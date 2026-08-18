@@ -160,6 +160,7 @@ def test_postgresql_constraint_query_excludes_not_null_metadata(
     ) -> str:
         assert kind == "postgresql"
         assert "pgc.contype = 'c'" in query
+        assert "pgc.conenforced AND pgc.convalidated" in query
         return (
             "figures\tck_figures_image_file\tCHECK\t-\t-\t-\t-\t"
             "((image_file)::text=((id)::text||'.png'::text))\n"
@@ -172,4 +173,28 @@ def test_postgresql_constraint_query_excludes_not_null_metadata(
     assert rows == (
         "figures|ck_figures_image_file|CHECK|-|-|-|-|"
         "((image_file)::text=((id)::text||'.png'::text))",
+    )
+
+
+def test_sqlserver_constraint_query_requires_trusted_enforcement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exclude disabled or untrusted SQL Server constraints and indexes."""
+
+    def capture_query(
+        kind: str,
+        connection: list[str],
+        query: str,
+        environment: dict[str, str],
+    ) -> str:
+        assert kind == "sqlserver"
+        assert "ki.is_disabled = 0" in query
+        assert "fk.is_disabled = 0 AND fk.is_not_trusted = 0" in query
+        assert "cc.is_disabled = 0 AND cc.is_not_trusted = 0" in query
+        return "Figures\tPK_Figures\tPRIMARY KEY\tId\t-\t-\t-\t-\n"
+
+    monkeypatch.setattr(database, "_database_command", capture_query)
+
+    assert database._constraint_rows("sqlserver", [], {}) == (
+        "Figures|PK_Figures|PRIMARY KEY|Id|-|-|-|-",
     )

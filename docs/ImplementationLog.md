@@ -487,3 +487,11 @@ Deferred (documented for future): blob image store, telemetry.
 - OpenTelemetry uses one auto-configured SDK and resource identity for traces, metrics, and logs. The production Logback bridge exports structured HTTP, database, import, query, performance, and distinct exception records through standard OTLP configuration.
 - Pinned Maven Wrapper 3.3.4 to checksum-verified Maven 3.9.16 and overrode pgJDBC to fixed version 42.7.12 after vulnerability validation identified the managed 42.7.11 release.
 - Coordinator integration validation passes 24 native tests, the executable JAR build, 20 shared contract tests with one optional live skip, and all 22 live checks against pinned PostgreSQL 18.6 with 198 figures, 20 categories, and 198 images. Seven malicious route aliases return 404, the exact outage responses and recovery pass, and Trivy reports no HIGH or CRITICAL findings.
+
+### 2026-08-18 (Rewrite - cross-runtime contract refreeze)
+- Stopped downstream work after cross-layer review found divergent edge behavior, then refroze the shared baseline before changing either producer.
+- Category normalization now iterates Unicode scalars and removes all `Mn`, `Mc`, and `Me` marks. Stored text uses Unicode code-point minimums, UTF-16 code-unit database maxima, nonblank values, and a 64-character normalized slug maximum.
+- Added cross-runtime text boundary vectors covering supplementary characters, every exact minimum and maximum, blank values, and NFKD slug expansion. Native evidence now requires exact normalization and text-validation conformance test names in addition to the ten health/performance tests.
+- Tightened live acceptance for canonical lowercase detail IDs, literal `%` and `_` combined search, and exact raw request-target aliases into existing health and performance routes.
+- Database evidence now excludes disabled, untrusted, unenforced, or unvalidated keys, constraints, and indexes. Telemetry evidence now carries exact metric units and measurements, one rejected unit per rejected document, and matched `/figure/{id}` route-template values with final status across traces, metrics, and logs.
+- Shared validation passes 23 tests with one optional live-environment skip; the offline uv lock and diff checks pass. The focused contract/decomposition review approved the replanned producer obligations.

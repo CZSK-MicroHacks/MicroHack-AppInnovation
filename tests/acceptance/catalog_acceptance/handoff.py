@@ -12,17 +12,19 @@ from jsonschema import Draft202012Validator, FormatChecker
 from catalog_acceptance.manifest import load_json
 from catalog_acceptance.models.contracts import AcceptanceReport
 
-REQUIRED_RUNTIME_TEST_IDS = {
-    "liveness-database-outage",
-    "readiness-database-outage",
-    "readiness-import-failure",
-    "performance-database-failure",
-    "performance-timeout",
-    "performance-missing-key",
-    "performance-invalid-key",
-    "work-factor-default",
-    "work-factor-bounds",
-    "work-factor-invalid",
+REQUIRED_RUNTIME_TESTS = {
+    "liveness-database-outage": "Contract.Health.LivenessSurvivesDatabaseOutage",
+    "readiness-database-outage": "Contract.Health.ReadinessFailsDuringDatabaseOutage",
+    "readiness-import-failure": "Contract.Health.ReadinessReportsImportFailure",
+    "performance-database-failure": "Contract.Performance.DatabaseFailureIsControlled",
+    "performance-timeout": "Contract.Performance.TimeoutIsControlled",
+    "performance-missing-key": "Contract.Performance.MissingKeyReturnsUnauthorized",
+    "performance-invalid-key": "Contract.Performance.InvalidKeyReturnsUnauthorized",
+    "work-factor-default": "Contract.Performance.MissingWorkFactorUsesDefault",
+    "work-factor-bounds": "Contract.Performance.BoundsAreAccepted",
+    "work-factor-invalid": "Contract.Performance.InvalidWorkFactorsFailStartup",
+    "normalization-conformance": "Contract.Conformance.NormalizationVectors",
+    "text-validation-conformance": "Contract.Conformance.TextValidationVectors",
 }
 
 
@@ -80,12 +82,10 @@ def _runtime_test_outcomes(
 
 def _validate_runtime_results(runtime_tests: dict[str, Any], artifact: Path) -> None:
     """Require every frozen runtime test ID to map to a native passing result."""
-    ids = [test["id"] for test in runtime_tests["tests"]]
-    if len(ids) != len(set(ids)) or set(ids) != REQUIRED_RUNTIME_TEST_IDS:
-        raise ValueError("runtime evidence does not contain the exact unique test ID set")
-    test_names = [test["testName"] for test in runtime_tests["tests"]]
-    if len(test_names) != len(set(test_names)):
-        raise ValueError("runtime evidence maps multiple requirements to one test")
+    mapping = {test["id"]: test["testName"] for test in runtime_tests["tests"]}
+    if len(mapping) != len(runtime_tests["tests"]) or mapping != REQUIRED_RUNTIME_TESTS:
+        raise ValueError("runtime evidence differs from the exact requirement/test mapping")
+    test_names = list(mapping.values())
     outcomes = _runtime_test_outcomes(artifact, runtime_tests["artifactFormat"])
     expected_pass = "passed" if runtime_tests["artifactFormat"] == "junit" else "passed"
     failures = [
@@ -117,6 +117,11 @@ def _validate_telemetry_results(
         "metrics": behavior["metrics"],
         "logs": behavior["logs"],
     }
+    route_probe = {
+        "http.request.method": "GET",
+        "http.route": "/figure/{id}",
+        "http.response.status_code": 200,
+    }
     for query_id, expected_names in expected_by_query.items():
         query = telemetry["queries"][query_id]
         if query["expectedSignalNames"] != expected_names:
@@ -147,6 +152,39 @@ def _validate_telemetry_results(
                 raise ValueError(
                     f"telemetry signal {signal_name} lacks required attributes"
                 )
+            if query_id == "metrics":
+                expected_unit = behavior["metricUnits"][signal_name]
+                if row["unit"] != expected_unit:
+                    raise ValueError(
+                        f"telemetry metric {signal_name} unit differs from contract"
+                    )
+        if query_id == "metrics":
+            rejected = [
+                measurement
+                for measurement in rows["catalog.import.records"]["measurements"]
+                if measurement["attributes"].get("catalog.import.outcome")
+                == "rejected"
+            ]
+            if not rejected or any(item["value"] != 1 for item in rejected):
+                raise ValueError(
+                    "catalog import rejected measurements must increment by one"
+                )
+        if query_id == "traces":
+            route_observations = rows["http.server"]["observations"]
+        elif query_id == "metrics":
+            route_observations = rows["http.server.request.duration"]["measurements"]
+        else:
+            route_observations = rows["http.server.request"]["observations"]
+        if not any(
+            all(
+                observation["attributes"].get(key) == value
+                for key, value in route_probe.items()
+            )
+            for observation in route_observations
+        ):
+            raise ValueError(
+                f"telemetry {query_id} lacks matched route-template value evidence"
+            )
 
 
 def _resolve_repository_path(repository_root: Path, value: str) -> Path:

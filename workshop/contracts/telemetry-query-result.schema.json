@@ -54,9 +54,117 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "measurements": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "attributes"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "attributes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "integer",
+                      "boolean"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "observations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "attributes"
+              ],
+              "properties": {
+                "attributes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "integer",
+                      "boolean"
+                    ]
+                  }
+                }
+              }
+            }
           }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "queryId": {
+            "const": "metrics"
+          }
+        },
+        "required": [
+          "queryId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "items": {
+              "required": [
+                "unit",
+                "measurements"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "queryId": {
+            "enum": [
+              "traces",
+              "logs"
+            ]
+          }
+        },
+        "required": [
+          "queryId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "items": {
+              "required": [
+                "observations"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

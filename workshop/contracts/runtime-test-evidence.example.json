@@ -46,6 +46,14 @@
     {
       "id": "work-factor-invalid",
       "testName": "Contract.Performance.InvalidWorkFactorsFailStartup"
+    },
+    {
+      "id": "normalization-conformance",
+      "testName": "Contract.Conformance.NormalizationVectors"
+    },
+    {
+      "id": "text-validation-conformance",
+      "testName": "Contract.Conformance.TextValidationVectors"
     }
   ]
 }

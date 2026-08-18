@@ -24,17 +24,24 @@
       "name": {
         "type": "string",
         "minLength": 3,
-        "maxLength": 80
+        "maxLength": 80,
+        "pattern": ".*\\S.*",
+        "x-maxUtf16CodeUnits": 80
       },
       "description": {
         "type": "string",
         "minLength": 20,
-        "maxLength": 1200
+        "maxLength": 1200,
+        "pattern": ".*\\S.*",
+        "x-maxUtf16CodeUnits": 1200
       },
       "category": {
         "type": "string",
         "minLength": 2,
-        "maxLength": 60
+        "maxLength": 60,
+        "pattern": ".*\\S.*",
+        "x-maxUtf16CodeUnits": 60,
+        "x-maxNormalizedSlugLength": 64
       },
       "filename": {
         "type": "string",
@@ -43,7 +50,8 @@
       "imagePrompt": {
         "type": "string",
         "minLength": 30,
-        "maxLength": 260
+        "maxLength": 260,
+        "pattern": ".*\\S.*"
       }
     }
   }

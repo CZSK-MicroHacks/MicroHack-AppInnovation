@@ -13,6 +13,7 @@ from pydantic import (
     ConfigDict,
     Field,
     SecretStr,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -45,6 +46,20 @@ FULL_ACCEPTANCE_CHECKS = (
     "database-tls",
 )
 
+_MAX_UTF16_UNITS = {
+    "name": 80,
+    "description": 1200,
+    "category": 60,
+}
+
+
+def _utf16_code_units(value: str) -> int:
+    """Count storage units used by SQL Server nvarchar columns."""
+    try:
+        return len(value.encode("utf-16-le")) // 2
+    except UnicodeEncodeError as error:
+        raise ValueError("text must contain valid Unicode scalar values") from error
+
 
 class CatalogItem(BaseModel):
     """Represent one canonical catalog record."""
@@ -57,6 +72,19 @@ class CatalogItem(BaseModel):
     category: str = Field(min_length=2, max_length=60)
     filename: str
     image_prompt: str = Field(alias="imagePrompt", min_length=30, max_length=260)
+
+    @field_validator("name", "description", "category", "image_prompt")
+    @classmethod
+    def require_storage_safe_text(cls, value: str, info: ValidationInfo) -> str:
+        """Require nonblank text and bounded UTF-16 storage for persisted fields."""
+        if not value.strip():
+            raise ValueError(f"{info.field_name} must not be blank")
+        maximum = _MAX_UTF16_UNITS.get(info.field_name)
+        if maximum is not None and _utf16_code_units(value) > maximum:
+            raise ValueError(
+                f"{info.field_name} exceeds {maximum} UTF-16 code units"
+            )
+        return value
 
     @field_validator("product_id", mode="before")
     @classmethod
@@ -73,8 +101,11 @@ class CatalogItem(BaseModel):
         expected = f"{self.product_id}.png"
         if self.filename != expected:
             raise ValueError(f"filename must equal {expected}")
-        if not category_slug(self.category):
+        slug = category_slug(self.category)
+        if not slug:
             raise ValueError("category must normalize to a non-empty slug")
+        if len(slug) > 64:
+            raise ValueError("category slug must contain at most 64 characters")
         return self
 
 

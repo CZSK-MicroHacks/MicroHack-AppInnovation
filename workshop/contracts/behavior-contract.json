@@ -12,7 +12,7 @@
       "trim",
       "normalize Unicode with NFKD",
       "lowercase invariantly",
-      "remove combining marks and apostrophes",
+      "remove Unicode mark categories Mn, Mc, and Me and apostrophes",
       "replace each remaining non-ASCII-alphanumeric run with one hyphen",
       "trim leading and trailing hyphens"
     ],
@@ -23,7 +23,7 @@
     "searchFields": [
       "name"
     ],
-    "searchComparison": "case-insensitive",
+    "searchComparison": "case-insensitive literal substring; percent and underscore have no wildcard semantics",
     "categoryQueryParameter": "category",
     "categoryComparison": "canonical slug or case-insensitive exact display name",
     "ordering": "productId ascending"
@@ -100,6 +100,29 @@
     "transaction": "all inserts and new categories commit in one transaction",
     "duplicates": "existing productId values are skipped",
     "startup": "when enabled, insert new records idempotently from the configured seed path",
+    "textValidation": {
+      "nonBlank": true,
+      "storedFields": {
+        "name": {
+          "minimumCodePoints": 3,
+          "maximumUtf16CodeUnits": 80
+        },
+        "description": {
+          "minimumCodePoints": 20,
+          "maximumUtf16CodeUnits": 1200
+        },
+        "category": {
+          "minimumCodePoints": 2,
+          "maximumUtf16CodeUnits": 60,
+          "maximumNormalizedSlugLength": 64
+        }
+      },
+      "imagePrompt": {
+        "minimumCodePoints": 30,
+        "maximumCodePoints": 260
+      }
+    },
+    "rejectedTelemetry": "increment rejected by one per rejected document, including parse, validation, or transactional conflict failures",
     "runtimeTestRequirements": [
       "a valid new figure and category commit together",
       "reimporting the same figure reports it as skipped",
@@ -202,6 +225,7 @@
     "serviceNamespace": "app-innovation",
     "deploymentEnvironment": "lab",
     "revisionResourceAttribute": "azure.containerapps.revision.name",
+    "httpRouteAttribute": "matched route template after request handling; use the final response status",
     "requiredResourceAttributes": [
       "service.name",
       "service.namespace",
@@ -264,6 +288,13 @@
       "catalog.performance.duration": [
         "catalog.performance.work_factor"
       ]
+    },
+    "metricUnits": {
+      "http.server.request.duration": "s",
+      "db.client.operation.duration": "s",
+      "catalog.import.records": "{record}",
+      "catalog.query.duration": "s",
+      "catalog.performance.duration": "s"
     },
     "logs": {
       "http.server.request": [

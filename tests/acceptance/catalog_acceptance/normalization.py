@@ -16,7 +16,8 @@ def category_slug(value: str) -> str:
     characters = (
         character
         for character in normalized
-        if unicodedata.category(character) != "Mn" and character not in _APOSTROPHES
+        if not unicodedata.category(character).startswith("M")
+        and character not in _APOSTROPHES
     )
     return _NON_ALPHANUMERIC.sub("-", "".join(characters)).strip("-")
 

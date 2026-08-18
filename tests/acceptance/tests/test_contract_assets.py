@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 
 from catalog_acceptance.handoff import validate_handoff
@@ -83,6 +84,48 @@ def test_normalization_vectors(repo_root: Path) -> None:
         assert category_slug(vector["input"]) == vector["expected"]
     for vector in vectors["invalidVectors"]:
         assert category_slug(vector["input"]) == ""
+
+
+def test_text_validation_vectors(repo_root: Path) -> None:
+    """Require storage-safe text vectors to pass or fail exactly."""
+    vectors = load_json(
+        repo_root / "workshop" / "contracts" / "text-validation-vectors.json"
+    )
+    base = {
+        "productId": "10000000-0000-4000-8000-000000000099",
+        "name": "Contract Figure",
+        "description": "A representative figure used for text validation.",
+        "category": "Contract Figures",
+        "filename": "10000000-0000-4000-8000-000000000099.png",
+        "imagePrompt": "Photorealistic construction-toy figure on a clean background.",
+    }
+    for vector in vectors["vectors"]:
+        candidate = dict(base)
+        candidate[vector["field"]] = vector["fragment"] * vector["repeat"]
+        if vector["valid"]:
+            CatalogItem.model_validate(candidate)
+        else:
+            with pytest.raises(ValidationError):
+                CatalogItem.model_validate(candidate)
+
+
+def test_runtime_evidence_schema_freezes_requirement_names(repo_root: Path) -> None:
+    """Reject a passing but unrelated native test name."""
+    contracts = repo_root / "workshop" / "contracts"
+    evidence = load_json(contracts / "runtime-test-evidence.example.json")
+    evidence["tests"][0]["testName"] = "Contract.Unrelated.Passes"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(
+            load_json(contracts / "runtime-test-evidence.schema.json"),
+            evidence,
+        )
+    duplicate = load_json(contracts / "runtime-test-evidence.example.json")
+    duplicate["tests"] = [duplicate["tests"][0]] * 12
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(
+            load_json(contracts / "runtime-test-evidence.schema.json"),
+            duplicate,
+        )
 
 
 def test_identity_vectors(repo_root: Path) -> None:
@@ -235,6 +278,41 @@ def test_handoff_bundle_cross_file_consistency(
             }
             if query_id == "resources":
                 row["resourceAttributes"] = telemetry["resourceAttributes"]
+            if query_id == "metrics":
+                row["unit"] = signal_contract["metricUnits"][signal_name]
+                row["measurements"] = [
+                    {
+                        "value": 1,
+                        "attributes": (
+                            {
+                                "http.request.method": "GET",
+                                "http.route": "/figure/{id}",
+                                "http.response.status_code": 200,
+                            }
+                            if signal_name == "http.server.request.duration"
+                            else (
+                                {"catalog.import.outcome": "rejected"}
+                                if signal_name == "catalog.import.records"
+                                else {}
+                            )
+                        ),
+                    }
+                ]
+            if query_id in ("traces", "logs"):
+                is_http = signal_name in ("http.server", "http.server.request")
+                row["observations"] = [
+                    {
+                        "attributes": (
+                            {
+                                "http.request.method": "GET",
+                                "http.route": "/figure/{id}",
+                                "http.response.status_code": 200,
+                            }
+                            if is_http
+                            else {}
+                        )
+                    }
+                ]
             rows.append(row)
         result_path = tmp_path / query["resultFile"]
         result_path.write_text(
@@ -264,6 +342,25 @@ def test_handoff_bundle_cross_file_consistency(
         )
         == 0
     )
+
+    metrics_path = tmp_path / telemetry["queries"]["metrics"]["resultFile"]
+    passing_metrics = load_json(metrics_path)
+    invalid_metrics = json.loads(json.dumps(passing_metrics))
+    invalid_metrics["rows"][0]["unit"] = "ms"
+    metrics_path.write_text(json.dumps(invalid_metrics), encoding="utf-8")
+    with pytest.raises(ValueError, match="unit differs"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    invalid_metrics = json.loads(json.dumps(passing_metrics))
+    import_row = next(
+        row
+        for row in invalid_metrics["rows"]
+        if row["signalName"] == "catalog.import.records"
+    )
+    import_row["measurements"][0]["value"] = 2
+    metrics_path.write_text(json.dumps(invalid_metrics), encoding="utf-8")
+    with pytest.raises(ValueError, match="increment by one"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    metrics_path.write_text(json.dumps(passing_metrics), encoding="utf-8")
 
     runtime_artifact = evidence / "runtime-tests.trx"
     passing_runtime_results = runtime_artifact.read_text(encoding="utf-8")

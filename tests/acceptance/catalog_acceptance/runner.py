@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import hashlib
+import http.client
 import re
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import urlsplit
 
 import httpx
 from pydantic import ValidationError
@@ -125,6 +126,27 @@ def _rendered_figure(item: CatalogItem) -> RenderedFigure:
 def _has_content_type(response: httpx.Response, expected: str) -> bool:
     """Compare a response media type while allowing a charset parameter."""
     return response.headers.get("content-type", "").split(";", 1)[0].strip() == expected
+
+
+def _raw_request_status(base_url: object, target: str) -> int:
+    """Send an exact request target without client-side path normalization."""
+    parsed = urlsplit(str(base_url))
+    if parsed.scheme not in ("http", "https") or parsed.hostname is None:
+        raise ValueError("acceptance base URL must be HTTP or HTTPS")
+    connection_type = (
+        http.client.HTTPSConnection
+        if parsed.scheme == "https"
+        else http.client.HTTPConnection
+    )
+    connection = connection_type(parsed.hostname, parsed.port, timeout=10)
+    base_path = parsed.path.rstrip("/")
+    try:
+        connection.request("GET", f"{base_path}{target}")
+        response = connection.getresponse()
+        response.read()
+        return response.status
+    finally:
+        connection.close()
 
 
 class AcceptanceRunner:
@@ -410,6 +432,28 @@ class AcceptanceRunner:
             and _has_content_type(name_response, "text/html")
             and name_html.cards == expected_category
         )
+        wildcard_passed = True
+        for literal, category in (
+            ("%", slug),
+            ("_", sample.category.swapcase()),
+        ):
+            response = client.get(
+                "/",
+                params={"search": literal, "category": category},
+            )
+            rendered = _parse_catalog_html(response.text)
+            expected = sorted(
+                _rendered_figure(item)
+                for item in items
+                if literal.casefold() in item.name.casefold()
+                and item.category.casefold() == sample.category.casefold()
+            )
+            wildcard_passed = (
+                wildcard_passed
+                and response.status_code == 200
+                and _has_content_type(response, "text/html")
+                and rendered.cards == expected
+            )
 
         return [
             _result(
@@ -420,9 +464,9 @@ class AcceptanceRunner:
             ),
             _result(
                 "name-search",
-                search_passed,
-                "case-insensitive name search returned the expected figure",
-                "case-insensitive name search did not return the expected figure",
+                search_passed and wildcard_passed,
+                "case-insensitive literal name search returned exact results",
+                "name search or literal wildcard behavior returned unexpected results",
             ),
             _result(
                 "name-only-search",
@@ -457,6 +501,7 @@ class AcceptanceRunner:
         )
         unknown = client.get("/figure/ffffffff-ffff-4fff-8fff-ffffffffffff")
         malformed = client.get("/figure/not-a-uuid")
+        noncanonical = client.get(f"/figure/{str(sample.product_id).upper()}")
         return [
             _result(
                 "known-figure",
@@ -466,9 +511,16 @@ class AcceptanceRunner:
             ),
             _result(
                 "unknown-figure",
-                unknown.status_code == 404 and malformed.status_code == 404,
-                "unknown and malformed figure IDs returned HTTP 404",
-                f"unknown={unknown.status_code}, malformed={malformed.status_code}",
+                (
+                    unknown.status_code == 404
+                    and malformed.status_code == 404
+                    and noncanonical.status_code == 404
+                ),
+                "unknown, malformed, and noncanonical figure IDs returned HTTP 404",
+                (
+                    f"unknown={unknown.status_code}, malformed={malformed.status_code}, "
+                    f"noncanonical={noncanonical.status_code}"
+                ),
             ),
         ]
 
@@ -493,18 +545,17 @@ class AcceptanceRunner:
 
         unknown = client.get("/images/ffffffff-ffff-4fff-8fff-ffffffffffff.png")
         malformed = client.get("/images/not-a-uuid.png")
-        encoded_forward = quote("../catalog.json", safe="")
-        encoded_backslash = quote("..\\catalog.json", safe="")
         traversal_paths = {
-            "raw-forward": "../catalog.json",
-            "raw-backslash": "..\\catalog.json",
-            "encoded-forward": encoded_forward,
-            "encoded-backslash": encoded_backslash,
-            "encoded-dot-segment": "%2e%2e/catalog.json",
-            "double-encoded": quote(encoded_forward, safe=""),
+            "raw-forward-existing": "/images/../healthz",
+            "raw-backslash-existing": "/images\\..\\healthz",
+            "encoded-forward-existing": "/images/%2e%2e%2fhealthz",
+            "encoded-backslash-existing": "/images/%2e%2e%5chealthz",
+            "double-encoded-existing": "/images/%252e%252e%252fhealthz",
+            "raw-route-alias": "/perftest\\catalog",
+            "encoded-route-alias": "/perftest%5ccatalog",
         }
         traversal_statuses = {
-            name: client.get(f"/images/{path}").status_code
+            name: _raw_request_status(self._settings.base_url, path)
             for name, path in traversal_paths.items()
         }
         passed = (

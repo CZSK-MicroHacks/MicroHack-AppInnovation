@@ -46,8 +46,9 @@
     },
     "tests": {
       "type": "array",
-      "minItems": 10,
-      "maxItems": 10,
+      "minItems": 12,
+      "maxItems": 12,
+      "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/test"
       }
@@ -113,14 +114,210 @@
             "performance-invalid-key",
             "work-factor-default",
             "work-factor-bounds",
-            "work-factor-invalid"
+            "work-factor-invalid",
+            "normalization-conformance",
+            "text-validation-conformance"
           ]
         },
         "testName": {
           "type": "string",
           "minLength": 1
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "liveness-database-outage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Health.LivenessSurvivesDatabaseOutage"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "readiness-database-outage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Health.ReadinessFailsDuringDatabaseOutage"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "readiness-import-failure"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Health.ReadinessReportsImportFailure"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "performance-database-failure"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.DatabaseFailureIsControlled"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "performance-timeout"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.TimeoutIsControlled"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "performance-missing-key"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.MissingKeyReturnsUnauthorized"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "performance-invalid-key"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.InvalidKeyReturnsUnauthorized"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "work-factor-default"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.MissingWorkFactorUsesDefault"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "work-factor-bounds"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.BoundsAreAccepted"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "work-factor-invalid"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Performance.InvalidWorkFactorsFailStartup"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "normalization-conformance"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Conformance.NormalizationVectors"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "text-validation-conformance"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Conformance.TextValidationVectors"
+              }
+            }
+          }
+        }
+      ]
     },
     "repositoryPath": {
       "type": "string",

@@ -19,7 +19,7 @@
       ]
     },
     "traces": {
-      "query": "AppDependencies | where TimeGenerated > ago(30m) | summarize count() by Name",
+      "query": "AppDependencies | where TimeGenerated > ago(30m) | project Name, Properties | take 1000",
       "resultFile": "evidence/telemetry/traces.json",
       "expectedSignalNames": [
         "http.server",
@@ -31,7 +31,7 @@
       ]
     },
     "metrics": {
-      "query": "AppMetrics | where TimeGenerated > ago(30m) | summarize count() by Name",
+      "query": "AppMetrics | where TimeGenerated > ago(30m) | project Name, Sum, Properties | take 1000",
       "resultFile": "evidence/telemetry/metrics.json",
       "expectedSignalNames": [
         "http.server.request.duration",
@@ -42,7 +42,7 @@
       ]
     },
     "logs": {
-      "query": "AppTraces | where TimeGenerated > ago(30m) | summarize count() by Message",
+      "query": "AppTraces | where TimeGenerated > ago(30m) | project Message, Properties | take 1000",
       "resultFile": "evidence/telemetry/logs.json",
       "expectedSignalNames": [
         "http.server.request",
