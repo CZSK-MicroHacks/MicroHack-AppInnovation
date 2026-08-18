@@ -163,13 +163,17 @@ class TelemetryContractTest {
         assertFullResource(record);
 
         logs.reset();
+        MockHttpServletResponse failedResponse = new MockHttpServletResponse();
         assertThatThrownBy(() -> new RequestTelemetryFilter(telemetry).doFilter(
                         request,
-                        response,
+                        failedResponse,
                         (ignoredRequest, ignoredResponse) -> {
+                            failedResponse.setStatus(418);
+                            failedResponse.flushBuffer();
                             throw new jakarta.servlet.ServletException("request failed");
                         }))
                 .isInstanceOf(jakarta.servlet.ServletException.class);
+        assertThat(failedResponse.getStatus()).isEqualTo(418);
         assertAttributes(log("exception"), Map.of(
                 "exception.type", jakarta.servlet.ServletException.class.getName(),
                 "exception.message", "request failed"));

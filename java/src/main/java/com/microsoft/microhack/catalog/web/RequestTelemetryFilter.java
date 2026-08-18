@@ -35,6 +35,7 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         long started = System.nanoTime();
+        int propagatedFailureStatus = 0;
         Span span = telemetry.startHttpServerSpan();
         span.setAttribute("http.request.method", request.getMethod());
         span.setAttribute("server.address", request.getServerName());
@@ -44,10 +45,13 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             span.setStatus(StatusCode.ERROR);
             span.recordException(exception);
             CatalogTelemetry.exception(LOGGER, exception);
+            propagatedFailureStatus = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             throw exception;
         } finally {
-            int status = response.getStatus();
+            int status = propagatedFailureStatus == 0
+                    ? response.getStatus()
+                    : propagatedFailureStatus;
             String route = matchedRoute(request);
             if (route != null) {
                 span.setAttribute("http.route", route);
