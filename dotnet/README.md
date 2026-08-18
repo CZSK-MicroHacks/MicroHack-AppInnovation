@@ -68,8 +68,9 @@ dotnet restore LegoCatalog.sln
 dotnet test LegoCatalog.sln --logger trx --results-directory evidence
 ```
 
-The native suite includes the exact degraded-state test names consumed by the shared
-handoff validator. To run implementation-neutral HTTP and database acceptance:
+The native suite includes the exact degraded-state and cross-runtime conformance test
+names consumed by the shared handoff validator. To run implementation-neutral HTTP and
+database acceptance:
 
 ```powershell
 cd ..\tests\acceptance
@@ -97,7 +98,7 @@ only reserved fixture IDs under `10000000-0000-4000-8000-`.
 
 | Route | Behavior |
 | --- | --- |
-| `GET /` | Product-ID-ordered catalog; `search` is case-insensitive name-only search and `category` accepts slug or display name |
+| `GET /` | Product-ID-ordered catalog; `search` is a case-insensitive literal name-only search and `category` accepts slug or display name |
 | `GET /figure/{id}` | Server-rendered detail or 404 |
 | `GET /images/{filename}` | Canonical UUID PNG bytes or 404; traversal is rejected |
 | `GET /import` | Upload form |
@@ -123,7 +124,8 @@ structured logs. Resource identity is fixed to:
 - A healthy `/healthz` with a 503 `/readyz` means SQL Server is unavailable or startup
   migration/import failed; inspect the structured startup log.
 - Startup import rejects the complete document before writing if any identity,
-  filename, category slug, length, or unknown-field rule fails.
+  filename, category slug, nonblank text, Unicode code-point minimum, UTF-16 storage
+  maximum, or unknown-field rule fails.
 - Image 404 responses require an exact lowercase `<productId>.png` key and an existing
   file beneath `CATALOG_IMAGES_PATH`.
 - The app fails startup when `PERFTEST_API_KEY` or a bounded work factor is invalid.

@@ -21,10 +21,10 @@ public sealed class CatalogDocumentParser
         Stream jsonStream,
         CancellationToken cancellationToken)
     {
-        List<CatalogInputItem>? rawItems;
+        List<CatalogInputItem?>? rawItems;
         try
         {
-            rawItems = await JsonSerializer.DeserializeAsync<List<CatalogInputItem>>(
+            rawItems = await JsonSerializer.DeserializeAsync<List<CatalogInputItem?>>(
                 jsonStream,
                 SerializerOptions,
                 cancellationToken);
@@ -50,13 +50,17 @@ public sealed class CatalogDocumentParser
         {
             try
             {
-                validated.Add(Validate(rawItems[index], ids));
+                var item = rawItems[index]
+                    ?? throw new CatalogImportValidationException(
+                        "catalog records must be JSON objects.",
+                        1);
+                validated.Add(Validate(item, ids));
             }
             catch (CatalogImportValidationException exception)
             {
                 throw new CatalogImportValidationException(
                     $"Record {index + 1} is invalid: {exception.Message}",
-                    rawItems.Count,
+                    1,
                     exception);
             }
         }
@@ -68,10 +72,14 @@ public sealed class CatalogDocumentParser
         CatalogInputItem item,
         ISet<Guid> ids)
     {
-        RequireLength(item.Name, 3, 80, "name");
-        RequireLength(item.Description, 20, 1200, "description");
-        RequireLength(item.Category, 2, 60, "category");
-        RequireLength(item.ImagePrompt, 30, 260, "imagePrompt");
+        var name = RequireStoredText(item.Name, 3, 80, "name");
+        var description = RequireStoredText(
+            item.Description,
+            20,
+            1200,
+            "description");
+        var category = RequireStoredText(item.Category, 2, 60, "category");
+        RequireCodePointText(item.ImagePrompt, 30, 260, "imagePrompt");
         if (item.ProductId is null
             || !Guid.TryParseExact(item.ProductId, "D", out var productId)
             || !string.Equals(
@@ -102,7 +110,6 @@ public sealed class CatalogDocumentParser
                 1);
         }
 
-        var category = item.Category!;
         var categorySlug = CategorySlug.Normalize(category);
         if (categorySlug.Length == 0)
         {
@@ -110,29 +117,74 @@ public sealed class CatalogDocumentParser
                 "category must normalize to a non-empty slug.",
                 1);
         }
+        if (categorySlug.Length > 64)
+        {
+            throw new CatalogImportValidationException(
+                "category must normalize to at most 64 ASCII characters.",
+                1);
+        }
 
         return new ValidatedCatalogItem(
             productId,
-            item.Name!,
-            item.Description!,
+            name,
+            description,
             category,
             categorySlug,
             item.Filename!);
     }
 
-    private static void RequireLength(
+    private static string RequireStoredText(
+        string? value,
+        int minimumCodePoints,
+        int maximumUtf16CodeUnits,
+        string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new CatalogImportValidationException(
+                $"{field} must not be blank.",
+                1);
+        }
+
+        if (value.EnumerateRunes().Count() < minimumCodePoints)
+        {
+            throw new CatalogImportValidationException(
+                $"{field} must contain at least {minimumCodePoints} Unicode code points.",
+                1);
+        }
+
+        if (value.Length > maximumUtf16CodeUnits)
+        {
+            throw new CatalogImportValidationException(
+                $"{field} must contain at most {maximumUtf16CodeUnits} UTF-16 code units.",
+                1);
+        }
+
+        return value;
+    }
+
+    private static string RequireCodePointText(
         string? value,
         int minimum,
         int maximum,
         string field)
     {
-        var length = value?.EnumerateRunes().Count() ?? 0;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new CatalogImportValidationException(
+                $"{field} must not be blank.",
+                1);
+        }
+
+        var length = value.EnumerateRunes().Count();
         if (length < minimum || length > maximum)
         {
             throw new CatalogImportValidationException(
-                $"{field} must contain from {minimum} through {maximum} characters.",
+                $"{field} must contain from {minimum} through {maximum} Unicode code points.",
                 1);
         }
+
+        return value;
     }
 
     private sealed record CatalogInputItem(

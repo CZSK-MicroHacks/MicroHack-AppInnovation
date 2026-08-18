@@ -495,3 +495,10 @@ Deferred (documented for future): blob image store, telemetry.
 - Tightened live acceptance for canonical lowercase detail IDs, literal `%` and `_` combined search, and exact raw request-target aliases into existing health and performance routes.
 - Database evidence now excludes disabled, untrusted, unenforced, or unvalidated keys, constraints, and indexes. Telemetry evidence now carries exact metric units and measurements, one rejected unit per rejected document, and matched `/figure/{id}` route-template values with final status across traces, metrics, and logs.
 - Shared validation passes 23 tests with one optional live-environment skip; the offline uv lock and diff checks pass. The focused contract/decomposition review approved the replanned producer obligations.
+
+### 2026-08-18 (Rewrite - .NET refreeze compliance)
+- Updated .NET slug normalization to iterate Unicode runes and remove `Mn`, `Mc`, and `Me` marks, then made import validation distinguish code-point minimums from UTF-16 storage maxima, reject blank/null members, and cap normalized slugs at 64 characters.
+- Import telemetry now starts before parsing, records one rejected unit per rejected document, and reports query/performance durations in seconds. SQL Server search now escapes `%`, `_`, the escape character, and bracket syntax before `LIKE`.
+- Added original-request-target rejection before routing so raw, encoded, and double-encoded aliases cannot normalize into health or performance routes. Canonical requests continue through the existing matched-route/final-status telemetry path.
+- Added exact native normalization/text conformance evidence, supplementary-boundary cases, rejected-document metric assertions, route-template log assertions, and raw-target tests.
+- Validation passes 32 native tests, Release publish, shared 23+1 optional skip, full SQL Server acceptance 22/22 over 198 figures/20 categories/198 images, exact outage/recovery, and a clean dependency vulnerability scan. Focused review approved the corrected slice.

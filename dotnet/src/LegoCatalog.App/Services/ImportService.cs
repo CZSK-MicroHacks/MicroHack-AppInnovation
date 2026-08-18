@@ -34,20 +34,13 @@ public sealed class ImportService
         Stream jsonStream,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<ValidatedCatalogItem> items;
-        try
-        {
-            items = await _parser.ParseAsync(jsonStream, cancellationToken);
-        }
-        catch (CatalogImportValidationException exception)
-        {
-            LogFailure(exception.RejectedCount, exception);
-            throw;
-        }
-
         using var activity = _telemetry.StartActivity("catalog.import");
+        activity?.SetTag("catalog.import.inserted", 0);
+        activity?.SetTag("catalog.import.skipped", 0);
+        activity?.SetTag("catalog.import.rejected", 0);
         try
         {
+            var items = await _parser.ParseAsync(jsonStream, cancellationToken);
             var strategy = _database.Database.CreateExecutionStrategy();
             var result = await strategy.ExecuteAsync(async () =>
             {
@@ -85,7 +78,7 @@ public sealed class ImportService
                         {
                             throw new CatalogImportValidationException(
                                 $"Category '{item.Category}' conflicts with existing category '{conflictingCategory.Name}'.",
-                                items.Count);
+                                1);
                         }
 
                         category = new Category
@@ -143,30 +136,41 @@ public sealed class ImportService
 
             return result;
         }
+        catch (CatalogImportValidationException exception)
+        {
+            RecordFailure(activity, exception);
+            throw;
+        }
         catch (Exception exception)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
-            CatalogTelemetry.RecordException(activity, exception);
-            activity?.SetTag("catalog.import.rejected", items.Count);
-            LogFailure(items.Count, exception);
+            RecordFailure(activity, exception);
             throw;
         }
     }
 
-    private void LogFailure(int rejected, Exception exception)
+    private void RecordFailure(Activity? activity, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        CatalogTelemetry.RecordException(activity, exception);
+        activity?.SetTag("catalog.import.rejected", 1);
+        _telemetry.RecordRejectedImport();
+        LogFailure(exception);
+    }
+
+    private void LogFailure(Exception exception)
     {
         CatalogTelemetry.LogException(_logger, exception);
         using (_logger.BeginScope(
             new Dictionary<string, object>
             {
-                ["catalog.import.rejected"] = rejected,
+                ["catalog.import.rejected"] = 1,
                 ["exception.type"] = exception.GetType().FullName ?? exception.GetType().Name,
             }))
         {
             _logger.LogError(
                 exception,
                 "catalog.import.failed rejected={Rejected}",
-                rejected);
+                1);
         }
     }
 }

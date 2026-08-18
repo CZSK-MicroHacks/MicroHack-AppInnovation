@@ -17,20 +17,22 @@ public static partial class CategorySlug
         ArgumentNullException.ThrowIfNull(value);
         var normalized = value.Trim().Normalize(NormalizationForm.FormKD).ToLowerInvariant();
         var builder = new StringBuilder(normalized.Length);
-        foreach (var character in normalized)
+        foreach (var rune in normalized.EnumerateRunes())
         {
-            if (CharUnicodeInfo.GetUnicodeCategory(character)
-                == UnicodeCategory.NonSpacingMark)
+            var category = Rune.GetUnicodeCategory(rune);
+            if (category is UnicodeCategory.NonSpacingMark
+                or UnicodeCategory.SpacingCombiningMark
+                or UnicodeCategory.EnclosingMark)
             {
                 continue;
             }
 
-            if (character is '\'' or '\u2019')
+            if (rune.Value is '\'' or '\u2019')
             {
                 continue;
             }
 
-            builder.Append(character);
+            builder.Append(rune.ToString());
         }
 
         return NonAsciiAlphanumericRun()

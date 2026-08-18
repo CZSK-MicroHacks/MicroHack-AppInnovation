@@ -75,7 +75,7 @@ public sealed class PerformanceCatalogService : IPerformanceCatalogService
                 "execute");
             activity?.SetTag("catalog.performance.item_count", items.Count);
             _telemetry.RecordPerformance(
-                stopwatch.Elapsed.TotalMilliseconds,
+                stopwatch.Elapsed.TotalSeconds,
                 _options.PerformanceWorkFactor);
             using (_logger.BeginScope(
                 new Dictionary<string, object>

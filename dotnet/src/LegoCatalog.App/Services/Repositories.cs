@@ -50,11 +50,14 @@ public sealed class FigureRepository : IFigureRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var searchFilter = search.Trim();
+            var searchFilter = EscapeLikePattern(search.Trim());
             query = query.Where(figure =>
-                EF.Functions.Collate(
-                    figure.Name,
-                    CaseInsensitiveCollation).Contains(searchFilter));
+                EF.Functions.Like(
+                    EF.Functions.Collate(
+                        figure.Name,
+                        CaseInsensitiveCollation),
+                    $"%{searchFilter}%",
+                    "\\"));
         }
 
         var figures = await query.ToListAsync(cancellationToken);
@@ -62,6 +65,13 @@ public sealed class FigureRepository : IFigureRepository
             .OrderBy(figure => figure.Id.ToString("D"), StringComparer.Ordinal)
             .ToList();
     }
+
+    private static string EscapeLikePattern(string value) =>
+        value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)
+            .Replace("[", "\\[", StringComparison.Ordinal);
 
     public Task<LegoFigure?> GetAsync(
         Guid id,

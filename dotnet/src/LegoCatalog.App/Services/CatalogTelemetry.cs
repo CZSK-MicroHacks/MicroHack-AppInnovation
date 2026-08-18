@@ -23,16 +23,18 @@ public sealed class CatalogTelemetry : IDisposable
 
     public CatalogTelemetry()
     {
-        _importRecords = _meter.CreateCounter<long>("catalog.import.records");
+        _importRecords = _meter.CreateCounter<long>(
+            "catalog.import.records",
+            unit: "{record}");
         _databaseDuration = _meter.CreateHistogram<double>(
             "db.client.operation.duration",
             unit: "s");
         _queryDuration = _meter.CreateHistogram<double>(
             "catalog.query.duration",
-            unit: "ms");
+            unit: "s");
         _performanceDuration = _meter.CreateHistogram<double>(
             "catalog.performance.duration",
-            unit: "ms");
+            unit: "s");
     }
 
     public Activity? StartActivity(string name) =>
@@ -48,9 +50,14 @@ public sealed class CatalogTelemetry : IDisposable
             new KeyValuePair<string, object?>("catalog.import.outcome", "skipped"));
     }
 
-    public void RecordQuery(double elapsedMilliseconds, string filter) =>
+    public void RecordRejectedImport() =>
+        _importRecords.Add(
+            1,
+            new KeyValuePair<string, object?>("catalog.import.outcome", "rejected"));
+
+    public void RecordQuery(double elapsedSeconds, string filter) =>
         _queryDuration.Record(
-            elapsedMilliseconds,
+            elapsedSeconds,
             new KeyValuePair<string, object?>("catalog.query.filter", filter));
 
     public void RecordDatabase(double elapsedSeconds, string operation) =>
@@ -61,9 +68,9 @@ public sealed class CatalogTelemetry : IDisposable
                 "microsoft.sql_server"),
             new KeyValuePair<string, object?>("db.operation.name", operation));
 
-    public void RecordPerformance(double elapsedMilliseconds, int workFactor) =>
+    public void RecordPerformance(double elapsedSeconds, int workFactor) =>
         _performanceDuration.Record(
-            elapsedMilliseconds,
+            elapsedSeconds,
             new KeyValuePair<string, object?>(
                 "catalog.performance.work_factor",
                 workFactor));

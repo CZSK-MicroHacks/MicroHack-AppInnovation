@@ -1,7 +1,13 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using LegoCatalog.App.Data;
+using LegoCatalog.App.Middleware;
 using LegoCatalog.App.Models;
 using LegoCatalog.App.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace LegoCatalog.App.Tests;
@@ -37,6 +43,7 @@ public sealed class TelemetryContractTests
                     new Measurement(
                         instrument.Name,
                         instrument.Unit,
+                        value,
                         tags.ToArray())));
         meterListener.SetMeasurementEventCallback<long>(
             (instrument, value, tags, _) =>
@@ -44,6 +51,7 @@ public sealed class TelemetryContractTests
                     new Measurement(
                         instrument.Name,
                         instrument.Unit,
+                        value,
                         tags.ToArray())));
         meterListener.Start();
 
@@ -61,7 +69,8 @@ public sealed class TelemetryContractTests
                 search: null,
                 CancellationToken.None));
         telemetry.RecordImport(inserted: 1, skipped: 2);
-        telemetry.RecordPerformance(elapsedMilliseconds: 5, workFactor: 10);
+        telemetry.RecordRejectedImport();
+        telemetry.RecordPerformance(elapsedSeconds: 0.005, workFactor: 10);
 
         var queryActivity = Assert.Single(
             activities,
@@ -74,6 +83,7 @@ public sealed class TelemetryContractTests
             measurements,
             measurement =>
                 measurement.Name == "catalog.query.duration"
+                && measurement.Unit == "s"
                 && measurement.HasTag("catalog.query.filter", "category"));
         Assert.Contains(
             measurements,
@@ -85,11 +95,20 @@ public sealed class TelemetryContractTests
             measurements,
             measurement =>
                 measurement.Name == "catalog.import.records"
+                && measurement.Unit == "{record}"
                 && measurement.HasTag("catalog.import.outcome", "inserted"));
         Assert.Contains(
             measurements,
             measurement =>
+                measurement.Name == "catalog.import.records"
+                && measurement.Value == 1
+                && measurement.HasTag("catalog.import.outcome", "rejected"));
+        Assert.Contains(
+            measurements,
+            measurement =>
                 measurement.Name == "catalog.performance.duration"
+                && measurement.Unit == "s"
+                && measurement.Value == 0.005
                 && measurement.HasTag("catalog.performance.work_factor", 10));
 
         var failingLogger = new CapturingLogger<FigureCatalogService>();
@@ -112,6 +131,78 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
+    public async Task RejectedDocumentRecordsExactlyOneRejectedUnit()
+    {
+        var measurements = new List<Measurement>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == CatalogTelemetry.InstrumentationName)
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>(
+            (instrument, value, tags, _) =>
+                measurements.Add(
+                    new Measurement(
+                        instrument.Name,
+                        instrument.Unit,
+                        value,
+                        tags.ToArray())));
+        meterListener.Start();
+
+        using var telemetry = new CatalogTelemetry();
+        await using var database = new CatalogDbContext(
+            new DbContextOptionsBuilder<CatalogDbContext>().Options);
+        var importer = new ImportService(
+            database,
+            new CatalogDocumentParser(),
+            telemetry,
+            new CapturingLogger<ImportService>());
+        await using var invalidDocument = new MemoryStream("{}"u8.ToArray());
+
+        await Assert.ThrowsAsync<CatalogImportValidationException>(
+            () => importer.ImportAsync(invalidDocument, CancellationToken.None));
+
+        var rejected = Assert.Single(
+            measurements,
+            measurement =>
+                measurement.Name == "catalog.import.records"
+                && measurement.HasTag("catalog.import.outcome", "rejected"));
+        Assert.Equal(1, rejected.Value);
+    }
+
+    [Fact]
+    public async Task RequestLogUsesMatchedRouteAndFinalStatus()
+    {
+        var logger = new CapturingLogger<RequestTelemetryMiddleware>();
+        var endpoint = new RouteEndpoint(
+            _ => Task.CompletedTask,
+            RoutePatternFactory.Parse("/figure/{id}"),
+            order: 0,
+            new EndpointMetadataCollection(),
+            displayName: "figure");
+        var middleware = new RequestTelemetryMiddleware(
+            context =>
+            {
+                context.SetEndpoint(endpoint);
+                context.Response.StatusCode = StatusCodes.Status200OK;
+                return Task.CompletedTask;
+            },
+            logger);
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Get;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("http.server.request", logger.Message);
+        Assert.Equal("GET", logger.Scope["http.request.method"]);
+        Assert.Equal("/figure/{id}", logger.Scope["http.route"]);
+        Assert.Equal(200, logger.Scope["http.response.status_code"]);
+    }
+
+    [Fact]
     public void ResourceIdentityUsesFrozenValues()
     {
         Assert.Equal("mh-catalog-dotnet", CatalogTelemetry.ServiceName);
@@ -127,6 +218,7 @@ public sealed class TelemetryContractTests
     private sealed record Measurement(
         string Name,
         string? Unit,
+        double Value,
         KeyValuePair<string, object?>[] Tags)
     {
         public bool HasTag(string name, object value) =>

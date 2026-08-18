@@ -43,7 +43,7 @@ public sealed class FigureCatalogService
             stopwatch.Stop();
             _telemetry.RecordDatabase(stopwatch.Elapsed.TotalSeconds, "select");
             activity?.SetTag("catalog.query.result_count", figures.Count);
-            _telemetry.RecordQuery(stopwatch.Elapsed.TotalMilliseconds, filter);
+            _telemetry.RecordQuery(stopwatch.Elapsed.TotalSeconds, filter);
             return figures;
         }
         catch (Exception exception)

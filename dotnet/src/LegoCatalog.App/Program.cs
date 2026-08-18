@@ -103,6 +103,7 @@ builder.Logging.AddOpenTelemetry(
     });
 
 var app = builder.Build();
+app.UseMiddleware<OriginalRequestTargetMiddleware>();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseMiddleware<RequestTelemetryMiddleware>();
