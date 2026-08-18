@@ -81,8 +81,9 @@ Open `http://localhost:8080/`. Liveness is `/healthz`; readiness is `/readyz`.
 java -jar target/catalog-java-1.0.0.jar
 ```
 
-Surefire writes native JUnit XML to `target/surefire-reports/`, including the exact ten
-frozen runtime failure-state display names.
+Surefire writes native JUnit XML to `target/surefire-reports/`, including all twelve frozen
+runtime display names. The conformance suite reads both shared normalization and text-validation
+vector files directly from `workshop/contracts`.
 
 ## Full shared acceptance
 

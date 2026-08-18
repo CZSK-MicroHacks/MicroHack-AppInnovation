@@ -12,7 +12,13 @@ public interface FigureRepository extends JpaRepository<Figure, UUID> {
 
     List<Figure> findAllByOrderByIdAsc();
 
-    List<Figure> findByNameContainingIgnoreCaseOrderByIdAsc(String search);
+    @Query("""
+            SELECT f FROM Figure f
+            WHERE lower(f.name) LIKE concat('%', lower(:search), '%') ESCAPE '!'
+            ORDER BY f.id ASC
+            """)
+    List<Figure> findByNameLiteral(
+            @Param("search") String escapedSearch);
 
     @Query("""
             SELECT f FROM Figure f
@@ -24,12 +30,12 @@ public interface FigureRepository extends JpaRepository<Figure, UUID> {
 
     @Query("""
             SELECT f FROM Figure f
-            WHERE lower(f.name) LIKE concat('%', lower(:search), '%')
+            WHERE lower(f.name) LIKE concat('%', lower(:search), '%') ESCAPE '!'
               AND (f.category.slug = :category
                    OR lower(f.category.name) = lower(:category))
             ORDER BY f.id ASC
             """)
     List<Figure> findBySearchAndCategory(
-            @Param("search") String search,
+            @Param("search") String escapedSearch,
             @Param("category") String category);
 }

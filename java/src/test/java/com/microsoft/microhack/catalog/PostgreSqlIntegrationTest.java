@@ -12,7 +12,9 @@ import com.microsoft.microhack.catalog.repository.CategoryRepository;
 import com.microsoft.microhack.catalog.repository.FigureRepository;
 import com.microsoft.microhack.catalog.service.CatalogImportService;
 import com.microsoft.microhack.catalog.service.CatalogImportValidationException;
+import com.microsoft.microhack.catalog.service.CatalogService;
 import com.microsoft.microhack.catalog.service.PerformanceCatalogService;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -72,6 +74,9 @@ class PostgreSqlIntegrationTest {
     PerformanceCatalogService performance;
 
     @Autowired
+    CatalogService catalog;
+
+    @Autowired
     TestRestTemplate http;
 
     @LocalServerPort
@@ -113,6 +118,11 @@ class PostgreSqlIntegrationTest {
                 .andExpect(content().json("""
                         {"status":"ready","checks":{"database":"ready","import":"ready"}}
                         """));
+        String canonicalId = figures.findAllByOrderByIdAsc().get(0).getId().toString();
+        mockMvc.perform(get("/figure/{id}", canonicalId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/figure/{id}", canonicalId.toUpperCase(java.util.Locale.ROOT)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -163,6 +173,49 @@ class PostgreSqlIntegrationTest {
 
     @Test
     @Order(3)
+    void searchTreatsLikeWildcardsAndEscapeAsLiteralText() {
+        importService.importDocument(stream("""
+                [
+                  {
+                    "productId":"33333333-3333-4333-8333-333333333331",
+                    "name":"Literal % Figure",
+                    "description":"A catalog figure whose name contains a literal percent character.",
+                    "category":"Literal Search",
+                    "filename":"33333333-3333-4333-8333-333333333331.png",
+                    "imagePrompt":"Photorealistic construction-toy figure with a literal percent symbol."
+                  },
+                  {
+                    "productId":"33333333-3333-4333-8333-333333333332",
+                    "name":"Literal _ Figure",
+                    "description":"A catalog figure whose name contains a literal underscore character.",
+                    "category":"Literal Search",
+                    "filename":"33333333-3333-4333-8333-333333333332.png",
+                    "imagePrompt":"Photorealistic construction-toy figure with a literal underscore symbol."
+                  },
+                  {
+                    "productId":"33333333-3333-4333-8333-333333333333",
+                    "name":"Literal ! Figure",
+                    "description":"A catalog figure whose name contains the configured LIKE escape character.",
+                    "category":"Literal Search",
+                    "filename":"33333333-3333-4333-8333-333333333333.png",
+                    "imagePrompt":"Photorealistic construction-toy figure with a literal exclamation symbol."
+                  }
+                ]
+                """));
+
+        assertThat(catalog.list("%", null))
+                .extracting(item -> item.name())
+                .containsExactly("Literal % Figure");
+        assertThat(catalog.list("_", "literal-search"))
+                .extracting(item -> item.name())
+                .containsExactly("Literal _ Figure");
+        assertThat(catalog.list("!", "LITERAL SEARCH"))
+                .extracting(item -> item.name())
+                .containsExactly("Literal ! Figure");
+    }
+
+    @Test
+    @Order(4)
     void performanceUsesConfiguredBoundAndReturnsCanonicalCorpus() {
         var result = performance.execute();
 
@@ -172,7 +225,7 @@ class PostgreSqlIntegrationTest {
     }
 
     @Test
-    @Order(4)
+    @Order(5)
     void liveConnectorRejectsAliasesBeforeRouteMapping() throws Exception {
         for (String path : new String[] {
                 "/images/../healthz",
@@ -213,5 +266,9 @@ class PostgreSqlIntegrationTest {
                 "category":"Strict Uploads","filename":"%s.png",
                 "imagePrompt":"Photorealistic construction-toy figure on a clean studio background."}
                 """.formatted(productId, productId);
+    }
+
+    private static ByteArrayInputStream stream(String document) {
+        return new ByteArrayInputStream(document.getBytes(StandardCharsets.UTF_8));
     }
 }

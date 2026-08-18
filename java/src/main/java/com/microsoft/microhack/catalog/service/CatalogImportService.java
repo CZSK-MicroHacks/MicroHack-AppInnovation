@@ -74,7 +74,7 @@ public class CatalogImportService {
                     "catalog.import.skipped", skipped));
             return new ImportResult(inserted, skipped, items.size());
         } catch (RuntimeException exception) {
-            int rejected = items == null ? 1 : items.size();
+            int rejected = 1;
             span.setAttribute("catalog.import.inserted", 0);
             span.setAttribute("catalog.import.skipped", 0);
             span.setAttribute("catalog.import.rejected", rejected);

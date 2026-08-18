@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /** Emits standard HTTP server span attributes and one structured completion log. */
@@ -36,7 +37,6 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
         long started = System.nanoTime();
         Span span = telemetry.startHttpServerSpan();
         span.setAttribute("http.request.method", request.getMethod());
-        span.setAttribute("http.route", request.getRequestURI());
         span.setAttribute("server.address", request.getServerName());
         try (var scope = span.makeCurrent()) {
             filterChain.doFilter(request, response);
@@ -46,17 +46,30 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             CatalogTelemetry.exception(LOGGER, exception);
             throw exception;
         } finally {
-            span.setAttribute("http.response.status_code", response.getStatus());
+            int status = response.getStatus();
+            String route = matchedRoute(request);
+            if (route != null) {
+                span.setAttribute("http.route", route);
+            }
+            span.setAttribute("http.response.status_code", status);
             telemetry.recordHttp(
                     (System.nanoTime() - started) / 1_000_000_000.0,
                     request.getMethod(),
-                    request.getRequestURI(),
-                    response.getStatus());
-            CatalogTelemetry.log(LOGGER, "http.server.request", Map.of(
-                    "http.request.method", request.getMethod(),
-                    "http.route", request.getRequestURI(),
-                    "http.response.status_code", response.getStatus()));
+                    route,
+                    status);
+            Map<String, Object> fields = new java.util.LinkedHashMap<>();
+            fields.put("http.request.method", request.getMethod());
+            if (route != null) {
+                fields.put("http.route", route);
+            }
+            fields.put("http.response.status_code", status);
+            CatalogTelemetry.log(LOGGER, "http.server.request", fields);
             span.end();
         }
+    }
+
+    private static String matchedRoute(HttpServletRequest request) {
+        Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        return pattern == null ? null : pattern.toString();
     }
 }

@@ -128,6 +128,10 @@ public class CatalogDocumentParser {
             CatalogImportItem record,
             Map<String, String> namesToSlugs,
             Map<String, String> slugsToNames) {
+        validateText(record.name(), "name", 3, 80, null);
+        validateText(record.description(), "description", 20, 1200, null);
+        validateText(record.category(), "category", 2, 60, null);
+        validateText(record.imagePrompt(), "imagePrompt", 30, null, 260);
         Set<ConstraintViolation<CatalogImportItem>> violations = validator.validate(record);
         if (!violations.isEmpty()) {
             throw new CatalogImportValidationException(
@@ -171,5 +175,29 @@ public class CatalogDocumentParser {
                 record.category(),
                 slug,
                 record.filename());
+    }
+
+    private static void validateText(
+            String value,
+            String field,
+            int minimumCodePoints,
+            Integer maximumUtf16Units,
+            Integer maximumCodePoints) {
+        if (value == null || value.isBlank()) {
+            throw new CatalogImportValidationException(field + " must not be blank");
+        }
+        int codePoints = value.codePointCount(0, value.length());
+        if (codePoints < minimumCodePoints) {
+            throw new CatalogImportValidationException(
+                    field + " must contain at least " + minimumCodePoints + " Unicode code points");
+        }
+        if (maximumUtf16Units != null && value.length() > maximumUtf16Units) {
+            throw new CatalogImportValidationException(
+                    field + " must contain at most " + maximumUtf16Units + " UTF-16 code units");
+        }
+        if (maximumCodePoints != null && codePoints > maximumCodePoints) {
+            throw new CatalogImportValidationException(
+                    field + " must contain at most " + maximumCodePoints + " Unicode code points");
+        }
     }
 }

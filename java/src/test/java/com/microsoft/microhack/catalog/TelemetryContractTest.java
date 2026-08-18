@@ -50,11 +50,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.servlet.HandlerMapping;
 
 /** Proves frozen traces, metrics, and bridged logs with real SDK exporters. */
 class TelemetryContractTest {
@@ -122,24 +124,40 @@ class TelemetryContractTest {
 
     @Test
     void httpSignalAndFullResourceIdentityReachLogExporter() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/healthz");
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/figure/44444444-4444-4444-8444-444444444444");
         request.setServerName("catalog.test");
         MockHttpServletResponse response = new MockHttpServletResponse();
         new RequestTelemetryFilter(telemetry).doFilter(
                 request,
                 response,
-                (ignoredRequest, ignoredResponse) -> response.setStatus(204));
+                (ignoredRequest, ignoredResponse) -> {
+                    request.setAttribute(
+                            HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE,
+                            "/figure/{id}");
+                    response.setStatus(404);
+                });
 
         var span = spans.getFinishedSpanItems().get(0);
         assertThat(span.getKind()).isEqualTo(SpanKind.SERVER);
         assertThat(span.getAttributes().get(AttributeKey.stringKey("http.route")))
-                .isEqualTo("/healthz");
-        assertThat(metricNames()).contains(CatalogTelemetry.HTTP_DURATION_METRIC);
+                .isEqualTo("/figure/{id}");
+        assertThat(span.getAttributes().get(AttributeKey.longKey("http.response.status_code")))
+                .isEqualTo(404L);
+        var httpPoint = metric(CatalogTelemetry.HTTP_DURATION_METRIC)
+                .getHistogramData()
+                .getPoints()
+                .iterator()
+                .next();
+        assertThat(httpPoint.getAttributes().get(AttributeKey.stringKey("http.route")))
+                .isEqualTo("/figure/{id}");
+        assertThat(httpPoint.getAttributes().get(AttributeKey.longKey("http.response.status_code")))
+                .isEqualTo(404L);
         LogRecordData record = log("http.server.request");
         assertAttributes(record, Map.of(
                 "http.request.method", "GET",
-                "http.route", "/healthz",
-                "http.response.status_code", "204"));
+                "http.route", "/figure/{id}",
+                "http.response.status_code", "404"));
         assertFullResource(record);
 
         logs.reset();
@@ -163,20 +181,37 @@ class TelemetryContractTest {
 
         assertThatThrownBy(() -> service.importDocument(stream("null")))
                 .isInstanceOf(CatalogImportValidationException.class);
+        assertLatestImportRejectedOne(1);
+        assertThatThrownBy(() -> service.importDocument(
+                        stream(validItem().replace("Telemetry Figure", "x"))))
+                .isInstanceOf(CatalogImportValidationException.class);
+        assertLatestImportRejectedOne(2);
+        assertThatThrownBy(() -> service.importDocument(
+                        stream("[" + validItemObject() + "," + validItemObject() + "]")))
+                .isInstanceOf(CatalogImportValidationException.class);
+        assertLatestImportRejectedOne(3);
+        verifyNoInteractions(figures, categories);
 
-        var span = spans.getFinishedSpanItems().stream()
-                .filter(item -> item.getName().equals("catalog.import"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(span.getAttributes().get(AttributeKey.longKey("catalog.import.rejected")))
-                .isEqualTo(1L);
+        FigureRepository conflictingFigures = mock(FigureRepository.class);
+        CategoryRepository conflictingCategories = mock(CategoryRepository.class);
+        when(conflictingCategories.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("transaction conflict"))
+                .when(conflictingFigures)
+                .flush();
+        assertThatThrownBy(() -> importService(conflictingFigures, conflictingCategories)
+                        .importDocument(stream(validItem())))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertLatestImportRejectedOne(4);
+        assertThat(rejectedMetricCount()).isEqualTo(4);
+
+        var span = importSpans().get(0);
         assertThat(span.getEvents()).anyMatch(event -> event.getName().equals("exception"));
-        assertThat(metricNames()).contains("catalog.import.records");
+        assertThat(metricNames()).contains(CatalogTelemetry.IMPORT_RECORDS_METRIC);
         assertAttributes(log("catalog.import.failed"), Map.of(
                 "catalog.import.rejected", "1",
                 "exception.type", CatalogImportValidationException.class.getName()));
         assertExceptionRecord(CatalogImportValidationException.class);
-        verifyNoInteractions(figures, categories);
 
         logs.reset();
         when(figures.existsById(org.mockito.ArgumentMatchers.any())).thenReturn(true);
@@ -184,6 +219,29 @@ class TelemetryContractTest {
         assertAttributes(log("catalog.import.completed"), Map.of(
                 "catalog.import.inserted", "0",
                 "catalog.import.skipped", "1"));
+    }
+
+    @Test
+    void metricUnitsAndSecondValuesAreFrozen() {
+        telemetry.recordHttp(0.11, "GET", "/figure/{id}", 200);
+        telemetry.recordDatabase(0.22, "select");
+        telemetry.recordQuery(0.33, "search");
+        telemetry.recordPerformance(0.44, 3);
+        telemetry.recordImport(0, 0, 1);
+
+        assertHistogram(CatalogTelemetry.HTTP_DURATION_METRIC, CatalogTelemetry.HTTP_DURATION_UNIT, 0.11);
+        assertHistogram(
+                CatalogTelemetry.DATABASE_DURATION_METRIC,
+                CatalogTelemetry.DATABASE_DURATION_UNIT,
+                0.22);
+        assertHistogram(CatalogTelemetry.QUERY_DURATION_METRIC, CatalogTelemetry.QUERY_DURATION_UNIT, 0.33);
+        assertHistogram(
+                CatalogTelemetry.PERFORMANCE_DURATION_METRIC,
+                CatalogTelemetry.PERFORMANCE_DURATION_UNIT,
+                0.44);
+        assertThat(metric(CatalogTelemetry.IMPORT_RECORDS_METRIC).getUnit())
+                .isEqualTo(CatalogTelemetry.IMPORT_RECORDS_UNIT);
+        assertThat(rejectedMetricCount()).isEqualTo(1);
     }
 
     @Test
@@ -325,20 +383,64 @@ class TelemetryContractTest {
         return metrics.collectAllMetrics().stream().map(MetricData::getName).toList();
     }
 
+    private MetricData metric(String name) {
+        return metrics.collectAllMetrics().stream()
+                .filter(metric -> name.equals(metric.getName()))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private void assertHistogram(String name, String unit, double expectedSum) {
+        MetricData metric = metric(name);
+        assertThat(metric.getUnit()).isEqualTo(unit);
+        assertThat(metric.getHistogramData().getPoints())
+                .singleElement()
+                .satisfies(point -> assertThat(point.getSum()).isEqualTo(expectedSum));
+    }
+
+    private List<io.opentelemetry.sdk.trace.data.SpanData> importSpans() {
+        return spans.getFinishedSpanItems().stream()
+                .filter(item -> item.getName().equals("catalog.import"))
+                .toList();
+    }
+
+    private void assertLatestImportRejectedOne(int expectedSpanCount) {
+        assertThat(importSpans()).hasSize(expectedSpanCount);
+        assertThat(importSpans().get(expectedSpanCount - 1)
+                        .getAttributes()
+                        .get(AttributeKey.longKey("catalog.import.rejected")))
+                .isEqualTo(1L);
+    }
+
+    private long rejectedMetricCount() {
+        return metric(CatalogTelemetry.IMPORT_RECORDS_METRIC)
+                .getLongSumData()
+                .getPoints()
+                .stream()
+                .filter(point -> "rejected".equals(point.getAttributes().get(
+                        AttributeKey.stringKey("catalog.import.outcome"))))
+                .mapToLong(point -> point.getValue())
+                .sum();
+    }
+
     private static ByteArrayInputStream stream(String document) {
         return new ByteArrayInputStream(document.getBytes(StandardCharsets.UTF_8));
     }
 
     private static String validItem() {
+        return "[" + validItemObject() + "]";
+    }
+
+    private static String validItemObject() {
         return """
-                [{
+                {
                   "productId":"44444444-4444-4444-8444-444444444444",
                   "name":"Telemetry Figure",
                   "description":"A complete figure used to validate telemetry completion logs.",
                   "category":"Telemetry Figures",
                   "filename":"44444444-4444-4444-8444-444444444444.png",
                   "imagePrompt":"Photorealistic construction-toy figure on a clean studio background."
-                }]
+                }
                 """;
     }
 }

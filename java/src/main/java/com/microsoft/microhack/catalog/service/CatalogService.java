@@ -92,16 +92,24 @@ public class CatalogService {
     }
 
     private List<Figure> query(String search, String category) {
+        String escapedSearch = search == null ? null : escapeLikeLiteral(search);
         if (search != null && category != null) {
-            return figures.findBySearchAndCategory(search, category);
+            return figures.findBySearchAndCategory(escapedSearch, category);
         }
         if (search != null) {
-            return figures.findByNameContainingIgnoreCaseOrderByIdAsc(search);
+            return figures.findByNameLiteral(escapedSearch);
         }
         if (category != null) {
             return figures.findByCategory(category);
         }
         return figures.findAllByOrderByIdAsc();
+    }
+
+    /** Escapes every character with SQL LIKE semantics using the repository's {@code !} escape. */
+    static String escapeLikeLiteral(String value) {
+        return value.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
     }
 
     private static String blankToNull(String value) {

@@ -41,6 +41,9 @@ public class CatalogController {
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
+        if (!id.equals(figureId.toString())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
         CatalogFigureDto figure = catalog.find(figureId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         model.addAttribute("figure", figure);

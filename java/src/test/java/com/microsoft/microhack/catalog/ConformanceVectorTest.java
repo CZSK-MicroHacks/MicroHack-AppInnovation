@@ -13,6 +13,9 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** Verifies shared normalization and canonical identity vectors without reinterpretation. */
@@ -24,6 +27,7 @@ class ConformanceVectorTest {
             Validation.buildDefaultValidatorFactory().getValidator());
 
     @Test
+    @DisplayName("Contract.Conformance.NormalizationVectors")
     void categorySlugMatchesSharedVectors() throws Exception {
         JsonNode vectors = mapper.readTree(Files.readString(contract("normalization-vectors.json")));
         for (JsonNode vector : vectors.get("vectors")) {
@@ -32,6 +36,29 @@ class ConformanceVectorTest {
         }
         for (JsonNode vector : vectors.get("invalidVectors")) {
             assertThat(CategorySlug.normalize(vector.get("input").asText())).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("Contract.Conformance.TextValidationVectors")
+    void textValidationMatchesSharedVectors() throws Exception {
+        JsonNode vectors = mapper.readTree(Files.readString(contract("text-validation-vectors.json")));
+        for (JsonNode vector : vectors.get("vectors")) {
+            String value = vector.get("fragment").asText().repeat(vector.get("repeat").asInt());
+            Map<String, String> item = validItemFields(
+                    "11111111-1111-4111-8111-111111111111");
+            item.put(vector.get("field").asText(), value);
+            String payload = mapper.writeValueAsString(new Object[] {item});
+
+            if (vector.get("valid").asBoolean()) {
+                assertThat(parser.parse(stream(payload)))
+                        .as(vector.get("reason").asText())
+                        .hasSize(1);
+            } else {
+                assertThatThrownBy(() -> parser.parse(stream(payload)))
+                        .as(vector.get("reason").asText())
+                        .isInstanceOf(CatalogImportValidationException.class);
+            }
         }
     }
 
@@ -95,6 +122,19 @@ class ConformanceVectorTest {
                   "imagePrompt":"Photorealistic construction-toy figure on a clean studio background."
                 }
                 """.formatted(productId, productId);
+    }
+
+    private static Map<String, String> validItemFields(String productId) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("productId", productId);
+        fields.put("name", "Strict Figure");
+        fields.put("description", "A complete strict document validation figure for the catalog.");
+        fields.put("category", "Strict Figures");
+        fields.put("filename", productId + ".png");
+        fields.put(
+                "imagePrompt",
+                "Photorealistic construction-toy figure on a clean studio background.");
+        return fields;
     }
 
     private static ByteArrayInputStream stream(String value) {

@@ -26,8 +26,13 @@ public class CatalogTelemetry {
     public static final String DATABASE_DURATION_METRIC = "db.client.operation.duration";
     public static final String DATABASE_DURATION_UNIT = "s";
     public static final String HTTP_DURATION_METRIC = "http.server.request.duration";
+    public static final String HTTP_DURATION_UNIT = "s";
+    public static final String IMPORT_RECORDS_METRIC = "catalog.import.records";
+    public static final String IMPORT_RECORDS_UNIT = "{record}";
     public static final String QUERY_DURATION_METRIC = "catalog.query.duration";
+    public static final String QUERY_DURATION_UNIT = "s";
     public static final String PERFORMANCE_DURATION_METRIC = "catalog.performance.duration";
+    public static final String PERFORMANCE_DURATION_UNIT = "s";
 
     private final Tracer tracer;
     private final String databaseHost;
@@ -43,18 +48,20 @@ public class CatalogTelemetry {
         databaseHost = options.databaseHost();
         databaseName = options.databaseName();
         var meter = openTelemetry.getMeter(INSTRUMENTATION_NAME);
-        importRecords = meter.counterBuilder("catalog.import.records").build();
+        importRecords = meter.counterBuilder(IMPORT_RECORDS_METRIC)
+                .setUnit(IMPORT_RECORDS_UNIT)
+                .build();
         httpDuration = meter.histogramBuilder(HTTP_DURATION_METRIC)
-                .setUnit("s")
+                .setUnit(HTTP_DURATION_UNIT)
                 .build();
         databaseDuration = meter.histogramBuilder(DATABASE_DURATION_METRIC)
                 .setUnit(DATABASE_DURATION_UNIT)
                 .build();
         queryDuration = meter.histogramBuilder(QUERY_DURATION_METRIC)
-                .setUnit("s")
+                .setUnit(QUERY_DURATION_UNIT)
                 .build();
         performanceDuration = meter.histogramBuilder(PERFORMANCE_DURATION_METRIC)
-                .setUnit("s")
+                .setUnit(PERFORMANCE_DURATION_UNIT)
                 .build();
     }
 
@@ -93,12 +100,13 @@ public class CatalogTelemetry {
     }
 
     public void recordHttp(double seconds, String method, String route, int statusCode) {
-        httpDuration.record(seconds,
-                io.opentelemetry.api.common.Attributes.builder()
-                        .put("http.request.method", method)
-                        .put("http.route", route)
-                        .put("http.response.status_code", statusCode)
-                        .build());
+        var attributes = io.opentelemetry.api.common.Attributes.builder()
+                .put("http.request.method", method)
+                .put("http.response.status_code", statusCode);
+        if (route != null) {
+            attributes.put("http.route", route);
+        }
+        httpDuration.record(seconds, attributes.build());
     }
 
     public void recordDatabase(double seconds, String operation) {
