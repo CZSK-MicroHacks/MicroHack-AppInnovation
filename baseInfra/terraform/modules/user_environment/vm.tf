@@ -95,8 +95,15 @@ resource "azapi_resource" "vm_setup" {
       autoUpgradeMinorVersion = false
       forceUpdateTag          = "${local.provisioner_sha256}-${var.source_commit}"
       protectedSettings = {
-        commandToExecute = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$script = 'C:\\AzureData\\provision-vm.ps1'; if (-not (Test-Path -LiteralPath $script)) { Copy-Item -LiteralPath 'C:\\AzureData\\CustomData.bin' -Destination $script -Force }; & $script -Stack ${each.key} -SourceCommit ${var.source_commit} -SourceArchiveUrl ${local.source_archive_url} -SourceArchiveSha256 ${var.source_archive_sha256}\""
+        commandToExecute = local.provisioner_command_to_execute[each.key]
       }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.provisioner_command_to_execute[each.key]) <= 7800
+      error_message = "The rendered Windows Custom Script Extension command exceeds the conservative 7,800-character launch limit."
     }
   }
 

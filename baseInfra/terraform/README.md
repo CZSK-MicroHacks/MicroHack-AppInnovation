@@ -69,13 +69,19 @@ terraform output deployment_footprint
 ## Immutable Custom Script Extension
 
 The provisioner and a generated per-stack secret payload are embedded in each VM's custom data
-instead of downloaded from a branch. Azure decodes it under the SYSTEM/Administrators-only
-`C:\AzureData` directory. The extension command is stored only in `protectedSettings`, contains no
-secret values, and copies the provisioner only on first execution. The provisioner persists the
-payload under an equally restrictive `C:\MicroHack\secrets` ACL, strips it from its executable
-copy, and overwrites/removes `CustomData.bin`. Installers receive database setup secrets through
-short-lived protected response/option files; `sqlcmd` and `psql` authenticate through
-`SQLCMDPASSWORD` and `PGPASSWORD`, never password command arguments. Application/data content uses:
+instead of downloaded from a branch. Azure decodes the data bundle under the
+SYSTEM/Administrators-only `C:\AzureData` directory. The extension command is stored only in
+`protectedSettings` and contains a secret-free encoded bootstrap. Before any provisioner
+execution, a short wrapper decodes the Terraform `base64gzip` payload with .NET
+`MemoryStream`/`GZipStream`/`StreamReader`, dot-sources the decompressed secret-free bootstrap, and
+calls it with only stack/source metadata. The bootstrap reads the bundle as data, writes a protected
+payload and clean script, clears `CustomData.bin`, and launches a new Windows PowerShell process
+against only the clean script. Payload values never become PowerShell source, command arguments, or
+logs. A lifecycle precondition rejects an entire rendered CSE command above 7,800 characters.
+Installers
+receive database setup secrets through short-lived protected response/option files; `sqlcmd` and
+`psql` authenticate through `SQLCMDPASSWORD` and `PGPASSWORD`, never password command arguments.
+Application/data content uses:
 
 ```text
 https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/<40-hex-commit>.zip
@@ -92,18 +98,23 @@ VS Code, Azure CLI, uv, Python, and VS Code extension versions are pinned. There
 URLs, `latest` versions, or mutable package-manager fallbacks.
 
 VM custom data cannot be updated in place. A `terraform_data.provisioner` replacement trigger makes
-any provisioner-content change replace the two VMs rather than attempt an invalid Azure update.
-Changing only `source_commit` reruns each extension in place through its force tag.
+any bootstrap, provisioner, bundle-format, or transport-version change replace the two VMs rather
+than attempt an invalid Azure update. The same combined digest drives the extension force tag.
+Changing only `source_commit` reruns each extension in place and reuses the already-separated
+protected local files.
 
 ## Independent operation
 
 Each database is a local automatic Windows service. Each application is run by an automatic
 scheduled task (`MicroHack-dotnet` or `MicroHack-java`) whose startup script requires a successful
-native database query within five minutes before launching the app. A provisioner rerun stops and
-waits for only that stack's task/exact application process before replacing source or output,
-publishes to staging, and atomically swaps the completed output. Provisioning creates a
-stack-specific smoke marker only after the app, liveness, readiness, canonical image, canonical
-manifest counts, and native database counts pass.
+native database query within five minutes before launching the app. Native connection/query
+timeouts and an exact-PID process deadline prevent either client from hanging the task; final
+sanitized failures are written to the stack app log before retry. A provisioner rerun disables the
+task before stopping it, matches only exact parsed DLL/JAR arguments, recovers an interrupted
+`.previous` directory, publishes to staging, and atomically swaps the completed output. Task
+registration explicitly re-enables it before start. Provisioning creates a stack-specific smoke
+marker only after the app, liveness, readiness, canonical image, canonical manifest counts, and
+native database counts pass.
 
 Deallocating `vm-dotnet-userNNN` does not affect `vm-java-userNNN`, and vice versa. Shared Bastion,
 VNet, subnet, NSG, NAT Gateway, and outbound IP remain available while either VM is stopped.

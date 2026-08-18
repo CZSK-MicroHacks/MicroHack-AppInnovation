@@ -16,15 +16,42 @@ locals {
   vms_subnet_cidr         = local.derived_vms_subnet_cidr
   source_archive_url      = "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/${var.source_commit}.zip"
   provisioner_path        = "${path.module}/../../../scripts/provision-vm.ps1"
-  provisioner_sha256      = filesha256(local.provisioner_path)
+  bootstrapper_path       = "${path.module}/../../../scripts/bootstrap-provision-vm.ps1"
+  provisioner_sha256 = sha256(join(":", [
+    filesha256(local.provisioner_path),
+    filesha256(local.bootstrapper_path),
+    "custom-data-v2",
+    "gzip-bootstrap-v1"
+  ]))
   provisioner_custom_data = {
     for stack in keys(local.stacks) : stack => base64encode(join("\n", [
-      file(local.provisioner_path),
-      "# MICROHACK_SECRET_PAYLOAD:${base64encode(jsonencode({
+      "MICROHACK_CUSTOM_DATA_V2",
+      base64encode(jsonencode({
         databasePassword  = random_password.database[stack].result
         performanceApiKey = random_password.performance_api_key[stack].result
-      }))}"
+      })),
+      "MICROHACK_PROVISIONER_START",
+      file(local.provisioner_path)
     ]))
+  }
+  bootstrapper_gzip_base64 = base64gzip(file(local.bootstrapper_path))
+  provisioner_bootstrap_wrapper = {
+    for stack in keys(local.stacks) : stack => join("\n", [
+      "$ErrorActionPreference='Stop'",
+      "$b=[Convert]::FromBase64String('${local.bootstrapper_gzip_base64}')",
+      "$m=New-Object IO.MemoryStream(,$b)",
+      "$g=New-Object IO.Compression.GZipStream($m,[IO.Compression.CompressionMode]::Decompress)",
+      "$r=New-Object IO.StreamReader($g)",
+      "try{$s=$r.ReadToEnd()}finally{$r.Dispose();$g.Dispose();$m.Dispose()}",
+      ". ([ScriptBlock]::Create($s))",
+      "Invoke-ProvisioningBootstrap -Stack '${stack}' -SourceCommit '${var.source_commit}' -SourceArchiveSha256 '${var.source_archive_sha256}'"
+    ])
+  }
+  provisioner_command_to_execute = {
+    for stack in keys(local.stacks) : stack => join(" ", [
+      "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand",
+      textencodebase64(local.provisioner_bootstrap_wrapper[stack], "UTF-16LE")
+    ])
   }
   stacks = {
     dotnet = {

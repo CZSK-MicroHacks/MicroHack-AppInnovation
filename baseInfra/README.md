@@ -20,13 +20,16 @@ Application content defaults to immutable commit
 `fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9`. Terraform rejects branch, tag, short-SHA,
 and other mutable source values.
 
-`baseInfra/scripts/provision-vm.ps1` and a generated per-stack secret payload are embedded as VM
-custom data. Azure stores the decoded payload under the SYSTEM/Administrators-only `C:\AzureData`
-boundary. The protected Custom Script Extension command contains only non-secret stack and source
-integrity arguments. On first execution, the provisioner moves the secrets into
-`C:\MicroHack\secrets`, reapplies the same restrictive ACL, removes the payload from its executable
-copy, and overwrites/removes `CustomData.bin`. The provisioner verifies each locked digest and
-Authenticode publisher before running an installer. It does not use `winget`, `latest`,
+`baseInfra/scripts/provision-vm.ps1` and a generated per-stack secret payload are embedded as a VM
+custom-data bundle. Azure stores the decoded bundle under the SYSTEM/Administrators-only
+`C:\AzureData` boundary. The Custom Script Extension runs only the secret-free encoded
+`bootstrap-provision-vm.ps1`. Terraform gzip-compresses that maintained script into a short wrapper
+and rejects a rendered command above 7,800 characters. The bootstrap reads the bundle as data,
+writes the payload to
+`C:\MicroHack\secrets` and a clean provisioner to `C:\AzureData`, applies restrictive ACLs, clears
+`CustomData.bin`, and only then launches Windows PowerShell on the clean script. No payload value is
+PowerShell source, a process argument, or a log field. The provisioner verifies each locked digest
+and Authenticode publisher before running an installer. It does not use `winget`, `latest`,
 package-manager fallback chains, or raw branch URLs.
 
 Both VMs receive pinned VS Code, Azure CLI, uv, uv-managed Python 3.12.10, and exact signed
@@ -138,16 +141,21 @@ Get-ScheduledTask -TaskName 'MicroHack-*'
 
 Only the matching stack files exist on each VM. SQL Server/PostgreSQL services and the
 `MicroHack-dotnet`/`MicroHack-java` startup tasks are automatic. Each startup script waits up to
-five minutes for a successful native database query before launching the application and fails
-visibly when that bound is exceeded. Ordinary VM restarts do not reseed duplicate records or
-require student setup; the application import paths remain transactional and insert-new/idempotent.
+five minutes for a successful native database query before launching the application. Every probe
+has native connection/query timeouts plus a ten-second process ceiling; a hung client is terminated
+by its exact PID. A sanitized terminal failure is appended to the matching documented app log
+before Task Scheduler retries it. Ordinary VM restarts do not reseed duplicate records or require
+student setup; the application import paths remain transactional and insert-new/idempotent.
 
 Changing `source_commit` updates the extension force tag and reruns verified provisioning in
-place. Every rerun rehashes the cached/downloaded archive, extracts a clean source tree, stops only
-the matching scheduled task/application process before replacement, builds into a staging output,
-and atomically swaps the completed source and application directories. Editing `provision-vm.ps1`
-replaces both VMs in each affected participant module because Azure VM custom data is immutable;
-review that replacement plan carefully. To deliberately rerun one stack without replacing its VM:
+place. Every rerun first disables the matching task to suppress queued restarts, stops a running
+instance, and identifies its application only by exact parsed DLL/JAR arguments before termination.
+It then rehashes the cached/downloaded archive, extracts a clean source tree, builds into staging,
+and atomically swaps the completed source and application directories. An interrupted application
+swap restores `.previous` before another attempt. Editing either provisioning script replaces both
+VMs in each affected participant module because Azure VM custom data is immutable. The replacement
+hash covers both scripts, the bundle format, and the gzip transport version; review that replacement
+plan carefully. To deliberately rerun one stack without replacing its VM:
 
 ```pwsh
 terraform apply `

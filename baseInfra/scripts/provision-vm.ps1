@@ -270,44 +270,23 @@ function Remove-ProtectedFile {
 
 function Get-ProvisioningSecrets {
     $PayloadPath = Join-Path $SecretRoot 'provisioning.json'
-    $ScriptContent = [IO.File]::ReadAllText($PSCommandPath)
-    $PayloadMatch = [regex]::Match(
-        $ScriptContent,
-        '(?m)^# MICROHACK_SECRET_PAYLOAD:([A-Za-z0-9+/]+={0,2})\s*$'
-    )
-
-    if ($PayloadMatch.Success) {
-        $PayloadJson = [Text.Encoding]::UTF8.GetString(
-            [Convert]::FromBase64String($PayloadMatch.Groups[1].Value)
-        )
-        $Payload = $PayloadJson | ConvertFrom-Json
-        if ([string]::IsNullOrWhiteSpace([string]$Payload.databasePassword) -or
-            [string]::IsNullOrWhiteSpace([string]$Payload.performanceApiKey)) {
-            throw 'The protected provisioning payload is incomplete.'
-        }
-        Save-ProtectedConfiguration -Path $PayloadPath -Values @{
-            DatabasePassword = [string]$Payload.databasePassword
-            PerformanceApiKey = [string]$Payload.performanceApiKey
-        }
-        $CleanScript = $ScriptContent.Remove($PayloadMatch.Index, $PayloadMatch.Length)
-        Save-ProtectedText -Path $PSCommandPath -Value $CleanScript
-        Remove-ProtectedFile -Path 'C:\AzureData\CustomData.bin'
-        $PayloadJson = $null
-        $Payload = $null
-    }
-
     if (-not (Test-Path -LiteralPath $PayloadPath)) {
         throw 'The protected provisioning payload is unavailable.'
     }
     Set-ProtectedAcl -Path $PayloadPath
-    return Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json
+    $Payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace([string]$Payload.databasePassword) -or
+        [string]::IsNullOrWhiteSpace([string]$Payload.performanceApiKey)) {
+        throw 'The protected provisioning payload is incomplete.'
+    }
+    return $Payload
 }
 
 Set-ProtectedAcl -Path $SecretRoot -Directory
 Set-ProtectedAcl -Path $PSCommandPath
 $ProvisioningSecrets = Get-ProvisioningSecrets
-$DatabasePassword = [string]$ProvisioningSecrets.DatabasePassword
-$PerformanceApiKey = [string]$ProvisioningSecrets.PerformanceApiKey
+$DatabasePassword = [string]$ProvisioningSecrets.databasePassword
+$PerformanceApiKey = [string]$ProvisioningSecrets.performanceApiKey
 $ProvisioningSecrets = $null
 
 function Install-CommonTools {
@@ -867,6 +846,66 @@ function Assert-CanonicalData {
     }
 }
 
+function ConvertFrom-WindowsCommandLine {
+    param(
+        [Parameter(Mandatory)]
+        [string]$CommandLine
+    )
+
+    if ($null -eq ('MicroHack.NativeCommandLine' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace MicroHack
+{
+    public static class NativeCommandLine
+    {
+        [DllImport("shell32.dll", SetLastError = true)]
+        private static extern IntPtr CommandLineToArgvW(
+            [MarshalAs(UnmanagedType.LPWStr)] string commandLine,
+            out int argumentCount
+        );
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr LocalFree(IntPtr memory);
+
+        public static string[] Split(string commandLine)
+        {
+            int argumentCount;
+            IntPtr argumentVector = CommandLineToArgvW(commandLine, out argumentCount);
+            if (argumentVector == IntPtr.Zero)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            try
+            {
+                string[] arguments = new string[argumentCount];
+                for (int index = 0; index < argumentCount; index++)
+                {
+                    IntPtr argument = Marshal.ReadIntPtr(
+                        argumentVector,
+                        index * IntPtr.Size
+                    );
+                    arguments[index] = Marshal.PtrToStringUni(argument);
+                }
+                return arguments;
+            }
+            finally
+            {
+                LocalFree(argumentVector);
+            }
+        }
+    }
+}
+'@ | Out-Null
+    }
+
+    return [MicroHack.NativeCommandLine]::Split($CommandLine)
+}
+
 function Get-StackApplicationProcesses {
     $Executable = if ($Stack -eq 'dotnet') { 'dotnet.exe' } else { 'java.exe' }
     $ApplicationArgument = if ($Stack -eq 'dotnet') {
@@ -879,11 +918,29 @@ function Get-StackApplicationProcesses {
     return @(
         Get-CimInstance -ClassName Win32_Process -Filter "Name = '$Executable'" |
             Where-Object {
-                -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
-                $_.CommandLine.IndexOf(
-                    $ApplicationArgument,
-                    [StringComparison]::OrdinalIgnoreCase
-                ) -ge 0
+                if ([string]::IsNullOrWhiteSpace($_.CommandLine)) {
+                    $false
+                }
+                else {
+                    $Arguments = @(ConvertFrom-WindowsCommandLine -CommandLine $_.CommandLine)
+                    if ($Stack -eq 'dotnet') {
+                        $Arguments.Count -ge 2 -and $Arguments[1].Equals(
+                            $ApplicationArgument,
+                            [StringComparison]::OrdinalIgnoreCase
+                        )
+                    }
+                    else {
+                        $Arguments.Count -ge 3 -and
+                            $Arguments[1].Equals(
+                                '-jar',
+                                [StringComparison]::OrdinalIgnoreCase
+                            ) -and
+                            $Arguments[2].Equals(
+                                $ApplicationArgument,
+                                [StringComparison]::OrdinalIgnoreCase
+                            )
+                    }
+                }
             }
     )
 }
@@ -891,21 +948,22 @@ function Get-StackApplicationProcesses {
 function Stop-ApplicationTask {
     $TaskName = "MicroHack-$Stack"
     $Existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($null -ne $Existing -and $Existing.State -eq 'Running') {
-        Write-ProvisionLog "Stopping $TaskName before replacing source or application output."
-        Stop-ScheduledTask -TaskName $TaskName
+    if ($null -ne $Existing) {
+        Write-ProvisionLog "Disabling $TaskName before replacing source or application output."
+        Disable-ScheduledTask -TaskName $TaskName | Out-Null
+        $Current = Get-ScheduledTask -TaskName $TaskName
+        if ($Current.State -eq 'Running') {
+            Stop-ScheduledTask -TaskName $TaskName
+        }
     }
 
     for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
-        $Task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         $Processes = @(Get-StackApplicationProcesses)
-        if (($null -eq $Task -or $Task.State -ne 'Running') -and $Processes.Count -eq 0) {
+        if ($Processes.Count -eq 0) {
             return
         }
-        if (($null -eq $Task -or $Task.State -ne 'Running') -and $Processes.Count -gt 0) {
-            foreach ($Process in $Processes) {
-                Stop-Process -Id $Process.ProcessId -Force -ErrorAction SilentlyContinue
-            }
+        foreach ($Process in $Processes) {
+            Stop-Process -Id $Process.ProcessId -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 1
     }
@@ -923,8 +981,20 @@ function Install-StagedDirectory {
     )
 
     $PreviousPath = "$DestinationPath.previous"
-    Remove-Item -Path $PreviousPath -Recurse -Force -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $DestinationPath) {
+    if (-not (Test-Path -LiteralPath $StagingPath -PathType Container)) {
+        throw "Staged application directory is missing: $StagingPath"
+    }
+    if (-not (Test-Path -LiteralPath $DestinationPath) -and
+        (Test-Path -LiteralPath $PreviousPath -PathType Container)) {
+        Move-Item -LiteralPath $PreviousPath -Destination $DestinationPath
+    }
+    if ((Test-Path -LiteralPath $DestinationPath) -and
+        -not (Test-Path -LiteralPath $DestinationPath -PathType Container)) {
+        throw "Current application path is not a directory: $DestinationPath"
+    }
+
+    if (Test-Path -LiteralPath $DestinationPath -PathType Container) {
+        Remove-Item -Path $PreviousPath -Recurse -Force -ErrorAction SilentlyContinue
         Move-Item -LiteralPath $DestinationPath -Destination $PreviousPath
     }
     try {
@@ -961,6 +1031,7 @@ function Register-ApplicationTask {
         -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger `
         -Principal $Principal -Settings $Settings -Force | Out-Null
+    Enable-ScheduledTask -TaskName $TaskName | Out-Null
     Start-ScheduledTask -TaskName $TaskName
 }
 
@@ -1009,33 +1080,104 @@ function Publish-DotNetApplication {
     $StartScript = Join-Path $Root 'start-dotnet.ps1'
     @'
 $ErrorActionPreference = 'Stop'
+
+function Invoke-BoundedNativeProbe {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory)]
+        [string[]]$ArgumentList,
+
+        [Parameter(Mandatory)]
+        [int]$TimeoutMilliseconds,
+
+        [Parameter(Mandatory)]
+        [string]$Description
+    )
+
+    $Process = $null
+    try {
+        $Process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+            -WindowStyle Hidden -PassThru
+        if (-not $Process.WaitForExit($TimeoutMilliseconds)) {
+            $ProcessId = $Process.Id
+            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+            $Process.WaitForExit(5000) | Out-Null
+            throw "$Description exceeded its process deadline."
+        }
+        if ($Process.ExitCode -ne 0) {
+            throw "$Description exited with code $($Process.ExitCode)."
+        }
+    }
+    finally {
+        if ($null -ne $Process) {
+            if (-not $Process.HasExited) {
+                Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+            }
+            $Process.Dispose()
+        }
+    }
+}
+
 $Configuration = Get-Content 'C:\MicroHack\secrets\dotnet.json' -Raw | ConvertFrom-Json
 $DatabaseReady = $false
 $LastDatabaseError = 'SQL Server readiness was not attempted.'
-for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
+$ReadinessDeadline = [DateTime]::UtcNow.AddMinutes(5)
+while (-not $DatabaseReady -and [DateTime]::UtcNow -lt $ReadinessDeadline) {
     try {
         if ((Get-Service -Name 'MSSQL$SQLEXPRESS').Status -ne 'Running') {
             throw 'SQL Server Express service is not running.'
         }
+        $RemainingMilliseconds = [int][Math]::Max(
+            1,
+            [Math]::Min(
+                10000,
+                ($ReadinessDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+        )
         $env:SQLCMDPASSWORD = $Configuration.DatabasePassword
-        & '__SQLCMD_COMMAND__' -S 'localhost,1433' -U catalog `
-            -d LegoCatalog -b -Q 'SET NOCOUNT ON; SELECT 1;' | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "sqlcmd exited with code $LASTEXITCODE."
-        }
+        Invoke-BoundedNativeProbe -FilePath '__SQLCMD_COMMAND__' -ArgumentList @(
+            '-S',
+            'localhost,1433',
+            '-U',
+            'catalog',
+            '-d',
+            'LegoCatalog',
+            '-b',
+            '-l',
+            '5',
+            '-t',
+            '5',
+            '-Q',
+            '"SET NOCOUNT ON; SELECT 1;"'
+        ) -TimeoutMilliseconds $RemainingMilliseconds -Description 'sqlcmd readiness probe'
         $DatabaseReady = $true
-        break
     }
     catch {
-        $LastDatabaseError = $_.Exception.Message
-        Start-Sleep -Seconds 5
+        $LastDatabaseError = $_.Exception.Message -replace '[\r\n]+', ' '
     }
     finally {
         $env:SQLCMDPASSWORD = $null
     }
+    if (-not $DatabaseReady) {
+        $SleepMilliseconds = [int][Math]::Max(
+            0,
+            [Math]::Min(
+                5000,
+                ($ReadinessDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+        )
+        if ($SleepMilliseconds -gt 0) {
+            Start-Sleep -Milliseconds $SleepMilliseconds
+        }
+    }
 }
 if (-not $DatabaseReady) {
-    throw "SQL Server was not ready after 300 seconds: $LastDatabaseError"
+    $Failure = '{0} [dotnet] SQL Server readiness failed after five minutes: {1}' -f `
+        [DateTime]::UtcNow.ToString('o'), $LastDatabaseError
+    Add-Content -LiteralPath 'C:\MicroHack\logs\dotnet-app.log' -Value $Failure -Encoding UTF8
+    throw $Failure
 }
 $env:CATALOG_DATABASE_HOST = 'localhost'
 $env:CATALOG_DATABASE_PORT = '1433'
@@ -1128,33 +1270,110 @@ function Publish-JavaApplication {
     $StartScript = Join-Path $Root 'start-java.ps1'
     @'
 $ErrorActionPreference = 'Stop'
+
+function Invoke-BoundedNativeProbe {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory)]
+        [string[]]$ArgumentList,
+
+        [Parameter(Mandatory)]
+        [int]$TimeoutMilliseconds,
+
+        [Parameter(Mandatory)]
+        [string]$Description
+    )
+
+    $Process = $null
+    try {
+        $Process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+            -WindowStyle Hidden -PassThru
+        if (-not $Process.WaitForExit($TimeoutMilliseconds)) {
+            $ProcessId = $Process.Id
+            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+            $Process.WaitForExit(5000) | Out-Null
+            throw "$Description exceeded its process deadline."
+        }
+        if ($Process.ExitCode -ne 0) {
+            throw "$Description exited with code $($Process.ExitCode)."
+        }
+    }
+    finally {
+        if ($null -ne $Process) {
+            if (-not $Process.HasExited) {
+                Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+            }
+            $Process.Dispose()
+        }
+    }
+}
+
 $Configuration = Get-Content 'C:\MicroHack\secrets\java.json' -Raw | ConvertFrom-Json
 $DatabaseReady = $false
 $LastDatabaseError = 'PostgreSQL readiness was not attempted.'
-for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
+$ReadinessDeadline = [DateTime]::UtcNow.AddMinutes(5)
+while (-not $DatabaseReady -and [DateTime]::UtcNow -lt $ReadinessDeadline) {
     try {
         if ((Get-Service -Name 'postgresql-x64-18').Status -ne 'Running') {
             throw 'PostgreSQL service is not running.'
         }
+        $RemainingMilliseconds = [int][Math]::Max(
+            1,
+            [Math]::Min(
+                10000,
+                ($ReadinessDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+        )
         $env:PGPASSWORD = $Configuration.DatabasePassword
-        & 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -p 5432 `
-            -U catalog -d catalog -v ON_ERROR_STOP=1 -tAc 'SELECT 1' | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "psql exited with code $LASTEXITCODE."
-        }
+        $env:PGCONNECT_TIMEOUT = '5'
+        $env:PGOPTIONS = '-c statement_timeout=5000'
+        Invoke-BoundedNativeProbe `
+            -FilePath 'C:\Program Files\PostgreSQL\18\bin\psql.exe' `
+            -ArgumentList @(
+            '-h',
+            'localhost',
+            '-p',
+            '5432',
+            '-U',
+            'catalog',
+            '-d',
+            'catalog',
+            '-w',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-tAc',
+            '"SELECT 1;"'
+        ) -TimeoutMilliseconds $RemainingMilliseconds -Description 'psql readiness probe'
         $DatabaseReady = $true
-        break
     }
     catch {
-        $LastDatabaseError = $_.Exception.Message
-        Start-Sleep -Seconds 5
+        $LastDatabaseError = $_.Exception.Message -replace '[\r\n]+', ' '
     }
     finally {
         $env:PGPASSWORD = $null
+        $env:PGCONNECT_TIMEOUT = $null
+        $env:PGOPTIONS = $null
+    }
+    if (-not $DatabaseReady) {
+        $SleepMilliseconds = [int][Math]::Max(
+            0,
+            [Math]::Min(
+                5000,
+                ($ReadinessDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+        )
+        if ($SleepMilliseconds -gt 0) {
+            Start-Sleep -Milliseconds $SleepMilliseconds
+        }
     }
 }
 if (-not $DatabaseReady) {
-    throw "PostgreSQL was not ready after 300 seconds: $LastDatabaseError"
+    $Failure = '{0} [java] PostgreSQL readiness failed after five minutes: {1}' -f `
+        [DateTime]::UtcNow.ToString('o'), $LastDatabaseError
+    Add-Content -LiteralPath 'C:\MicroHack\logs\java-app.log' -Value $Failure -Encoding UTF8
+    throw $Failure
 }
 $env:CATALOG_DATABASE_HOST = 'localhost'
 $env:CATALOG_DATABASE_PORT = '5432'
