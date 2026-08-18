@@ -60,6 +60,15 @@ class ConformanceVectorTest {
                         .isInstanceOf(CatalogImportValidationException.class);
             }
         }
+        for (String field : new String[] {"name", "description", "category", "imagePrompt"}) {
+            Map<String, String> item = validItemFields(
+                    "11111111-1111-4111-8111-111111111111");
+            item.put(field, "\u00a0".repeat(field.equals("description") ? 20 : 30));
+            String payload = mapper.writeValueAsString(new Object[] {item});
+            assertThatThrownBy(() -> parser.parse(stream(payload)))
+                    .as("%s rejects NBSP-only text", field)
+                    .isInstanceOf(CatalogImportValidationException.class);
+        }
     }
 
     @Test

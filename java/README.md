@@ -39,6 +39,10 @@ Supply every secret outside source control:
 Standard `OTEL_*` exporter variables configure protocol, headers, TLS, sampling, and
 timeouts. Set `OTEL_SDK_DISABLED=true` only when intentionally running without a collector.
 
+Catalog imports validate and write through a proxied transaction worker. The surrounding
+telemetry boundary reports completion only after commit and records one rejected document when
+parsing, validation, persistence, or transaction commit fails.
+
 ## Local PostgreSQL and run
 
 The disposable database below uses the frozen multi-platform PostgreSQL image digest:

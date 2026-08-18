@@ -11,6 +11,7 @@ import com.microsoft.microhack.catalog.repository.CategoryRepository;
 import com.microsoft.microhack.catalog.repository.FigureRepository;
 import com.microsoft.microhack.catalog.service.CatalogDocumentParser;
 import com.microsoft.microhack.catalog.service.CatalogImportService;
+import com.microsoft.microhack.catalog.service.CatalogImportTransactionWorker;
 import com.microsoft.microhack.catalog.service.CatalogTelemetry;
 import com.microsoft.microhack.catalog.service.StartupImportRunner;
 import com.microsoft.microhack.catalog.service.StartupState;
@@ -100,11 +101,12 @@ class RuntimeHealthContractTest {
         FigureRepository figures = mock(FigureRepository.class);
         CategoryRepository categories = mock(CategoryRepository.class);
         CatalogImportService imports = new CatalogImportService(
-                new CatalogDocumentParser(
-                        new ObjectMapper(),
-                        Validation.buildDefaultValidatorFactory().getValidator()),
-                figures,
-                categories,
+                new CatalogImportTransactionWorker(
+                        new CatalogDocumentParser(
+                                new ObjectMapper(),
+                                Validation.buildDefaultValidatorFactory().getValidator()),
+                        figures,
+                        categories),
                 new CatalogTelemetry(OpenTelemetry.noop(), options));
         StartupState startupState = new StartupState();
 

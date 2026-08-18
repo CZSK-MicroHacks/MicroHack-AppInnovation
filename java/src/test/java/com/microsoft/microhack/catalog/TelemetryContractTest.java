@@ -16,6 +16,8 @@ import com.microsoft.microhack.catalog.repository.CategoryRepository;
 import com.microsoft.microhack.catalog.repository.FigureRepository;
 import com.microsoft.microhack.catalog.service.CatalogDocumentParser;
 import com.microsoft.microhack.catalog.service.CatalogImportService;
+import com.microsoft.microhack.catalog.service.CatalogImportTransaction;
+import com.microsoft.microhack.catalog.service.CatalogImportTransactionWorker;
 import com.microsoft.microhack.catalog.service.CatalogImportValidationException;
 import com.microsoft.microhack.catalog.service.CatalogQueryTimeoutException;
 import com.microsoft.microhack.catalog.service.CatalogService;
@@ -171,6 +173,27 @@ class TelemetryContractTest {
         assertAttributes(log("exception"), Map.of(
                 "exception.type", jakarta.servlet.ServletException.class.getName(),
                 "exception.message", "request failed"));
+        var failureSpan = spans.getFinishedSpanItems().get(1);
+        assertThat(failureSpan.getAttributes().get(AttributeKey.stringKey("http.route")))
+                .isEqualTo("/figure/{id}");
+        assertThat(failureSpan.getAttributes().get(
+                AttributeKey.longKey("http.response.status_code")))
+                .isEqualTo(500L);
+        assertThat(metric(CatalogTelemetry.HTTP_DURATION_METRIC)
+                        .getHistogramData()
+                        .getPoints())
+                .anySatisfy(point -> {
+                    assertThat(point.getAttributes().get(
+                            AttributeKey.stringKey("http.route")))
+                            .isEqualTo("/figure/{id}");
+                    assertThat(point.getAttributes().get(
+                            AttributeKey.longKey("http.response.status_code")))
+                            .isEqualTo(500L);
+                });
+        assertAttributes(log("http.server.request"), Map.of(
+                "http.request.method", "GET",
+                "http.route", "/figure/{id}",
+                "http.response.status_code", "500"));
     }
 
     @Test
@@ -190,20 +213,20 @@ class TelemetryContractTest {
                         stream("[" + validItemObject() + "," + validItemObject() + "]")))
                 .isInstanceOf(CatalogImportValidationException.class);
         assertLatestImportRejectedOne(3);
+        assertThatThrownBy(() -> service.importDocument(
+                        stream(validItem().replace("Telemetry Figure", "\u00a0\u00a0\u00a0"))))
+                .isInstanceOf(CatalogImportValidationException.class);
+        assertLatestImportRejectedOne(4);
         verifyNoInteractions(figures, categories);
 
-        FigureRepository conflictingFigures = mock(FigureRepository.class);
-        CategoryRepository conflictingCategories = mock(CategoryRepository.class);
-        when(conflictingCategories.save(org.mockito.ArgumentMatchers.any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("transaction conflict"))
-                .when(conflictingFigures)
-                .flush();
-        assertThatThrownBy(() -> importService(conflictingFigures, conflictingCategories)
+        CatalogImportTransaction conflictingTransaction = input -> {
+            throw new DataIntegrityViolationException("transaction conflict");
+        };
+        assertThatThrownBy(() -> new CatalogImportService(conflictingTransaction, telemetry)
                         .importDocument(stream(validItem())))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertLatestImportRejectedOne(4);
-        assertThat(rejectedMetricCount()).isEqualTo(4);
+        assertLatestImportRejectedOne(5);
+        assertThat(rejectedMetricCount()).isEqualTo(5);
 
         var span = importSpans().get(0);
         assertThat(span.getEvents()).anyMatch(event -> event.getName().equals("exception"));
@@ -340,11 +363,12 @@ class TelemetryContractTest {
             FigureRepository figures,
             CategoryRepository categories) {
         return new CatalogImportService(
-                new CatalogDocumentParser(
-                        new ObjectMapper(),
-                        Validation.buildDefaultValidatorFactory().getValidator()),
-                figures,
-                categories,
+                new CatalogImportTransactionWorker(
+                        new CatalogDocumentParser(
+                                new ObjectMapper(),
+                                Validation.buildDefaultValidatorFactory().getValidator()),
+                        figures,
+                        categories),
                 telemetry);
     }
 

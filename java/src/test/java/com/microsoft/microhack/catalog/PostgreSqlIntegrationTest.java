@@ -2,6 +2,12 @@ package com.microsoft.microhack.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -11,9 +17,15 @@ import com.microsoft.microhack.catalog.model.ImportResult;
 import com.microsoft.microhack.catalog.repository.CategoryRepository;
 import com.microsoft.microhack.catalog.repository.FigureRepository;
 import com.microsoft.microhack.catalog.service.CatalogImportService;
+import com.microsoft.microhack.catalog.service.CatalogImportTransaction;
 import com.microsoft.microhack.catalog.service.CatalogImportValidationException;
 import com.microsoft.microhack.catalog.service.CatalogService;
+import com.microsoft.microhack.catalog.service.CatalogTelemetry;
 import com.microsoft.microhack.catalog.service.PerformanceCatalogService;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import io.opentelemetry.api.trace.Span;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.BufferedReader;
@@ -33,10 +45,16 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -78,6 +96,9 @@ class PostgreSqlIntegrationTest {
 
     @Autowired
     TestRestTemplate http;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @LocalServerPort
     int port;
@@ -216,6 +237,45 @@ class PostgreSqlIntegrationTest {
 
     @Test
     @Order(4)
+    void commitPhaseConflictEmitsOneRejectionAndNoCompletion() {
+        CatalogImportTransaction commitFailure = input -> new TransactionTemplate(transactionManager)
+                .execute(status -> {
+                    TransactionSynchronizationManager.registerSynchronization(
+                            new TransactionSynchronization() {
+                                @Override
+                                public void beforeCommit(boolean readOnly) {
+                                    throw new DataIntegrityViolationException("commit conflict");
+                                }
+                            });
+                    return new ImportResult(1, 0, 1);
+                });
+        CatalogTelemetry telemetry = mock(CatalogTelemetry.class);
+        when(telemetry.startSpan("catalog.import")).thenReturn(Span.getInvalid());
+        CatalogImportService boundary = new CatalogImportService(commitFailure, telemetry);
+        Logger logger = (Logger) LoggerFactory.getLogger(CatalogImportService.class);
+        ListAppender<ILoggingEvent> events = new ListAppender<>();
+        events.start();
+        logger.addAppender(events);
+        try {
+            assertThatThrownBy(() -> boundary.importDocument(stream(strictItem(
+                            "55555555-5555-4555-8555-555555555555"))))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessage("commit conflict");
+        } finally {
+            logger.detachAppender(events);
+            events.stop();
+        }
+
+        verify(telemetry).recordImport(0, 0, 1);
+        verify(telemetry, never()).recordImport(anyInt(), anyInt(), eq(0));
+        assertThat(events.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .contains("catalog.import.failed", "exception")
+                .doesNotContain("catalog.import.completed");
+    }
+
+    @Test
+    @Order(5)
     void performanceUsesConfiguredBoundAndReturnsCanonicalCorpus() {
         var result = performance.execute();
 
@@ -225,7 +285,7 @@ class PostgreSqlIntegrationTest {
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     void liveConnectorRejectsAliasesBeforeRouteMapping() throws Exception {
         for (String path : new String[] {
                 "/images/../healthz",

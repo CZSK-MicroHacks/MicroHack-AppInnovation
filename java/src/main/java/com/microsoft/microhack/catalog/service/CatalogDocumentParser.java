@@ -183,7 +183,8 @@ public class CatalogDocumentParser {
             int minimumCodePoints,
             Integer maximumUtf16Units,
             Integer maximumCodePoints) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isEmpty() || value.codePoints().allMatch(
+                CatalogDocumentParser::isContractWhitespace)) {
             throw new CatalogImportValidationException(field + " must not be blank");
         }
         int codePoints = value.codePointCount(0, value.length());
@@ -199,5 +200,11 @@ public class CatalogDocumentParser {
             throw new CatalogImportValidationException(
                     field + " must contain at most " + maximumCodePoints + " Unicode code points");
         }
+    }
+
+    private static boolean isContractWhitespace(int codePoint) {
+        return Character.isWhitespace(codePoint)
+                || Character.isSpaceChar(codePoint)
+                || codePoint == 0x0085;
     }
 }

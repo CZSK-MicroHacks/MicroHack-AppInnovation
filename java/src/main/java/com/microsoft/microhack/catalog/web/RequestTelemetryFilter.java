@@ -44,6 +44,7 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             span.setStatus(StatusCode.ERROR);
             span.recordException(exception);
             CatalogTelemetry.exception(LOGGER, exception);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             throw exception;
         } finally {
             int status = response.getStatus();
