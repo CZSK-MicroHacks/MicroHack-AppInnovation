@@ -1,26 +1,33 @@
+using LegoCatalog.App.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace LegoCatalog.App.Data;
 
 /// <summary>
-/// Design-time factory so EF CLI can create the context for migrations.
+/// Creates the contract-configured context for EF migration commands.
 /// </summary>
-public class CatalogDbContextFactory : IDesignTimeDbContextFactory<CatalogDbContext>
+public sealed class CatalogDbContextFactory
+    : IDesignTimeDbContextFactory<CatalogDbContext>
 {
     public CatalogDbContext CreateDbContext(string[] args)
     {
-        var config = new ConfigurationBuilder()
+        var workingDirectory = Directory.GetCurrentDirectory();
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(workingDirectory)
             .AddJsonFile("appsettings.json", optional: true)
             .AddEnvironmentVariables()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["PERFTEST_API_KEY"] = "design-time-only",
+                })
             .Build();
-
-        var connStr = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
-                      ?? config["Sql:ConnectionString"]
-                      ?? "Server=.\\SQLEXPRESS;Database=LegoCatalog;TrustServerCertificate=True;Integrated Security=True";
-
+        var runtime = CatalogRuntimeOptions.Load(
+            configuration,
+            workingDirectory);
         var options = new DbContextOptionsBuilder<CatalogDbContext>()
-            .UseSqlServer(connStr)
+            .UseSqlServer(runtime.SqlConnectionString)
             .Options;
         return new CatalogDbContext(options);
     }

@@ -1,33 +1,69 @@
-using LegoCatalog.App.Services;
+using LegoCatalog.App.Configuration;
+using LegoCatalog.App.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace LegoCatalog.App.Services;
 
 /// <summary>
-/// On startup, imports seed data if DB empty and not skipped.
+/// Applies the contract migration and completes optional idempotent startup import.
 /// </summary>
-public class StartupImportHostedService : IHostedService
+public sealed class StartupImportHostedService : BackgroundService
 {
-    private readonly IServiceProvider _provider;
-    private readonly IConfiguration _cfg;
+    private readonly IServiceProvider _services;
+    private readonly CatalogRuntimeOptions _options;
+    private readonly StartupState _state;
     private readonly ILogger<StartupImportHostedService> _logger;
-    public StartupImportHostedService(IServiceProvider provider, IConfiguration cfg, ILogger<StartupImportHostedService> logger)
-    { _provider = provider; _cfg = cfg; _logger = logger; }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public StartupImportHostedService(
+        IServiceProvider services,
+        CatalogRuntimeOptions options,
+        StartupState state,
+        ILogger<StartupImportHostedService> logger)
     {
-        using var scope = _provider.CreateScope();
-        var figures = scope.ServiceProvider.GetRequiredService<IFigureRepository>();
-        var importService = scope.ServiceProvider.GetRequiredService<ImportService>();
-        var path = Environment.GetEnvironmentVariable("SEED_DATA_PATH") ?? _cfg["Seed:CatalogPath"];
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            _logger.LogWarning("Seed data path not found – skipping import (path: {Path})", path);
-            return;
-        }
-        await using var fs = File.OpenRead(path);
-        var (added, total) = await importService.ImportAsync(fs, cancellationToken);
-    _logger.LogInformation("Startup import complete (always run): parsed {Total} items, added {Added} new.", total, added);
+        _services = services;
+        _options = options;
+        _state = state;
+        _logger = logger;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await using var scope = _services.CreateAsyncScope();
+            var database = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+            await database.Database.MigrateAsync(stoppingToken);
+
+            if (_options.StartupImportEnabled)
+            {
+                if (!File.Exists(_options.SeedPath))
+                {
+                    throw new FileNotFoundException(
+                        "Configured catalog seed file was not found.",
+                        _options.SeedPath);
+                }
+
+                await using var stream = File.OpenRead(_options.SeedPath);
+                var importer = scope.ServiceProvider.GetRequiredService<ImportService>();
+                var result = await importer.ImportAsync(stream, stoppingToken);
+                _logger.LogInformation(
+                    "Startup import completed: inserted={Inserted} skipped={Skipped}",
+                    result.Inserted,
+                    result.Skipped);
+            }
+
+            _state.MarkReady();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _state.MarkFailed();
+            _logger.LogCritical(
+                exception,
+                "Startup migration or import failed; readiness remains unavailable.");
+        }
+    }
 }

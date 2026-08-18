@@ -256,13 +256,21 @@ def fetch_database_state(
         categories_query = (
             "SELECT name, slug FROM public.categories ORDER BY name, slug;"
         )
-    figures = _parse_rows(
-        _database_command(kind, connection, figures_query, environment),
-        7,
+    figures = tuple(
+        sorted(
+            _parse_rows(
+                _database_command(kind, connection, figures_query, environment),
+                7,
+            )
+        )
     )
-    categories = _parse_rows(
-        _database_command(kind, connection, categories_query, environment),
-        2,
+    categories = tuple(
+        sorted(
+            _parse_rows(
+                _database_command(kind, connection, categories_query, environment),
+                2,
+            )
+        )
     )
     return DatabaseState(figures=figures, categories=categories)
 

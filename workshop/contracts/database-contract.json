@@ -79,7 +79,7 @@
       "Categories|PK_Categories|PRIMARY KEY|Id|-|-|-|-",
       "Categories|UQ_Categories_Name|UNIQUE|Name|-|-|-|-",
       "Categories|UQ_Categories_Slug|UNIQUE|Slug|-|-|-|-",
-      "Figures|CK_Figures_ImageFile|CHECK|-|-|-|-|([ImageFile]=lower(CONVERT([varchar](36),[Id]))+'.png')",
+      "Figures|CK_Figures_ImageFile|CHECK|-|-|-|-|([ImageFile]=(lower(CONVERT([varchar](36),[Id]))+'.png'))",
       "Figures|FK_Figures_Categories|FOREIGN KEY|CategoryId|dbo.Categories(Id)|NO_ACTION|NO_ACTION|-",
       "Figures|PK_Figures|PRIMARY KEY|Id|-|-|-|-"
     ],

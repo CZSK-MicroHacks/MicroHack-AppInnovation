@@ -6,84 +6,85 @@ namespace LegoCatalog.App.Services;
 
 public interface IFigureRepository
 {
-    Task<bool> IsEmptyAsync(CancellationToken ct);
-    Task<int> BulkInsertAsync(IEnumerable<LegoFigure> figures, CancellationToken ct);
-    Task<IReadOnlyList<LegoFigure>> ListAsync(string? category, string? search, CancellationToken ct);
-    Task<LegoFigure?> GetAsync(string id, CancellationToken ct);
-    Task<int> CountAsync(CancellationToken ct);
+    Task<IReadOnlyList<LegoFigure>> ListAsync(
+        string? category,
+        string? search,
+        CancellationToken cancellationToken);
+
+    Task<LegoFigure?> GetAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public interface ICategoryRepository
 {
-    Task<Category?> GetByNameAsync(string name, CancellationToken ct);
-    Task<Category> GetOrCreateAsync(string name, CancellationToken ct);
-    Task<Dictionary<string, int>> GetNameIdMapAsync(CancellationToken ct);
-    Task<List<Category>> ListAsync(CancellationToken ct);
+    Task<IReadOnlyList<Category>> ListAsync(CancellationToken cancellationToken);
 }
 
-public class FigureRepository : IFigureRepository
+/// <summary>
+/// Executes deterministic SQL Server catalog queries.
+/// </summary>
+public sealed class FigureRepository : IFigureRepository
 {
-    private readonly CatalogDbContext _db;
-    public FigureRepository(CatalogDbContext db) => _db = db;
+    private const string CaseInsensitiveCollation = "Latin1_General_100_CI_AS";
+    private readonly CatalogDbContext _database;
 
-    public async Task<bool> IsEmptyAsync(CancellationToken ct) => !await _db.Figures.AnyAsync(ct);
+    public FigureRepository(CatalogDbContext database) => _database = database;
 
-    public Task<int> CountAsync(CancellationToken ct) => _db.Figures.CountAsync(ct);
-
-    public async Task<int> BulkInsertAsync(IEnumerable<LegoFigure> figures, CancellationToken ct)
+    public async Task<IReadOnlyList<LegoFigure>> ListAsync(
+        string? category,
+        string? search,
+        CancellationToken cancellationToken)
     {
-        // Load existing IDs once to avoid N queries and for accurate duplicate detection
-    // EF Core (current version) doesn't expose ToHashSetAsync, so materialize then convert
-    var existingIds = (await _db.Figures.AsNoTracking().Select(f => f.Id).ToListAsync(ct)).ToHashSet();
-        int added = 0;
-        foreach (var f in figures)
+        var query = _database.Figures
+            .AsNoTracking()
+            .Include(figure => figure.Category)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(category))
         {
-            if (existingIds.Contains(f.Id)) continue;
-            f.CreatedUtc = DateTime.UtcNow;
-            f.LastUpdatedUtc = f.CreatedUtc;
-            _db.Figures.Add(f);
-            existingIds.Add(f.Id);
-            added++;
+            var categoryFilter = category.Trim();
+            query = query.Where(figure =>
+                figure.Category!.Slug == categoryFilter
+                || EF.Functions.Collate(
+                    figure.Category.Name,
+                    CaseInsensitiveCollation) == categoryFilter);
         }
-        if (added > 0) await _db.SaveChangesAsync(ct);
-        return added;
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchFilter = search.Trim();
+            query = query.Where(figure =>
+                EF.Functions.Collate(
+                    figure.Name,
+                    CaseInsensitiveCollation).Contains(searchFilter));
+        }
+
+        var figures = await query.ToListAsync(cancellationToken);
+        return figures
+            .OrderBy(figure => figure.Id.ToString("D"), StringComparer.Ordinal)
+            .ToList();
     }
 
-    public async Task<IReadOnlyList<LegoFigure>> ListAsync(string? category, string? search, CancellationToken ct)
-    {
-        var q = _db.Figures.Include(f => f.Category).AsQueryable();
-        if (!string.IsNullOrWhiteSpace(category)) q = q.Where(f => f.Category!.Slug == category || f.Category.Name == category);
-        if (!string.IsNullOrWhiteSpace(search)) q = q.Where(f => f.Name.Contains(search));
-        return await q.OrderBy(f => f.Id).ToListAsync(ct);
-    }
-
-    public Task<LegoFigure?> GetAsync(string id, CancellationToken ct) => _db.Figures.Include(f => f.Category).FirstOrDefaultAsync(f => f.Id == id, ct);
+    public Task<LegoFigure?> GetAsync(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        _database.Figures
+            .AsNoTracking()
+            .Include(figure => figure.Category)
+            .FirstOrDefaultAsync(figure => figure.Id == id, cancellationToken);
 }
 
-public class CategoryRepository : ICategoryRepository
+/// <summary>
+/// Reads category filter options in stable display order.
+/// </summary>
+public sealed class CategoryRepository : ICategoryRepository
 {
-    private readonly CatalogDbContext _db;
-    public CategoryRepository(CatalogDbContext db) => _db = db;
+    private readonly CatalogDbContext _database;
 
-    public Task<Category?> GetByNameAsync(string name, CancellationToken ct) => _db.Categories.FirstOrDefaultAsync(c => c.Name == name, ct);
+    public CategoryRepository(CatalogDbContext database) => _database = database;
 
-    public async Task<Category> GetOrCreateAsync(string name, CancellationToken ct)
-    {
-        var existing = await GetByNameAsync(name, ct);
-        if (existing != null) return existing;
-        var slug = Slugify(name);
-        var cat = new Category { Name = name, Slug = slug };
-        _db.Categories.Add(cat);
-        await _db.SaveChangesAsync(ct);
-        return cat;
-    }
-
-    public async Task<Dictionary<string, int>> GetNameIdMapAsync(CancellationToken ct)
-    {
-        return await _db.Categories.AsNoTracking().ToDictionaryAsync(c => c.Name, c => c.Id, ct);
-    }
-
-    public Task<List<Category>> ListAsync(CancellationToken ct) => _db.Categories.OrderBy(c => c.Name).ToListAsync(ct);
-
-    private static string Slugify(string value) => new string(value.ToLowerInvariant().Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray()).Replace(' ', '-');
+    public async Task<IReadOnlyList<Category>> ListAsync(
+        CancellationToken cancellationToken) =>
+        await _database.Categories
+            .AsNoTracking()
+            .OrderBy(category => category.Name)
+            .ToListAsync(cancellationToken);
 }

@@ -5,7 +5,7 @@ namespace LegoCatalog.App.Models;
 /// </summary>
 public class LegoFigure
 {
-    public string Id { get; set; } = string.Empty; // e.g. LF-0001
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public int CategoryId { get; set; }
     public Category? Category { get; set; }

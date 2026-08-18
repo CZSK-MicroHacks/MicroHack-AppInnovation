@@ -17,26 +17,34 @@ public class CatalogDbContext : DbContext
     {
         modelBuilder.Entity<Category>(e =>
         {
-            e.HasKey(c => c.Id);
-            e.HasIndex(c => c.Name).IsUnique();
-            e.HasIndex(c => c.Slug).IsUnique();
+            e.ToTable("Categories");
+            e.HasKey(c => c.Id).HasName("PK_Categories");
+            e.HasAlternateKey(c => c.Name).HasName("UQ_Categories_Name");
+            e.HasAlternateKey(c => c.Slug).HasName("UQ_Categories_Slug");
             e.Property(c => c.Name).HasMaxLength(64).IsRequired();
-            e.Property(c => c.Slug).HasMaxLength(64).IsRequired();
+            e.Property(c => c.Slug).HasMaxLength(64).IsUnicode(false).IsRequired();
         });
 
         modelBuilder.Entity<LegoFigure>(e =>
         {
-            e.HasKey(f => f.Id);
-            // GUIDs from seed file -> 36 chars (including hyphens). Use 36 to avoid truncation.
-            e.Property(f => f.Id).HasMaxLength(36);
+            e.ToTable(
+                "Figures",
+                table => table.HasCheckConstraint(
+                    "CK_Figures_ImageFile",
+                    "[ImageFile] = LOWER(CONVERT(varchar(36), [Id])) + '.png'"));
+            e.HasKey(f => f.Id).HasName("PK_Figures");
             e.Property(f => f.Name).HasMaxLength(80).IsRequired();
-            e.Property(f => f.Description).IsRequired();
-            e.Property(f => f.ImageFile).HasMaxLength(64).IsRequired();
-            e.HasIndex(f => f.Name);
+            e.Property(f => f.Description).HasMaxLength(1200).IsRequired();
+            e.Property(f => f.ImageFile).HasMaxLength(40).IsUnicode(false).IsRequired();
+            e.Property(f => f.CreatedUtc).HasColumnType("datetime2").IsRequired();
+            e.Property(f => f.LastUpdatedUtc).HasColumnType("datetime2").IsRequired();
+            e.HasIndex(f => f.Name).HasDatabaseName("IX_Figures_Name");
+            e.HasIndex(f => f.CategoryId).HasDatabaseName("IX_Figures_CategoryId");
             e.HasOne(f => f.Category)
                 .WithMany(c => c.Figures)
                 .HasForeignKey(f => f.CategoryId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasConstraintName("FK_Figures_Categories")
+                .OnDelete(DeleteBehavior.NoAction);
         });
     }
 }

@@ -14,6 +14,7 @@ from catalog_acceptance.models.contracts import (
     CatalogItem,
     FULL_ACCEPTANCE_CHECKS,
 )
+from catalog_acceptance import database
 
 
 def _full_report() -> dict:
@@ -110,3 +111,37 @@ def test_catalog_item_rejects_empty_normalized_category() -> None:
                 "imagePrompt": "Photorealistic construction-toy figure for category validation on a clean background.",
             }
         )
+
+
+def test_database_state_uses_canonical_text_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Normalize engine-specific row ordering before contract comparison."""
+    outputs = iter(
+        (
+            "ffffffff-ffff-4fff-8fff-ffffffffffff\tZed\tDescription text long enough\tZed\tzed\tffffffff-ffff-4fff-8fff-ffffffffffff.png\tvalid\n"
+            "10000000-0000-4000-8000-000000000001\tAlpha\tDescription text long enough\tAlpha\talpha\t10000000-0000-4000-8000-000000000001.png\tvalid\n",
+            "Zed\tzed\nAlpha\talpha\n",
+        )
+    )
+    monkeypatch.setattr(database, "_connection", lambda *args: ([], {}))
+    monkeypatch.setattr(
+        database,
+        "_database_command",
+        lambda *args: next(outputs),
+    )
+
+    state = database.fetch_database_state(
+        "sqlserver",
+        "localhost",
+        1433,
+        "catalog",
+        "user",
+        "password",
+        "prefer",
+        True,
+        "local",
+    )
+
+    assert state.figures[0][0] == "10000000-0000-4000-8000-000000000001"
+    assert state.categories == (("Alpha", "alpha"), ("Zed", "zed"))

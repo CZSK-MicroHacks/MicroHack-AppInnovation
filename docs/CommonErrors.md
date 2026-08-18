@@ -67,6 +67,41 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Pin `tests/acceptance/.python-version` to Python 3.12 and constrain the project to `>=3.12,<3.14`. This selects published Pydantic wheels and keeps local and container validation consistent.
 
+## 10. The .NET solution reports no projects to restore
+**Symptom:** `dotnet build dotnet/LegoCatalog.sln` succeeds immediately with `Unable to find a project to restore`.
+
+**Cause:** The solution file contained literal `\t` text instead of tab indentation in its `GlobalSection` records, so the SDK did not parse the project configuration.
+
+**Resolution:** Recreated the solution with valid solution syntax and added both the application and contract test projects. The pinned .NET 8 SDK now restores, builds, and tests the complete solution.
+
+## 11. EF migration tooling cannot find ASP.NET Core 8
+**Symptom:** `dotnet-ef` 8.0.22 fails because only the .NET 8 runtime and ASP.NET Core 10 runtime are present.
+
+**Cause:** EF's .NET 8 tool requires the matching ASP.NET Core shared framework; a newer SDK/runtime does not satisfy that framework roll-forward boundary.
+
+**Resolution:** Install the frozen .NET SDK 8.0.424 in session-local or VM tool storage and run restore, build, migration, and tests with that `DOTNET_ROOT`.
+
+## 12. SQL Server corpus verification differs despite matching rows
+**Symptom:** Full acceptance reports corpus or reset differences even though SQL Server contains the expected UUIDs and values.
+
+**Cause:** SQL Server orders `uniqueidentifier` values by its binary GUID semantics, not by canonical UUID text. SQL Server also canonicalizes the image check expression with an extra right-hand grouping pair.
+
+**Resolution:** Sort native-client rows by their normalized text tuples in the verifier and freeze the actual SQL Server metadata expression produced by the contract migration.
+
+## 13. OpenTelemetry 1.12 packages report NuGet vulnerabilities
+**Symptom:** Restore emits `NU1902` for `OpenTelemetry.Api` and `OpenTelemetry.Exporter.OpenTelemetryProtocol`.
+
+**Cause:** The prior 1.12.0 packages are affected by the published `GHSA-g94r-2vxg-569j` and `GHSA-4625-4j76-fww9` advisories.
+
+**Resolution:** Align the OpenTelemetry SDK, exporter, and instrumentations on 1.17.0, which includes the fixes, and verify the resolved dependency graph with `dotnet list package --vulnerable --include-transitive`.
+
+## 14. Database duration telemetry uses the wrong unit
+**Symptom:** `db.client.operation.duration` is emitted in milliseconds even though the standard instrument name is used.
+
+**Cause:** The custom histogram and its call sites copied the application's millisecond timing convention instead of the OpenTelemetry database semantic convention.
+
+**Resolution:** Declare the histogram unit as `s`, record `Stopwatch.Elapsed.TotalSeconds`, and assert the instrument unit in the native telemetry contract test.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
