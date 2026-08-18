@@ -109,6 +109,34 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Continue verifying nullability through `information_schema.columns`, and include only true `pg_constraint.contype='c'` checks in the normalized explicit-constraint set. Validate the result against the pinned PostgreSQL 18.6 image.
 
+## 16. Tomcat normalizes traversal into an existing route
+**Symptom:** Allowing encoded separators makes probes such as `/images/../healthz` normalize to a valid route and return 200 instead of the frozen image-path 404.
+
+**Cause:** Connector normalization occurs before Spring MVC and the image-store validator, so validating only the mapped path is too late.
+
+**Resolution:** Preserve the original request target, reject raw, encoded, double-encoded, and dot-segment aliases in a highest-precedence filter, and test aliases against existing routes as well as missing files.
+
+## 17. Jackson binding accepts schema-invalid import documents
+**Symptom:** A valid array followed by another JSON root, null members, numeric values coerced to strings, or duplicate product IDs can bypass POJO validation.
+
+**Cause:** Ordinary data binding does not enforce exact token types, one-root EOF, or document-level identity uniqueness.
+
+**Resolution:** Parse the import as a token stream with explicit root, member, field, value, EOF, and duplicate checks. Convert every document failure to the controlled validation exception before repository access.
+
+## 18. Structured Logback records are absent from OTLP logs
+**Symptom:** Traces and metrics reach the configured OpenTelemetry exporter, but required structured application logs do not appear.
+
+**Cause:** Writing through SLF4J does not connect Logback to the OpenTelemetry SDK logger provider by itself.
+
+**Resolution:** Attach the official OpenTelemetry Logback appender, install it on the application's single auto-configured SDK, preserve MDC attributes, emit the distinct `exception` record, and verify exported records with an in-memory SDK log exporter.
+
+## 19. Spring Boot-managed pgJDBC version is vulnerable
+**Symptom:** Dependency scanning reports HIGH-severity `CVE-2026-54291` in pgJDBC 42.7.11.
+
+**Cause:** The managed driver version permits a SCRAM-SHA-256-PLUS downgrade.
+
+**Resolution:** Override `postgresql.version` to fixed version 42.7.12 and verify the resolved Maven graph with a HIGH/CRITICAL vulnerability scan.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
