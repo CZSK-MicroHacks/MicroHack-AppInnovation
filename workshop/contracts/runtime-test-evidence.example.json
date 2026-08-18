@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "stack": "dotnet-sqlserver",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "status": "passed",
+  "artifactFormat": "trx",
+  "artifact": "evidence/runtime-tests.trx",
+  "command": "dotnet test --logger trx --results-directory evidence",
+  "tests": [
+    {
+      "id": "liveness-database-outage",
+      "testName": "Contract.Health.LivenessSurvivesDatabaseOutage"
+    },
+    {
+      "id": "readiness-database-outage",
+      "testName": "Contract.Health.ReadinessFailsDuringDatabaseOutage"
+    },
+    {
+      "id": "readiness-import-failure",
+      "testName": "Contract.Health.ReadinessReportsImportFailure"
+    },
+    {
+      "id": "performance-database-failure",
+      "testName": "Contract.Performance.DatabaseFailureIsControlled"
+    },
+    {
+      "id": "performance-timeout",
+      "testName": "Contract.Performance.TimeoutIsControlled"
+    },
+    {
+      "id": "performance-missing-key",
+      "testName": "Contract.Performance.MissingKeyReturnsUnauthorized"
+    },
+    {
+      "id": "performance-invalid-key",
+      "testName": "Contract.Performance.InvalidKeyReturnsUnauthorized"
+    },
+    {
+      "id": "work-factor-default",
+      "testName": "Contract.Performance.MissingWorkFactorUsesDefault"
+    },
+    {
+      "id": "work-factor-bounds",
+      "testName": "Contract.Performance.BoundsAreAccepted"
+    },
+    {
+      "id": "work-factor-invalid",
+      "testName": "Contract.Performance.InvalidWorkFactorsFailStartup"
+    }
+  ]
+}

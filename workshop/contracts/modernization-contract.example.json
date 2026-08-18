@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "stack": "dotnet-sqlserver",
+    "runtimeVersion": "8.0.30",
+    "frameworkVersion": "ASP.NET Core 8.0.30",
+    "commitSha": "0000000000000000000000000000000000000000"
+  },
+  "seedManifest": {
+    "schemaVersion": "1.0.0",
+    "counts": {
+      "figures": 198,
+      "categories": 20,
+      "images": 198,
+      "imageBytes": 323011386
+    },
+    "hashes": {
+      "catalogSha256": "01cdbfd262c409eac52b3d8a4ead4937eabf331e4a9ce4fe997bdffd1273720a",
+      "categoriesSha256": "94be3f58ff5dcca7f4b622020ff2e541fcca73de8c86bc8b85cb5f31551c6f4c",
+      "imageSetSha256": "c706eda9b7d74a2b578b02487e6527e707819bc3cdd09adc59e3cb62ffcba7be"
+    }
+  },
+  "path": "manual",
+  "application": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "url": "https://catalog.example.invalid",
+    "healthUrl": "https://catalog.example.invalid/healthz",
+    "readinessUrl": "https://catalog.example.invalid/readyz",
+    "region": "swedencentral",
+    "resourceGroup": "rg-mh-example",
+    "containerAppName": "ca-mh-example",
+    "revisionName": "ca-mh-example--000001"
+  },
+  "containerImage": {
+    "registryResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
+    "registry": "acrexample.azurecr.io",
+    "repository": "catalog-dotnet",
+    "tag": "0000000000000000000000000000000000000000",
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "database": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+    "family": "azure-sql",
+    "server": "sql-example.database.windows.net",
+    "database": "catalog",
+    "migrationMechanism": "ef-migrations-sqlpackage",
+    "migrationVersion": "1",
+    "seedManifestVersion": "1.0.0",
+    "verifiedRowCounts": {
+      "figures": 198,
+      "categories": 20
+    }
+  },
+  "images": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Storage/storageAccounts/stexample/fileServices/default/shares/catalog-images",
+    "provider": "azure-files",
+    "location": "catalog-images",
+    "verification": {
+      "verified": true,
+      "imageCount": 198,
+      "imageBytes": 323011386,
+      "imageSetSha256": "c706eda9b7d74a2b578b02487e6527e707819bc3cdd09adc59e3cb62ffcba7be",
+      "seedManifestVersion": "1.0.0"
+    }
+  },
+  "authentication": {
+    "containerRegistry": "managed-identity",
+    "database": "password-secret",
+    "imageStore": "aca-volume-secret",
+    "telemetry": "connection-string-secret"
+  },
+  "observability": {
+    "serviceName": "mh-catalog-dotnet",
+    "serviceNamespace": "app-innovation",
+    "environment": "lab",
+    "serviceVersion": "0000000000000000000000000000000000000000",
+    "serviceInstanceId": "instance-000001",
+    "revision": "ca-mh-example--000001",
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example"
+  },
+  "acceptance": {
+    "report": "evidence/acceptance-report.json",
+    "profile": "full",
+    "result": "passed"
+  },
+  "deployment": {
+    "mechanism": "bicep",
+    "iacPath": "solutions/ch01-manual/dotnet/bicep"
+  },
+  "rollback": {
+    "targetRevision": "ca-mh-example--000000",
+    "runbook": "evidence/rollback.md"
+  },
+  "evidence": {
+    "telemetryReport": "evidence/telemetry-report.json",
+    "runtimeTestReport": "evidence/runtime-test-report.json"
+  }
+}

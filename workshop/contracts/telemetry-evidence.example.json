@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0.0",
+  "capturedAt": "2026-08-18T00:00:00Z",
+  "service": "mh-catalog-dotnet",
+  "resourceAttributes": {
+    "service.name": "mh-catalog-dotnet",
+    "service.namespace": "app-innovation",
+    "service.version": "0000000000000000000000000000000000000000",
+    "deployment.environment": "lab",
+    "service.instance.id": "instance-000001",
+    "azure.containerapps.revision.name": "ca-mh-example--000001"
+  },
+  "queries": {
+    "resources": {
+      "query": "AppDependencies | where TimeGenerated > ago(30m) | take 100",
+      "resultFile": "evidence/telemetry/resources.json",
+      "expectedSignalNames": [
+        "resource"
+      ]
+    },
+    "traces": {
+      "query": "AppDependencies | where TimeGenerated > ago(30m) | summarize count() by Name",
+      "resultFile": "evidence/telemetry/traces.json",
+      "expectedSignalNames": [
+        "http.server",
+        "db.client",
+        "exception",
+        "catalog.import",
+        "catalog.query",
+        "catalog.performance"
+      ]
+    },
+    "metrics": {
+      "query": "AppMetrics | where TimeGenerated > ago(30m) | summarize count() by Name",
+      "resultFile": "evidence/telemetry/metrics.json",
+      "expectedSignalNames": [
+        "http.server.request.duration",
+        "db.client.operation.duration",
+        "catalog.import.records",
+        "catalog.query.duration",
+        "catalog.performance.duration"
+      ]
+    },
+    "logs": {
+      "query": "AppTraces | where TimeGenerated > ago(30m) | summarize count() by Message",
+      "resultFile": "evidence/telemetry/logs.json",
+      "expectedSignalNames": [
+        "http.server.request",
+        "catalog.database.failed",
+        "exception",
+        "catalog.import.completed",
+        "catalog.import.failed",
+        "catalog.query.failed",
+        "catalog.performance.completed",
+        "catalog.performance.failed"
+      ]
+    }
+  }
+}

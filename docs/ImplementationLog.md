@@ -452,3 +452,17 @@ Deferred (documented for future): blob image store, telemetry.
 - Reverted two-phase VNet + separate subnet resources back to original single azapi VNet resource with inline subnet definitions.
 - Reason: separate subnet resources introduced update/idempotency complications; opting to keep simpler inline model despite occasional transient 404 previously under investigation.
 - NIC subnet reference restored to string interpolation form (`.../subnets/vms`).
+
+### 2026-08-18 (Rewrite - product gates and contract foundation)
+- Created the `rewrite-integration` branch from commit `93887ab` and retained `docs/RewritePlan.md` as the implementation source of truth.
+- Verified the selected workshop subscription permits modern ARM resources. Its deny policy targets only classic resource types; the signed-in facilitator has subscription Owner access.
+- Confirmed `Microsoft.App/agents` is registered for Azure SRE Agent, Sweden Central is supported, and the subscription has 100 regional vCPUs available there.
+- With facilitator approval, enabled the Defender CSPM `ServerlessContainers` component while preserving all other Defender extensions. Initial posture results can take up to 24 hours.
+- Pinned the Windows 11 Enterprise `26100.7456.251206` workshop matrix in `workshop/toolchain.lock.json`: .NET runtime 8.0.30/SDK 8.0.424 through runtime 10.0.11/SDK 10.0.400; Microsoft OpenJDK 17.0.20+8/Spring Boot 3.5.16 through OpenJDK 21.0.12/Spring Boot 4.0.7; Maven 3.9.16/Wrapper 3.3.4; VS Code 1.133.0; Azure CLI 2.80.0; `uv` 0.8.22; exact installer hashes, container digests, and Copilot modernization/tooling extension versions.
+- Added versioned schemas for catalog seed data, the seed manifest, modernization handoff, and acceptance evidence.
+- Froze lowercase UUID identity, `<productId>.png` storage keys, Unicode-aware category slug normalization, case-insensitive name-only search, route/status behavior, transactional insert-new import, bounded performance work, health/readiness semantics, configuration names, and telemetry resource names in `workshop/contracts/`.
+- Added `data/manifest.json` for the verified corpus: 198 figures, 20 categories, 198 images, 323,011,386 image bytes, source-file hashes, deterministic image-set hash, and per-category counts.
+- Added sanitized valid/invalid fixtures, including valid Unicode punctuation, without copying production credentials or deployment data.
+- Added the Python 3.12/uv/Pydantic/pytest acceptance harness. Its exact ordered 22-check full profile verifies the complete rendered and API result sets, all image bytes and MIME types, path traversal rejection, transactional import behavior, dependency failures, bounded performance behavior, and protected cleanup. Native `sqlcmd` and `psql` verification compares complete rows, schema, constraints, indexes, migration history, and TLS state rather than counts alone.
+- Bound modernization handoffs to the canonical manifest, release commit/image/revision, managed resource IDs, parsed TRX/JUnit runtime tests, parsed telemetry query results, non-empty mechanism-appropriate IaC, and rollback evidence.
+- Contract validation passes 18 tests with one optional live-environment skip. The offline `uv` lock check and both module entry points pass, the full acceptance command fails closed without required live inputs, and the focused contract/decomposition review approved the frozen foundation.

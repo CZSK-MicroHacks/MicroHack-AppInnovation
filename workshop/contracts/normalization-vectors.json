@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "algorithm": "category-slug-v1",
+  "vectors": [
+    {
+      "input": " Space Explorers ",
+      "expected": "space-explorers"
+    },
+    {
+      "input": "Crème Brûlée",
+      "expected": "creme-brulee"
+    },
+    {
+      "input": "Robot   Builders",
+      "expected": "robot-builders"
+    },
+    {
+      "input": "NINJA__Warriors",
+      "expected": "ninja-warriors"
+    },
+    {
+      "input": "Inventor’s Workshop",
+      "expected": "inventors-workshop"
+    }
+  ],
+  "invalidVectors": [
+    {
+      "input": "  --  ",
+      "reason": "normalizes to an empty slug"
+    },
+    {
+      "input": "’ '",
+      "reason": "normalizes to an empty slug"
+    }
+  ]
+}

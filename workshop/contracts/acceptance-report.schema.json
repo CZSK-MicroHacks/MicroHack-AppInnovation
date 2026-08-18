@@ -1,0 +1,609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/acceptance-report.schema.json",
+  "title": "MicroHack acceptance report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profile",
+    "status",
+    "startedAt",
+    "finishedAt",
+    "baseUrl",
+    "corpus",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "profile": {
+      "enum": [
+        "full",
+        "smoke"
+      ]
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed"
+      ]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "databaseKind": {
+      "enum": [
+        "sqlserver",
+        "postgresql"
+      ]
+    },
+    "databaseTarget": {
+      "enum": [
+        "local",
+        "managed"
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceCommit",
+        "imageDigest",
+        "revisionName"
+      ],
+      "properties": {
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "imageDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "revisionName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "figures",
+        "categories",
+        "images"
+      ],
+      "properties": {
+        "figures": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "categories": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "images": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "profile": {
+            "const": "full"
+          }
+        },
+        "required": [
+          "profile"
+        ]
+      },
+      "then": {
+        "required": [
+          "databaseKind",
+          "databaseTarget"
+        ],
+        "properties": {
+          "checks": {
+            "minItems": 22,
+            "maxItems": 22,
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/liveness"
+              },
+              {
+                "$ref": "#/$defs/readiness"
+              },
+              {
+                "$ref": "#/$defs/catalogOrderAndCount"
+              },
+              {
+                "$ref": "#/$defs/nameSearch"
+              },
+              {
+                "$ref": "#/$defs/nameOnlySearch"
+              },
+              {
+                "$ref": "#/$defs/categoryFilterSlug"
+              },
+              {
+                "$ref": "#/$defs/categoryFilterName"
+              },
+              {
+                "$ref": "#/$defs/knownFigure"
+              },
+              {
+                "$ref": "#/$defs/unknownFigure"
+              },
+              {
+                "$ref": "#/$defs/imageStorage"
+              },
+              {
+                "$ref": "#/$defs/importNewCategory"
+              },
+              {
+                "$ref": "#/$defs/idempotentImport"
+              },
+              {
+                "$ref": "#/$defs/invalidImport"
+              },
+              {
+                "$ref": "#/$defs/performanceAuthenticationMissing"
+              },
+              {
+                "$ref": "#/$defs/performanceAuthenticationInvalid"
+              },
+              {
+                "$ref": "#/$defs/performanceContract"
+              },
+              {
+                "$ref": "#/$defs/databaseCorpus"
+              },
+              {
+                "$ref": "#/$defs/databaseSchema"
+              },
+              {
+                "$ref": "#/$defs/databaseConstraints"
+              },
+              {
+                "$ref": "#/$defs/databaseIndexes"
+              },
+              {
+                "$ref": "#/$defs/databaseMigrations"
+              },
+              {
+                "$ref": "#/$defs/databaseTls"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profile": {
+            "const": "full"
+          },
+          "status": {
+            "const": "passed"
+          }
+        },
+        "required": [
+          "profile",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checks": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "passed"
+                },
+                "required": {
+                  "const": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status",
+        "detail",
+        "required"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "liveness",
+            "readiness",
+            "catalog-order-and-count",
+            "name-search",
+            "name-only-search",
+            "category-filter-slug",
+            "category-filter-name",
+            "known-figure",
+            "unknown-figure",
+            "image-storage",
+            "import-new-category",
+            "idempotent-import",
+            "invalid-import",
+            "performance-authentication-missing",
+            "performance-authentication-invalid",
+            "performance-contract",
+            "database-corpus",
+            "database-schema",
+            "database-constraints",
+            "database-indexes",
+            "database-migrations",
+            "database-tls"
+          ]
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "requiredCheck": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "const": true
+        }
+      },
+      "required": [
+        "required"
+      ]
+    },
+    "liveness": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "liveness"
+            }
+          }
+        }
+      ]
+    },
+    "readiness": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "readiness"
+            }
+          }
+        }
+      ]
+    },
+    "catalogOrderAndCount": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "catalog-order-and-count"
+            }
+          }
+        }
+      ]
+    },
+    "nameSearch": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "name-search"
+            }
+          }
+        }
+      ]
+    },
+    "nameOnlySearch": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "name-only-search"
+            }
+          }
+        }
+      ]
+    },
+    "categoryFilterSlug": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "category-filter-slug"
+            }
+          }
+        }
+      ]
+    },
+    "categoryFilterName": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "category-filter-name"
+            }
+          }
+        }
+      ]
+    },
+    "knownFigure": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "known-figure"
+            }
+          }
+        }
+      ]
+    },
+    "unknownFigure": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "unknown-figure"
+            }
+          }
+        }
+      ]
+    },
+    "imageStorage": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "image-storage"
+            }
+          }
+        }
+      ]
+    },
+    "importNewCategory": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "import-new-category"
+            }
+          }
+        }
+      ]
+    },
+    "idempotentImport": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "idempotent-import"
+            }
+          }
+        }
+      ]
+    },
+    "invalidImport": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "invalid-import"
+            }
+          }
+        }
+      ]
+    },
+    "performanceAuthenticationMissing": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "performance-authentication-missing"
+            }
+          }
+        }
+      ]
+    },
+    "performanceAuthenticationInvalid": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "performance-authentication-invalid"
+            }
+          }
+        }
+      ]
+    },
+    "performanceContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "performance-contract"
+            }
+          }
+        }
+      ]
+    },
+    "databaseCorpus": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-corpus"
+            }
+          }
+        }
+      ]
+    },
+    "databaseSchema": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-schema"
+            }
+          }
+        }
+      ]
+    },
+    "databaseConstraints": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-constraints"
+            }
+          }
+        }
+      ]
+    },
+    "databaseIndexes": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-indexes"
+            }
+          }
+        }
+      ]
+    },
+    "databaseMigrations": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-migrations"
+            }
+          }
+        }
+      ]
+    },
+    "databaseTls": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requiredCheck"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "database-tls"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

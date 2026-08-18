@@ -1,0 +1,25 @@
+[project]
+name = "microhack-catalog-acceptance"
+version = "1.0.0"
+description = "Path-neutral acceptance harness for the MicroHack catalog applications"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "httpx==0.28.1",
+  "idna==3.10",
+  "jsonschema==4.25.1",
+  "pydantic==2.11.7",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==8.4.1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+  "live: requires a running catalog application",
+]

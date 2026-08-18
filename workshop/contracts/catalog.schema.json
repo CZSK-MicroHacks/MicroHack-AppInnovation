@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/catalog.schema.json",
+  "title": "MicroHack catalog seed",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "productId",
+      "name",
+      "description",
+      "category",
+      "filename",
+      "imagePrompt"
+    ],
+    "properties": {
+      "productId": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 80
+      },
+      "description": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 1200
+      },
+      "category": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 60
+      },
+      "filename": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png$"
+      },
+      "imagePrompt": {
+        "type": "string",
+        "minLength": 30,
+        "maxLength": 260
+      }
+    }
+  }
+}

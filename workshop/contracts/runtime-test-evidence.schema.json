@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/runtime-test-evidence.schema.json",
+  "title": "Runtime failure-state test evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "stack",
+    "sourceCommit",
+    "status",
+    "artifactFormat",
+    "artifact",
+    "command",
+    "tests"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "stack": {
+      "enum": [
+        "dotnet-sqlserver",
+        "java-postgresql"
+      ]
+    },
+    "sourceCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "status": {
+      "const": "passed"
+    },
+    "artifactFormat": {
+      "enum": [
+        "trx",
+        "junit"
+      ]
+    },
+    "artifact": {
+      "$ref": "#/$defs/repositoryPath"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/test"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "stack": {
+            "const": "dotnet-sqlserver"
+          }
+        },
+        "required": [
+          "stack"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifactFormat": {
+            "const": "trx"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stack": {
+            "const": "java-postgresql"
+          }
+        },
+        "required": [
+          "stack"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifactFormat": {
+            "const": "junit"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "testName"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "liveness-database-outage",
+            "readiness-database-outage",
+            "readiness-import-failure",
+            "performance-database-failure",
+            "performance-timeout",
+            "performance-missing-key",
+            "performance-invalid-key",
+            "work-factor-default",
+            "work-factor-bounds",
+            "work-factor-invalid"
+          ]
+        },
+        "testName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^(?:/|[A-Za-z]:\\\\)"
+          },
+          {
+            "pattern": "(?:^|/)\\.\\.(?:/|$)"
+          }
+        ]
+      }
+    }
+  }
+}

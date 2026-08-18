@@ -46,8 +46,8 @@ coverage*/
 *.coverage
 *.coveragexml
 lcov.info
+.pytest_cache/
 
 # Logs (dotnet)
 *.trx
-
 

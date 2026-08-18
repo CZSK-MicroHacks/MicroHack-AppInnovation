@@ -1,0 +1,513 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/modernization-contract.schema.json",
+  "title": "MicroHack modernization handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "source",
+    "seedManifest",
+    "path",
+    "application",
+    "containerImage",
+    "database",
+    "images",
+    "authentication",
+    "observability",
+    "acceptance",
+    "deployment",
+    "rollback",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stack",
+        "runtimeVersion",
+        "frameworkVersion",
+        "commitSha"
+      ],
+      "properties": {
+        "stack": {
+          "enum": [
+            "dotnet-sqlserver",
+            "java-postgresql"
+          ]
+        },
+        "runtimeVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frameworkVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commitSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "seedManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "counts",
+        "hashes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "figures",
+            "categories",
+            "images",
+            "imageBytes"
+          ],
+          "properties": {
+            "figures": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "categories": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "images": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "imageBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "hashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "catalogSha256",
+            "categoriesSha256",
+            "imageSetSha256"
+          ],
+          "properties": {
+            "catalogSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "categoriesSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "imageSetSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "path": {
+      "enum": [
+        "manual",
+        "copilot-rewrite",
+        "copilot-modernization"
+      ]
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceId",
+        "url",
+        "healthUrl",
+        "readinessUrl",
+        "region",
+        "resourceGroup",
+        "containerAppName",
+        "revisionName"
+      ],
+      "properties": {
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "healthUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "readinessUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resourceGroup": {
+          "type": "string",
+          "minLength": 1
+        },
+        "containerAppName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revisionName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "containerImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registryResourceId",
+        "registry",
+        "repository",
+        "tag",
+        "digest"
+      ],
+      "properties": {
+        "registryResourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "registry": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "const": "latest"
+          }
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceId",
+        "family",
+        "server",
+        "database",
+        "migrationMechanism",
+        "migrationVersion",
+        "seedManifestVersion",
+        "verifiedRowCounts"
+      ],
+      "properties": {
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "family": {
+          "enum": [
+            "azure-sql",
+            "postgresql-flexible"
+          ]
+        },
+        "server": {
+          "type": "string",
+          "minLength": 1
+        },
+        "database": {
+          "type": "string",
+          "minLength": 1
+        },
+        "migrationMechanism": {
+          "type": "string",
+          "minLength": 1
+        },
+        "migrationVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seedManifestVersion": {
+          "const": "1.0.0"
+        },
+        "verifiedRowCounts": {
+          "$ref": "#/$defs/corpusCounts"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceId",
+        "provider",
+        "location",
+        "verification"
+      ],
+      "properties": {
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "provider": {
+          "enum": [
+            "azure-files",
+            "azure-blob"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verified",
+            "imageCount",
+            "imageBytes",
+            "imageSetSha256",
+            "seedManifestVersion"
+          ],
+          "properties": {
+            "verified": {
+              "const": true
+            },
+            "imageCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "imageBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "imageSetSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "seedManifestVersion": {
+              "const": "1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containerRegistry",
+        "database",
+        "imageStore",
+        "telemetry"
+      ],
+      "properties": {
+        "containerRegistry": {
+          "const": "managed-identity"
+        },
+        "database": {
+          "enum": [
+            "password-secret",
+            "managed-identity"
+          ]
+        },
+        "imageStore": {
+          "enum": [
+            "managed-identity",
+            "aca-volume-secret"
+          ]
+        },
+        "telemetry": {
+          "enum": [
+            "connection-string-secret",
+            "managed-identity"
+          ]
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serviceName",
+        "serviceNamespace",
+        "environment",
+        "serviceVersion",
+        "serviceInstanceId",
+        "revision",
+        "applicationInsightsResourceId",
+        "logAnalyticsWorkspaceResourceId"
+      ],
+      "properties": {
+        "serviceName": {
+          "enum": [
+            "mh-catalog-dotnet",
+            "mh-catalog-java"
+          ]
+        },
+        "serviceNamespace": {
+          "const": "app-innovation"
+        },
+        "environment": {
+          "const": "lab"
+        },
+        "serviceVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serviceInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicationInsightsResourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "logAnalyticsWorkspaceResourceId": {
+          "$ref": "#/$defs/resourceId"
+        }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report",
+        "profile",
+        "result"
+      ],
+      "properties": {
+        "report": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "profile": {
+          "const": "full"
+        },
+        "result": {
+          "const": "passed"
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism",
+        "iacPath"
+      ],
+      "properties": {
+        "mechanism": {
+          "enum": [
+            "bicep",
+            "terraform",
+            "copilot-generated"
+          ]
+        },
+        "iacPath": {
+          "$ref": "#/$defs/repositoryPath"
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetRevision",
+        "runbook"
+      ],
+      "properties": {
+        "targetRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runbook": {
+          "$ref": "#/$defs/repositoryPath"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "telemetryReport",
+        "runtimeTestReport"
+      ],
+      "properties": {
+        "telemetryReport": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "runtimeTestReport": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "assessment": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "dependencyReport": {
+          "$ref": "#/$defs/repositoryPath"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "resourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[^/]+/providers/[^/]+(?:/[^/]+/[^/]+)+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^(?:/|[A-Za-z]:\\\\)"
+          },
+          {
+            "pattern": "(?:^|/)\\.\\.(?:/|$)"
+          }
+        ]
+      }
+    },
+    "corpusCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "figures",
+        "categories"
+      ],
+      "properties": {
+        "figures": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "categories": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

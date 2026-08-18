@@ -60,6 +60,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution (Planned):** Enhance `_generate_single_image` to log error details (status codes, messages) and record to a `failed_images.json` for post-run analysis.
 
+## 9. Pydantic core build fails under Python 3.14
+**Symptom:** `uv sync` attempts to compile `pydantic-core` and fails because its PyO3 version supports Python only through 3.13.
+
+**Cause:** An unconstrained `requires-python = ">=3.12"` selected a locally installed Python 3.14 interpreter for the acceptance harness.
+
+**Resolution:** Pin `tests/acceptance/.python-version` to Python 3.12 and constrain the project to `>=3.12,<3.14`. This selects published Pydantic wheels and keeps local and container validation consistent.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

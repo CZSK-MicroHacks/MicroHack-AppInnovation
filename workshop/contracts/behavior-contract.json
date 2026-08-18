@@ -1,0 +1,305 @@
+{
+  "schemaVersion": "1.0.0",
+  "identity": {
+    "figureId": "canonical lowercase RFC 4122 UUID",
+    "filenamePattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png$",
+    "filenameRule": "filename must equal productId plus .png",
+    "storageKeyRule": "a filename is one path segment and must not contain separators, dot segments, or percent-decoded separators"
+  },
+  "categorySlug": {
+    "algorithm": "category-slug-v1",
+    "steps": [
+      "trim",
+      "normalize Unicode with NFKD",
+      "lowercase invariantly",
+      "remove combining marks and apostrophes",
+      "replace each remaining non-ASCII-alphanumeric run with one hyphen",
+      "trim leading and trailing hyphens"
+    ],
+    "emptyResult": "reject the complete import document before writing"
+  },
+  "catalog": {
+    "searchQueryParameter": "search",
+    "searchFields": [
+      "name"
+    ],
+    "searchComparison": "case-insensitive",
+    "categoryQueryParameter": "category",
+    "categoryComparison": "canonical slug or case-insensitive exact display name",
+    "ordering": "productId ascending"
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/",
+      "successStatus": 200,
+      "contentType": "text/html",
+      "assertions": [
+        "each result has data-figure-id, data-figure-name, data-figure-description, data-category-name, data-category-slug, and data-image-filename",
+        "root, search, and category-filter results exactly match the canonical ordered result set",
+        "an empty result has data-catalog-empty"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/figure/{id}",
+      "successStatus": 200,
+      "unknownStatus": 404,
+      "contentType": "text/html",
+      "assertions": [
+        "the detail root has data-figure-detail equal to productId",
+        "the detail root has the same six complete identity attributes as a catalog result"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/images/{filename}",
+      "successStatus": 200,
+      "unknownStatus": 404,
+      "traversalStatus": 404,
+      "contentType": "image/png"
+    },
+    {
+      "method": "GET",
+      "path": "/import",
+      "successStatus": 200,
+      "contentType": "text/html"
+    },
+    {
+      "method": "POST",
+      "path": "/import",
+      "successStatus": 200,
+      "invalidStatus": 400,
+      "requestContentType": "multipart/form-data",
+      "fileField": "catalogFile",
+      "jsonResponseWhenAccepted": "application/json"
+    },
+    {
+      "method": "GET",
+      "path": "/perftest/catalog",
+      "successStatus": 200,
+      "unauthorizedStatus": 401,
+      "contentType": "application/json"
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "successStatus": 200,
+      "contentType": "application/json"
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "successStatus": 200,
+      "unreadyStatus": 503,
+      "contentType": "application/json"
+    }
+  ],
+  "import": {
+    "validation": "validate the complete document before writing",
+    "transaction": "all inserts and new categories commit in one transaction",
+    "duplicates": "existing productId values are skipped",
+    "startup": "when enabled, insert new records idempotently from the configured seed path",
+    "runtimeTestRequirements": [
+      "a valid new figure and category commit together",
+      "reimporting the same figure reports it as skipped",
+      "a valid prefix followed by an invalid record publishes nothing"
+    ],
+    "acceptanceReset": {
+      "ownedProductIdPrefix": "10000000-0000-4000-8000-",
+      "method": "native database client transaction after verification",
+      "protectedBoundary": "only reserved fixture IDs and a now-empty fixture category may be deleted; every manifest record is read-only",
+      "requiredProof": "complete database state after reset equals the pre-import state"
+    }
+  },
+  "performance": {
+    "apiKeyHeader": "x-api-key",
+    "apiKeyEnvironmentVariable": "PERFTEST_API_KEY",
+    "workFactorEnvironmentVariable": "PERFTEST_WORK_FACTOR",
+    "defaultWorkFactor": 10,
+    "maximumWorkFactor": 25,
+    "databaseUnavailable": {
+      "status": 503,
+      "body": {
+        "status": "unavailable",
+        "error": "catalog_dependency_unavailable"
+      }
+    },
+    "databaseTimeout": {
+      "status": 504,
+      "body": {
+        "status": "unavailable",
+        "error": "catalog_query_timeout"
+      }
+    },
+    "responseFields": [
+      "iterations",
+      "itemCount",
+      "elapsedMilliseconds",
+      "items"
+    ],
+    "runtimeTestRequirements": [
+      "default work factor is 10",
+      "values 1 and 25 are accepted",
+      "zero, negative, non-integer, and values above 25 fail startup validation",
+      "invalid and missing API keys return 401",
+      "database failure returns the frozen 503 body without a stack trace",
+      "database timeout returns the frozen 504 body without a stack trace"
+    ]
+  },
+  "health": {
+    "liveness": "process health only; database outages do not fail liveness",
+    "readiness": "database connectivity and startup-import completion",
+    "response": {
+      "statusField": "status",
+      "checksField": "checks"
+    },
+    "degradedResponses": {
+      "databaseOutage": {
+        "statusCode": 503,
+        "body": {
+          "status": "not_ready",
+          "checks": {
+            "database": "not_ready",
+            "import": "ready"
+          }
+        }
+      },
+      "importFailure": {
+        "statusCode": 503,
+        "body": {
+          "status": "not_ready",
+          "checks": {
+            "database": "ready",
+            "import": "failed"
+          }
+        }
+      }
+    },
+    "runtimeTestRequirements": [
+      "database outage leaves /healthz at 200 healthy",
+      "database outage changes /readyz to 503 with database not-ready",
+      "incomplete startup import changes /readyz to 503 with import not-ready"
+    ]
+  },
+  "environment": {
+    "CATALOG_DATABASE_HOST": "database host or local named-instance address",
+    "CATALOG_DATABASE_PORT": "optional provider port",
+    "CATALOG_DATABASE_NAME": "catalog database name",
+    "CATALOG_DATABASE_USERNAME": "database application identity",
+    "CATALOG_DATABASE_PASSWORD": "database secret supplied outside source control",
+    "CATALOG_IMAGES_PATH": "directory containing canonical image storage keys",
+    "CATALOG_SEED_PATH": "path to catalog.json",
+    "CATALOG_STARTUP_IMPORT_ENABLED": "true or false; defaults to true",
+    "PERFTEST_API_KEY": "required; no checked-in or production default",
+    "PERFTEST_WORK_FACTOR": "integer from 1 through 25; defaults to 10",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "standard OpenTelemetry OTLP endpoint",
+    "OTEL_SERVICE_VERSION": "deployed application version",
+    "DEPLOYMENT_ENVIRONMENT": "OpenTelemetry deployment.environment; required value lab",
+    "CONTAINER_APP_REVISION": "OpenTelemetry azure.containerapps.revision.name"
+  },
+  "telemetry": {
+    "serviceNamespace": "app-innovation",
+    "deploymentEnvironment": "lab",
+    "revisionResourceAttribute": "azure.containerapps.revision.name",
+    "requiredResourceAttributes": [
+      "service.name",
+      "service.namespace",
+      "service.version",
+      "deployment.environment",
+      "service.instance.id",
+      "azure.containerapps.revision.name"
+    ],
+    "serviceNames": {
+      "dotnet-sqlserver": "mh-catalog-dotnet",
+      "java-postgresql": "mh-catalog-java"
+    },
+    "traces": {
+      "http.server": [
+        "http.request.method",
+        "http.route",
+        "http.response.status_code",
+        "server.address"
+      ],
+      "db.client": [
+        "db.system.name",
+        "db.operation.name",
+        "db.namespace",
+        "server.address"
+      ],
+      "exception": [
+        "exception.type",
+        "exception.message"
+      ],
+      "catalog.import": [
+        "catalog.import.inserted",
+        "catalog.import.skipped",
+        "catalog.import.rejected"
+      ],
+      "catalog.query": [
+        "catalog.query.filter",
+        "catalog.query.result_count"
+      ],
+      "catalog.performance": [
+        "catalog.performance.work_factor",
+        "catalog.performance.item_count"
+      ]
+    },
+    "metrics": {
+      "http.server.request.duration": [
+        "http.request.method",
+        "http.route",
+        "http.response.status_code"
+      ],
+      "db.client.operation.duration": [
+        "db.system.name",
+        "db.operation.name"
+      ],
+      "catalog.import.records": [
+        "catalog.import.outcome"
+      ],
+      "catalog.query.duration": [
+        "catalog.query.filter"
+      ],
+      "catalog.performance.duration": [
+        "catalog.performance.work_factor"
+      ]
+    },
+    "logs": {
+      "http.server.request": [
+        "http.request.method",
+        "http.route",
+        "http.response.status_code"
+      ],
+      "catalog.database.failed": [
+        "db.system.name",
+        "db.operation.name",
+        "exception.type"
+      ],
+      "exception": [
+        "exception.type",
+        "exception.message"
+      ],
+      "catalog.import.completed": [
+        "catalog.import.inserted",
+        "catalog.import.skipped"
+      ],
+      "catalog.import.failed": [
+        "catalog.import.rejected",
+        "exception.type"
+      ],
+      "catalog.query.failed": [
+        "catalog.query.filter",
+        "exception.type"
+      ],
+      "catalog.performance.completed": [
+        "catalog.performance.work_factor",
+        "catalog.performance.item_count"
+      ],
+      "catalog.performance.failed": [
+        "catalog.performance.work_factor",
+        "exception.type"
+      ]
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/database-contract.schema.json",
+  "title": "Database persistence contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "common",
+    "sqlserver",
+    "postgresql"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "common": {
+      "type": "object",
+      "required": [
+        "figureIdentity",
+        "categoryIdentity",
+        "acceptanceFixtureProductIdPrefix",
+        "protectedCorpus"
+      ]
+    },
+    "sqlserver": {
+      "$ref": "#/$defs/engine"
+    },
+    "postgresql": {
+      "$ref": "#/$defs/engine"
+    }
+  },
+  "$defs": {
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "tables",
+        "constraints",
+        "indexes",
+        "migration",
+        "tls"
+      ],
+      "properties": {
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tables": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/column"
+            }
+          }
+        },
+        "constraints": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "indexes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "table",
+            "orderedHistory"
+          ],
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "orderedHistory": {
+              "$ref": "#/$defs/stringSet"
+            }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": [
+              "string",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "maximumLength",
+        "nullable"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maximumLength": {
+          "type": "string"
+        },
+        "nullable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "stringSet": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
