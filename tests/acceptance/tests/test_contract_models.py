@@ -145,3 +145,31 @@ def test_database_state_uses_canonical_text_order(
 
     assert state.figures[0][0] == "10000000-0000-4000-8000-000000000001"
     assert state.categories == (("Alpha", "alpha"), ("Zed", "zed"))
+
+
+def test_postgresql_constraint_query_excludes_not_null_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compare explicit checks without duplicating verified column nullability."""
+
+    def capture_query(
+        kind: str,
+        connection: list[str],
+        query: str,
+        environment: dict[str, str],
+    ) -> str:
+        assert kind == "postgresql"
+        assert "pgc.contype = 'c'" in query
+        return (
+            "figures\tck_figures_image_file\tCHECK\t-\t-\t-\t-\t"
+            "((image_file)::text=((id)::text||'.png'::text))\n"
+        )
+
+    monkeypatch.setattr(database, "_database_command", capture_query)
+
+    rows = database._constraint_rows("postgresql", [], {})
+
+    assert rows == (
+        "figures|ck_figures_image_file|CHECK|-|-|-|-|"
+        "((image_file)::text=((id)::text||'.png'::text))",
+    )
