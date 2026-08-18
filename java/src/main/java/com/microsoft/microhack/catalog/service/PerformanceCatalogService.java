@@ -46,21 +46,25 @@ public class PerformanceCatalogService {
         long started = System.nanoTime();
         Span span = telemetry.startSpan("catalog.performance");
         span.setAttribute("catalog.performance.work_factor", options.performanceWorkFactor());
+        span.setAttribute("catalog.performance.item_count", 0);
         try (var scope = span.makeCurrent()) {
+            long databaseStarted = System.nanoTime();
             Span databaseSpan = telemetry.startDatabaseSpan("execute");
             try (var databaseScope = databaseSpan.makeCurrent()) {
                 for (int iteration = 0; iteration < options.performanceWorkFactor(); iteration++) {
                     jdbc.queryForObject(BOUNDED_WORK, Long.class);
                 }
             } catch (RuntimeException exception) {
-                databaseSpan.recordException(exception);
+                telemetry.databaseFailure(LOGGER, databaseSpan, "execute", exception);
                 throw exception;
             } finally {
+                telemetry.recordDatabase(
+                        (System.nanoTime() - databaseStarted) / 1_000_000_000.0,
+                        "execute");
                 databaseSpan.end();
             }
             List<CatalogFigureDto> items = catalog.list(null, null);
             double seconds = (System.nanoTime() - started) / 1_000_000_000.0;
-            telemetry.recordDatabase(seconds, "execute");
             telemetry.recordPerformance(seconds, options.performanceWorkFactor());
             span.setAttribute("catalog.performance.item_count", items.size());
             CatalogTelemetry.log(LOGGER, "catalog.performance.completed", Map.of(
@@ -72,10 +76,12 @@ public class PerformanceCatalogService {
                     seconds * 1000.0,
                     items);
         } catch (QueryTimeoutException exception) {
-            CatalogTelemetry.failure(LOGGER, "catalog.performance.failed", span, exception);
+            CatalogTelemetry.failure(LOGGER, "catalog.performance.failed", span, exception, Map.of(
+                    "catalog.performance.work_factor", options.performanceWorkFactor()));
             throw new CatalogQueryTimeoutException(exception);
         } catch (DataAccessException exception) {
-            CatalogTelemetry.failure(LOGGER, "catalog.performance.failed", span, exception);
+            CatalogTelemetry.failure(LOGGER, "catalog.performance.failed", span, exception, Map.of(
+                    "catalog.performance.work_factor", options.performanceWorkFactor()));
             throw new CatalogDependencyUnavailableException(exception);
         } finally {
             span.end();

@@ -3,6 +3,7 @@ package com.microsoft.microhack.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,6 +14,11 @@ import com.microsoft.microhack.catalog.service.CatalogImportService;
 import com.microsoft.microhack.catalog.service.CatalogImportValidationException;
 import com.microsoft.microhack.catalog.service.PerformanceCatalogService;
 import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -23,10 +29,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -65,6 +73,9 @@ class PostgreSqlIntegrationTest {
 
     @Autowired
     TestRestTemplate http;
+
+    @LocalServerPort
+    int port;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -128,6 +139,26 @@ class PostgreSqlIntegrationTest {
         }
         assertThat(figures.count()).isEqualTo(publishedFigures);
         assertThat(categories.count()).isEqualTo(publishedCategories);
+
+        String valid = strictItem("22222222-2222-4222-8222-222222222222");
+        for (String invalid : new String[] {
+                "null",
+                "[null]",
+                "[" + valid.replace("\"name\":\"Strict Upload\"", "\"name\":17") + "]",
+                "[" + valid + "," + valid + "]",
+                "[" + valid + "] []",
+                "[" + valid + ",null]"
+        }) {
+            MockMultipartFile upload = new MockMultipartFile(
+                    "catalogFile",
+                    "catalog.json",
+                    "application/json",
+                    invalid.getBytes(StandardCharsets.UTF_8));
+            mockMvc.perform(multipart("/import").file(upload))
+                    .andExpect(status().isBadRequest());
+            assertThat(figures.count()).isEqualTo(publishedFigures);
+            assertThat(categories.count()).isEqualTo(publishedCategories);
+        }
     }
 
     @Test
@@ -142,18 +173,45 @@ class PostgreSqlIntegrationTest {
 
     @Test
     @Order(4)
-    void liveConnectorRejectsEveryTraversalVariantWithNotFound() {
+    void liveConnectorRejectsAliasesBeforeRouteMapping() throws Exception {
         for (String path : new String[] {
-                "/images/../catalog.json",
-                "/images/..\\catalog.json",
-                "/images/..%2Fcatalog.json",
-                "/images/..%5Ccatalog.json",
-                "/images/%2e%2e/catalog.json",
-                "/images/..%252Fcatalog.json"
+                "/images/../healthz",
+                "/images/..\\healthz",
+                "/images/..%2Fhealthz",
+                "/images/..%5Chealthz",
+                "/images/%2e%2e/healthz",
+                "/images/..%252Fhealthz",
+                "/perftest\\catalog",
+                "/perftest%2Fcatalog",
+                "/perftest%5Ccatalog"
         }) {
-            assertThat(http.getForEntity(path, byte[].class).getStatusCode())
+            assertThat(rawStatus(path))
                     .as(path)
-                    .isEqualTo(HttpStatus.NOT_FOUND);
+                    .isEqualTo(404);
         }
+        assertThat(rawStatus("/healthz")).isEqualTo(200);
+        assertThat(rawStatus("/perftest/catalog")).isEqualTo(401);
+    }
+
+    private int rawStatus(String path) throws Exception {
+        try (Socket socket = new Socket("127.0.0.1", port);
+                OutputStreamWriter writer =
+                        new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.US_ASCII);
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))) {
+            writer.write("GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+            writer.flush();
+            String statusLine = reader.readLine();
+            return Integer.parseInt(statusLine.split(" ")[1]);
+        }
+    }
+
+    private static String strictItem(String productId) {
+        return """
+                {"productId":"%s","name":"Strict Upload",
+                "description":"A complete strict upload validation figure for the catalog.",
+                "category":"Strict Uploads","filename":"%s.png",
+                "imagePrompt":"Photorealistic construction-toy figure on a clean studio background."}
+                """.formatted(productId, productId);
     }
 }

@@ -41,19 +41,10 @@ public class CatalogImportService {
     /** Validates the complete document before inserting any previously absent figure IDs. */
     @Transactional
     public ImportResult importDocument(InputStream input) {
-        List<ValidatedCatalogItem> items;
-        try {
-            items = parser.parse(input);
-        } catch (CatalogImportValidationException exception) {
-            telemetry.recordImport(0, 0, 1);
-            throw exception;
-        }
-        return publish(items);
-    }
-
-    private ImportResult publish(List<ValidatedCatalogItem> items) {
         Span span = telemetry.startSpan("catalog.import");
+        List<ValidatedCatalogItem> items = null;
         try (var scope = span.makeCurrent()) {
+            items = parser.parse(input);
             int inserted = 0;
             int skipped = 0;
             Map<String, Category> categoryCache = new HashMap<>();
@@ -83,9 +74,15 @@ public class CatalogImportService {
                     "catalog.import.skipped", skipped));
             return new ImportResult(inserted, skipped, items.size());
         } catch (RuntimeException exception) {
-            span.setAttribute("catalog.import.rejected", items.size());
-            telemetry.recordImport(0, 0, items.size());
-            CatalogTelemetry.failure(LOGGER, "catalog.import.failed", span, exception);
+            int rejected = items == null ? 1 : items.size();
+            span.setAttribute("catalog.import.inserted", 0);
+            span.setAttribute("catalog.import.skipped", 0);
+            span.setAttribute("catalog.import.rejected", rejected);
+            telemetry.recordImport(0, 0, rejected);
+            CatalogTelemetry.failure(LOGGER, "catalog.import.failed", span, exception, Map.of(
+                    "catalog.import.inserted", 0,
+                    "catalog.import.skipped", 0,
+                    "catalog.import.rejected", rejected));
             throw exception;
         } finally {
             span.end();

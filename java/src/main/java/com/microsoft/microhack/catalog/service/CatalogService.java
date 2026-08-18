@@ -6,6 +6,7 @@ import com.microsoft.microhack.catalog.repository.CategoryRepository;
 import com.microsoft.microhack.catalog.repository.FigureRepository;
 import io.opentelemetry.api.trace.Span;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -40,7 +41,9 @@ public class CatalogService {
         long started = System.nanoTime();
         Span span = telemetry.startSpan("catalog.query");
         span.setAttribute("catalog.query.filter", filter);
+        span.setAttribute("catalog.query.result_count", 0);
         try (var scope = span.makeCurrent()) {
+            long databaseStarted = System.nanoTime();
             Span databaseSpan = telemetry.startDatabaseSpan("select");
             List<CatalogFigureDto> result;
             try (var databaseScope = databaseSpan.makeCurrent()) {
@@ -49,20 +52,23 @@ public class CatalogService {
                         .map(CatalogService::toDto)
                         .toList();
             } catch (RuntimeException exception) {
-                databaseSpan.recordException(exception);
+                telemetry.databaseFailure(LOGGER, databaseSpan, "select", exception);
                 throw exception;
             } finally {
+                telemetry.recordDatabase(
+                        (System.nanoTime() - databaseStarted) / 1_000_000_000.0,
+                        "select");
                 databaseSpan.end();
             }
             span.setAttribute("catalog.query.result_count", result.size());
             return result;
         } catch (RuntimeException exception) {
-            CatalogTelemetry.failure(LOGGER, "catalog.query.failed", span, exception);
+            CatalogTelemetry.failure(LOGGER, "catalog.query.failed", span, exception, Map.of(
+                    "catalog.query.filter", filter));
             throw exception;
         } finally {
             double seconds = (System.nanoTime() - started) / 1_000_000_000.0;
             telemetry.recordQuery(seconds, filter);
-            telemetry.recordDatabase(seconds, "select");
             span.end();
         }
     }

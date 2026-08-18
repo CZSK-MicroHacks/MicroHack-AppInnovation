@@ -18,7 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /** Emits standard HTTP server span attributes and one structured completion log. */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class RequestTelemetryFilter extends OncePerRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RequestTelemetryFilter.class);
@@ -33,7 +33,8 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        Span span = telemetry.startSpan("http.server");
+        long started = System.nanoTime();
+        Span span = telemetry.startHttpServerSpan();
         span.setAttribute("http.request.method", request.getMethod());
         span.setAttribute("http.route", request.getRequestURI());
         span.setAttribute("server.address", request.getServerName());
@@ -45,6 +46,11 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
             throw exception;
         } finally {
             span.setAttribute("http.response.status_code", response.getStatus());
+            telemetry.recordHttp(
+                    (System.nanoTime() - started) / 1_000_000_000.0,
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    response.getStatus());
             CatalogTelemetry.log(LOGGER, "http.server.request", Map.of(
                     "http.request.method", request.getMethod(),
                     "http.route", request.getRequestURI(),

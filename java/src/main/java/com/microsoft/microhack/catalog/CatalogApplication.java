@@ -1,6 +1,7 @@
 package com.microsoft.microhack.catalog;
 
 import com.microsoft.microhack.catalog.config.CatalogRuntimeOptions;
+import com.microsoft.microhack.catalog.config.CatalogResourceIdentity;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import java.net.InetAddress;
@@ -27,16 +28,10 @@ public class CatalogApplication {
     /** Initializes the OpenTelemetry SDK using standard OTEL environment variables. */
     @Bean(destroyMethod = "close")
     OpenTelemetrySdk openTelemetry(CatalogRuntimeOptions options) {
-        System.setProperty("otel.service.name", CatalogRuntimeOptions.SERVICE_NAME);
         System.setProperty("otel.exporter.otlp.endpoint", options.otlpEndpoint());
         System.setProperty(
                 "otel.resource.attributes",
-                String.join(",",
-                        "service.namespace=" + CatalogRuntimeOptions.SERVICE_NAMESPACE,
-                        "service.version=" + options.serviceVersion(),
-                        "deployment.environment=" + options.deploymentEnvironment(),
-                        "service.instance.id=" + options.serviceInstanceId(),
-                        "azure.containerapps.revision.name=" + options.revisionName()));
+                CatalogResourceIdentity.asOtelProperty(options));
         return AutoConfiguredOpenTelemetrySdk.builder()
                 .build()
                 .getOpenTelemetrySdk();

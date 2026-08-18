@@ -8,6 +8,8 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.Tracer;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -23,6 +25,7 @@ public class CatalogTelemetry {
     public static final String REVISION_ATTRIBUTE = "azure.containerapps.revision.name";
     public static final String DATABASE_DURATION_METRIC = "db.client.operation.duration";
     public static final String DATABASE_DURATION_UNIT = "s";
+    public static final String HTTP_DURATION_METRIC = "http.server.request.duration";
     public static final String QUERY_DURATION_METRIC = "catalog.query.duration";
     public static final String PERFORMANCE_DURATION_METRIC = "catalog.performance.duration";
 
@@ -30,6 +33,7 @@ public class CatalogTelemetry {
     private final String databaseHost;
     private final String databaseName;
     private final LongCounter importRecords;
+    private final DoubleHistogram httpDuration;
     private final DoubleHistogram databaseDuration;
     private final DoubleHistogram queryDuration;
     private final DoubleHistogram performanceDuration;
@@ -40,6 +44,9 @@ public class CatalogTelemetry {
         databaseName = options.databaseName();
         var meter = openTelemetry.getMeter(INSTRUMENTATION_NAME);
         importRecords = meter.counterBuilder("catalog.import.records").build();
+        httpDuration = meter.histogramBuilder(HTTP_DURATION_METRIC)
+                .setUnit("s")
+                .build();
         databaseDuration = meter.histogramBuilder(DATABASE_DURATION_METRIC)
                 .setUnit(DATABASE_DURATION_UNIT)
                 .build();
@@ -53,6 +60,12 @@ public class CatalogTelemetry {
 
     public Span startSpan(String name) {
         return tracer.spanBuilder(name).setSpanKind(SpanKind.INTERNAL).startSpan();
+    }
+
+    public Span startHttpServerSpan() {
+        return tracer.spanBuilder("http.server")
+                .setSpanKind(SpanKind.SERVER)
+                .startSpan();
     }
 
     /** Starts a database client span with the frozen semantic-convention attributes. */
@@ -77,6 +90,15 @@ public class CatalogTelemetry {
         importRecords.add(rejected,
                 io.opentelemetry.api.common.Attributes.of(
                         AttributeKey.stringKey("catalog.import.outcome"), "rejected"));
+    }
+
+    public void recordHttp(double seconds, String method, String route, int statusCode) {
+        httpDuration.record(seconds,
+                io.opentelemetry.api.common.Attributes.builder()
+                        .put("http.request.method", method)
+                        .put("http.route", route)
+                        .put("http.response.status_code", statusCode)
+                        .build());
     }
 
     public void recordDatabase(double seconds, String operation) {
@@ -111,17 +133,36 @@ public class CatalogTelemetry {
     }
 
     /** Records exception evidence on a span and in a structured log. */
-    public static void failure(Logger logger, String event, Span span, Exception exception) {
+    public static void failure(
+            Logger logger,
+            String event,
+            Span span,
+            Exception exception,
+            Map<String, ?> fields) {
         span.recordException(exception);
         span.setAttribute("exception.type", exception.getClass().getName());
         span.setAttribute("exception.message", exception.getMessage());
-        MDC.put("exception.type", exception.getClass().getName());
-        MDC.put("exception.message", String.valueOf(exception.getMessage()));
+        Map<String, Object> evidence = new LinkedHashMap<>(fields);
+        evidence.put("exception.type", exception.getClass().getName());
+        evidence.put("exception.message", String.valueOf(exception.getMessage()));
+        evidence.forEach((key, value) -> MDC.put(key, String.valueOf(value)));
         try {
             logger.error(event);
         } finally {
-            MDC.remove("exception.type");
-            MDC.remove("exception.message");
+            evidence.keySet().forEach(MDC::remove);
         }
+    }
+
+    public static void failure(Logger logger, String event, Span span, Exception exception) {
+        failure(logger, event, span, exception, Map.of());
+    }
+
+    /** Emits database failure evidence without SQL text or credentials. */
+    public void databaseFailure(Logger logger, Span span, String operation, Exception exception) {
+        failure(logger, "catalog.database.failed", span, exception, Map.of(
+                "db.system.name", "postgresql",
+                "db.operation.name", operation,
+                "db.namespace", databaseName,
+                "server.address", databaseHost));
     }
 }

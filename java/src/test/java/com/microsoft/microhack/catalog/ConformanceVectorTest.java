@@ -67,6 +67,36 @@ class ConformanceVectorTest {
         }
     }
 
+    @Test
+    void completeDocumentRejectsEveryStructuralViolation() {
+        String valid = validItem("11111111-1111-4111-8111-111111111111");
+        for (String invalid : new String[] {
+                "null",
+                "[null]",
+                "[" + valid.replace("\"name\":\"Strict Figure\"", "\"name\":7") + "]",
+                "[" + valid + "," + valid + "]",
+                "[" + valid + "] []",
+                "[" + valid + ",null]"
+        }) {
+            assertThatThrownBy(() -> parser.parse(stream(invalid)))
+                    .as(invalid)
+                    .isInstanceOf(CatalogImportValidationException.class);
+        }
+    }
+
+    private static String validItem(String productId) {
+        return """
+                {
+                  "productId":"%s",
+                  "name":"Strict Figure",
+                  "description":"A complete strict document validation figure for the catalog.",
+                  "category":"Strict Figures",
+                  "filename":"%s.png",
+                  "imagePrompt":"Photorealistic construction-toy figure on a clean studio background."
+                }
+                """.formatted(productId, productId);
+    }
+
     private static ByteArrayInputStream stream(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }
