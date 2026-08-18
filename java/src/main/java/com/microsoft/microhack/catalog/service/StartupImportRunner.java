@@ -37,9 +37,15 @@ public class StartupImportRunner implements ApplicationRunner {
         try (InputStream input = Files.newInputStream(options.seedPath())) {
             importService.importDocument(input);
             startupState.ready();
-        } catch (IOException | RuntimeException exception) {
+        } catch (IOException exception) {
             startupState.failed();
-            LOGGER.error("catalog.import.failed", exception);
+            CatalogTelemetry.logFailure(
+                    LOGGER,
+                    "catalog.import.failed",
+                    exception,
+                    java.util.Map.of("catalog.import.rejected", 1));
+        } catch (RuntimeException exception) {
+            startupState.failed();
         }
     }
 }

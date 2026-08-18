@@ -7,7 +7,12 @@
             <includeContext>true</includeContext>
         </encoder>
     </appender>
+    <appender name="OPENTELEMETRY"
+              class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
+        <captureMdcAttributes>*</captureMdcAttributes>
+    </appender>
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="OPENTELEMETRY"/>
     </root>
 </configuration>

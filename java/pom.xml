@@ -22,6 +22,7 @@
         <maven.compiler.release>17</maven.compiler.release>
         <testcontainers.version>1.21.4</testcontainers.version>
         <opentelemetry.version>1.54.1</opentelemetry.version>
+        <opentelemetry.instrumentation.version>2.20.1-alpha</opentelemetry.instrumentation.version>
         <postgresql.version>42.7.12</postgresql.version>
     </properties>
 
@@ -85,6 +86,11 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-logback-appender-1.0</artifactId>
+            <version>${opentelemetry.instrumentation.version}</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>

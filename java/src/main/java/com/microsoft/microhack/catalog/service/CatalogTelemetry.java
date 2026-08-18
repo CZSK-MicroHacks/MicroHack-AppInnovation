@@ -142,12 +142,22 @@ public class CatalogTelemetry {
         span.recordException(exception);
         span.setAttribute("exception.type", exception.getClass().getName());
         span.setAttribute("exception.message", exception.getMessage());
+        logFailure(logger, event, exception, fields);
+    }
+
+    /** Emits a domain failure and the distinct frozen exception log signal. */
+    public static void logFailure(
+            Logger logger,
+            String event,
+            Exception exception,
+            Map<String, ?> fields) {
         Map<String, Object> evidence = new LinkedHashMap<>(fields);
         evidence.put("exception.type", exception.getClass().getName());
         evidence.put("exception.message", String.valueOf(exception.getMessage()));
         evidence.forEach((key, value) -> MDC.put(key, String.valueOf(value)));
         try {
             logger.error(event);
+            logger.error("exception");
         } finally {
             evidence.keySet().forEach(MDC::remove);
         }
@@ -155,6 +165,19 @@ public class CatalogTelemetry {
 
     public static void failure(Logger logger, String event, Span span, Exception exception) {
         failure(logger, event, span, exception, Map.of());
+    }
+
+    /** Emits only the frozen exception log for failures without a domain event. */
+    public static void exception(Logger logger, Exception exception) {
+        Map<String, Object> evidence = Map.of(
+                "exception.type", exception.getClass().getName(),
+                "exception.message", String.valueOf(exception.getMessage()));
+        evidence.forEach((key, value) -> MDC.put(key, String.valueOf(value)));
+        try {
+            logger.error("exception");
+        } finally {
+            evidence.keySet().forEach(MDC::remove);
+        }
     }
 
     /** Emits database failure evidence without SQL text or credentials. */

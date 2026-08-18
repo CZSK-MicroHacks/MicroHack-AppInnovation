@@ -4,6 +4,7 @@ import com.microsoft.microhack.catalog.config.CatalogRuntimeOptions;
 import com.microsoft.microhack.catalog.config.CatalogResourceIdentity;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import org.springframework.boot.SpringApplication;
@@ -32,9 +33,11 @@ public class CatalogApplication {
         System.setProperty(
                 "otel.resource.attributes",
                 CatalogResourceIdentity.asOtelProperty(options));
-        return AutoConfiguredOpenTelemetrySdk.builder()
+        OpenTelemetrySdk sdk = AutoConfiguredOpenTelemetrySdk.builder()
                 .build()
                 .getOpenTelemetrySdk();
+        OpenTelemetryAppender.install(sdk);
+        return sdk;
     }
 
     private static String instanceId() {

@@ -43,6 +43,7 @@ public class RequestTelemetryFilter extends OncePerRequestFilter {
         } catch (IOException | ServletException | RuntimeException exception) {
             span.setStatus(StatusCode.ERROR);
             span.recordException(exception);
+            CatalogTelemetry.exception(LOGGER, exception);
             throw exception;
         } finally {
             span.setAttribute("http.response.status_code", response.getStatus());
