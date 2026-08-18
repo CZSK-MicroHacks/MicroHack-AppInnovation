@@ -24,28 +24,13 @@ param(
 
     [Parameter(Mandatory)]
     [ValidatePattern('^[0-9a-f]{64}$')]
-    [string]$SourceArchiveSha256,
-
-    [Parameter(Mandatory)]
-    [ValidatePattern('^[A-Za-z0-9+/]+={0,2}$')]
-    [string]$DatabasePasswordBase64,
-
-    [Parameter(Mandatory)]
-    [ValidatePattern('^[A-Za-z0-9+/]+={0,2}$')]
-    [string]$PerformanceApiKeyBase64
+    [string]$SourceArchiveSha256
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-$DatabasePassword = [Text.Encoding]::UTF8.GetString(
-    [Convert]::FromBase64String($DatabasePasswordBase64)
-)
-$PerformanceApiKey = [Text.Encoding]::UTF8.GetString(
-    [Convert]::FromBase64String($PerformanceApiKeyBase64)
-)
 
 $Root = 'C:\MicroHack'
 $DownloadRoot = Join-Path $Root 'downloads'
@@ -200,6 +185,61 @@ function Invoke-WithRetry {
     }
 }
 
+function Set-ProtectedAcl {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [switch]$Directory
+    )
+
+    $Acl = if ($Directory) {
+        New-Object Security.AccessControl.DirectorySecurity
+    }
+    else {
+        New-Object Security.AccessControl.FileSecurity
+    }
+    $Acl.SetAccessRuleProtection($true, $false)
+    foreach ($Identity in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators')) {
+        if ($Directory) {
+            $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
+                $Identity,
+                'FullControl',
+                'ContainerInherit,ObjectInherit',
+                'None',
+                'Allow'
+            )
+        }
+        else {
+            $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
+                $Identity,
+                'FullControl',
+                'Allow'
+            )
+        }
+        $Acl.AddAccessRule($Rule)
+    }
+    Set-Acl -Path $Path -AclObject $Acl
+}
+
+function Save-ProtectedText {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    [IO.File]::WriteAllText(
+        $Path,
+        $Value,
+        (New-Object Text.UTF8Encoding($false))
+    )
+    Set-ProtectedAcl -Path $Path
+}
+
 function Save-ProtectedConfiguration {
     param(
         [Parameter(Mandatory)]
@@ -209,19 +249,66 @@ function Save-ProtectedConfiguration {
         [hashtable]$Values
     )
 
-    $Values | ConvertTo-Json | Set-Content -Path $Path -Encoding UTF8
-    $Acl = New-Object Security.AccessControl.FileSecurity
-    $Acl.SetAccessRuleProtection($true, $false)
-    foreach ($Identity in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators')) {
-        $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
-            $Identity,
-            'FullControl',
-            'Allow'
-        )
-        $Acl.AddAccessRule($Rule)
-    }
-    Set-Acl -Path $Path -AclObject $Acl
+    Save-ProtectedText -Path $Path -Value ($Values | ConvertTo-Json)
 }
+
+function Remove-ProtectedFile {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+    $Length = (Get-Item -LiteralPath $Path).Length
+    if ($Length -gt 0) {
+        [IO.File]::WriteAllBytes($Path, (New-Object byte[] $Length))
+    }
+    Remove-Item -LiteralPath $Path -Force
+}
+
+function Get-ProvisioningSecrets {
+    $PayloadPath = Join-Path $SecretRoot 'provisioning.json'
+    $ScriptContent = [IO.File]::ReadAllText($PSCommandPath)
+    $PayloadMatch = [regex]::Match(
+        $ScriptContent,
+        '(?m)^# MICROHACK_SECRET_PAYLOAD:([A-Za-z0-9+/]+={0,2})\s*$'
+    )
+
+    if ($PayloadMatch.Success) {
+        $PayloadJson = [Text.Encoding]::UTF8.GetString(
+            [Convert]::FromBase64String($PayloadMatch.Groups[1].Value)
+        )
+        $Payload = $PayloadJson | ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace([string]$Payload.databasePassword) -or
+            [string]::IsNullOrWhiteSpace([string]$Payload.performanceApiKey)) {
+            throw 'The protected provisioning payload is incomplete.'
+        }
+        Save-ProtectedConfiguration -Path $PayloadPath -Values @{
+            DatabasePassword = [string]$Payload.databasePassword
+            PerformanceApiKey = [string]$Payload.performanceApiKey
+        }
+        $CleanScript = $ScriptContent.Remove($PayloadMatch.Index, $PayloadMatch.Length)
+        Save-ProtectedText -Path $PSCommandPath -Value $CleanScript
+        Remove-ProtectedFile -Path 'C:\AzureData\CustomData.bin'
+        $PayloadJson = $null
+        $Payload = $null
+    }
+
+    if (-not (Test-Path -LiteralPath $PayloadPath)) {
+        throw 'The protected provisioning payload is unavailable.'
+    }
+    Set-ProtectedAcl -Path $PayloadPath
+    return Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json
+}
+
+Set-ProtectedAcl -Path $SecretRoot -Directory
+Set-ProtectedAcl -Path $PSCommandPath
+$ProvisioningSecrets = Get-ProvisioningSecrets
+$DatabasePassword = [string]$ProvisioningSecrets.DatabasePassword
+$PerformanceApiKey = [string]$ProvisioningSecrets.PerformanceApiKey
+$ProvisioningSecrets = $null
 
 function Install-CommonTools {
     $Artifacts = @{
@@ -415,20 +502,30 @@ function Install-DotNetDatabase {
         Invoke-VerifiedDownload -Uri $SqlServer.Uri -Destination $Installer `
             -Algorithm SHA256 -ExpectedHash $SqlServer.Hash
         Assert-AuthenticodePublisher -Path $Installer -Publisher $SqlServer.Publisher
-        Invoke-LockedInstaller -Path $Installer -Arguments @(
-            '/Q',
-            '/ACTION=Install',
-            '/FEATURES=SQLENGINE',
-            '/SUPPRESSPRIVACYSTATEMENTNOTICE',
-            '/INSTANCENAME=SQLEXPRESS',
-            '/SECURITYMODE=SQL',
-            "/SAPWD=$DatabasePassword",
-            '/SQLSVCACCOUNT="NT AUTHORITY\NETWORK SERVICE"',
-            '/TCPENABLED=1',
-            '/NPENABLED=0',
-            '/BROWSERSVCSTARTUPTYPE=Automatic',
-            '/IACCEPTSQLSERVERLICENSETERMS'
-        )
+        $SetupConfiguration = Join-Path $SecretRoot 'sqlserver-setup.ini'
+        try {
+            Save-ProtectedText -Path $SetupConfiguration -Value @"
+[OPTIONS]
+ACTION="Install"
+FEATURES=SQLENGINE
+QUIET="True"
+SUPPRESSPRIVACYSTATEMENTNOTICE="True"
+INSTANCENAME="SQLEXPRESS"
+SECURITYMODE="SQL"
+SAPWD="$DatabasePassword"
+SQLSVCACCOUNT="NT AUTHORITY\NETWORK SERVICE"
+TCPENABLED="1"
+NPENABLED="0"
+BROWSERSVCSTARTUPTYPE="Automatic"
+IACCEPTSQLSERVERLICENSETERMS="True"
+"@
+            Invoke-LockedInstaller -Path $Installer -Arguments @(
+                "/ConfigurationFile=`"$SetupConfiguration`""
+            )
+        }
+        finally {
+            Remove-ProtectedFile -Path $SetupConfiguration
+        }
     }
     Set-Service -Name $SqlServiceName -StartupType Automatic
     Start-Service -Name $SqlServiceName
@@ -492,8 +589,9 @@ function Install-DotNetDatabase {
         throw 'go-sqlcmd version verification failed.'
     }
 
+    $env:SQLCMDPASSWORD = $DatabasePassword
     $SqlIdentity = (
-        & $SqlCmdCommand -S 'localhost,1433' -U sa -P $DatabasePassword -h -1 -W `
+        & $SqlCmdCommand -S 'localhost,1433' -U sa -h -1 -W `
             -Q "SET NOCOUNT ON; SELECT CONCAT(SERVERPROPERTY('ProductMajorVersion'), '|', SERVERPROPERTY('Edition'));" |
             Where-Object { $_ -match '^\s*16\|.*Express' } |
             Select-Object -First 1
@@ -503,7 +601,9 @@ function Install-DotNetDatabase {
     }
 
     $EscapedPassword = $DatabasePassword.Replace("'", "''")
-    $Sql = @"
+    $SqlInput = Join-Path $SecretRoot 'sqlserver-login.sql'
+    try {
+        Save-ProtectedText -Path $SqlInput -Value @"
 IF DB_ID(N'LegoCatalog') IS NULL CREATE DATABASE [LegoCatalog];
 IF NOT EXISTS (SELECT 1 FROM sys.sql_logins WHERE name = N'catalog')
     CREATE LOGIN [catalog] WITH PASSWORD = N'$EscapedPassword', CHECK_POLICY = ON;
@@ -516,9 +616,13 @@ BEGIN
     ALTER ROLE [db_owner] ADD MEMBER [catalog];
 END;
 "@
-    $Sql | & $SqlCmdCommand -S 'localhost,1433' -U sa -P $DatabasePassword -b | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw 'SQL Server database and login provisioning failed.'
+        & $SqlCmdCommand -S 'localhost,1433' -U sa -b -i $SqlInput | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'SQL Server database and login provisioning failed.'
+        }
+    }
+    finally {
+        Remove-ProtectedFile -Path $SqlInput
     }
 
     return @{
@@ -583,24 +687,26 @@ function Install-JavaDatabase {
         Invoke-VerifiedDownload -Uri $PostgreSql.Uri -Destination $Installer `
             -Algorithm SHA256 -ExpectedHash $PostgreSql.Hash
         Assert-AuthenticodePublisher -Path $Installer -Publisher $PostgreSql.Publisher
-        Invoke-LockedInstaller -Path $Installer -Arguments @(
-            '--mode',
-            'unattended',
-            '--unattendedmodeui',
-            'none',
-            '--prefix',
-            "`"$PostgreSqlRoot`"",
-            '--datadir',
-            "`"$PostgreSqlRoot\data`"",
-            '--serverport',
-            '5432',
-            '--servicename',
-            $PostgreSqlService,
-            '--superaccount',
-            'postgres',
-            '--superpassword',
-            $DatabasePassword
-        )
+        $SetupOptions = Join-Path $SecretRoot 'postgresql-setup.conf'
+        try {
+            Save-ProtectedText -Path $SetupOptions -Value @"
+mode=unattended
+unattendedmodeui=none
+prefix=$PostgreSqlRoot
+datadir=$PostgreSqlRoot\data
+serverport=5432
+servicename=$PostgreSqlService
+superaccount=postgres
+superpassword=$DatabasePassword
+"@
+            Invoke-LockedInstaller -Path $Installer -Arguments @(
+                '--optionfile',
+                "`"$SetupOptions`""
+            )
+        }
+        finally {
+            Remove-ProtectedFile -Path $SetupOptions
+        }
     }
     Set-Service -Name $PostgreSqlService -StartupType Automatic
     Start-Service -Name $PostgreSqlService
@@ -629,16 +735,24 @@ function Install-JavaDatabase {
     $EscapedPassword = $DatabasePassword.Replace("'", "''")
     $RoleExists = (& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
             "SELECT 1 FROM pg_roles WHERE rolname = 'catalog'").Trim()
-    if ($RoleExists -ne '1') {
+    $RoleInput = Join-Path $SecretRoot 'postgresql-role.sql'
+    try {
+        $RoleSql = if ($RoleExists -ne '1') {
+            "CREATE ROLE catalog LOGIN PASSWORD '$EscapedPassword';"
+        }
+        else {
+            "ALTER ROLE catalog PASSWORD '$EscapedPassword';"
+        }
+        Save-ProtectedText -Path $RoleInput -Value $RoleSql
         & $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 `
-            -c "CREATE ROLE catalog LOGIN PASSWORD '$EscapedPassword'" | Out-Null
+            -f $RoleInput | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'PostgreSQL application role provisioning failed.'
+        }
     }
-    else {
-        & $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 `
-            -c "ALTER ROLE catalog PASSWORD '$EscapedPassword'" | Out-Null
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw 'PostgreSQL application role provisioning failed.'
+    finally {
+        Remove-ProtectedFile -Path $RoleInput
+        $RoleSql = $null
     }
     $DatabaseExists = (& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
             "SELECT 1 FROM pg_database WHERE datname = 'catalog'").Trim()
@@ -686,14 +800,6 @@ function Install-JavaDatabase {
 }
 
 function Install-SourceArchive {
-    $CommitMarker = Join-Path $SourceRoot '.source-commit'
-    if ((Test-Path $CommitMarker) -and
-        ((Get-Content -Path $CommitMarker -Raw).Trim() -eq $SourceCommit) -and
-        (Test-Path (Join-Path $SourceRoot 'data\manifest.json'))) {
-        Write-ProvisionLog "Reusing immutable source commit $SourceCommit."
-        return
-    }
-
     $Archive = Join-Path $DownloadRoot "source-$SourceCommit.zip"
     Invoke-VerifiedDownload -Uri $SourceArchiveUrl -Destination $Archive `
         -Algorithm SHA256 -ExpectedHash $SourceArchiveSha256
@@ -717,9 +823,9 @@ function Install-SourceArchive {
     }
     try {
         Move-Item -Path $ArchiveRoot.FullName -Destination $SourceRoot
+        $CommitMarker = Join-Path $SourceRoot '.source-commit'
         Set-Content -Path $CommitMarker -Value $SourceCommit -Encoding ASCII
         Remove-Item -Path $Previous -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $Staging -Recurse -Force -ErrorAction SilentlyContinue
     }
     catch {
         Remove-Item -Path $SourceRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -727,6 +833,9 @@ function Install-SourceArchive {
             Move-Item -Path $Previous -Destination $SourceRoot
         }
         throw
+    }
+    finally {
+        Remove-Item -Path $Staging -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -758,6 +867,79 @@ function Assert-CanonicalData {
     }
 }
 
+function Get-StackApplicationProcesses {
+    $Executable = if ($Stack -eq 'dotnet') { 'dotnet.exe' } else { 'java.exe' }
+    $ApplicationArgument = if ($Stack -eq 'dotnet') {
+        'C:\MicroHack\app\dotnet\LegoCatalog.App.dll'
+    }
+    else {
+        'C:\MicroHack\app\java\catalog-java.jar'
+    }
+
+    return @(
+        Get-CimInstance -ClassName Win32_Process -Filter "Name = '$Executable'" |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+                $_.CommandLine.IndexOf(
+                    $ApplicationArgument,
+                    [StringComparison]::OrdinalIgnoreCase
+                ) -ge 0
+            }
+    )
+}
+
+function Stop-ApplicationTask {
+    $TaskName = "MicroHack-$Stack"
+    $Existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($null -ne $Existing -and $Existing.State -eq 'Running') {
+        Write-ProvisionLog "Stopping $TaskName before replacing source or application output."
+        Stop-ScheduledTask -TaskName $TaskName
+    }
+
+    for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
+        $Task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        $Processes = @(Get-StackApplicationProcesses)
+        if (($null -eq $Task -or $Task.State -ne 'Running') -and $Processes.Count -eq 0) {
+            return
+        }
+        if (($null -eq $Task -or $Task.State -ne 'Running') -and $Processes.Count -gt 0) {
+            foreach ($Process in $Processes) {
+                Stop-Process -Id $Process.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    throw "$TaskName or its exact stack application process did not stop within 60 seconds."
+}
+
+function Install-StagedDirectory {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StagingPath,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+
+    $PreviousPath = "$DestinationPath.previous"
+    Remove-Item -Path $PreviousPath -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $DestinationPath) {
+        Move-Item -LiteralPath $DestinationPath -Destination $PreviousPath
+    }
+    try {
+        Move-Item -LiteralPath $StagingPath -Destination $DestinationPath
+        Remove-Item -Path $PreviousPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        Remove-Item -Path $DestinationPath -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $PreviousPath) {
+            Move-Item -LiteralPath $PreviousPath -Destination $DestinationPath
+        }
+        throw
+    }
+}
+
 function Register-ApplicationTask {
     param(
         [Parameter(Mandatory)]
@@ -767,8 +949,7 @@ function Register-ApplicationTask {
     $TaskName = "MicroHack-$Stack"
     $Existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($null -ne $Existing -and $Existing.State -eq 'Running') {
-        Stop-ScheduledTask -TaskName $TaskName
-        Start-Sleep -Seconds 3
+        throw "$TaskName must be stopped before task registration."
     }
     $Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
         "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$ScriptPath`""
@@ -786,7 +967,10 @@ function Register-ApplicationTask {
 function Publish-DotNetApplication {
     param(
         [Parameter(Mandatory)]
-        [string]$DotNetCommand
+        [string]$DotNetCommand,
+
+        [Parameter(Mandatory)]
+        [string]$SqlCmdCommand
     )
 
     $Project = Join-Path $SourceRoot 'dotnet\src\LegoCatalog.App\LegoCatalog.App.csproj'
@@ -799,10 +983,12 @@ function Publish-DotNetApplication {
     } | ConvertTo-Json -Depth 3 | Set-Content `
         -Path (Join-Path $DotNetSource 'global.json') -Encoding UTF8
     $PublishRoot = Join-Path $ApplicationRoot 'dotnet'
-    New-Item -ItemType Directory -Path $PublishRoot -Force | Out-Null
+    $PublishStaging = "$PublishRoot.staging"
+    Remove-Item -Path $PublishStaging -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $PublishStaging -Force | Out-Null
     Push-Location $DotNetSource
     try {
-        & $DotNetCommand publish $Project --configuration Release --output $PublishRoot
+        & $DotNetCommand publish $Project --configuration Release --output $PublishStaging
         if ($LASTEXITCODE -ne 0) {
             throw '.NET application publish failed.'
         }
@@ -810,6 +996,10 @@ function Publish-DotNetApplication {
     finally {
         Pop-Location
     }
+    if (-not (Test-Path (Join-Path $PublishStaging 'LegoCatalog.App.dll'))) {
+        throw '.NET staged publish is missing LegoCatalog.App.dll.'
+    }
+    Install-StagedDirectory -StagingPath $PublishStaging -DestinationPath $PublishRoot
 
     $ConfigurationPath = Join-Path $SecretRoot 'dotnet.json'
     Save-ProtectedConfiguration -Path $ConfigurationPath -Values @{
@@ -820,6 +1010,33 @@ function Publish-DotNetApplication {
     @'
 $ErrorActionPreference = 'Stop'
 $Configuration = Get-Content 'C:\MicroHack\secrets\dotnet.json' -Raw | ConvertFrom-Json
+$DatabaseReady = $false
+$LastDatabaseError = 'SQL Server readiness was not attempted.'
+for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
+    try {
+        if ((Get-Service -Name 'MSSQL$SQLEXPRESS').Status -ne 'Running') {
+            throw 'SQL Server Express service is not running.'
+        }
+        $env:SQLCMDPASSWORD = $Configuration.DatabasePassword
+        & '__SQLCMD_COMMAND__' -S 'localhost,1433' -U catalog `
+            -d LegoCatalog -b -Q 'SET NOCOUNT ON; SELECT 1;' | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "sqlcmd exited with code $LASTEXITCODE."
+        }
+        $DatabaseReady = $true
+        break
+    }
+    catch {
+        $LastDatabaseError = $_.Exception.Message
+        Start-Sleep -Seconds 5
+    }
+    finally {
+        $env:SQLCMDPASSWORD = $null
+    }
+}
+if (-not $DatabaseReady) {
+    throw "SQL Server was not ready after 300 seconds: $LastDatabaseError"
+}
 $env:CATALOG_DATABASE_HOST = 'localhost'
 $env:CATALOG_DATABASE_PORT = '1433'
 $env:CATALOG_DATABASE_NAME = 'LegoCatalog'
@@ -837,7 +1054,7 @@ $env:ASPNETCORE_URLS = 'http://0.0.0.0:5000'
 & 'C:\Program Files\dotnet\dotnet.exe' 'C:\MicroHack\app\dotnet\LegoCatalog.App.dll' `
     *>> 'C:\MicroHack\logs\dotnet-app.log'
 exit $LASTEXITCODE
-'@.Replace('__SOURCE_COMMIT__', $SourceCommit) |
+'@.Replace('__SOURCE_COMMIT__', $SourceCommit).Replace('__SQLCMD_COMMAND__', $SqlCmdCommand) |
         Set-Content -Path $StartScript -Encoding UTF8
     Register-ApplicationTask -ScriptPath $StartScript
 }
@@ -893,8 +1110,15 @@ function Publish-JavaApplication {
         throw 'The Java package did not produce the expected application JAR.'
     }
     $PublishRoot = Join-Path $ApplicationRoot 'java'
-    New-Item -ItemType Directory -Path $PublishRoot -Force | Out-Null
-    Copy-Item -Path $Jar.FullName -Destination (Join-Path $PublishRoot 'catalog-java.jar') -Force
+    $PublishStaging = "$PublishRoot.staging"
+    Remove-Item -Path $PublishStaging -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $PublishStaging -Force | Out-Null
+    Copy-Item -Path $Jar.FullName `
+        -Destination (Join-Path $PublishStaging 'catalog-java.jar') -Force
+    if (-not (Test-Path (Join-Path $PublishStaging 'catalog-java.jar'))) {
+        throw 'Java staged publish is missing catalog-java.jar.'
+    }
+    Install-StagedDirectory -StagingPath $PublishStaging -DestinationPath $PublishRoot
 
     $ConfigurationPath = Join-Path $SecretRoot 'java.json'
     Save-ProtectedConfiguration -Path $ConfigurationPath -Values @{
@@ -905,6 +1129,33 @@ function Publish-JavaApplication {
     @'
 $ErrorActionPreference = 'Stop'
 $Configuration = Get-Content 'C:\MicroHack\secrets\java.json' -Raw | ConvertFrom-Json
+$DatabaseReady = $false
+$LastDatabaseError = 'PostgreSQL readiness was not attempted.'
+for ($Attempt = 1; $Attempt -le 60; $Attempt++) {
+    try {
+        if ((Get-Service -Name 'postgresql-x64-18').Status -ne 'Running') {
+            throw 'PostgreSQL service is not running.'
+        }
+        $env:PGPASSWORD = $Configuration.DatabasePassword
+        & 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -p 5432 `
+            -U catalog -d catalog -v ON_ERROR_STOP=1 -tAc 'SELECT 1' | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "psql exited with code $LASTEXITCODE."
+        }
+        $DatabaseReady = $true
+        break
+    }
+    catch {
+        $LastDatabaseError = $_.Exception.Message
+        Start-Sleep -Seconds 5
+    }
+    finally {
+        $env:PGPASSWORD = $null
+    }
+}
+if (-not $DatabaseReady) {
+    throw "PostgreSQL was not ready after 300 seconds: $LastDatabaseError"
+}
 $env:CATALOG_DATABASE_HOST = 'localhost'
 $env:CATALOG_DATABASE_PORT = '5432'
 $env:CATALOG_DATABASE_NAME = 'catalog'
@@ -966,14 +1217,15 @@ function Invoke-StackSmokeCheck {
     Remove-Item -Path $ImageProbe -Force
 
     if ($Stack -eq 'dotnet') {
+        $env:SQLCMDPASSWORD = $DatabasePassword
         $FigureCount = (
-            & $NativeClient -S 'localhost,1433' -U catalog -P $DatabasePassword `
+            & $NativeClient -S 'localhost,1433' -U catalog `
                 -d LegoCatalog -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM Figures;' |
                 Where-Object { $_ -match '^\s*\d+\s*$' } |
                 Select-Object -First 1
         ).Trim()
         $CategoryCount = (
-            & $NativeClient -S 'localhost,1433' -U catalog -P $DatabasePassword `
+            & $NativeClient -S 'localhost,1433' -U catalog `
                 -d LegoCatalog -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM Categories;' |
                 Where-Object { $_ -match '^\s*\d+\s*$' } |
                 Select-Object -First 1
@@ -1010,13 +1262,15 @@ function Invoke-StackSmokeCheck {
 
 try {
     Write-ProvisionLog "Starting idempotent provisioning for source commit $SourceCommit."
+    Stop-ApplicationTask
     Install-CommonTools
     Install-SourceArchive
     Assert-CanonicalData
 
     if ($Stack -eq 'dotnet') {
         $Tools = Install-DotNetDatabase
-        Publish-DotNetApplication -DotNetCommand $Tools.DotNetCommand
+        Publish-DotNetApplication -DotNetCommand $Tools.DotNetCommand `
+            -SqlCmdCommand $Tools.SqlCmdCommand
         Invoke-StackSmokeCheck -NativeClient $Tools.SqlCmdCommand
     }
     else {
@@ -1030,5 +1284,6 @@ try {
 finally {
     $DatabasePassword = $null
     $PerformanceApiKey = $null
+    $env:SQLCMDPASSWORD = $null
     $env:PGPASSWORD = $null
 }

@@ -34,9 +34,11 @@ module.
 | `manage_azure_resources` | `true` | Enables participant infrastructure |
 | `manage_sub_providers` | `true` | Enables explicit provider registration |
 
-No secret belongs in `config.tfvars.example` or a committed `.tfvars` file. Generated secrets and
-protected extension settings are still present in Terraform state; use an encrypted,
-access-controlled remote backend for deployment.
+No secret belongs in `config.tfvars.example` or a committed `.tfvars` file. Generated secrets,
+VM custom data, and protected extension settings are still present in Terraform state. VM custom
+data is restricted to SYSTEM/Administrators after Windows provisioning but is not an encrypted
+secret store, so use an encrypted, access-controlled remote backend and tightly restrict VM
+administrator access.
 
 ## Commands
 
@@ -66,18 +68,24 @@ terraform output deployment_footprint
 
 ## Immutable Custom Script Extension
 
-The provisioner is embedded in each VM's custom data instead of downloaded from a branch. The
-extension copies Azure's decoded `CustomData.bin` to a `.ps1` path before Windows PowerShell 5.1
-executes it. Its command is stored only in `protectedSettings` and passes base64-encoded generated
-credentials without printing them. Application/data content uses:
+The provisioner and a generated per-stack secret payload are embedded in each VM's custom data
+instead of downloaded from a branch. Azure decodes it under the SYSTEM/Administrators-only
+`C:\AzureData` directory. The extension command is stored only in `protectedSettings`, contains no
+secret values, and copies the provisioner only on first execution. The provisioner persists the
+payload under an equally restrictive `C:\MicroHack\secrets` ACL, strips it from its executable
+copy, and overwrites/removes `CustomData.bin`. Installers receive database setup secrets through
+short-lived protected response/option files; `sqlcmd` and `psql` authenticate through
+`SQLCMDPASSWORD` and `PGPASSWORD`, never password command arguments. Application/data content uses:
 
 ```text
 https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/<40-hex-commit>.zip
 ```
 
-`source_archive_sha256` is verified before expansion. Every tool/database installer is the exact
-URL from `workshop/toolchain.lock.json`, with digest verification and Authenticode publisher
-verification where the lock declares a publisher.
+`source_archive_sha256` is verified before every expansion, including cached archives. Each run
+uses a clean staging extraction and atomically swaps the source tree rather than trusting a prior
+mutable extraction. Every tool/database installer is the exact URL from
+`workshop/toolchain.lock.json`, with digest verification and Authenticode publisher verification
+where the lock declares a publisher.
 
 VM image version, .NET, SQL Server Express, go-sqlcmd, Microsoft OpenJDK, PostgreSQL, Maven,
 VS Code, Azure CLI, uv, Python, and VS Code extension versions are pinned. There are no raw branch
@@ -89,8 +97,11 @@ Changing only `source_commit` reruns each extension in place through its force t
 
 ## Independent operation
 
-Each database is a local automatic Windows service. Each application is published once and run by
-an automatic scheduled task (`MicroHack-dotnet` or `MicroHack-java`). Provisioning creates a
+Each database is a local automatic Windows service. Each application is run by an automatic
+scheduled task (`MicroHack-dotnet` or `MicroHack-java`) whose startup script requires a successful
+native database query within five minutes before launching the app. A provisioner rerun stops and
+waits for only that stack's task/exact application process before replacing source or output,
+publishes to staging, and atomically swaps the completed output. Provisioning creates a
 stack-specific smoke marker only after the app, liveness, readiness, canonical image, canonical
 manifest counts, and native database counts pass.
 

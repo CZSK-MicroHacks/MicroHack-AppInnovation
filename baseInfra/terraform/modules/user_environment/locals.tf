@@ -17,6 +17,15 @@ locals {
   source_archive_url      = "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/${var.source_commit}.zip"
   provisioner_path        = "${path.module}/../../../scripts/provision-vm.ps1"
   provisioner_sha256      = filesha256(local.provisioner_path)
+  provisioner_custom_data = {
+    for stack in keys(local.stacks) : stack => base64encode(join("\n", [
+      file(local.provisioner_path),
+      "# MICROHACK_SECRET_PAYLOAD:${base64encode(jsonencode({
+        databasePassword  = random_password.database[stack].result
+        performanceApiKey = random_password.performance_api_key[stack].result
+      }))}"
+    ]))
+  }
   stacks = {
     dotnet = {
       vm_name       = "vm-dotnet-user${local.padded}"

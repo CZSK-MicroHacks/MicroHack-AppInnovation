@@ -20,11 +20,14 @@ Application content defaults to immutable commit
 `fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9`. Terraform rejects branch, tag, short-SHA,
 and other mutable source values.
 
-`baseInfra/scripts/provision-vm.ps1` is embedded as VM custom data. The protected Custom Script
-Extension command supplies only generated database and performance secrets plus reviewed source
-integrity metadata. The provisioner verifies each locked digest and Authenticode publisher before
-running an installer. It does not use `winget`, `latest`, package-manager fallback chains, or raw
-branch URLs.
+`baseInfra/scripts/provision-vm.ps1` and a generated per-stack secret payload are embedded as VM
+custom data. Azure stores the decoded payload under the SYSTEM/Administrators-only `C:\AzureData`
+boundary. The protected Custom Script Extension command contains only non-secret stack and source
+integrity arguments. On first execution, the provisioner moves the secrets into
+`C:\MicroHack\secrets`, reapplies the same restrictive ACL, removes the payload from its executable
+copy, and overwrites/removes `CustomData.bin`. The provisioner verifies each locked digest and
+Authenticode publisher before running an installer. It does not use `winget`, `latest`,
+package-manager fallback chains, or raw branch URLs.
 
 Both VMs receive pinned VS Code, Azure CLI, uv, uv-managed Python 3.12.10, and exact signed
 Copilot extensions. The .NET VM additionally receives the pinned .NET modernization extensions.
@@ -91,9 +94,10 @@ terraform apply tfplan
 ```
 
 Do not commit `.tfvars`, plan, or state files. Terraform state contains the Windows administrator
-password, generated per-environment database passwords, generated performance API keys, and
-protected extension settings. Use an encrypted, access-controlled remote backend for a real
-facilitator deployment and restrict state access as tightly as the VMs.
+password, generated per-environment database passwords, generated performance API keys, VM custom
+data, and protected extension settings. VM custom data is ACL-restricted on Windows but is not an
+encrypted secret store; its safety depends on the encrypted, access-controlled Terraform backend
+and administrator-only VM access. Restrict state and administrator access as tightly as the VMs.
 
 ## Outputs and access
 
@@ -133,14 +137,17 @@ Get-ScheduledTask -TaskName 'MicroHack-*'
 ```
 
 Only the matching stack files exist on each VM. SQL Server/PostgreSQL services and the
-`MicroHack-dotnet`/`MicroHack-java` startup tasks are automatic, so ordinary VM restarts do not
-reseed duplicate records or require student setup. The application import paths remain
-transactional and insert-new/idempotent.
+`MicroHack-dotnet`/`MicroHack-java` startup tasks are automatic. Each startup script waits up to
+five minutes for a successful native database query before launching the application and fails
+visibly when that bound is exceeded. Ordinary VM restarts do not reseed duplicate records or
+require student setup; the application import paths remain transactional and insert-new/idempotent.
 
 Changing `source_commit` updates the extension force tag and reruns verified provisioning in
-place. Editing `provision-vm.ps1` replaces both VMs in each affected participant module because
-Azure VM custom data is immutable; review that replacement plan carefully. To deliberately rerun
-one stack without replacing its VM:
+place. Every rerun rehashes the cached/downloaded archive, extracts a clean source tree, stops only
+the matching scheduled task/application process before replacement, builds into a staging output,
+and atomically swaps the completed source and application directories. Editing `provision-vm.ps1`
+replaces both VMs in each affected participant module because Azure VM custom data is immutable;
+review that replacement plan carefully. To deliberately rerun one stack without replacing its VM:
 
 ```pwsh
 terraform apply `

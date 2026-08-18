@@ -4,6 +4,10 @@ resource "random_password" "database" {
   length           = 32
   special          = true
   override_special = "!#%+-_="
+  min_upper        = 1
+  min_lower        = 1
+  min_numeric      = 1
+  min_special      = 1
 }
 
 resource "random_password" "performance_api_key" {
@@ -45,7 +49,7 @@ resource "azapi_resource" "vm" {
         computerName  = each.value.computer_name
         adminUsername = var.admin_username
         adminPassword = var.admin_password
-        customData    = filebase64(local.provisioner_path)
+        customData    = local.provisioner_custom_data[each.key]
         windowsConfiguration = {
           enableAutomaticUpdates = true
           patchSettings          = { patchMode = "AutomaticByPlatform" }
@@ -66,7 +70,11 @@ resource "azapi_resource" "vm" {
   }
 
   lifecycle {
-    replace_triggered_by = [terraform_data.provisioner]
+    replace_triggered_by = [
+      terraform_data.provisioner,
+      random_password.database[each.key],
+      random_password.performance_api_key[each.key]
+    ]
   }
 
   depends_on = [azapi_resource.nic]
@@ -87,7 +95,7 @@ resource "azapi_resource" "vm_setup" {
       autoUpgradeMinorVersion = false
       forceUpdateTag          = "${local.provisioner_sha256}-${var.source_commit}"
       protectedSettings = {
-        commandToExecute = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Copy-Item -LiteralPath 'C:\\AzureData\\CustomData.bin' -Destination 'C:\\AzureData\\provision-vm.ps1' -Force; & 'C:\\AzureData\\provision-vm.ps1' -Stack ${each.key} -SourceCommit ${var.source_commit} -SourceArchiveUrl ${local.source_archive_url} -SourceArchiveSha256 ${var.source_archive_sha256} -DatabasePasswordBase64 ${base64encode(random_password.database[each.key].result)} -PerformanceApiKeyBase64 ${base64encode(random_password.performance_api_key[each.key].result)}\""
+        commandToExecute = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$script = 'C:\\AzureData\\provision-vm.ps1'; if (-not (Test-Path -LiteralPath $script)) { Copy-Item -LiteralPath 'C:\\AzureData\\CustomData.bin' -Destination $script -Force }; & $script -Stack ${each.key} -SourceCommit ${var.source_commit} -SourceArchiveUrl ${local.source_archive_url} -SourceArchiveSha256 ${var.source_archive_sha256}\""
       }
     }
   }
