@@ -98,10 +98,11 @@ resource "azapi_resource" "vnet" {
   depends_on = [azapi_resource.nat_gw]
 }
 
-# NIC
 resource "azapi_resource" "nic" {
+  for_each = local.stacks
+
   type      = "Microsoft.Network/networkInterfaces@2023-04-01"
-  name      = local.nic_name
+  name      = each.value.nic_name
   location  = var.location
   parent_id = azapi_resource.rg.id
   body = {

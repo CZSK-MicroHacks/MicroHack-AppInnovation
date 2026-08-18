@@ -24,15 +24,16 @@ resource "azapi_resource" "rg_owner_role_assignment" {
   }
 }
 
-# Owner role assignment for VM system-assigned managed identity
 resource "azapi_resource" "vm_identity_owner" {
+  for_each = local.stacks
+
   type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = uuidv5(local.role_assignment_ns, "${data.azurerm_client_config.current.subscription_id}/${local.rg_name}/${azapi_resource.vm.id}")
+  name      = uuidv5(local.role_assignment_ns, "${data.azurerm_client_config.current.subscription_id}/${local.rg_name}/${azapi_resource.vm[each.key].output.identity.principalId}")
   parent_id = azapi_resource.rg.id
   body = {
     properties = {
       roleDefinitionId = local.owner_role_definition_id # Owner
-      principalId      = azapi_resource.vm.output.identity.principalId
+      principalId      = azapi_resource.vm[each.key].output.identity.principalId
       principalType    = "ServicePrincipal"
     }
   }

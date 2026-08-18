@@ -4,7 +4,7 @@ variable "n" {
   description = <<EOT
 Number of user environments to provision.
 Each environment consists of a resource group containing:
- - One Windows VM (developer workstation)
+ - Two independent Windows Server 2025 VMs: dotnet/SQL Server and java/PostgreSQL
  - Public IP (for Bastion) and separate Public IP for NAT Gateway
  - NAT Gateway for outbound SNAT
  - Network Security Group
@@ -12,6 +12,11 @@ Each environment consists of a resource group containing:
  - Subnets: 'vms' plus 'AzureBastionSubnet'
 Set to a reasonable small number for demos. Must be >=1.
 EOT
+
+  validation {
+    condition     = var.n >= 1 && var.n <= 254 && floor(var.n) == var.n
+    error_message = "n must be a whole number from 1 through 254."
+  }
 }
 
 variable "locations" {
@@ -25,8 +30,12 @@ Changing the region assigned to an existing index forces recreation of that envi
 Provide at least one region; empty list is invalid.
 EOT
   validation {
-    condition     = length(var.locations) > 0 && alltrue([for l in var.locations : length(trimspace(l)) > 0])
-    error_message = "Provide at least one non-empty region name in locations."
+    condition = (
+      length(var.locations) > 0 &&
+      length(distinct(var.locations)) == length(var.locations) &&
+      alltrue([for location in var.locations : length(trimspace(location)) > 0])
+    )
+    error_message = "Provide at least one non-empty, unique region name in locations."
   }
 }
 
@@ -34,7 +43,7 @@ variable "admin_username" {
   type        = string
   default     = "azureuser"
   description = <<EOT
-Administrative username configured on every Windows VM.
+Administrative username configured on both Windows VMs in every participant environment.
 Avoid reserved names (Administrator, admin, etc.).
 EOT
 }
@@ -43,8 +52,8 @@ variable "admin_password" {
   type        = string
   sensitive   = true
   description = <<EOT
-Administrative password for all Windows VMs.
-Provide via CLI (-var or tfvars file) or environment variable TF_VAR_admin_password.
+Administrative password for all facilitator-created Windows VMs.
+Provide through the sensitive TF_VAR_admin_password environment variable.
 Do NOT commit real secrets to version control.
 Password must satisfy Windows complexity requirements.
 EOT
@@ -55,7 +64,77 @@ variable "vm_size" {
   default     = "Standard_D2as_v5"
   description = <<EOT
 SKU/size of the Windows VM per user environment.
-Should support required features (e.g. enough RAM/CPU for workshop tools).
+The deployment creates two VMs of this size per participant.
+The default is a two-vCPU SKU; update vm_vcpus when selecting another size.
+EOT
+}
+
+variable "vm_vcpus" {
+  type        = number
+  default     = 2
+  description = <<EOT
+Number of vCPUs exposed by vm_size, used only to calculate the doubled deployment footprint.
+The facilitator preflight script obtains the authoritative value from Azure.
+Set this input to that reported value before plan/apply when vm_size is changed.
+EOT
+
+  validation {
+    condition     = var.vm_vcpus >= 1 && floor(var.vm_vcpus) == var.vm_vcpus
+    error_message = "vm_vcpus must be a positive whole number."
+  }
+}
+
+variable "os_disk_size_gb" {
+  type        = number
+  default     = 127
+  description = <<EOT
+Size in GiB of each Premium_LRS operating-system disk.
+Two disks of this size are created per participant, one for each independent VM.
+The value is included in the required capacity and cost preflight.
+EOT
+
+  validation {
+    condition     = var.os_disk_size_gb >= 127 && floor(var.os_disk_size_gb) == var.os_disk_size_gb
+    error_message = "os_disk_size_gb must be a whole number of at least 127 GiB for the pinned Windows image."
+  }
+}
+
+variable "source_commit" {
+  type        = string
+  default     = "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
+  description = <<EOT
+Immutable Git commit used to download the application, canonical manifest, catalog, and images.
+The frozen P3 baseline is the exact default. Overrides must remain full lowercase 40-hex commit IDs;
+branches, tags, main, and other mutable references are rejected.
+EOT
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{40}$", var.source_commit))
+    error_message = "source_commit must be a full lowercase 40-hex Git commit ID."
+  }
+}
+
+variable "source_archive_sha256" {
+  type        = string
+  description = <<EOT
+Expected SHA-256 digest of the immutable GitHub source archive for source_commit.
+Provisioning verifies this digest before expanding the archive. Supply the reviewed digest through
+TF_VAR_source_archive_sha256; it is integrity metadata, not a secret.
+EOT
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.source_archive_sha256))
+    error_message = "source_archive_sha256 must be a lowercase 64-hex SHA-256 digest."
+  }
+}
+
+variable "capacity_preflight_confirmed" {
+  type        = bool
+  default     = false
+  description = <<EOT
+Explicit facilitator acknowledgement that baseInfra/scripts/preflight-capacity.ps1 completed for the
+selected subscription, locations, participant count, VM size, vCPU count, disk size, and cost ceiling.
+Azure resource creation is blocked until this value is true.
 EOT
 }
 
@@ -119,5 +198,3 @@ When false: skips provider registration (assumes providers are already registere
 This is useful for workshop scenarios where users don't have subscription-level permissions to register providers.
 EOT
 }
-
-

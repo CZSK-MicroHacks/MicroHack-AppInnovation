@@ -1,7 +1,27 @@
-# Virtual Machine
+resource "random_password" "database" {
+  for_each = local.stacks
+
+  length           = 32
+  special          = true
+  override_special = "!#%+-_="
+}
+
+resource "random_password" "performance_api_key" {
+  for_each = local.stacks
+
+  length  = 48
+  special = false
+}
+
+resource "terraform_data" "provisioner" {
+  input = local.provisioner_sha256
+}
+
 resource "azapi_resource" "vm" {
-  type      = "Microsoft.Compute/virtualMachines@2023-09-01"
-  name      = local.vm_name
+  for_each = local.stacks
+
+  type      = "Microsoft.Compute/virtualMachines@2024-11-01"
+  name      = each.value.vm_name
   location  = var.location
   parent_id = azapi_resource.rg.id
   body = {
@@ -11,19 +31,21 @@ resource "azapi_resource" "vm" {
         osDisk = {
           createOption = "FromImage"
           deleteOption = "Delete"
+          diskSizeGB   = var.os_disk_size_gb
           managedDisk  = { storageAccountType = "Premium_LRS" }
         }
         imageReference = {
           publisher = "MicrosoftWindowsServer"
           offer     = "WindowsServer"
           sku       = "2025-datacenter-azure-edition"
-          version   = "latest"
+          version   = "26100.7456.251206"
         }
       }
       osProfile = {
-        computerName  = local.vm_name
+        computerName  = each.value.computer_name
         adminUsername = var.admin_username
         adminPassword = var.admin_password
+        customData    = filebase64(local.provisioner_path)
         windowsConfiguration = {
           enableAutomaticUpdates = true
           patchSettings          = { patchMode = "AutomaticByPlatform" }
@@ -31,7 +53,10 @@ resource "azapi_resource" "vm" {
       }
       networkProfile = {
         networkInterfaces = [
-          { id = azapi_resource.nic.id, properties = { primary = true } }
+          {
+            id         = azapi_resource.nic[each.key].id
+            properties = { primary = true }
+          }
         ]
       }
     }
@@ -39,26 +64,33 @@ resource "azapi_resource" "vm" {
       type = "SystemAssigned"
     }
   }
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.provisioner]
+  }
+
   depends_on = [azapi_resource.nic]
 }
 
-# Custom Script Extension
 resource "azapi_resource" "vm_setup" {
-  type      = "Microsoft.Compute/virtualMachines/extensions@2023-09-01"
-  name      = "setup"
+  for_each = local.stacks
+
+  type      = "Microsoft.Compute/virtualMachines/extensions@2024-11-01"
+  name      = "provision-${each.key}"
   location  = var.location
-  parent_id = azapi_resource.vm.id
+  parent_id = azapi_resource.vm[each.key].id
   body = {
     properties = {
       publisher               = "Microsoft.Compute"
       type                    = "CustomScriptExtension"
       typeHandlerVersion      = "1.10"
-      autoUpgradeMinorVersion = true
+      autoUpgradeMinorVersion = false
+      forceUpdateTag          = "${local.provisioner_sha256}-${var.source_commit}"
       protectedSettings = {
-        fileUris         = local.provisioning_scripts
-        commandToExecute = "powershell -ExecutionPolicy Bypass -File setup.ps1"
+        commandToExecute = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Copy-Item -LiteralPath 'C:\\AzureData\\CustomData.bin' -Destination 'C:\\AzureData\\provision-vm.ps1' -Force; & 'C:\\AzureData\\provision-vm.ps1' -Stack ${each.key} -SourceCommit ${var.source_commit} -SourceArchiveUrl ${local.source_archive_url} -SourceArchiveSha256 ${var.source_archive_sha256} -DatabasePasswordBase64 ${base64encode(random_password.database[each.key].result)} -PerformanceApiKeyBase64 ${base64encode(random_password.performance_api_key[each.key].result)}\""
       }
     }
   }
+
   depends_on = [azapi_resource.vm]
 }

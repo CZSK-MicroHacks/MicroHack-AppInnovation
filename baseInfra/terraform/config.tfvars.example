@@ -11,16 +11,21 @@ subscription_id = "00000000-0000-0000-0000-000000000000"
 
 # VM administrator credentials
 admin_username = "azureuser"
-admin_password = "YourSecurePassword123!"
+# Set TF_VAR_admin_password in the facilitator shell. Do not put it in this file.
 
 # VM size for user environments (adjust based on workshop requirements)
-vm_size = "Standard_D2as_v6"
+vm_size           = "Standard_D2as_v5"
+vm_vcpus          = 2
+os_disk_size_gb   = 127
+
+# Immutable application source. Keep the frozen commit unless a new contract is approved.
+source_commit = "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
+# Set TF_VAR_source_archive_sha256 to the reviewed 64-hex archive digest.
 
 # Entra ID domain for creating workshop users
 entra_user_domain = "yourcompany.onmicrosoft.com"
 
-# Password for workshop user accounts
-entra_user_password = "WorkshopPassword123!"
+# Set TF_VAR_entra_user_password when manage_entra_users is true.
 
 # Whether to create Entra ID users for the workshop
 manage_entra_users = true
@@ -30,3 +35,6 @@ manage_azure_resources = true
 
 # Whether to register Azure resource providers in the subscription
 manage_sub_providers = true
+
+# Set true only after preflight-capacity.ps1 succeeds for these exact inputs.
+capacity_preflight_confirmed = false

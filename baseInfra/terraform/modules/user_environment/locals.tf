@@ -7,8 +7,6 @@ locals {
   vms_subnet_name         = "vms"
   bastion_subnet_name     = "AzureBastionSubnet"
   nsg_name                = "nsg-user${local.padded}"
-  nic_name                = "nic-user${local.padded}"
-  vm_name                 = "vm-user${local.padded}"
   nat_gateway_name        = "nat-user${local.padded}"
   bastion_name            = "bastion-user${local.padded}"
   derived_vnet_cidr       = "10.${var.user_index}.0.0/22"
@@ -16,11 +14,19 @@ locals {
   derived_vms_subnet_cidr = "10.${var.user_index}.0.0/24"
   derived_bastion_cidr    = "10.${var.user_index}.1.0/26"
   vms_subnet_cidr         = local.derived_vms_subnet_cidr
-  provisioning_scripts = [
-    "https://github.com/tkubica12/MicroHack-AppInnovation/raw/refs/heads/main/baseInfra/scripts/setup.ps1",
-    "https://github.com/tkubica12/MicroHack-AppInnovation/raw/refs/heads/main/baseInfra/scripts/SQL_install.ps1",
-    "https://github.com/tkubica12/MicroHack-AppInnovation/raw/refs/heads/main/baseInfra/scripts/App_install.ps1",
-    "https://github.com/tkubica12/MicroHack-AppInnovation/raw/refs/heads/main/baseInfra/scripts/Dev_install_initial.ps1",
-    "https://github.com/tkubica12/MicroHack-AppInnovation/raw/refs/heads/main/baseInfra/scripts/Dev_install_post_reboot.ps1"
-  ]
+  source_archive_url      = "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/${var.source_commit}.zip"
+  provisioner_path        = "${path.module}/../../../scripts/provision-vm.ps1"
+  provisioner_sha256      = filesha256(local.provisioner_path)
+  stacks = {
+    dotnet = {
+      vm_name       = "vm-dotnet-user${local.padded}"
+      computer_name = "dotnet-u${local.padded}"
+      nic_name      = "nic-dotnet-user${local.padded}"
+    }
+    java = {
+      vm_name       = "vm-java-user${local.padded}"
+      computer_name = "java-u${local.padded}"
+      nic_name      = "nic-java-user${local.padded}"
+    }
+  }
 }

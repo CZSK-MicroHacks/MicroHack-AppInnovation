@@ -3,9 +3,30 @@ output "resource_group_names" {
   value       = [for k, m in module.user_environment : m.resource_group_name]
 }
 
-output "vm_names" {
-  description = "List of provisioned VM names."
-  value       = [for k, m in module.user_environment : m.vm_name]
+output "dotnet_vm_names" {
+  description = "List of provisioned .NET/SQL Server VM names."
+  value       = [for _, environment in module.user_environment : environment.dotnet_vm_name]
+}
+
+output "java_vm_names" {
+  description = "List of provisioned Java/PostgreSQL VM names."
+  value       = [for _, environment in module.user_environment : environment.java_vm_name]
+}
+
+output "vm_names_by_environment" {
+  description = "Map of participant index to unambiguous dotnet and java VM names."
+  value = {
+    for index, environment in module.user_environment :
+    index => environment.vm_names
+  }
+}
+
+output "private_ip_addresses_by_environment" {
+  description = "Map of participant index to the distinct dotnet and java private IP addresses."
+  value = {
+    for index, environment in module.user_environment :
+    index => environment.private_ip_addresses
+  }
 }
 
 output "vnet_names" {
@@ -30,10 +51,15 @@ output "region_assignment" {
 
 output "region_distribution" {
   description = "Count of environments per region."
-  value = { for r in var.locations : r => length([for i in local.user_indices : local.user_location_map[i] if local.user_location_map[i] == r]) }
+  value       = { for r in var.locations : r => length([for i in local.user_indices : local.user_location_map[i] if local.user_location_map[i] == r]) }
 }
 
 output "registered_resource_providers" {
   description = "List of registered Azure resource providers."
   value       = var.manage_sub_providers ? module.resource_providers[0].registered_providers : []
+}
+
+output "deployment_footprint" {
+  description = "Calculated doubled VM, vCPU, OS-disk count, and OS-disk GiB footprint."
+  value       = local.deployment_footprint
 }
