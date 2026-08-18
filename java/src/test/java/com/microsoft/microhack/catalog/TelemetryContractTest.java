@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -125,6 +126,7 @@ class TelemetryContractTest {
     }
 
     @Test
+    @DisplayName("Contract.Telemetry.FinalResponseStatus")
     void httpSignalAndFullResourceIdentityReachLogExporter() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "GET", "/figure/44444444-4444-4444-8444-444444444444");
@@ -182,7 +184,7 @@ class TelemetryContractTest {
                 .isEqualTo("/figure/{id}");
         assertThat(failureSpan.getAttributes().get(
                 AttributeKey.longKey("http.response.status_code")))
-                .isEqualTo(500L);
+                .isEqualTo(418L);
         assertThat(metric(CatalogTelemetry.HTTP_DURATION_METRIC)
                         .getHistogramData()
                         .getPoints())
@@ -192,12 +194,55 @@ class TelemetryContractTest {
                             .isEqualTo("/figure/{id}");
                     assertThat(point.getAttributes().get(
                             AttributeKey.longKey("http.response.status_code")))
-                            .isEqualTo(500L);
+                            .isEqualTo(418L);
                 });
         assertAttributes(log("http.server.request"), Map.of(
                 "http.request.method", "GET",
                 "http.route", "/figure/{id}",
+                "http.response.status_code", "418"));
+
+        logs.reset();
+        MockHttpServletResponse uncommittedResponse = new MockHttpServletResponse();
+        assertThatThrownBy(() -> new RequestTelemetryFilter(telemetry).doFilter(
+                        request,
+                        uncommittedResponse,
+                        (ignoredRequest, ignoredResponse) -> {
+                            throw new jakarta.servlet.ServletException("uncommitted failure");
+                        }))
+                .isInstanceOf(jakarta.servlet.ServletException.class);
+        assertThat(uncommittedResponse.getStatus()).isEqualTo(500);
+        var uncommittedSpan = spans.getFinishedSpanItems().get(2);
+        assertThat(uncommittedSpan.getAttributes().get(
+                AttributeKey.longKey("http.response.status_code")))
+                .isEqualTo(500L);
+        assertThat(metric(CatalogTelemetry.HTTP_DURATION_METRIC)
+                        .getHistogramData()
+                        .getPoints())
+                .anySatisfy(point -> assertThat(point.getAttributes().get(
+                               AttributeKey.longKey("http.response.status_code")))
+                        .isEqualTo(500L));
+        assertAttributes(log("http.server.request"), Map.of(
+                "http.request.method", "GET",
+                "http.route", "/figure/{id}",
                 "http.response.status_code", "500"));
+    }
+
+    @Test
+    @DisplayName("Contract.Telemetry.RejectedDocumentIncrementsOnce")
+    void rejectedDocumentIncrementsOnce() {
+        FigureRepository figures = mock(FigureRepository.class);
+        CategoryRepository categories = mock(CategoryRepository.class);
+        CatalogImportService service = importService(figures, categories);
+
+        assertThatThrownBy(() -> service.importDocument(
+                        stream(validItem().replace(
+                               "\"category\":\"Telemetry Figures\"",
+                               "\"category\":\"!!!\""))))
+                .isInstanceOf(CatalogImportValidationException.class);
+
+        assertLatestImportRejectedOne(1);
+        assertThat(rejectedMetricCount()).isEqualTo(1);
+        verifyNoInteractions(figures, categories);
     }
 
     @Test

@@ -127,6 +127,16 @@ public sealed class ConformanceVectorTests
         await Assert.ThrowsAsync<CatalogImportValidationException>(
             () => parser.ParseAsync(invalid, CancellationToken.None));
 
+        await using var emptySlug = File.OpenRead(
+            Path.Combine(
+                RepositoryRoot(),
+                "tests",
+                "acceptance",
+                "fixtures",
+                "catalog.invalid-empty-slug.json"));
+        await Assert.ThrowsAsync<CatalogImportValidationException>(
+            () => parser.ParseAsync(emptySlug, CancellationToken.None));
+
         await using var nullMember = new MemoryStream("[null]"u8.ToArray());
         await Assert.ThrowsAsync<CatalogImportValidationException>(
             () => parser.ParseAsync(nullMember, CancellationToken.None));

@@ -2,7 +2,7 @@
 
 The supported legacy baseline is a .NET 8 Blazor Server monolith backed by SQL
 Server 2022 Express. It preserves the workshop UI while implementing shared contract
-`1.0.0` for catalog browsing, search, category filtering, details, local images,
+`1.1.0` for catalog browsing, search, category filtering, details, local images,
 transactional import, health, bounded performance work, and OpenTelemetry.
 
 The baseline intentionally contains no Dockerfile or student-facing cloud IaC.
@@ -68,9 +68,9 @@ dotnet restore LegoCatalog.sln
 dotnet test LegoCatalog.sln --logger trx --results-directory evidence
 ```
 
-The native suite includes the exact degraded-state and cross-runtime conformance test
-names consumed by the shared handoff validator. To run implementation-neutral HTTP and
-database acceptance:
+The native suite includes all fourteen degraded-state, conformance, and telemetry tests
+under the exact class-qualified identities consumed by the shared handoff validator. To
+run implementation-neutral HTTP and database acceptance:
 
 ```powershell
 cd ..\tests\acceptance

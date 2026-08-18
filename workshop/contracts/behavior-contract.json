@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "identity": {
     "figureId": "canonical lowercase RFC 4122 UUID",
     "filenamePattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png$",
@@ -122,11 +122,11 @@
         "maximumCodePoints": 260
       }
     },
-    "rejectedTelemetry": "increment rejected by one per rejected document, including parse, validation, or transactional conflict failures",
+    "rejectedTelemetry": "each rejected document adds exactly one at the native instrumentation call, including parse, validation, or transactional conflict failures; exported cumulative or delta aggregates may contain any positive integral sum",
     "runtimeTestRequirements": [
       "a valid new figure and category commit together",
       "reimporting the same figure reports it as skipped",
-      "a valid prefix followed by an invalid record publishes nothing"
+      "a valid prefix followed by a record whose category normalizes to an empty slug publishes nothing"
     ],
     "acceptanceReset": {
       "ownedProductIdPrefix": "10000000-0000-4000-8000-",
@@ -225,7 +225,8 @@
     "serviceNamespace": "app-innovation",
     "deploymentEnvironment": "lab",
     "revisionResourceAttribute": "azure.containerapps.revision.name",
-    "httpRouteAttribute": "matched route template after request handling; use the final response status",
+    "httpRouteAttribute": "matched route template after request handling",
+    "httpStatusAttribute": "actual HTTP response status sent on the wire; an uncommitted propagated failure is set to and recorded as 500, while a committed response retains and records its committed status even when an exception later propagates",
     "requiredResourceAttributes": [
       "service.name",
       "service.namespace",

@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "stack": {
       "enum": [
@@ -46,8 +46,8 @@
     },
     "tests": {
       "type": "array",
-      "minItems": 12,
-      "maxItems": 12,
+      "minItems": 14,
+      "maxItems": 14,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/test"
@@ -70,6 +70,15 @@
         "properties": {
           "artifactFormat": {
             "const": "trx"
+          },
+          "tests": {
+            "items": {
+              "properties": {
+                "testIdentity": {
+                  "pattern": "^LegoCatalog\\.App\\.Tests\\.(?:HealthContractTests|PerformanceContractTests|ConformanceVectorTests|TelemetryContractTests)\\.[A-Za-z][A-Za-z0-9]*$"
+                }
+              }
+            }
           }
         }
       }
@@ -89,6 +98,15 @@
         "properties": {
           "artifactFormat": {
             "const": "junit"
+          },
+          "tests": {
+            "items": {
+              "properties": {
+                "testIdentity": {
+                  "pattern": "^com\\.microsoft\\.microhack\\.catalog\\.(?:RuntimeHealthContractTest|RuntimePerformanceContractTest|ConformanceVectorTest|TelemetryContractTest)#Contract\\.(?:Health|Performance|Conformance|Telemetry)\\.[A-Za-z][A-Za-z0-9]*$"
+                }
+              }
+            }
           }
         }
       }
@@ -100,7 +118,8 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "testName"
+        "testName",
+        "testIdentity"
       ],
       "properties": {
         "id": {
@@ -116,10 +135,16 @@
             "work-factor-bounds",
             "work-factor-invalid",
             "normalization-conformance",
-            "text-validation-conformance"
+            "text-validation-conformance",
+            "final-response-status",
+            "rejected-document-increments-once"
           ]
         },
         "testName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "testIdentity": {
           "type": "string",
           "minLength": 1
         }
@@ -313,6 +338,38 @@
             "properties": {
               "testName": {
                 "const": "Contract.Conformance.TextValidationVectors"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "final-response-status"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Telemetry.FinalResponseStatus"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "const": "rejected-document-increments-once"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "testName": {
+                "const": "Contract.Telemetry.RejectedDocumentIncrementsOnce"
               }
             }
           }

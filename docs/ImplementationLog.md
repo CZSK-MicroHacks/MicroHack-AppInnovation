@@ -502,3 +502,16 @@ Deferred (documented for future): blob image store, telemetry.
 - Added original-request-target rejection before routing so raw, encoded, and double-encoded aliases cannot normalize into health or performance routes. Canonical requests continue through the existing matched-route/final-status telemetry path.
 - Added exact native normalization/text conformance evidence, supplementary-boundary cases, rejected-document metric assertions, route-template log assertions, and raw-target tests.
 - Validation passes 32 native tests, Release publish, shared 23+1 optional skip, full SQL Server acceptance 22/22 over 198 figures/20 categories/198 images, exact outage/recovery, and a clean dependency vulnerability scan. Focused review approved the corrected slice.
+
+### 2026-08-18 (Rewrite - Java refreeze compliance)
+- Aligned Java with the refrozen Unicode scalar, UTF-16 storage, canonical UUID, literal search, seconds-based metric, matched-route, and one-rejected-document contracts without changing the shared interfaces.
+- Moved import completion telemetry outside the proxied transaction so it emits only after commit. Parse, validation, persistence, and commit-time conflicts each emit exactly one rejected document and no false completion.
+- Preserved committed HTTP response status across propagated failures while using 500 only when the response is still uncommitted. The SERVER span, duration metric, and structured request log now report the same actual wire status.
+- Validation passes 29 native tests, executable JAR packaging, full PostgreSQL acceptance 22/22 over 198 figures/20 categories/198 images, exact outage/recovery, and a zero HIGH/CRITICAL Trivy scan.
+
+### 2026-08-18 (Rewrite - baseline evidence finalization)
+- Replanned the coupled baseline after definitive review found that display names alone could bind unrelated native tests, committed-response failures could report synthetic statuses, the live invalid import did not exercise empty-slug normalization, and exported counter aggregates were incorrectly required to equal one.
+- Bumped the behavior and runtime-evidence contracts to `1.1.0`. Runtime evidence now binds all fourteen requirements to stack-specific class-qualified identities parsed from TRX test definitions or Surefire JUnit `classname` values.
+- Added a mixed valid-prefix/empty-slug fixture and made the unchanged 22-check full profile prove HTTP 400 plus unchanged complete database state. Both native parsers consume the same fixture, and Java additionally verifies atomicity against PostgreSQL.
+- Native SDK tests prove each rejected document adds exactly one counter unit, while handoff validation accepts only positive integral exported aggregates. HTTP telemetry now records the actual wire status: committed responses retain their status, and uncommitted propagated failures become 500.
+- Final integrated validation passes 24 shared tests with one optional live skip and the offline lock, 32 .NET tests, 29 Java tests, real fully qualified TRX/Surefire evidence validation, both package/publish gates, both full live 22/22 profiles, exact outage/recovery for both databases, and clean .NET/Java vulnerability scans.

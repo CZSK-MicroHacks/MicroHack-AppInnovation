@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -13,18 +14,122 @@ from catalog_acceptance.manifest import load_json
 from catalog_acceptance.models.contracts import AcceptanceReport
 
 REQUIRED_RUNTIME_TESTS = {
-    "liveness-database-outage": "Contract.Health.LivenessSurvivesDatabaseOutage",
-    "readiness-database-outage": "Contract.Health.ReadinessFailsDuringDatabaseOutage",
-    "readiness-import-failure": "Contract.Health.ReadinessReportsImportFailure",
-    "performance-database-failure": "Contract.Performance.DatabaseFailureIsControlled",
-    "performance-timeout": "Contract.Performance.TimeoutIsControlled",
-    "performance-missing-key": "Contract.Performance.MissingKeyReturnsUnauthorized",
-    "performance-invalid-key": "Contract.Performance.InvalidKeyReturnsUnauthorized",
-    "work-factor-default": "Contract.Performance.MissingWorkFactorUsesDefault",
-    "work-factor-bounds": "Contract.Performance.BoundsAreAccepted",
-    "work-factor-invalid": "Contract.Performance.InvalidWorkFactorsFailStartup",
-    "normalization-conformance": "Contract.Conformance.NormalizationVectors",
-    "text-validation-conformance": "Contract.Conformance.TextValidationVectors",
+    "dotnet-sqlserver": {
+        "liveness-database-outage": (
+            "Contract.Health.LivenessSurvivesDatabaseOutage",
+            "LegoCatalog.App.Tests.HealthContractTests.LivenessSurvivesDatabaseOutage",
+        ),
+        "readiness-database-outage": (
+            "Contract.Health.ReadinessFailsDuringDatabaseOutage",
+            "LegoCatalog.App.Tests.HealthContractTests.ReadinessFailsDuringDatabaseOutage",
+        ),
+        "readiness-import-failure": (
+            "Contract.Health.ReadinessReportsImportFailure",
+            "LegoCatalog.App.Tests.HealthContractTests.ReadinessReportsImportFailure",
+        ),
+        "performance-database-failure": (
+            "Contract.Performance.DatabaseFailureIsControlled",
+            "LegoCatalog.App.Tests.PerformanceContractTests.DatabaseFailureIsControlled",
+        ),
+        "performance-timeout": (
+            "Contract.Performance.TimeoutIsControlled",
+            "LegoCatalog.App.Tests.PerformanceContractTests.TimeoutIsControlled",
+        ),
+        "performance-missing-key": (
+            "Contract.Performance.MissingKeyReturnsUnauthorized",
+            "LegoCatalog.App.Tests.PerformanceContractTests.MissingKeyReturnsUnauthorized",
+        ),
+        "performance-invalid-key": (
+            "Contract.Performance.InvalidKeyReturnsUnauthorized",
+            "LegoCatalog.App.Tests.PerformanceContractTests.InvalidKeyReturnsUnauthorized",
+        ),
+        "work-factor-default": (
+            "Contract.Performance.MissingWorkFactorUsesDefault",
+            "LegoCatalog.App.Tests.PerformanceContractTests.MissingWorkFactorUsesDefault",
+        ),
+        "work-factor-bounds": (
+            "Contract.Performance.BoundsAreAccepted",
+            "LegoCatalog.App.Tests.PerformanceContractTests.BoundsAreAccepted",
+        ),
+        "work-factor-invalid": (
+            "Contract.Performance.InvalidWorkFactorsFailStartup",
+            "LegoCatalog.App.Tests.PerformanceContractTests.InvalidWorkFactorsFailStartup",
+        ),
+        "normalization-conformance": (
+            "Contract.Conformance.NormalizationVectors",
+            "LegoCatalog.App.Tests.ConformanceVectorTests.CategorySlugMatchesSharedVectors",
+        ),
+        "text-validation-conformance": (
+            "Contract.Conformance.TextValidationVectors",
+            "LegoCatalog.App.Tests.ConformanceVectorTests.TextValidationMatchesSharedVectors",
+        ),
+        "final-response-status": (
+            "Contract.Telemetry.FinalResponseStatus",
+            "LegoCatalog.App.Tests.TelemetryContractTests.RequestLogUsesMatchedRouteAndFinalStatus",
+        ),
+        "rejected-document-increments-once": (
+            "Contract.Telemetry.RejectedDocumentIncrementsOnce",
+            "LegoCatalog.App.Tests.TelemetryContractTests.RejectedDocumentRecordsExactlyOneRejectedUnit",
+        ),
+    },
+    "java-postgresql": {
+        "liveness-database-outage": (
+            "Contract.Health.LivenessSurvivesDatabaseOutage",
+            "com.microsoft.microhack.catalog.RuntimeHealthContractTest#Contract.Health.LivenessSurvivesDatabaseOutage",
+        ),
+        "readiness-database-outage": (
+            "Contract.Health.ReadinessFailsDuringDatabaseOutage",
+            "com.microsoft.microhack.catalog.RuntimeHealthContractTest#Contract.Health.ReadinessFailsDuringDatabaseOutage",
+        ),
+        "readiness-import-failure": (
+            "Contract.Health.ReadinessReportsImportFailure",
+            "com.microsoft.microhack.catalog.RuntimeHealthContractTest#Contract.Health.ReadinessReportsImportFailure",
+        ),
+        "performance-database-failure": (
+            "Contract.Performance.DatabaseFailureIsControlled",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.DatabaseFailureIsControlled",
+        ),
+        "performance-timeout": (
+            "Contract.Performance.TimeoutIsControlled",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.TimeoutIsControlled",
+        ),
+        "performance-missing-key": (
+            "Contract.Performance.MissingKeyReturnsUnauthorized",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.MissingKeyReturnsUnauthorized",
+        ),
+        "performance-invalid-key": (
+            "Contract.Performance.InvalidKeyReturnsUnauthorized",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.InvalidKeyReturnsUnauthorized",
+        ),
+        "work-factor-default": (
+            "Contract.Performance.MissingWorkFactorUsesDefault",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.MissingWorkFactorUsesDefault",
+        ),
+        "work-factor-bounds": (
+            "Contract.Performance.BoundsAreAccepted",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.BoundsAreAccepted",
+        ),
+        "work-factor-invalid": (
+            "Contract.Performance.InvalidWorkFactorsFailStartup",
+            "com.microsoft.microhack.catalog.RuntimePerformanceContractTest#Contract.Performance.InvalidWorkFactorsFailStartup",
+        ),
+        "normalization-conformance": (
+            "Contract.Conformance.NormalizationVectors",
+            "com.microsoft.microhack.catalog.ConformanceVectorTest#Contract.Conformance.NormalizationVectors",
+        ),
+        "text-validation-conformance": (
+            "Contract.Conformance.TextValidationVectors",
+            "com.microsoft.microhack.catalog.ConformanceVectorTest#Contract.Conformance.TextValidationVectors",
+        ),
+        "final-response-status": (
+            "Contract.Telemetry.FinalResponseStatus",
+            "com.microsoft.microhack.catalog.TelemetryContractTest#Contract.Telemetry.FinalResponseStatus",
+        ),
+        "rejected-document-increments-once": (
+            "Contract.Telemetry.RejectedDocumentIncrementsOnce",
+            "com.microsoft.microhack.catalog.TelemetryContractTest#Contract.Telemetry.RejectedDocumentIncrementsOnce",
+        ),
+    },
 }
 
 
@@ -51,49 +156,75 @@ def _xml_files(artifact: Path, artifact_format: str) -> list[Path]:
 def _runtime_test_outcomes(
     artifact: Path,
     artifact_format: str,
-) -> dict[str, list[str]]:
-    """Parse native TRX or JUnit artifacts into test-name outcomes."""
-    outcomes: dict[str, list[str]] = {}
+) -> dict[tuple[str, str], list[str]]:
+    """Parse results into display-name and fully qualified identity outcomes."""
+    outcomes: dict[tuple[str, str], list[str]] = {}
     for result_path in _xml_files(artifact, artifact_format):
         root = ElementTree.parse(result_path).getroot()
         if artifact_format == "trx":
+            definitions: dict[str, str] = {}
+            for definition in root.iter():
+                if definition.tag.rsplit("}", 1)[-1] != "UnitTest":
+                    continue
+                test_id = definition.attrib.get("id")
+                method = next(
+                    (
+                        child
+                        for child in definition.iter()
+                        if child.tag.rsplit("}", 1)[-1] == "TestMethod"
+                    ),
+                    None,
+                )
+                if test_id and method is not None:
+                    class_name = method.attrib.get("className")
+                    method_name = method.attrib.get("name")
+                    if class_name and method_name:
+                        definitions[test_id] = f"{class_name}.{method_name}"
             for result in root.iter():
                 if result.tag.rsplit("}", 1)[-1] != "UnitTestResult":
                     continue
                 name = result.attrib.get("testName")
+                identity = definitions.get(result.attrib.get("testId", ""))
                 outcome = result.attrib.get("outcome")
-                if name and outcome:
-                    outcomes.setdefault(name, []).append(outcome.casefold())
+                if name and identity and outcome:
+                    outcomes.setdefault((name, identity), []).append(outcome.casefold())
         else:
             for case in root.iter():
                 if case.tag.rsplit("}", 1)[-1] != "testcase":
                     continue
                 name = case.attrib.get("name")
-                if not name:
+                class_name = case.attrib.get("classname")
+                if not name or not class_name:
                     continue
                 failed = any(
                     child.tag.rsplit("}", 1)[-1]
                     in ("failure", "error", "skipped")
                     for child in case
                 )
-                outcomes.setdefault(name, []).append("failed" if failed else "passed")
+                outcomes.setdefault((name, f"{class_name}#{name}"), []).append(
+                    "failed" if failed else "passed"
+                )
     return outcomes
 
 
 def _validate_runtime_results(runtime_tests: dict[str, Any], artifact: Path) -> None:
     """Require every frozen runtime test ID to map to a native passing result."""
-    mapping = {test["id"]: test["testName"] for test in runtime_tests["tests"]}
-    if len(mapping) != len(runtime_tests["tests"]) or mapping != REQUIRED_RUNTIME_TESTS:
-        raise ValueError("runtime evidence differs from the exact requirement/test mapping")
-    test_names = list(mapping.values())
+    mapping = {
+        test["id"]: (test["testName"], test["testIdentity"])
+        for test in runtime_tests["tests"]
+    }
+    expected = REQUIRED_RUNTIME_TESTS[runtime_tests["stack"]]
+    if len(mapping) != len(runtime_tests["tests"]) or mapping != expected:
+        raise ValueError(
+            "runtime evidence differs from the exact stack requirement mapping"
+        )
     outcomes = _runtime_test_outcomes(artifact, runtime_tests["artifactFormat"])
-    expected_pass = "passed" if runtime_tests["artifactFormat"] == "junit" else "passed"
     failures = [
-        name
-        for name in test_names
-        if name not in outcomes
-        or not outcomes[name]
-        or any(outcome != expected_pass for outcome in outcomes[name])
+        f"{name} ({identity})"
+        for name, identity in mapping.values()
+        if (name, identity) not in outcomes
+        or not outcomes[(name, identity)]
+        or any(outcome != "passed" for outcome in outcomes[(name, identity)])
     ]
     if failures:
         raise ValueError(f"runtime result artifact lacks passing tests: {failures}")
@@ -165,9 +296,15 @@ def _validate_telemetry_results(
                 if measurement["attributes"].get("catalog.import.outcome")
                 == "rejected"
             ]
-            if not rejected or any(item["value"] != 1 for item in rejected):
+            if not rejected or any(
+                type(item.get("value")) not in (int, float)
+                or not math.isfinite(float(item["value"]))
+                or item["value"] <= 0
+                or not float(item["value"]).is_integer()
+                for item in rejected
+            ):
                 raise ValueError(
-                    "catalog import rejected measurements must increment by one"
+                    "catalog import rejected measurements must contain positive integral aggregates"
                 )
         if query_id == "traces":
             route_observations = rows["http.server"]["observations"]

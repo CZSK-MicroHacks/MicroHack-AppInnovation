@@ -713,7 +713,7 @@ class AcceptanceRunner:
             except ValidationError:
                 duplicate_passed = False
 
-        invalid_path = fixture_root / "catalog.invalid.json"
+        invalid_path = fixture_root / "catalog.invalid-empty-slug.json"
         invalid_payload = invalid_path.read_bytes()
         invalid_records = load_json(invalid_path)
         invalid_ids = [record["productId"] for record in invalid_records]

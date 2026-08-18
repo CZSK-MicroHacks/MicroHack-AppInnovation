@@ -20,21 +20,36 @@ public sealed class RequestTelemetryMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        await _next(context);
-        var route = (context.GetEndpoint() as RouteEndpoint)
-            ?.RoutePattern
-            .RawText
-            ?? context.Request.Path.Value
-            ?? "/";
-        using (_logger.BeginScope(
-            new Dictionary<string, object>
-            {
-                ["http.request.method"] = context.Request.Method,
-                ["http.route"] = route,
-                ["http.response.status_code"] = context.Response.StatusCode,
-            }))
+        try
         {
-            _logger.LogInformation("http.server.request");
+            await _next(context);
+        }
+        catch
+        {
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            }
+
+            throw;
+        }
+        finally
+        {
+            var route = (context.GetEndpoint() as RouteEndpoint)
+                ?.RoutePattern
+                .RawText
+                ?? context.Request.Path.Value
+                ?? "/";
+            using (_logger.BeginScope(
+                new Dictionary<string, object>
+                {
+                    ["http.request.method"] = context.Request.Method,
+                    ["http.route"] = route,
+                    ["http.response.status_code"] = context.Response.StatusCode,
+                }))
+            {
+                _logger.LogInformation("http.server.request");
+            }
         }
     }
 }

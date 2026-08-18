@@ -164,12 +164,18 @@ class PostgreSqlIntegrationTest {
         }
         long publishedFigures = figures.count();
         long publishedCategories = categories.count();
-        try (InputStream input = Files.newInputStream(fixtures.resolve("catalog.invalid.json"))) {
-            assertThatThrownBy(() -> importService.importDocument(input))
-                    .isInstanceOf(CatalogImportValidationException.class);
+        for (String fixture : new String[] {
+            "catalog.invalid.json",
+            "catalog.invalid-empty-slug.json"
+        }) {
+            try (InputStream input = Files.newInputStream(fixtures.resolve(fixture))) {
+                assertThatThrownBy(() -> importService.importDocument(input))
+                        .as(fixture)
+                        .isInstanceOf(CatalogImportValidationException.class);
+            }
+            assertThat(figures.count()).isEqualTo(publishedFigures);
+            assertThat(categories.count()).isEqualTo(publishedCategories);
         }
-        assertThat(figures.count()).isEqualTo(publishedFigures);
-        assertThat(categories.count()).isEqualTo(publishedCategories);
 
         String valid = strictItem("22222222-2222-4222-8222-222222222222");
         for (String invalid : new String[] {

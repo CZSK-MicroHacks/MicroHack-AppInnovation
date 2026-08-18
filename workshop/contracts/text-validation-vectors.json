@@ -157,6 +157,13 @@
     },
     {
       "field": "category",
+      "fragment": "!!!",
+      "repeat": 1,
+      "valid": false,
+      "reason": "category must normalize to a non-empty slug"
+    },
+    {
+      "field": "category",
       "fragment": "\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03\ufb03a",
       "repeat": 1,
       "valid": true,

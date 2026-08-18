@@ -5,6 +5,7 @@ using LegoCatalog.App.Middleware;
 using LegoCatalog.App.Models;
 using LegoCatalog.App.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.EntityFrameworkCore;
@@ -130,7 +131,7 @@ public sealed class TelemetryContractTests
             failingLogger.Scope["exception.type"]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Contract.Telemetry.RejectedDocumentIncrementsOnce")]
     public async Task RejectedDocumentRecordsExactlyOneRejectedUnit()
     {
         var measurements = new List<Measurement>();
@@ -160,7 +161,19 @@ public sealed class TelemetryContractTests
             new CatalogDocumentParser(),
             telemetry,
             new CapturingLogger<ImportService>());
-        await using var invalidDocument = new MemoryStream("{}"u8.ToArray());
+        await using var invalidDocument = new MemoryStream(
+            """
+            [
+              {
+                "productId":"10000000-0000-4000-8000-000000000006",
+                "name":"Empty Slug Category",
+                "description":"This complete record uses a category that normalizes to an empty slug.",
+                "category":"!!!",
+                "filename":"10000000-0000-4000-8000-000000000006.png",
+                "imagePrompt":"Photorealistic construction-toy figure used for empty slug validation."
+              }
+            ]
+            """u8.ToArray());
 
         await Assert.ThrowsAsync<CatalogImportValidationException>(
             () => importer.ImportAsync(invalidDocument, CancellationToken.None));
@@ -173,7 +186,7 @@ public sealed class TelemetryContractTests
         Assert.Equal(1, rejected.Value);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Contract.Telemetry.FinalResponseStatus")]
     public async Task RequestLogUsesMatchedRouteAndFinalStatus()
     {
         var logger = new CapturingLogger<RequestTelemetryMiddleware>();
@@ -200,6 +213,55 @@ public sealed class TelemetryContractTests
         Assert.Equal("GET", logger.Scope["http.request.method"]);
         Assert.Equal("/figure/{id}", logger.Scope["http.route"]);
         Assert.Equal(200, logger.Scope["http.response.status_code"]);
+
+        var failedLogger = new CapturingLogger<RequestTelemetryMiddleware>();
+        var failedMiddleware = new RequestTelemetryMiddleware(
+            failedContext =>
+            {
+                failedContext.SetEndpoint(endpoint);
+                throw new InvalidOperationException("request failed after response start");
+            },
+            failedLogger);
+        var failedContext = new DefaultHttpContext();
+        failedContext.Features.Set<IHttpResponseFeature>(
+            new StartedResponseFeature
+            {
+                StatusCode = StatusCodes.Status418ImATeapot,
+            });
+        failedContext.Request.Method = HttpMethods.Get;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => failedMiddleware.InvokeAsync(failedContext));
+
+        Assert.True(failedContext.Response.HasStarted);
+        Assert.Equal(StatusCodes.Status418ImATeapot, failedContext.Response.StatusCode);
+        Assert.Equal("http.server.request", failedLogger.Message);
+        Assert.Equal("GET", failedLogger.Scope["http.request.method"]);
+        Assert.Equal("/figure/{id}", failedLogger.Scope["http.route"]);
+        Assert.Equal(418, failedLogger.Scope["http.response.status_code"]);
+
+        var uncommittedLogger = new CapturingLogger<RequestTelemetryMiddleware>();
+        var uncommittedMiddleware = new RequestTelemetryMiddleware(
+            uncommittedContext =>
+            {
+                uncommittedContext.SetEndpoint(endpoint);
+                throw new InvalidOperationException("request failed before response start");
+            },
+            uncommittedLogger);
+        var uncommittedContext = new DefaultHttpContext();
+        uncommittedContext.Request.Method = HttpMethods.Get;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => uncommittedMiddleware.InvokeAsync(uncommittedContext));
+
+        Assert.False(uncommittedContext.Response.HasStarted);
+        Assert.Equal(
+            StatusCodes.Status500InternalServerError,
+            uncommittedContext.Response.StatusCode);
+        Assert.Equal("http.server.request", uncommittedLogger.Message);
+        Assert.Equal("GET", uncommittedLogger.Scope["http.request.method"]);
+        Assert.Equal("/figure/{id}", uncommittedLogger.Scope["http.route"]);
+        Assert.Equal(500, uncommittedLogger.Scope["http.response.status_code"]);
     }
 
     [Fact]
@@ -225,6 +287,27 @@ public sealed class TelemetryContractTests
             Tags.Any(
                 tag => tag.Key == name
                     && Equals(tag.Value, value));
+    }
+
+    private sealed class StartedResponseFeature : IHttpResponseFeature
+    {
+        public int StatusCode { get; set; }
+
+        public string? ReasonPhrase { get; set; }
+
+        public IHeaderDictionary Headers { get; set; } = new HeaderDictionary();
+
+        public Stream Body { get; set; } = Stream.Null;
+
+        public bool HasStarted => true;
+
+        public void OnStarting(Func<object, Task> callback, object state)
+        {
+        }
+
+        public void OnCompleted(Func<object, Task> callback, object state)
+        {
+        }
     }
 
     private sealed class EmptyFigureRepository : IFigureRepository

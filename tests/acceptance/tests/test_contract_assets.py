@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 
-from catalog_acceptance.handoff import validate_handoff
+from catalog_acceptance.handoff import _runtime_test_outcomes, validate_handoff
 from catalog_acceptance.handoff_cli import main as handoff_cli_main
 from catalog_acceptance.manifest import (
     category_slug,
@@ -61,8 +61,8 @@ def test_handoff_example_matches_schema(repo_root: Path) -> None:
     )
 
 
-def test_sanitized_fixtures_cover_valid_and_invalid_identity(repo_root: Path) -> None:
-    """Require the valid fixture to parse and the traversal fixture to fail."""
+def test_sanitized_fixtures_cover_atomic_rejection_inputs(repo_root: Path) -> None:
+    """Require valid prefixes followed by either frozen invalid record to fail."""
     contracts = repo_root / "workshop" / "contracts"
     fixtures = repo_root / "tests" / "acceptance" / "fixtures"
     _validate(
@@ -73,6 +73,10 @@ def test_sanitized_fixtures_cover_valid_and_invalid_identity(repo_root: Path) ->
     CatalogItem.model_validate(mixed_items[0])
     with pytest.raises(ValidationError):
         CatalogItem.model_validate(mixed_items[1])
+    empty_slug_items = load_json(fixtures / "catalog.invalid-empty-slug.json")
+    CatalogItem.model_validate(empty_slug_items[0])
+    with pytest.raises(ValidationError):
+        CatalogItem.model_validate(empty_slug_items[1])
 
 
 def test_normalization_vectors(repo_root: Path) -> None:
@@ -120,12 +124,39 @@ def test_runtime_evidence_schema_freezes_requirement_names(repo_root: Path) -> N
             evidence,
         )
     duplicate = load_json(contracts / "runtime-test-evidence.example.json")
-    duplicate["tests"] = [duplicate["tests"][0]] * 12
+    duplicate["tests"] = [duplicate["tests"][0]] * 14
     with pytest.raises(JsonSchemaValidationError):
         _validate(
             load_json(contracts / "runtime-test-evidence.schema.json"),
             duplicate,
         )
+    unqualified = load_json(contracts / "runtime-test-evidence.example.json")
+    unqualified["tests"][0]["testIdentity"] = "UnqualifiedTest"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(
+            load_json(contracts / "runtime-test-evidence.schema.json"),
+            unqualified,
+        )
+
+
+def test_junit_runtime_evidence_uses_class_and_display_name(tmp_path: Path) -> None:
+    """Bind JUnit evidence to its package-qualified class and display name."""
+    reports = tmp_path / "surefire-reports"
+    reports.mkdir()
+    name = "Contract.Telemetry.FinalResponseStatus"
+    class_name = "com.microsoft.microhack.catalog.TelemetryContractTest"
+    (reports / "TEST-telemetry.xml").write_text(
+        (
+            "<testsuite>"
+            f'<testcase name="{name}" classname="{class_name}" />'
+            "</testsuite>"
+        ),
+        encoding="utf-8",
+    )
+
+    assert _runtime_test_outcomes(reports, "junit") == {
+        (name, f"{class_name}#{name}"): ["passed"]
+    }
 
 
 def test_identity_vectors(repo_root: Path) -> None:
@@ -208,13 +239,24 @@ def test_handoff_bundle_cross_file_consistency(
     (evidence / "rollback.md").write_text("rollback fixture\n", encoding="utf-8")
     runtime_example = load_json(contracts / "runtime-test-evidence.example.json")
     runtime_results = "\n".join(
+        f'<UnitTestResult testId="runtime-{index}" '
+        f'testName="{test["testName"]}" outcome="Passed" />'
+        for index, test in enumerate(runtime_example["tests"])
+    )
+    runtime_definitions = "\n".join(
         (
-            f'<UnitTestResult testName="{test["testName"]}" outcome="Passed" />'
-            for test in runtime_example["tests"]
+            f'<UnitTest id="runtime-{index}" name="{test["testName"]}">'
+            f'<TestMethod className="{test["testIdentity"].rsplit(".", 1)[0]}" '
+            f'name="{test["testIdentity"].rsplit(".", 1)[1]}" />'
+            "</UnitTest>"
         )
+        for index, test in enumerate(runtime_example["tests"])
     )
     (evidence / "runtime-tests.trx").write_text(
-        f"<TestRun><Results>{runtime_results}</Results></TestRun>\n",
+        (
+            f"<TestRun><Results>{runtime_results}</Results>"
+            f"<TestDefinitions>{runtime_definitions}</TestDefinitions></TestRun>\n"
+        ),
         encoding="utf-8",
     )
     handoff_path = evidence / "modernization-contract.json"
@@ -282,7 +324,11 @@ def test_handoff_bundle_cross_file_consistency(
                 row["unit"] = signal_contract["metricUnits"][signal_name]
                 row["measurements"] = [
                     {
-                        "value": 1,
+                        "value": (
+                            3
+                            if signal_name == "catalog.import.records"
+                            else 1
+                        ),
                         "attributes": (
                             {
                                 "http.request.method": "GET",
@@ -356,9 +402,9 @@ def test_handoff_bundle_cross_file_consistency(
         for row in invalid_metrics["rows"]
         if row["signalName"] == "catalog.import.records"
     )
-    import_row["measurements"][0]["value"] = 2
+    import_row["measurements"][0]["value"] = 1.5
     metrics_path.write_text(json.dumps(invalid_metrics), encoding="utf-8")
-    with pytest.raises(ValueError, match="increment by one"):
+    with pytest.raises(ValueError, match="positive integral aggregate"):
         validate_handoff(handoff_path, contracts, tmp_path)
     metrics_path.write_text(json.dumps(passing_metrics), encoding="utf-8")
 
@@ -366,6 +412,17 @@ def test_handoff_bundle_cross_file_consistency(
     passing_runtime_results = runtime_artifact.read_text(encoding="utf-8")
     runtime_artifact.write_text(
         passing_runtime_results.replace('outcome="Passed"', 'outcome="Failed"', 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="lacks passing"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    runtime_artifact.write_text(passing_runtime_results, encoding="utf-8")
+    runtime_artifact.write_text(
+        passing_runtime_results.replace(
+            'className="LegoCatalog.App.Tests.HealthContractTests"',
+            'className="LegoCatalog.App.Tests.UnrelatedTests"',
+            1,
+        ),
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="lacks passing"):

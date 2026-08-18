@@ -96,10 +96,17 @@ class ConformanceVectorTest {
 
     @Test
     void completeDocumentRejectsValidPrefix() throws Exception {
-        try (var input = Files.newInputStream(repositoryRoot()
-                .resolve("tests/acceptance/fixtures/catalog.invalid.json"))) {
-            assertThatThrownBy(() -> parser.parse(input))
-                    .isInstanceOf(CatalogImportValidationException.class);
+        for (String fixture : new String[] {
+            "catalog.invalid.json",
+            "catalog.invalid-empty-slug.json"
+        }) {
+            try (var input = Files.newInputStream(repositoryRoot()
+                    .resolve("tests/acceptance/fixtures")
+                    .resolve(fixture))) {
+                assertThatThrownBy(() -> parser.parse(input))
+                        .as(fixture)
+                        .isInstanceOf(CatalogImportValidationException.class);
+            }
         }
     }
 

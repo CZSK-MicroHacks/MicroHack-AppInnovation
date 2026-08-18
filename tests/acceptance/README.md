@@ -1,7 +1,7 @@
 # Catalog acceptance harness
 
 This Python/pytest harness grades both baseline applications and every modernization
-path against contract `1.0.0`. It validates the checked-in corpus before making live
+path against contract `1.1.0`. It validates the checked-in corpus before making live
 requests.
 
 ## Contract tests
@@ -36,10 +36,10 @@ uv run python -m catalog_acceptance \
 ```
 
 Full evidence requires all 198 image routes, database verification, duplicate import,
-mixed valid/invalid atomicity, and no skipped required check. `--sample-images` and
-`--skip-import` are smoke-only development options and are rejected by the full profile.
-The full command exits nonzero when its live or database settings are absent; the
-optional pytest live test may skip only for local development.
+mixed valid/empty-slug atomicity, and no skipped required check. `--sample-images` and
+`--skip-import` are smoke-only development options and are rejected by the full
+profile. The full command exits nonzero when its live or database settings are absent;
+the optional pytest live test may skip only for local development.
 
 ## Database verification
 
@@ -96,6 +96,8 @@ stack, database family, corpus counts, image verification, application URL, serv
 identity, environment, version, or revision differs across the bundle.
 
 All paths declared by a handoff are repository-root-relative. Runtime evidence must be
-native TRX or JUnit XML containing the exact frozen failure-state tests. Telemetry
-evidence must include normalized non-empty query-result JSON for every named trace,
-metric, log, and resource attribute.
+native TRX or Surefire JUnit XML containing all fourteen frozen tests under their exact
+class-qualified native identities. Telemetry evidence must include normalized non-empty
+query-result JSON for every named trace, metric, log, and resource attribute. Native
+tests prove each rejected document adds exactly one counter unit; exported counter
+measurements are validated as positive integral aggregates and may exceed one.

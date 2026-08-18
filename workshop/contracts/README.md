@@ -5,7 +5,9 @@ Java/PostgreSQL baselines and by all three modernization paths.
 
 ## Contract versions
 
-- Seed and behavior contract: `1.0.0`
+- Seed contract: `1.0.0`
+- Behavior contract: `1.1.0`
+- Runtime test evidence: `1.1.0`
 - Modernization handoff: `1.0.0`
 - Acceptance report: `1.0.0`
 - Telemetry evidence: `1.0.0`

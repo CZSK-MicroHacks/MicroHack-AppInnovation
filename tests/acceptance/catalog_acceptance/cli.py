@@ -18,7 +18,7 @@ from catalog_acceptance.runner import AcceptanceRunner
 def build_parser() -> argparse.ArgumentParser:
     """Build the stable command-line interface for acceptance runs."""
     parser = argparse.ArgumentParser(
-        description="Verify a MicroHack catalog application against contract 1.0.0"
+        description="Verify a MicroHack catalog application against contract 1.1.0"
     )
     parser.add_argument(
         "--profile",
