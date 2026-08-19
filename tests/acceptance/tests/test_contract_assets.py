@@ -10,7 +10,11 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 
-from catalog_acceptance.handoff import _runtime_test_outcomes, validate_handoff
+from catalog_acceptance.handoff import (
+    _runtime_test_outcomes,
+    _validate_target_resource_ids,
+    validate_handoff,
+)
 from catalog_acceptance.handoff_cli import main as handoff_cli_main
 from catalog_acceptance.manifest import (
     category_slug,
@@ -59,6 +63,330 @@ def test_handoff_example_matches_schema(repo_root: Path) -> None:
         load_json(contracts / "telemetry-evidence.schema.json"),
         load_json(contracts / "telemetry-evidence.example.json"),
     )
+
+
+def test_p4_target_and_migration_examples_match_schemas(repo_root: Path) -> None:
+    """Require both target stages and database migration paths to remain valid."""
+    contracts = repo_root / "workshop" / "contracts"
+    target_schema = load_json(contracts / "azure-target-output.schema.json")
+    migration_schema = load_json(contracts / "migration-report.schema.json")
+    for name in ("bootstrap", "application"):
+        target = load_json(contracts / f"azure-target-output.{name}.example.json")
+        _validate(
+            target_schema,
+            target,
+        )
+        _validate_target_resource_ids(target)
+    for name in ("sql", "postgresql"):
+        _validate(
+            migration_schema,
+            load_json(contracts / f"migration-report.{name}.example.json"),
+        )
+    _validate(
+        load_json(contracts / "migration-cli-contract.schema.json"),
+        load_json(contracts / "migration-cli-contract.json"),
+    )
+    operation_schema = load_json(
+        contracts / "migration-operation-result.schema.json"
+    )
+    sql_import = load_json(
+        contracts / "migration-operation-result.example.json"
+    )
+    sql_export = json.loads(json.dumps(sql_import))
+    sql_export.update(command="sql export", target=None)
+    postgresql_report = load_json(
+        contracts / "migration-report.postgresql.example.json"
+    )
+    postgresql_target = {
+        "kind": "database",
+        **{
+            key: postgresql_report["targetDatabase"][key]
+            for key in (
+                "resourceId",
+                "family",
+                "authentication",
+                "localAdministratorPrincipal",
+                "entraAdministratorPrincipal",
+                "applicationPrincipal",
+            )
+        },
+    }
+    postgresql_import = json.loads(json.dumps(sql_import))
+    postgresql_import.update(
+        command="postgresql import",
+        target=postgresql_target,
+        artifact=postgresql_report["databaseArtifact"],
+    )
+    postgresql_export = json.loads(json.dumps(postgresql_import))
+    postgresql_export.update(command="postgresql export", target=None)
+    images_copy = json.loads(json.dumps(sql_import))
+    images_copy.update(
+        command="images copy",
+        target={
+            "kind": "images",
+            "resourceId": postgresql_report["images"]["resourceId"],
+            "provider": postgresql_report["images"]["provider"],
+        },
+        artifact=None,
+        imageVerification=postgresql_report["images"]["verification"],
+    )
+    for result in (
+        sql_export,
+        sql_import,
+        postgresql_export,
+        postgresql_import,
+        images_copy,
+    ):
+        _validate(operation_schema, result)
+
+
+def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
+    """Freeze command names, exit codes, and non-destructive safety boundaries."""
+    contract = load_json(
+        repo_root / "workshop" / "contracts" / "migration-cli-contract.json"
+    )
+    assert [command["name"] for command in contract["commands"]] == [
+        "sql export",
+        "sql import",
+        "postgresql export",
+        "postgresql import",
+        "images copy",
+        "verify",
+        "render-handoff",
+    ]
+    assert [item["code"] for item in contract["exitCodes"]] == [0, 2, 3, 4, 5]
+    assert contract["safety"] == {
+        "sourceReadOnly": True,
+        "refuseNonemptyTarget": True,
+        "requireExactTargetConfirmation": True,
+        "argumentsAreExact": True,
+        "deriveTargetSettingsFromTargetOutput": True,
+        "secretsInEnvironmentOnly": True,
+        "tokensInChildProcessEnvironmentOnly": True,
+        "rejectUndeclaredSecrets": True,
+        "resourceDeletionSupported": False,
+    }
+    mutating = {
+        command["name"]
+        for command in contract["commands"]
+        if command["mutatesTarget"]
+    }
+    assert mutating == {"sql import", "postgresql import", "images copy"}
+    commands = {command["name"]: command for command in contract["commands"]}
+    assert "--target-output" in commands["sql import"]["arguments"]
+    assert "--target-output" in commands["postgresql import"]["arguments"]
+    assert "--application-username" not in commands["postgresql import"][
+        "arguments"
+    ]
+    assert "--target-authentication" not in commands["postgresql import"][
+        "arguments"
+    ]
+    assert commands["postgresql import"]["requiredSecretEnvironment"] == [
+        "MIGRATION_TARGET_ADMINISTRATOR_PASSWORD"
+    ]
+    assert commands["postgresql import"][
+        "secretEnvironmentByTargetAuthentication"
+    ]["managed-identity"] == {
+        "required": [],
+        "forbidden": ["MIGRATION_TARGET_APPLICATION_PASSWORD"],
+    }
+    assert contract["postgresqlManagedIdentityBootstrap"] == {
+        "administratorSource": (
+            "target-output.database.entraAdministratorPrincipal"
+        ),
+        "administratorPrincipalType": "user",
+        "azureCliConfigDirectory": "$HOME/.azure-365",
+        "azureCliPrincipalCommand": "az ad signed-in-user show",
+        "tokenCommand": (
+            "az account get-access-token --resource-type oss-rdbms"
+        ),
+        "tokenProcessEnvironment": "PGPASSWORD",
+        "principalCreationDatabase": "postgres",
+        "principalCreationFunction": (
+            "pg_catalog.pgaadauth_create_principal_with_oid"
+        ),
+        "applicationPrincipalNameSource": (
+            "target-output.database.applicationPrincipal.name"
+        ),
+        "applicationPrincipalObjectIdSource": (
+            "target-output.workloadIdentity.principalId"
+        ),
+        "applicationPrincipalObjectType": "service",
+        "applicationPrincipalIsAdmin": False,
+        "applicationPrincipalIsMfa": False,
+    }
+    assert commands["verify"]["resultSchema"] == "migration-report.schema.json"
+    assert (
+        commands["render-handoff"]["resultSchema"]
+        == "modernization-contract.schema.json"
+    )
+
+    schema = load_json(
+        repo_root
+        / "workshop"
+        / "contracts"
+        / "migration-cli-contract.schema.json"
+    )
+    invalid = json.loads(json.dumps(contract))
+    invalid["commands"][1]["arguments"] = ["--execute"]
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, invalid)
+    invalid = json.loads(json.dumps(contract))
+    invalid["commands"][3]["requiredSecretEnvironment"] = []
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, invalid)
+
+
+def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
+    """Reject placeholder apps, SQL passwords, and mismatched storage authentication."""
+    contracts = repo_root / "workshop" / "contracts"
+    target_schema = load_json(contracts / "azure-target-output.schema.json")
+    bootstrap = load_json(contracts / "azure-target-output.bootstrap.example.json")
+    invalid_bootstrap = json.loads(json.dumps(bootstrap))
+    invalid_bootstrap["application"] = {
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.App/containerApps/placeholder",
+        "url": "https://placeholder.example.invalid",
+        "healthUrl": "https://placeholder.example.invalid/healthz",
+        "readinessUrl": "https://placeholder.example.invalid/readyz",
+        "containerAppName": "placeholder",
+        "revisionName": "placeholder--000001",
+    }
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_bootstrap)
+
+    invalid_sql_auth = json.loads(json.dumps(bootstrap))
+    invalid_sql_auth["database"]["authentication"] = "password-secret"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_sql_auth)
+
+    invalid_blob_auth = json.loads(json.dumps(bootstrap))
+    invalid_blob_auth["images"]["authentication"] = "aca-volume-secret"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_blob_auth)
+
+    invalid_scope = json.loads(json.dumps(bootstrap))
+    invalid_scope["workloadIdentity"]["resourceId"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000/"
+        "resourceGroups/rg-other/providers/Microsoft.ManagedIdentity/"
+        "userAssignedIdentities/id-mh-dotnet-example"
+    )
+    with pytest.raises(ValueError, match="outside the declared scope"):
+        _validate_target_resource_ids(invalid_scope)
+
+    invalid_type = json.loads(json.dumps(bootstrap))
+    invalid_type["network"]["virtualNetworkResourceId"] = bootstrap["database"][
+        "resourceId"
+    ]
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_type)
+
+    invalid_host = json.loads(json.dumps(bootstrap))
+    invalid_host["database"]["server"] = "sql-mh-dotnet-example.attacker.invalid"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_host)
+
+    invalid_location = json.loads(json.dumps(bootstrap))
+    invalid_location["location"] = "northeurope"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_location)
+
+    invalid_principal = json.loads(json.dumps(bootstrap))
+    invalid_principal["database"]["applicationPrincipal"]["principalId"] = (
+        "00000000-0000-0000-0000-000000000099"
+    )
+    with pytest.raises(ValueError, match="principal differs"):
+        _validate_target_resource_ids(invalid_principal)
+
+    application = load_json(
+        contracts / "azure-target-output.application.example.json"
+    )
+    invalid_endpoint = json.loads(json.dumps(application))
+    invalid_endpoint["application"]["url"] = "https://unrelated.example.invalid"
+    invalid_endpoint["application"]["healthUrl"] = (
+        "https://unrelated.example.invalid/healthz"
+    )
+    invalid_endpoint["application"]["readinessUrl"] = (
+        "https://unrelated.example.invalid/readyz"
+    )
+    with pytest.raises(ValueError, match="URL differs"):
+        _validate_target_resource_ids(invalid_endpoint)
+
+    invalid_revision = json.loads(json.dumps(application))
+    invalid_revision["application"]["revisionName"] = "unrelated--revision"
+    with pytest.raises(ValueError, match="revision differs"):
+        _validate_target_resource_ids(invalid_revision)
+
+    managed_identity_postgresql = json.loads(json.dumps(application))
+    managed_identity_postgresql["database"]["authentication"] = (
+        "managed-identity"
+    )
+    managed_identity_postgresql["database"]["applicationPrincipal"] = {
+        "name": "id-mh-java-example",
+        "kind": "managed-identity",
+        "principalId": "00000000-0000-0000-0000-000000000002",
+    }
+    _validate(target_schema, managed_identity_postgresql)
+    _validate_target_resource_ids(managed_identity_postgresql)
+    missing_entra_administrator = json.loads(
+        json.dumps(managed_identity_postgresql)
+    )
+    missing_entra_administrator["database"]["entraAdministratorPrincipal"] = (
+        None
+    )
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, missing_entra_administrator)
+
+    migration_schema = load_json(contracts / "migration-report.schema.json")
+    invalid_migration = load_json(contracts / "migration-report.sql.example.json")
+    invalid_migration["databaseArtifact"]["exportTool"]["name"] = "pg_dump"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(migration_schema, invalid_migration)
+    invalid_migration = load_json(contracts / "migration-report.sql.example.json")
+    invalid_migration["sourceDatabase"]["engineVersion"] = "1999"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(migration_schema, invalid_migration)
+
+    operation_schema = load_json(
+        contracts / "migration-operation-result.schema.json"
+    )
+    invalid_operation = load_json(
+        contracts / "migration-operation-result.example.json"
+    )
+    invalid_operation["artifact"] = load_json(
+        contracts / "migration-report.postgresql.example.json"
+    )["databaseArtifact"]
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(operation_schema, invalid_operation)
+    invalid_operation = load_json(
+        contracts / "migration-operation-result.example.json"
+    )
+    invalid_operation["target"]["resourceId"] = (
+        load_json(contracts / "migration-report.postgresql.example.json")[
+            "targetDatabase"
+        ]["resourceId"]
+    )
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(operation_schema, invalid_operation)
+
+    handoff_schema = load_json(contracts / "modernization-contract.schema.json")
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["authentication"]["database"] = "password-secret"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["application"]["region"] = "northeurope"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["deployment"]["mechanism"] = "terraform"
+    invalid_handoff["deployment"]["iacPath"] = "infra/aca"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["database"]["migrationMechanism"] = "unrelated"
+    invalid_handoff["database"]["migrationVersion"] = "999"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
 
 
 def test_sanitized_fixtures_cover_atomic_rejection_inputs(repo_root: Path) -> None:
@@ -210,6 +538,54 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
     assert toolchain["databases"]["postgresql"]["localContainer"][
         "indexDigest"
     ].startswith("sha256:")
+    assert toolchain["tools"]["sqlPackage"]["version"] == "170.4.83"
+    assert toolchain["azureSdk"]["dotnet"]["azureIdentity"]["version"] == "1.21.0"
+    assert (
+        toolchain["azureSdk"]["dotnet"]["azureStorageBlobs"]["version"] == "12.29.1"
+    )
+    assert toolchain["azureSdk"]["java"]["azureIdentity"]["version"] == "1.18.4"
+    assert (
+        toolchain["azureSdk"]["java"]["azureStorageBlob"]["version"] == "12.35.1"
+    )
+    assert (
+        toolchain["azureSdk"]["java"]["azureIdentityExtensions"]["version"]
+        == "1.2.9"
+    )
+    assert toolchain["azureSdk"]["java"]["azureIdentity"]["sha256"] == (
+        "fd947ab1d6b1a8519d377e8509f34fdf70215aaa11e84826dbe017e962acb2a0"
+    )
+    assert toolchain["azureSdk"]["java"]["azureStorageBlob"]["sha256"] == (
+        "087bd34819f9d443cb9f745318e38548d5377f664959481f8acffa72f194e7d0"
+    )
+    assert toolchain["azureSdk"]["java"]["azureIdentityExtensions"]["sha256"] == (
+        "38193a31810c64e0f7b7daf69f82b2cfd0425bd0a0c9f1ebede380a0dae7114e"
+    )
+    assert toolchain["databases"]["postgresql"]["migrationTools"] == {
+        "exportTool": "pg_dump",
+        "importTool": "pg_restore",
+        "version": "18.6",
+        "source": "bundled-with-postgresql-installer",
+    }
+    operation_defs = load_json(
+        repo_root
+        / "workshop"
+        / "contracts"
+        / "migration-operation-result.schema.json"
+    )["$defs"]
+    assert operation_defs["sqlArtifact"]["allOf"][1]["properties"][
+        "exportTool"
+    ]["properties"]["version"]["const"] == toolchain["tools"]["sqlPackage"][
+        "version"
+    ]
+    assert operation_defs["postgresqlArtifact"]["allOf"][1]["properties"][
+        "exportTool"
+    ]["properties"]["version"]["const"] == toolchain["databases"][
+        "postgresql"
+    ]["migrationTools"]["version"]
+    for container in toolchain["applicationContainers"].values():
+        assert container["platform"] == "linux/amd64"
+        assert container["digest"].startswith("sha256:")
+        assert ":latest" not in container["image"]
     assert toolchain["extensions"]["vscjava.migrate-java-to-azure"]
     assert toolchain["extensions"]["vscjava.vscode-java-upgrade"]
     assert toolchain["extensions"]["ms-dotnettools.vscode-dotnet-modernize"]
@@ -224,7 +600,7 @@ def test_handoff_bundle_cross_file_consistency(
     handoff = load_json(contracts / "modernization-contract.example.json")
     evidence = tmp_path / "evidence"
     evidence.mkdir()
-    iac_directory = tmp_path / "solutions" / "ch01-manual" / "dotnet" / "bicep"
+    iac_directory = tmp_path / "infra"
     iac_directory.mkdir(parents=True)
     (iac_directory / "main.bicep").write_text(
         "metadata contractFixture = true\n",
@@ -375,6 +751,94 @@ def test_handoff_bundle_cross_file_consistency(
         (contracts / "runtime-test-evidence.example.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    target_output = {
+        "schemaVersion": "1.0.0",
+        "deploymentStage": "application",
+        "sourceCommit": handoff["source"]["commitSha"],
+        "stack": handoff["source"]["stack"],
+        "location": handoff["application"]["region"],
+        "resourceGroup": {
+            "name": handoff["application"]["resourceGroup"],
+            "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example",
+        },
+        "network": {
+            "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example"
+        },
+        "containerRegistry": {
+            "resourceId": handoff["containerImage"]["registryResourceId"],
+            "loginServer": handoff["containerImage"]["registry"],
+        },
+        "workloadIdentity": {
+            "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-mh-example",
+            "clientId": "00000000-0000-0000-0000-000000000001",
+            "principalId": "00000000-0000-0000-0000-000000000002",
+        },
+        "containerAppsEnvironmentResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/managedEnvironments/cae-mh-example",
+        "containerAppsEnvironmentDefaultDomain": "example.swedencentral.azurecontainerapps.io",
+        "database": {
+            "resourceId": handoff["database"]["resourceId"],
+            "family": handoff["database"]["family"],
+            "server": handoff["database"]["server"],
+            "database": handoff["database"]["database"],
+            "authentication": handoff["authentication"]["database"],
+            "localAdministratorPrincipal": None,
+            "entraAdministratorPrincipal": None,
+            "applicationPrincipal": handoff["database"]["applicationPrincipal"],
+        },
+        "images": {
+            "resourceId": handoff["images"]["resourceId"],
+            "provider": handoff["images"]["provider"],
+            "location": handoff["images"]["location"],
+            "authentication": handoff["authentication"]["imageStore"],
+        },
+        "observability": {
+            "applicationInsightsResourceId": handoff["observability"][
+                "applicationInsightsResourceId"
+            ],
+            "logAnalyticsWorkspaceResourceId": handoff["observability"][
+                "logAnalyticsWorkspaceResourceId"
+            ],
+        },
+        "containerImage": {
+            "repository": handoff["containerImage"]["repository"],
+            "tag": handoff["containerImage"]["tag"],
+            "digest": handoff["containerImage"]["digest"],
+        },
+        "application": {
+            key: handoff["application"][key]
+            for key in (
+                "resourceId",
+                "url",
+                "healthUrl",
+                "readinessUrl",
+                "containerAppName",
+                "revisionName",
+            )
+        },
+    }
+    (evidence / "azure-target-output.json").write_text(
+        json.dumps(target_output),
+        encoding="utf-8",
+    )
+    migration_report = load_json(contracts / "migration-report.sql.example.json")
+    migration_report["sourceCommit"] = handoff["source"]["commitSha"]
+    migration_report["targetDatabase"] = target_output["database"]
+    migration_report["images"] = {
+        **target_output["images"],
+        "verification": {
+            key: handoff["images"]["verification"][key]
+            for key in (
+                "imageCount",
+                "imageBytes",
+                "imageSetSha256",
+                "seedManifestVersion",
+            )
+        },
+    }
+    (evidence / "migration-report.json").write_text(
+        json.dumps(migration_report),
+        encoding="utf-8",
+    )
     assert validate_handoff(handoff_path, contracts, tmp_path) == handoff
     assert (
         handoff_cli_main(
@@ -387,6 +851,44 @@ def test_handoff_bundle_cross_file_consistency(
             ]
         )
         == 0
+    )
+
+    target_output_path = evidence / "azure-target-output.json"
+    passing_target_output = load_json(target_output_path)
+    invalid_target_output = json.loads(json.dumps(passing_target_output))
+    invalid_target_output["database"]["server"] = "other.database.windows.net"
+    target_output_path.write_text(json.dumps(invalid_target_output), encoding="utf-8")
+    with pytest.raises(ValueError, match="target database names differ"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    target_output_path.write_text(json.dumps(passing_target_output), encoding="utf-8")
+
+    migration_report_path = evidence / "migration-report.json"
+    passing_migration_report = load_json(migration_report_path)
+    invalid_migration_report = json.loads(json.dumps(passing_migration_report))
+    invalid_migration_report["databaseVerification"]["migrationHistory"] = [
+        "unrelated migration"
+    ]
+    migration_report_path.write_text(
+        json.dumps(invalid_migration_report),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="history differs"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    migration_report_path.write_text(
+        json.dumps(passing_migration_report),
+        encoding="utf-8",
+    )
+    invalid_migration_report = json.loads(json.dumps(passing_migration_report))
+    invalid_migration_report["databaseArtifact"]["importTool"]["version"] = "999.0"
+    migration_report_path.write_text(
+        json.dumps(invalid_migration_report),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="tools differ"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    migration_report_path.write_text(
+        json.dumps(passing_migration_report),
+        encoding="utf-8",
     )
 
     metrics_path = tmp_path / telemetry["queries"]["metrics"]["resultFile"]

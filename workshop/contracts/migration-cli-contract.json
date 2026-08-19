@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "1.0.0",
+  "executable": "catalog-migrate",
+  "commands": [
+    {
+      "name": "sql export",
+      "mutatesTarget": false,
+      "arguments": [
+        "--source-server",
+        "--source-database",
+        "--source-username",
+        "--artifact"
+      ],
+      "requiredSecretEnvironment": [
+        "MIGRATION_SOURCE_DATABASE_PASSWORD"
+      ],
+      "secretEnvironmentByTargetAuthentication": null,
+      "resultSchema": "migration-operation-result.schema.json"
+    },
+    {
+      "name": "sql import",
+      "mutatesTarget": true,
+      "arguments": [
+        "--artifact",
+        "--target-output",
+        "--target-resource-id",
+        "--confirm-target-resource-id",
+        "--execute"
+      ],
+      "requiredSecretEnvironment": [],
+      "secretEnvironmentByTargetAuthentication": null,
+      "resultSchema": "migration-operation-result.schema.json"
+    },
+    {
+      "name": "postgresql export",
+      "mutatesTarget": false,
+      "arguments": [
+        "--source-host",
+        "--source-port",
+        "--source-database",
+        "--source-username",
+        "--artifact"
+      ],
+      "requiredSecretEnvironment": [
+        "MIGRATION_SOURCE_DATABASE_PASSWORD"
+      ],
+      "secretEnvironmentByTargetAuthentication": null,
+      "resultSchema": "migration-operation-result.schema.json"
+    },
+    {
+      "name": "postgresql import",
+      "mutatesTarget": true,
+      "arguments": [
+        "--artifact",
+        "--target-output",
+        "--target-resource-id",
+        "--confirm-target-resource-id",
+        "--execute"
+      ],
+      "requiredSecretEnvironment": [
+        "MIGRATION_TARGET_ADMINISTRATOR_PASSWORD"
+      ],
+      "secretEnvironmentByTargetAuthentication": {
+        "selector": "target-output.database.authentication",
+        "password-secret": {
+          "required": [
+            "MIGRATION_TARGET_APPLICATION_PASSWORD"
+          ],
+          "forbidden": []
+        },
+        "managed-identity": {
+          "required": [],
+          "forbidden": [
+            "MIGRATION_TARGET_APPLICATION_PASSWORD"
+          ]
+        }
+      },
+      "resultSchema": "migration-operation-result.schema.json"
+    },
+    {
+      "name": "images copy",
+      "mutatesTarget": true,
+      "arguments": [
+        "--source-directory",
+        "--target-output",
+        "--target-resource-id",
+        "--confirm-target-resource-id",
+        "--execute"
+      ],
+      "requiredSecretEnvironment": [],
+      "secretEnvironmentByTargetAuthentication": null,
+      "resultSchema": "migration-operation-result.schema.json"
+    },
+    {
+      "name": "verify",
+      "mutatesTarget": false,
+      "arguments": [
+        "--stack",
+        "--source-commit",
+        "--database-artifact",
+        "--target-output",
+        "--output"
+      ],
+      "requiredSecretEnvironment": [],
+      "secretEnvironmentByTargetAuthentication": {
+        "selector": "target-output.database.authentication",
+        "password-secret": {
+          "required": [
+            "MIGRATION_TARGET_APPLICATION_PASSWORD"
+          ],
+          "forbidden": []
+        },
+        "managed-identity": {
+          "required": [],
+          "forbidden": [
+            "MIGRATION_TARGET_APPLICATION_PASSWORD"
+          ]
+        }
+      },
+      "resultSchema": "migration-report.schema.json"
+    },
+    {
+      "name": "render-handoff",
+      "mutatesTarget": false,
+      "arguments": [
+        "--target-output",
+        "--migration-report",
+        "--acceptance-report",
+        "--telemetry-report",
+        "--runtime-test-report",
+        "--output"
+      ],
+      "requiredSecretEnvironment": [],
+      "secretEnvironmentByTargetAuthentication": null,
+      "resultSchema": "modernization-contract.schema.json"
+    }
+  ],
+  "postgresqlManagedIdentityBootstrap": {
+    "administratorSource": "target-output.database.entraAdministratorPrincipal",
+    "administratorPrincipalType": "user",
+    "azureCliConfigDirectory": "$HOME/.azure-365",
+    "azureCliPrincipalCommand": "az ad signed-in-user show",
+    "tokenCommand": "az account get-access-token --resource-type oss-rdbms",
+    "tokenProcessEnvironment": "PGPASSWORD",
+    "principalCreationDatabase": "postgres",
+    "principalCreationFunction": "pg_catalog.pgaadauth_create_principal_with_oid",
+    "applicationPrincipalNameSource": "target-output.database.applicationPrincipal.name",
+    "applicationPrincipalObjectIdSource": "target-output.workloadIdentity.principalId",
+    "applicationPrincipalObjectType": "service",
+    "applicationPrincipalIsAdmin": false,
+    "applicationPrincipalIsMfa": false
+  },
+  "exitCodes": [
+    {
+      "name": "success",
+      "code": 0
+    },
+    {
+      "name": "invalid-input",
+      "code": 2
+    },
+    {
+      "name": "precondition-failed",
+      "code": 3
+    },
+    {
+      "name": "tool-failed",
+      "code": 4
+    },
+    {
+      "name": "verification-failed",
+      "code": 5
+    }
+  ],
+  "safety": {
+    "sourceReadOnly": true,
+    "refuseNonemptyTarget": true,
+    "requireExactTargetConfirmation": true,
+    "argumentsAreExact": true,
+    "deriveTargetSettingsFromTargetOutput": true,
+    "secretsInEnvironmentOnly": true,
+    "tokensInChildProcessEnvironmentOnly": true,
+    "rejectUndeclaredSecrets": true,
+    "resourceDeletionSupported": false
+  }
+}

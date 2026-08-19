@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "source": {
       "type": "object",
@@ -150,8 +150,7 @@
           "$ref": "#/$defs/httpsUrl"
         },
         "region": {
-          "type": "string",
-          "minLength": 1
+          "const": "swedencentral"
         },
         "resourceGroup": {
           "type": "string",
@@ -191,10 +190,7 @@
         },
         "tag": {
           "type": "string",
-          "minLength": 1,
-          "not": {
-            "const": "latest"
-          }
+          "pattern": "^[0-9a-f]{40}$"
         },
         "digest": {
           "type": "string",
@@ -213,7 +209,8 @@
         "migrationMechanism",
         "migrationVersion",
         "seedManifestVersion",
-        "verifiedRowCounts"
+        "verifiedRowCounts",
+        "applicationPrincipal"
       ],
       "properties": {
         "resourceId": {
@@ -246,6 +243,9 @@
         },
         "verifiedRowCounts": {
           "$ref": "#/$defs/corpusCounts"
+        },
+        "applicationPrincipal": {
+          "$ref": "#/$defs/applicationPrincipal"
         }
       }
     },
@@ -408,17 +408,17 @@
       "additionalProperties": false,
       "required": [
         "mechanism",
-        "iacPath"
+        "iacPath",
+        "targetOutput"
       ],
       "properties": {
         "mechanism": {
-          "enum": [
-            "bicep",
-            "terraform",
-            "copilot-generated"
-          ]
+          "const": "bicep"
         },
         "iacPath": {
+          "const": "infra"
+        },
+        "targetOutput": {
           "$ref": "#/$defs/repositoryPath"
         }
       }
@@ -444,10 +444,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "migrationReport",
         "telemetryReport",
         "runtimeTestReport"
       ],
       "properties": {
+        "migrationReport": {
+          "$ref": "#/$defs/repositoryPath"
+        },
         "telemetryReport": {
           "$ref": "#/$defs/repositoryPath"
         },
@@ -463,7 +467,252 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "stack": {
+                "const": "dotnet-sqlserver"
+              }
+            },
+            "required": [
+              "stack"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "database": {
+            "properties": {
+              "family": {
+                "const": "azure-sql"
+              },
+              "migrationMechanism": {
+                "const": "sqlpackage-bacpac"
+              },
+              "migrationVersion": {
+                "const": "170.4.83"
+              }
+            }
+          },
+          "authentication": {
+            "properties": {
+              "database": {
+                "const": "managed-identity"
+              }
+            }
+          },
+          "observability": {
+            "properties": {
+              "serviceName": {
+                "const": "mh-catalog-dotnet"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "stack": {
+                "const": "java-postgresql"
+              }
+            },
+            "required": [
+              "stack"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "database": {
+            "properties": {
+              "family": {
+                "const": "postgresql-flexible"
+              },
+              "migrationMechanism": {
+                "const": "pg-dump-restore"
+              },
+              "migrationVersion": {
+                "const": "18.6"
+              }
+            }
+          },
+          "observability": {
+            "properties": {
+              "serviceName": {
+                "const": "mh-catalog-java"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authentication": {
+            "properties": {
+              "database": {
+                "const": "password-secret"
+              }
+            },
+            "required": [
+              "database"
+            ]
+          }
+        },
+        "required": [
+          "authentication"
+        ]
+      },
+      "then": {
+        "properties": {
+          "database": {
+            "properties": {
+              "applicationPrincipal": {
+                "properties": {
+                  "kind": {
+                    "const": "database-role"
+                  },
+                  "principalId": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "database": {
+            "properties": {
+              "applicationPrincipal": {
+                "properties": {
+                  "kind": {
+                    "const": "managed-identity"
+                  },
+                  "principalId": {
+                    "$ref": "#/$defs/guid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "images": {
+            "properties": {
+              "provider": {
+                "const": "azure-blob"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          }
+        },
+        "required": [
+          "images"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authentication": {
+            "properties": {
+              "imageStore": {
+                "const": "managed-identity"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "images": {
+            "properties": {
+              "provider": {
+                "const": "azure-files"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          }
+        },
+        "required": [
+          "images"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authentication": {
+            "properties": {
+              "imageStore": {
+                "const": "aca-volume-secret"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
+    "applicationPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "principalId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "database-role",
+            "managed-identity"
+          ]
+        },
+        "principalId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/guid"
+            }
+          ]
+        }
+      }
+    },
+    "guid": {
+      "type": "string",
+      "format": "uuid"
+    },
     "httpsUrl": {
       "type": "string",
       "format": "uri",

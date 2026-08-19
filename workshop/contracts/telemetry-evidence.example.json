@@ -8,7 +8,7 @@
     "service.version": "0000000000000000000000000000000000000000",
     "deployment.environment": "lab",
     "service.instance.id": "instance-000001",
-    "azure.containerapps.revision.name": "ca-mh-example--000001"
+    "azure.containerapps.revision.name": "ca-mh-example--000000000000"
   },
   "queries": {
     "resources": {

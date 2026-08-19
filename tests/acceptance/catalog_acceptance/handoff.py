@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 from xml.etree import ElementTree
 
@@ -390,6 +391,22 @@ def _parse_resource_id(value: str) -> dict[str, Any]:
     }
 
 
+def _parse_resource_group_id(value: str) -> dict[str, str]:
+    """Parse an Azure resource-group ID without accepting child segments."""
+    parts = value.strip("/").split("/")
+    if (
+        len(parts) != 4
+        or parts[0].casefold() != "subscriptions"
+        or parts[2].casefold() != "resourcegroups"
+    ):
+        raise ValueError(f"malformed Azure resource-group ID: {value}")
+    UUID(parts[1])
+    return {
+        "subscription": parts[1].casefold(),
+        "resourceGroup": parts[3].casefold(),
+    }
+
+
 def _validate_resource_ids(handoff: dict[str, Any]) -> None:
     """Require exact Azure providers, resource types, names, and common scope."""
     resources = {
@@ -468,6 +485,377 @@ def _validate_resource_ids(handoff: dict[str, Any]) -> None:
         raise ValueError("image location differs from image resource ID")
 
 
+def _validate_target_resource_ids(target: dict[str, Any]) -> None:
+    """Require every target resource to have the declared type and common scope."""
+    resource_group = _parse_resource_group_id(target["resourceGroup"]["resourceId"])
+    if (
+        resource_group["resourceGroup"]
+        != target["resourceGroup"]["name"].casefold()
+    ):
+        raise ValueError("target resource-group ID differs from its declared name")
+
+    resources = {
+        "network": (
+            target["network"]["virtualNetworkResourceId"],
+            ("microsoft.network", ("virtualnetworks",)),
+        ),
+        "registry": (
+            target["containerRegistry"]["resourceId"],
+            ("microsoft.containerregistry", ("registries",)),
+        ),
+        "identity": (
+            target["workloadIdentity"]["resourceId"],
+            ("microsoft.managedidentity", ("userassignedidentities",)),
+        ),
+        "containerAppsEnvironment": (
+            target["containerAppsEnvironmentResourceId"],
+            ("microsoft.app", ("managedenvironments",)),
+        ),
+        "database": (
+            target["database"]["resourceId"],
+            (
+                ("microsoft.sql", ("servers", "databases"))
+                if target["database"]["family"] == "azure-sql"
+                else (
+                    "microsoft.dbforpostgresql",
+                    ("flexibleservers", "databases"),
+                )
+            ),
+        ),
+        "images": (
+            target["images"]["resourceId"],
+            (
+                (
+                    "microsoft.storage",
+                    ("storageaccounts", "fileservices", "shares"),
+                )
+                if target["images"]["provider"] == "azure-files"
+                else (
+                    "microsoft.storage",
+                    ("storageaccounts", "blobservices", "containers"),
+                )
+            ),
+        ),
+        "applicationInsights": (
+            target["observability"]["applicationInsightsResourceId"],
+            ("microsoft.insights", ("components",)),
+        ),
+        "logAnalytics": (
+            target["observability"]["logAnalyticsWorkspaceResourceId"],
+            ("microsoft.operationalinsights", ("workspaces",)),
+        ),
+    }
+    if target["application"] is not None:
+        resources["application"] = (
+            target["application"]["resourceId"],
+            ("microsoft.app", ("containerapps",)),
+        )
+
+    parsed: dict[str, dict[str, Any]] = {}
+    for name, (resource_id, expected) in resources.items():
+        resource = _parse_resource_id(resource_id)
+        if (resource["namespace"], resource["types"]) != expected:
+            raise ValueError(f"target {name} resource ID has the wrong provider or type")
+        if (
+            resource["subscription"] != resource_group["subscription"]
+            or resource["resourceGroup"] != resource_group["resourceGroup"]
+        ):
+            raise ValueError(f"target {name} resource ID is outside the declared scope")
+        parsed[name] = resource
+
+    registry_name = parsed["registry"]["names"][-1]
+    if target["containerRegistry"]["loginServer"] != f"{registry_name}.azurecr.io":
+        raise ValueError("target registry hostname differs from its resource ID")
+    database_server, database_name = parsed["database"]["names"][-2:]
+    if (
+        not target["database"]["server"].casefold().startswith(
+            f"{database_server.casefold()}."
+        )
+        or database_name != target["database"]["database"]
+    ):
+        raise ValueError("target database names differ from its resource ID")
+    if parsed["images"]["names"][-1] != target["images"]["location"]:
+        raise ValueError("target image location differs from its resource ID")
+    application_principal = target["database"]["applicationPrincipal"]
+    if target["database"]["authentication"] == "managed-identity":
+        if (
+            application_principal["kind"] != "managed-identity"
+            or application_principal["name"] != parsed["identity"]["names"][-1]
+            or application_principal["principalId"]
+            != target["workloadIdentity"]["principalId"]
+        ):
+            raise ValueError(
+                "target database principal differs from its workload identity"
+            )
+    elif (
+        application_principal["kind"] != "database-role"
+        or application_principal["principalId"] is not None
+    ):
+        raise ValueError("target password database principal is not a database role")
+    expected_domain_suffix = (
+        f'.{target["location"]}.azurecontainerapps.io'
+    )
+    environment_domain = target["containerAppsEnvironmentDefaultDomain"]
+    if not environment_domain.endswith(expected_domain_suffix):
+        raise ValueError("target Container Apps domain differs from its region")
+    if target["application"] is not None:
+        application = target["application"]
+        if parsed["application"]["names"][-1] != application["containerAppName"]:
+            raise ValueError("target application name differs from its resource ID")
+        expected_url = (
+            f'https://{application["containerAppName"]}.{environment_domain}'
+        )
+        if application["url"] != expected_url or (
+            urlsplit(application["url"]).hostname
+            != f'{application["containerAppName"]}.{environment_domain}'
+        ):
+            raise ValueError(
+                "target application URL differs from its Container App environment"
+            )
+        if application["healthUrl"] != f'{application["url"].rstrip("/")}/healthz':
+            raise ValueError("target health URL differs from its application URL")
+        if application["readinessUrl"] != (
+            f'{application["url"].rstrip("/")}/readyz'
+        ):
+            raise ValueError("target readiness URL differs from its application URL")
+        expected_revision = (
+            f'{application["containerAppName"]}--{target["sourceCommit"][:12]}'
+        )
+        if application["revisionName"] != expected_revision:
+            raise ValueError(
+                "target revision differs from its Container App and source commit"
+            )
+    if (
+        target["containerImage"] is not None
+        and target["containerImage"]["tag"] != target["sourceCommit"]
+    ):
+        raise ValueError("target image tag differs from its source commit")
+
+
+def _validate_target_output(
+    handoff: dict[str, Any],
+    target: dict[str, Any],
+) -> None:
+    """Require application-stage Bicep output to populate the handoff exactly."""
+    _validate_target_resource_ids(target)
+    expected_database = {
+        "resourceId": handoff["database"]["resourceId"],
+        "family": handoff["database"]["family"],
+        "server": handoff["database"]["server"],
+        "database": handoff["database"]["database"],
+        "authentication": handoff["authentication"]["database"],
+        "localAdministratorPrincipal": target["database"][
+            "localAdministratorPrincipal"
+        ],
+        "entraAdministratorPrincipal": target["database"][
+            "entraAdministratorPrincipal"
+        ],
+        "applicationPrincipal": handoff["database"]["applicationPrincipal"],
+    }
+    expected_images = {
+        "resourceId": handoff["images"]["resourceId"],
+        "provider": handoff["images"]["provider"],
+        "location": handoff["images"]["location"],
+        "authentication": handoff["authentication"]["imageStore"],
+    }
+    expected_image = {
+        "repository": handoff["containerImage"]["repository"],
+        "tag": handoff["containerImage"]["tag"],
+        "digest": handoff["containerImage"]["digest"],
+    }
+    expected_application = {
+        key: handoff["application"][key]
+        for key in (
+            "resourceId",
+            "url",
+            "healthUrl",
+            "readinessUrl",
+            "containerAppName",
+            "revisionName",
+        )
+    }
+    checks = (
+        (target["deploymentStage"] == "application", "target output is not application-stage"),
+        (
+            target["sourceCommit"] == handoff["source"]["commitSha"],
+            "target output source commit differs from handoff",
+        ),
+        (
+            target["stack"] == handoff["source"]["stack"],
+            "target output stack differs from handoff",
+        ),
+        (
+            target["location"] == handoff["application"]["region"],
+            "target output location differs from handoff",
+        ),
+        (
+            target["resourceGroup"]["name"] == handoff["application"]["resourceGroup"],
+            "target output resource group differs from handoff",
+        ),
+        (
+            target["containerRegistry"]["resourceId"]
+            == handoff["containerImage"]["registryResourceId"],
+            "target output registry resource differs from handoff",
+        ),
+        (
+            target["containerRegistry"]["loginServer"]
+            == handoff["containerImage"]["registry"],
+            "target output registry hostname differs from handoff",
+        ),
+        (target["database"] == expected_database, "target output database differs from handoff"),
+        (target["images"] == expected_images, "target output images differ from handoff"),
+        (
+            target["observability"]["applicationInsightsResourceId"]
+            == handoff["observability"]["applicationInsightsResourceId"]
+            and target["observability"]["logAnalyticsWorkspaceResourceId"]
+            == handoff["observability"]["logAnalyticsWorkspaceResourceId"],
+            "target output observability resources differ from handoff",
+        ),
+        (
+            target["containerImage"] == expected_image,
+            "target output image identity differs from handoff",
+        ),
+        (
+            target["application"] == expected_application,
+            "target output application differs from handoff",
+        ),
+    )
+    failures = [message for passed, message in checks if not passed]
+    if failures:
+        raise ValueError("; ".join(failures))
+
+
+def _validate_migration_report(
+    handoff: dict[str, Any],
+    target: dict[str, Any],
+    report: dict[str, Any],
+    database_contract: dict[str, Any],
+    toolchain: dict[str, Any],
+) -> None:
+    """Require migration evidence to match the handoff and frozen corpus."""
+    database_key = (
+        "sqlserver"
+        if handoff["source"]["stack"] == "dotnet-sqlserver"
+        else "postgresql"
+    )
+    expected_database = target["database"]
+    expected_image_verification = {
+        key: handoff["images"]["verification"][key]
+        for key in (
+            "imageCount",
+            "imageBytes",
+            "imageSetSha256",
+            "seedManifestVersion",
+        )
+    }
+    expected_images = {
+        "resourceId": handoff["images"]["resourceId"],
+        "provider": handoff["images"]["provider"],
+        "location": handoff["images"]["location"],
+        "authentication": handoff["authentication"]["imageStore"],
+        "verification": expected_image_verification,
+    }
+    verification = report["databaseVerification"]
+    expected_tools = (
+        {
+            "exportTool": {
+                "name": "SqlPackage",
+                "version": toolchain["tools"]["sqlPackage"]["version"],
+            },
+            "importTool": {
+                "name": "SqlPackage",
+                "version": toolchain["tools"]["sqlPackage"]["version"],
+            },
+        }
+        if database_key == "sqlserver"
+        else {
+            "exportTool": {
+                "name": toolchain["databases"]["postgresql"]["migrationTools"][
+                    "exportTool"
+                ],
+                "version": toolchain["databases"]["postgresql"]["migrationTools"][
+                    "version"
+                ],
+            },
+            "importTool": {
+                "name": toolchain["databases"]["postgresql"]["migrationTools"][
+                    "importTool"
+                ],
+                "version": toolchain["databases"]["postgresql"]["migrationTools"][
+                    "version"
+                ],
+            },
+        }
+    )
+    artifact = report["databaseArtifact"]
+    expected_migration_mechanism = (
+        "sqlpackage-bacpac"
+        if database_key == "sqlserver"
+        else "pg-dump-restore"
+    )
+    expected_source_engine = (
+        toolchain["databases"]["sqlserver"]["sourceMajorVersion"]
+        if database_key == "sqlserver"
+        else toolchain["databases"]["postgresql"]["migrationTools"]["version"]
+    )
+    checks = (
+        (
+            report["sourceCommit"] == handoff["source"]["commitSha"],
+            "migration report source commit differs from handoff",
+        ),
+        (
+            report["stack"] == handoff["source"]["stack"],
+            "migration report stack differs from handoff",
+        ),
+        (
+            report["sourceDatabase"]["family"] == database_key
+            and report["sourceDatabase"]["engineVersion"] == expected_source_engine,
+            "migration report source database differs from toolchain lock",
+        ),
+        (
+            report["targetDatabase"] == expected_database,
+            "migration report database differs from handoff",
+        ),
+        (
+            report["images"] == expected_images,
+            "migration report images differ from handoff",
+        ),
+        (
+            verification["verifiedRowCounts"]
+            == handoff["database"]["verifiedRowCounts"],
+            "migration report row counts differ from handoff",
+        ),
+        (
+            verification["seedManifestVersion"]
+            == handoff["database"]["seedManifestVersion"],
+            "migration report seed version differs from handoff",
+        ),
+        (
+            verification["migrationHistory"]
+            == database_contract[database_key]["migration"]["orderedHistory"],
+            "migration report history differs from database contract",
+        ),
+        (
+            {
+                "exportTool": artifact["exportTool"],
+                "importTool": artifact["importTool"],
+            }
+            == expected_tools,
+            "migration report tools differ from toolchain lock",
+        ),
+        (
+            handoff["database"]["migrationMechanism"]
+            == expected_migration_mechanism
+            and handoff["database"]["migrationVersion"]
+            == artifact["importTool"]["version"],
+            "handoff migration provenance differs from migration evidence",
+        ),
+    )
+    failures = [message for passed, message in checks if not passed]
+    if failures:
+        raise ValueError("; ".join(failures))
+
+
 def validate_handoff(
     handoff_path: Path,
     contracts_directory: Path,
@@ -516,9 +904,31 @@ def validate_handoff(
         runtime_tests,
     )
     runtime_artifact = _resolve_repository_path(root, runtime_tests["artifact"])
+    migration_path = _resolve_repository_path(
+        root, handoff["evidence"]["migrationReport"]
+    )
+    migration_report = load_json(migration_path)
+    _validate_schema(
+        contracts_directory / "migration-report.schema.json",
+        migration_report,
+    )
+    target_output_path = _resolve_repository_path(
+        root, handoff["deployment"]["targetOutput"]
+    )
+    target_output = load_json(target_output_path)
+    _validate_schema(
+        contracts_directory / "azure-target-output.schema.json",
+        target_output,
+    )
     iac_path = _resolve_repository_path(root, handoff["deployment"]["iacPath"])
     runbook_path = _resolve_repository_path(root, handoff["rollback"]["runbook"])
-    required_paths = [iac_path, runbook_path, runtime_artifact]
+    required_paths = [
+        iac_path,
+        runbook_path,
+        runtime_artifact,
+        migration_path,
+        target_output_path,
+    ]
     for optional_name in ("assessment", "dependencyReport"):
         if optional_path := handoff["evidence"].get(optional_name):
             required_paths.append(_resolve_repository_path(root, optional_path))
@@ -532,6 +942,14 @@ def validate_handoff(
     _validate_runtime_results(runtime_tests, runtime_artifact)
     _validate_telemetry_results(telemetry, contracts_directory, root)
     _validate_resource_ids(handoff)
+    _validate_target_output(handoff, target_output)
+    _validate_migration_report(
+        handoff,
+        target_output,
+        migration_report,
+        load_json(contracts_directory / "database-contract.json"),
+        load_json(contracts_directory.parent / "toolchain.lock.json"),
+    )
 
     manifest = load_json(root / "data" / "manifest.json")
     expected_seed = {

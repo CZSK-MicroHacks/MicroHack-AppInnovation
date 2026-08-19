@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "source": {
     "stack": "dotnet-sqlserver",
     "runtimeVersion": "8.0.30",
@@ -23,13 +23,13 @@
   "path": "manual",
   "application": {
     "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
-    "url": "https://catalog.example.invalid",
-    "healthUrl": "https://catalog.example.invalid/healthz",
-    "readinessUrl": "https://catalog.example.invalid/readyz",
+    "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io",
+    "healthUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/healthz",
+    "readinessUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/readyz",
     "region": "swedencentral",
     "resourceGroup": "rg-mh-example",
     "containerAppName": "ca-mh-example",
-    "revisionName": "ca-mh-example--000001"
+    "revisionName": "ca-mh-example--000000000000"
   },
   "containerImage": {
     "registryResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
@@ -43,17 +43,22 @@
     "family": "azure-sql",
     "server": "sql-example.database.windows.net",
     "database": "catalog",
-    "migrationMechanism": "ef-migrations-sqlpackage",
-    "migrationVersion": "1",
+    "migrationMechanism": "sqlpackage-bacpac",
+    "migrationVersion": "170.4.83",
     "seedManifestVersion": "1.0.0",
+    "applicationPrincipal": {
+      "name": "id-mh-example",
+      "kind": "managed-identity",
+      "principalId": "00000000-0000-0000-0000-000000000002"
+    },
     "verifiedRowCounts": {
       "figures": 198,
       "categories": 20
     }
   },
   "images": {
-    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Storage/storageAccounts/stexample/fileServices/default/shares/catalog-images",
-    "provider": "azure-files",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Storage/storageAccounts/stexample/blobServices/default/containers/catalog-images",
+    "provider": "azure-blob",
     "location": "catalog-images",
     "verification": {
       "verified": true,
@@ -65,8 +70,8 @@
   },
   "authentication": {
     "containerRegistry": "managed-identity",
-    "database": "password-secret",
-    "imageStore": "aca-volume-secret",
+    "database": "managed-identity",
+    "imageStore": "managed-identity",
     "telemetry": "connection-string-secret"
   },
   "observability": {
@@ -75,7 +80,7 @@
     "environment": "lab",
     "serviceVersion": "0000000000000000000000000000000000000000",
     "serviceInstanceId": "instance-000001",
-    "revision": "ca-mh-example--000001",
+    "revision": "ca-mh-example--000000000000",
     "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
     "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example"
   },
@@ -86,13 +91,15 @@
   },
   "deployment": {
     "mechanism": "bicep",
-    "iacPath": "solutions/ch01-manual/dotnet/bicep"
+    "iacPath": "infra",
+    "targetOutput": "evidence/azure-target-output.json"
   },
   "rollback": {
     "targetRevision": "ca-mh-example--000000",
     "runbook": "evidence/rollback.md"
   },
   "evidence": {
+    "migrationReport": "evidence/migration-report.json",
     "telemetryReport": "evidence/telemetry-report.json",
     "runtimeTestReport": "evidence/runtime-test-report.json"
   }

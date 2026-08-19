@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "00000000-0000-0000-0000-000000000001",
+  "status": "passed",
+  "startedAt": "2026-08-18T00:00:00Z",
+  "completedAt": "2026-08-18T00:05:00Z",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "stack": "java-postgresql",
+  "sourceDatabase": {
+    "family": "postgresql",
+    "server": "localhost",
+    "database": "catalog",
+    "engineVersion": "18.6"
+  },
+  "targetDatabase": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-mh-java-example/databases/catalog",
+    "family": "postgresql-flexible",
+    "server": "psql-mh-java-example.postgres.database.azure.com",
+    "database": "catalog",
+    "authentication": "password-secret",
+    "localAdministratorPrincipal": {
+      "name": "catalogadmin",
+      "authentication": "password"
+    },
+    "entraAdministratorPrincipal": {
+      "name": "facilitator@example.com",
+      "objectId": "00000000-0000-0000-0000-000000000003",
+      "principalType": "user"
+    },
+    "applicationPrincipal": {
+      "name": "catalog_app",
+      "kind": "database-role",
+      "principalId": null
+    }
+  },
+  "databaseArtifact": {
+    "format": "postgresql-custom",
+    "exportTool": {
+      "name": "pg_dump",
+      "version": "18.6"
+    },
+    "importTool": {
+      "name": "pg_restore",
+      "version": "18.6"
+    },
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "bytes": 1
+  },
+  "databaseVerification": {
+    "migrationHistory": [
+      "1|contract baseline|SQL|V1__contract_baseline.sql|true"
+    ],
+    "schemaVerified": true,
+    "constraintsVerified": true,
+    "indexesVerified": true,
+    "seedManifestVersion": "1.0.0",
+    "verifiedRowCounts": {
+      "figures": 198,
+      "categories": 20
+    }
+  },
+  "images": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Storage/storageAccounts/stmhjavaexample/fileServices/default/shares/catalog-images",
+    "provider": "azure-files",
+    "location": "catalog-images",
+    "authentication": "aca-volume-secret",
+    "verification": {
+      "imageCount": 198,
+      "imageBytes": 323011386,
+      "imageSetSha256": "c706eda9b7d74a2b578b02487e6527e707819bc3cdd09adc59e3cb62ffcba7be",
+      "seedManifestVersion": "1.0.0"
+    }
+  }
+}

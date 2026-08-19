@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "verifiedOn": "2026-08-18",
+  "verifiedOn": "2026-08-19",
   "hosts": {
     "coordinator": {
       "operatingSystem": "macOS",
@@ -111,6 +111,12 @@
         "version": "18.6",
         "source": "bundled-with-postgresql-installer"
       },
+      "migrationTools": {
+        "exportTool": "pg_dump",
+        "importTool": "pg_restore",
+        "version": "18.6",
+        "source": "bundled-with-postgresql-installer"
+      },
       "localContainer": {
         "image": "postgres:18.6-bookworm",
         "indexDigest": "sha256:7d2695c3aa88e792e8b3b233e7e4adb296a20412c6c0ca361e3edaaacfada108",
@@ -155,6 +161,13 @@
     "bicep": {
       "version": "0.43.8"
     },
+    "sqlPackage": {
+      "package": "Microsoft.SqlPackage",
+      "version": "170.4.83",
+      "url": "https://www.nuget.org/api/v2/package/Microsoft.SqlPackage/170.4.83",
+      "sha512": "v0gJs4fk+6g4TK24de3XpJrBbKM0mzaOfi/GKppX9ibLZpT3iIHjn84Mqw9t8b1rY+vbh3LJq2xSQSYct3ZR1A==",
+      "integrity": "NuGet repository signature and package SHA-512 are required"
+    },
     "terraform": {
       "version": "1.13.3",
       "platforms": [
@@ -177,6 +190,70 @@
       "url": "https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip",
       "sha256": "5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12",
       "signaturePublisher": "Astral Software Inc."
+    }
+  },
+  "azureSdk": {
+    "dotnet": {
+      "azureIdentity": {
+        "package": "Azure.Identity",
+        "version": "1.21.0",
+        "source": "https://www.nuget.org/packages/Azure.Identity/1.21.0",
+        "sha512": "iDKQt23oDf1LGPA6AJC/0kKDm30cKFNXa6GfkIwWHfg8M+U/Vvt+7jE/RbFcC/6g7YTLzWhm4nxEXBWNWV56oA==",
+        "integrity": "NuGet repository signature and package SHA-512 are required"
+      },
+      "azureStorageBlobs": {
+        "package": "Azure.Storage.Blobs",
+        "version": "12.29.1",
+        "source": "https://www.nuget.org/packages/Azure.Storage.Blobs/12.29.1",
+        "sha512": "7sbyW/WTLdaRStBVRaQSU1kXIN5EnkdowTgR9ZLtfQrklTutNs7Pj8cpw+qwCpeTyy2azMnsPc9PX8cT3pCL9w==",
+        "integrity": "NuGet repository signature and package SHA-512 are required"
+      }
+    },
+    "java": {
+      "azureIdentity": {
+        "coordinate": "com.azure:azure-identity",
+        "version": "1.18.4",
+        "source": "https://repo1.maven.org/maven2/com/azure/azure-identity/1.18.4/azure-identity-1.18.4.jar",
+        "sha256": "fd947ab1d6b1a8519d377e8509f34fdf70215aaa11e84826dbe017e962acb2a0",
+        "signature": "https://repo1.maven.org/maven2/com/azure/azure-identity/1.18.4/azure-identity-1.18.4.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      },
+      "azureStorageBlob": {
+        "coordinate": "com.azure:azure-storage-blob",
+        "version": "12.35.1",
+        "source": "https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.35.1/azure-storage-blob-12.35.1.jar",
+        "sha256": "087bd34819f9d443cb9f745318e38548d5377f664959481f8acffa72f194e7d0",
+        "signature": "https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.35.1/azure-storage-blob-12.35.1.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      },
+      "azureIdentityExtensions": {
+        "coordinate": "com.azure:azure-identity-extensions",
+        "version": "1.2.9",
+        "source": "https://repo1.maven.org/maven2/com/azure/azure-identity-extensions/1.2.9/azure-identity-extensions-1.2.9.jar",
+        "sha256": "38193a31810c64e0f7b7daf69f82b2cfd0425bd0a0c9f1ebede380a0dae7114e",
+        "signature": "https://repo1.maven.org/maven2/com/azure/azure-identity-extensions/1.2.9/azure-identity-extensions-1.2.9.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      }
+    }
+  },
+  "applicationContainers": {
+    "dotnetBuild": {
+      "image": "mcr.microsoft.com/dotnet/sdk:8.0.424-azurelinux3.0-amd64",
+      "digest": "sha256:b3da7c196c074e9d099e98694d09fececc0db778b22b9a3415b0926b3692fd92",
+      "platform": "linux/amd64",
+      "runtimeVersion": "8.0.30"
+    },
+    "dotnetRuntime": {
+      "image": "mcr.microsoft.com/dotnet/aspnet:8.0.30-azurelinux3.0-amd64",
+      "digest": "sha256:53842aa07e71786a5feb1086ea1c314ecaa14b47c9a9abc0134ace0f228598fc",
+      "platform": "linux/amd64",
+      "runtimeVersion": "8.0.30"
+    },
+    "javaBuildRuntime": {
+      "image": "mcr.microsoft.com/openjdk/jdk:17-azurelinux",
+      "digest": "sha256:247a214856ad8fca58a89e9ec94b2f271fe965ac13eecdab768f0c967a3c7d7e",
+      "platform": "linux/amd64",
+      "runtimeVersion": "17.0.20+8"
     }
   },
   "extensions": {

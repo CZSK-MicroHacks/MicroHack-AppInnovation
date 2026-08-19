@@ -207,6 +207,34 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Gzip the secret-free bootstrap with Terraform `base64gzip`, decode/decompress it inside a compact PowerShell 5.1 wrapper, and dot-source the resulting script block before invoking it with non-secret metadata. Build the entire command in one local and reject lengths above 7,800 characters.
 
+## 30. Azure Files mounts conflict with disabled shared-key policy
+**Symptom:** An Azure Container Apps SMB storage definition is valid, but the mounted share cannot authenticate after policy disables Storage shared-key access.
+
+**Cause:** Container Apps environment storage for a classic Azure Files SMB share uses the storage account key. Managed identity can authorize Blob SDK access, but it does not replace the account-key field for this mount path.
+
+**Resolution:** Use Blob-backed images with managed identity as the policy-compatible default. Keep Azure Files as the compatibility path only where the workshop subscription permits shared-key access or has an explicit exemption; do not report it as live-validated in a subscription that enforces the conflicting policy.
+
+## 31. Parallel integrity probes assign hashes to the wrong packages
+**Symptom:** Every dependency digest is valid, but each hash is recorded beside a different package coordinate.
+
+**Cause:** Concurrent download commands return independently, and unlabeled output is associated by display order instead of by artifact name.
+
+**Resolution:** Recompute integrity values with the coordinate printed beside each result, then freeze exact coordinate-to-hash assertions in the contract suite. Never infer package ownership from parallel command completion order.
+
+## 32. Valid examples do not freeze deployment behavior
+**Symptom:** Approved examples use the intended region, IaC mechanism, resource types, and endpoint shape, while alternative or unrelated values still validate.
+
+**Cause:** Examples demonstrate one valid document but do not constrain other documents. Cross-file equality can also make two consistently wrong producer outputs appear compatible.
+
+**Resolution:** Encode fixed decisions as schema constants, validate typed Azure IDs and common scope, and add executable cross-field checks for values JSON Schema cannot relate directly, such as Container App FQDNs, revision names, workload principals, and toolchain versions.
+
+## 33. A PostgreSQL password administrator cannot bootstrap Entra principals
+**Symptom:** Flexible Server accepts password-authenticated restore operations, but managed-identity application setup cannot create the mapped Entra database role.
+
+**Cause:** Only a configured Microsoft Entra administrator can create or enable Entra principals. `pgaadauth_create_principal` or `pgaadauth_create_principal_with_oid` must be invoked by that administrator against the `postgres` database.
+
+**Resolution:** Provision a distinct non-secret Entra administrator identity in addition to the local password administrator. Verify the migration caller is that declared identity, acquire an ephemeral `oss-rdbms` token, pass it only through the child `psql` environment, and create the workload principal on `postgres` with `isAdmin=false` and `isMfa=false` before granting application privileges.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

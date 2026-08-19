@@ -1,0 +1,681 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/migration-operation-result.schema.json",
+  "title": "MicroHack migration operation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "command",
+    "status",
+    "startedAt",
+    "completedAt",
+    "target",
+    "artifact",
+    "imageVerification"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "command": {
+      "enum": [
+        "sql export",
+        "sql import",
+        "postgresql export",
+        "postgresql import",
+        "images copy"
+      ]
+    },
+    "status": {
+      "const": "succeeded"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/databaseTarget"
+        },
+        {
+          "$ref": "#/$defs/imageTarget"
+        }
+      ]
+    },
+    "artifact": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/artifact"
+        }
+      ]
+    },
+    "imageVerification": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/imageVerification"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sql export"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "type": "null"
+          },
+          "artifact": {
+            "$ref": "#/$defs/sqlArtifact"
+          },
+          "imageVerification": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sql import"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/sqlDatabaseTarget"
+          },
+          "artifact": {
+            "$ref": "#/$defs/sqlArtifact"
+          },
+          "imageVerification": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "postgresql export"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "type": "null"
+          },
+          "artifact": {
+            "$ref": "#/$defs/postgresqlArtifact"
+          },
+          "imageVerification": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "postgresql import"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/postgresqlDatabaseTarget"
+          },
+          "artifact": {
+            "$ref": "#/$defs/postgresqlArtifact"
+          },
+          "imageVerification": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "images copy"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/imageTarget"
+          },
+          "artifact": {
+            "type": "null"
+          },
+          "imageVerification": {
+            "$ref": "#/$defs/imageVerification"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "applicationPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "principalId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "database-role",
+            "managed-identity"
+          ]
+        },
+        "principalId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/guid"
+            }
+          ]
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "exportTool",
+        "importTool",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "format": {
+          "enum": [
+            "bacpac",
+            "postgresql-custom"
+          ]
+        },
+        "exportTool": {
+          "$ref": "#/$defs/databaseTool"
+        },
+        "importTool": {
+          "$ref": "#/$defs/databaseTool"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "azureSqlDatabaseResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Sql/servers/[^/]+/databases/[^/]+$"
+        }
+      ]
+    },
+    "databaseTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "SqlPackage",
+            "pg_dump",
+            "pg_restore"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "databaseTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "resourceId",
+        "family",
+        "authentication",
+        "localAdministratorPrincipal",
+        "entraAdministratorPrincipal",
+        "applicationPrincipal"
+      ],
+      "properties": {
+        "kind": {
+          "const": "database"
+        },
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "family": {
+          "enum": [
+            "azure-sql",
+            "postgresql-flexible"
+          ]
+        },
+        "authentication": {
+          "enum": [
+            "password-secret",
+            "managed-identity"
+          ]
+        },
+        "applicationPrincipal": {
+          "$ref": "#/$defs/applicationPrincipal"
+        },
+        "localAdministratorPrincipal": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/administratorPrincipal"
+            }
+          ]
+        },
+        "entraAdministratorPrincipal": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/entraAdministratorPrincipal"
+            }
+          ]
+        }
+      }
+    },
+    "fileShareResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Storage/storageAccounts/[^/]+/fileServices/default/shares/[^/]+$"
+        }
+      ]
+    },
+    "blobContainerResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Storage/storageAccounts/[^/]+/blobServices/default/containers/[^/]+$"
+        }
+      ]
+    },
+    "guid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "administratorPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "authentication"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]{0,62}$"
+        },
+        "authentication": {
+          "const": "password"
+        }
+      }
+    },
+    "entraAdministratorPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "objectId",
+        "principalType"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "email"
+        },
+        "objectId": {
+          "$ref": "#/$defs/guid"
+        },
+        "principalType": {
+          "const": "user"
+        }
+      }
+    },
+    "imageTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "resourceId",
+        "provider"
+      ],
+      "properties": {
+        "kind": {
+          "const": "images"
+        },
+        "resourceId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/blobContainerResourceId"
+            },
+            {
+              "$ref": "#/$defs/fileShareResourceId"
+            }
+          ]
+        },
+        "provider": {
+          "enum": [
+            "azure-blob",
+            "azure-files"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "azure-blob"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resourceId": {
+                "$ref": "#/$defs/blobContainerResourceId"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "resourceId": {
+                "$ref": "#/$defs/fileShareResourceId"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "postgresqlArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "postgresql-custom"
+            },
+            "exportTool": {
+              "properties": {
+                "name": {
+                  "const": "pg_dump"
+                },
+                "version": {
+                  "const": "18.6"
+                }
+              }
+            },
+            "importTool": {
+              "properties": {
+                "name": {
+                  "const": "pg_restore"
+                },
+                "version": {
+                  "const": "18.6"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "postgresqlDatabaseResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.DBforPostgreSQL/flexibleServers/[^/]+/databases/[^/]+$"
+        }
+      ]
+    },
+    "postgresqlDatabaseTarget": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/databaseTarget"
+        },
+        {
+          "properties": {
+            "resourceId": {
+              "$ref": "#/$defs/postgresqlDatabaseResourceId"
+            },
+            "family": {
+              "const": "postgresql-flexible"
+            },
+            "localAdministratorPrincipal": {
+              "$ref": "#/$defs/administratorPrincipal"
+            },
+            "entraAdministratorPrincipal": {
+              "$ref": "#/$defs/entraAdministratorPrincipal"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "authentication": {
+                    "const": "password-secret"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "applicationPrincipal": {
+                    "properties": {
+                      "kind": {
+                        "const": "database-role"
+                      },
+                      "principalId": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "applicationPrincipal": {
+                    "properties": {
+                      "kind": {
+                        "const": "managed-identity"
+                      },
+                      "principalId": {
+                        "$ref": "#/$defs/guid"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "sqlArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "bacpac"
+            },
+            "exportTool": {
+              "properties": {
+                "name": {
+                  "const": "SqlPackage"
+                },
+                "version": {
+                  "const": "170.4.83"
+                }
+              }
+            },
+            "importTool": {
+              "properties": {
+                "name": {
+                  "const": "SqlPackage"
+                },
+                "version": {
+                  "const": "170.4.83"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sqlDatabaseTarget": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/databaseTarget"
+        },
+        {
+          "properties": {
+            "resourceId": {
+              "$ref": "#/$defs/azureSqlDatabaseResourceId"
+            },
+            "family": {
+              "const": "azure-sql"
+            },
+            "authentication": {
+              "const": "managed-identity"
+            },
+            "localAdministratorPrincipal": {
+              "type": "null"
+            },
+            "entraAdministratorPrincipal": {
+              "type": "null"
+            },
+            "applicationPrincipal": {
+              "properties": {
+                "kind": {
+                  "const": "managed-identity"
+                },
+                "principalId": {
+                  "$ref": "#/$defs/guid"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "imageVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "imageCount",
+        "imageBytes",
+        "imageSetSha256",
+        "seedManifestVersion"
+      ],
+      "properties": {
+        "imageCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "imageBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "imageSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "seedManifestVersion": {
+          "const": "1.0.0"
+        }
+      }
+    },
+    "resourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[^/]+/providers/[^/]+(?:/[^/]+/[^/]+)+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}
