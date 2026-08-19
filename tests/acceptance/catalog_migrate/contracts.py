@@ -11,6 +11,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
+from catalog_acceptance.handoff import _validate_target_resource_ids
 from catalog_migrate.errors import InvalidInputError, PreconditionError
 
 KNOWN_SECRETS = {
@@ -53,11 +54,15 @@ def validate_document(document: Any, schema_name: str) -> None:
         ).validate(document)
     except ValidationError as error:
         raise InvalidInputError(
-            f"document does not satisfy {schema_name}: {error}"
+            f"document does not satisfy {schema_name}: {error.message}"
         ) from error
 
 
-def load_target_output(path: Path, *, require_application: bool = True) -> dict[str, Any]:
+def load_target_output(
+    path: Path,
+    *,
+    required_stage: str,
+) -> dict[str, Any]:
     """Load and validate one Azure target-output document.
 
     Raises:
@@ -65,8 +70,12 @@ def load_target_output(path: Path, *, require_application: bool = True) -> dict[
     """
     target = load_json(path)
     validate_document(target, "azure-target-output.schema.json")
-    if require_application and target["deploymentStage"] != "application":
-        raise InvalidInputError("target output must be application-stage")
+    try:
+        _validate_target_resource_ids(target)
+    except ValueError as error:
+        raise InvalidInputError(str(error)) from error
+    if target["deploymentStage"] != required_stage:
+        raise InvalidInputError(f"target output must be {required_stage}-stage")
     return target
 
 

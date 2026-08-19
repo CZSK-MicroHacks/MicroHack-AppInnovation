@@ -11,6 +11,39 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from catalog_migrate.contracts import load_json
 from catalog_migrate.handoff import render_handoff
+from catalog_migrate.process import ProcessResult
+
+
+class ReleaseRunner:
+    """Return the frozen tag digest and a healthy inactive baseline revision."""
+
+    def __init__(self, target: dict, rollback_revision: str) -> None:
+        self.target = target
+        self.rollback_revision = rollback_revision
+
+    def run(self, argv: list[str], **kwargs) -> ProcessResult:
+        del kwargs
+        if argv[:2] == ["az", "version"]:
+            return ProcessResult('{"azure-cli":"2.80.0"}', "")
+        if argv[:4] == ["az", "acr", "manifest", "show-metadata"]:
+            return ProcessResult(self.target["containerImage"]["digest"], "")
+        if argv[:4] == ["az", "containerapp", "revision", "show"]:
+            image = self.target["containerImage"]
+            return ProcessResult(
+                json.dumps(
+                    {
+                        "active": False,
+                        "health": "Healthy",
+                        "error": None,
+                        "images": [
+                            f"{self.target['containerRegistry']['loginServer']}/"
+                            f"{image['repository']}@{image['digest']}"
+                        ],
+                    }
+                ),
+                "",
+            )
+        raise AssertionError(f"Unexpected command: {argv}")
 
 
 def test_frozen_examples_validate_against_migration_schemas(repo_root: Path) -> None:
@@ -41,6 +74,10 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
     """Rendered Java evidence identifies Spring Boot and pg_dump/restore provenance."""
     contracts = repo_root / "workshop/contracts"
     target = load_json(contracts / "azure-target-output.application.example.json")
+    rollback_revision = (
+        f'{target["application"]["containerAppName"]}'
+        f'--baseline-{target["sourceCommit"][:12]}'
+    )
     migration = load_json(contracts / "migration-report.postgresql.example.json")
     commit = target["sourceCommit"]
     migration["sourceCommit"] = commit
@@ -69,11 +106,13 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
         paths[name] = path
     try:
         handoff = render_handoff(
+            runner=ReleaseRunner(target, rollback_revision),
             target_path=paths["target"],
             migration_path=paths["migration"],
             acceptance_path=paths["acceptance"],
             telemetry_path=paths["telemetry"],
             runtime_path=paths["runtime"],
+            rollback_revision=rollback_revision,
         )
     finally:
         for path in paths.values():
@@ -82,7 +121,8 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
     assert handoff["source"]["frameworkVersion"] == "Spring Boot 4.0.7"
     assert handoff["database"]["migrationMechanism"] == "pg-dump-restore"
     assert handoff["database"]["migrationVersion"] == "18.6"
-    assert handoff["rollback"]["targetRevision"] == target["application"]["revisionName"]
+    assert handoff["schemaVersion"] == "1.2.0"
+    assert handoff["rollback"]["targetRevision"] == rollback_revision
 
 
 def _runtime_tests(contracts: Path, stack: str) -> list[dict]:

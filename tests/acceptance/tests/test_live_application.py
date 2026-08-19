@@ -39,6 +39,11 @@ def test_live_application_contract(repo_root: Path) -> None:
         database_name=os.getenv("CATALOG_DATABASE_NAME"),
         database_username=os.getenv("CATALOG_DATABASE_USERNAME"),
         database_password=SecretStr(database_password) if database_password else None,
+        database_access_token=(
+            SecretStr(os.environ["SQLCMDACCESS_TOKEN"])
+            if os.getenv("SQLCMDACCESS_TOKEN")
+            else None
+        ),
         database_ssl_mode=os.getenv("CATALOG_DATABASE_SSL_MODE", "prefer"),
         database_trust_certificate=os.getenv(
             "CATALOG_DATABASE_TRUST_CERTIFICATE", ""

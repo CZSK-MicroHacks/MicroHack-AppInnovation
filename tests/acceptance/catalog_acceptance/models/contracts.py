@@ -321,6 +321,7 @@ class AcceptanceSettings(BaseModel):
     database_name: str | None = None
     database_username: str | None = None
     database_password: SecretStr | None = None
+    database_access_token: SecretStr | None = None
     database_port: int | None = Field(default=None, ge=1, le=65535)
     database_ssl_mode: Literal["disable", "allow", "prefer", "require"] = "prefer"
     database_trust_certificate: bool = False
@@ -343,17 +344,38 @@ class AcceptanceSettings(BaseModel):
             self.database_name,
             self.database_username,
             self.database_password,
+            self.database_access_token,
         )
         if self.database_kind is None and any(
             value is not None for value in database_values
         ):
             raise ValueError("database_kind is required with database connection values")
         if self.database_kind is not None and any(
-            value is None for value in database_values
+            value is None for value in (self.database_host, self.database_name)
         ):
-            raise ValueError(
-                "database host, name, username, and password are all required"
-            )
+            raise ValueError("database host and name are required")
+        uses_sql_access_token = (
+            self.database_kind == "sqlserver" and self.database_target == "managed"
+        )
+        if uses_sql_access_token:
+            if (
+                self.database_access_token is None
+                or not self.database_access_token.get_secret_value()
+            ):
+                raise ValueError(
+                    "managed Azure SQL verification requires SQLCMDACCESS_TOKEN"
+                )
+            if self.database_username is not None or self.database_password is not None:
+                raise ValueError(
+                    "managed Azure SQL verification forbids username and password"
+                )
+        elif self.database_kind is not None:
+            if self.database_username is None or self.database_password is None:
+                raise ValueError("database username and password are required")
+            if self.database_access_token is not None:
+                raise ValueError(
+                    "SQLCMDACCESS_TOKEN is allowed only for managed Azure SQL"
+                )
         if self.profile == "full" and self.database_kind is None:
             raise ValueError("full profile requires database verification")
         if self.profile == "full" and not self.verify_import:

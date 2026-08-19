@@ -9,7 +9,12 @@ resource group and supports:
   administrator and either a password application role or workload managed identity;
 - Blob images with workload-identity reads, or the Azure Files compatibility mount;
 - ACR managed-identity pulls, a VNet-integrated Container Apps environment, private
-  data endpoints, Log Analytics, Application Insights, and managed OpenTelemetry.
+  data endpoints, Log Analytics, Application Insights, and direct Azure Monitor
+  OpenTelemetry export for traces, metrics, and logs.
+
+The target VNet is deterministic and does not overlap the P3 participant
+`10.<participant>.0.0/22` ranges: .NET uses `172.20.0.0/16` and Java uses
+`172.21.0.0/16`.
 
 ## Stages
 

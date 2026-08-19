@@ -160,6 +160,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if arguments.database_password
             else None
         ),
+        database_access_token=(
+            SecretStr(os.environ["SQLCMDACCESS_TOKEN"])
+            if os.getenv("SQLCMDACCESS_TOKEN")
+            else None
+        ),
         database_ssl_mode=arguments.database_ssl_mode,
         database_trust_certificate=arguments.database_trust_certificate,
         database_target=arguments.database_target,

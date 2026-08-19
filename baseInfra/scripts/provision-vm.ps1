@@ -458,6 +458,11 @@ function Install-DotNetDatabase {
         Hash      = 'c8fc4ba484d25aa5f7687c4538f8a09052d4a6f35ccf17ff38e76c44922c627d'
         Publisher = 'Microsoft Corporation'
     }
+    $SqlPackage = @{
+        Uri       = 'https://download.microsoft.com/download/46a13f8c-5548-42fb-b547-7e69ebc3fcca/sqlpackage-win-x64-en-170.4.83.3.zip'
+        Hash      = 'f1c80c38a6c4e55fe2b8787de9119ee52313b900a05873be9d0084102344666a'
+        Publisher = 'Microsoft Corporation'
+    }
 
     $DotNetRoot = 'C:\Program Files\dotnet'
     $DotNetCommand = Join-Path $DotNetRoot 'dotnet.exe'
@@ -566,6 +571,38 @@ IACCEPTSQLSERVERLICENSETERMS="True"
     }
     if ((& $SqlCmdCommand --version 2>&1) -notmatch '1\.7\.0') {
         throw 'go-sqlcmd version verification failed.'
+    }
+
+    $SqlPackageRoot = 'C:\Program Files\SqlPackage'
+    $SqlPackageCommand = Join-Path $SqlPackageRoot 'SqlPackage.exe'
+    $SqlPackageVersion = if (Test-Path $SqlPackageCommand) {
+        (& $SqlPackageCommand /Version 2>&1 | Select-Object -First 1)
+    }
+    if ($SqlPackageVersion -notmatch '^170\.4\.83\.3$') {
+        $Archive = Join-Path $DownloadRoot 'sqlpackage-win-x64-en-170.4.83.3.zip'
+        Invoke-VerifiedDownload -Uri $SqlPackage.Uri -Destination $Archive `
+            -Algorithm SHA256 -ExpectedHash $SqlPackage.Hash
+        $SqlPackageStaging = "$SqlPackageRoot.staging"
+        Remove-Item -LiteralPath $SqlPackageStaging -Recurse -Force `
+            -ErrorAction SilentlyContinue
+        Expand-Archive -LiteralPath $Archive -DestinationPath $SqlPackageStaging -Force
+        $StagedSqlPackage = Join-Path $SqlPackageStaging 'SqlPackage.exe'
+        if (-not (Test-Path -LiteralPath $StagedSqlPackage -PathType Leaf)) {
+            throw 'The pinned SqlPackage archive did not contain SqlPackage.exe.'
+        }
+        Assert-AuthenticodePublisher -Path $StagedSqlPackage `
+            -Publisher $SqlPackage.Publisher
+        if ((& $StagedSqlPackage /Version 2>&1 | Select-Object -First 1) -notmatch
+            '^170\.4\.83\.3$') {
+            throw 'SqlPackage staged version verification failed.'
+        }
+        Install-StagedDirectory -StagingPath $SqlPackageStaging `
+            -DestinationPath $SqlPackageRoot
+    }
+    Add-MachinePath -Path $SqlPackageRoot
+    if ((& $SqlPackageCommand /Version 2>&1 | Select-Object -First 1) -notmatch
+        '^170\.4\.83\.3$') {
+        throw 'SqlPackage version verification failed.'
     }
 
     $env:SQLCMDPASSWORD = $DatabasePassword

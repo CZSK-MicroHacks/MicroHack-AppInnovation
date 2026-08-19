@@ -205,22 +205,22 @@ class AcceptanceRunner:
             self._settings.database_kind
             and self._settings.database_host
             and self._settings.database_name
-            and self._settings.database_username
-            and self._settings.database_password
         ):
             try:
+                username, password, access_token = self._database_credentials()
                 verification = verify_database(
                     self._settings.database_kind,
                     self._settings.database_host,
                     self._settings.database_port,
                     self._settings.database_name,
-                    self._settings.database_username,
-                    self._settings.database_password.get_secret_value(),
+                    username,
+                    password,
                     self._settings.database_ssl_mode,
                     self._settings.database_trust_certificate,
                     self._settings.database_target,
                     items,
                     categories,
+                    access_token,
                 )
                 checks.extend(
                     [
@@ -783,20 +783,37 @@ class AcceptanceRunner:
             settings.database_kind is None
             or settings.database_host is None
             or settings.database_name is None
-            or settings.database_username is None
-            or settings.database_password is None
         ):
             raise ValueError("complete database configuration is required")
+        username, password, access_token = self._database_credentials()
         return fetch_database_state(
             settings.database_kind,
             settings.database_host,
             settings.database_port,
             settings.database_name,
-            settings.database_username,
-            settings.database_password.get_secret_value(),
+            username,
+            password,
             settings.database_ssl_mode,
             settings.database_trust_certificate,
             settings.database_target,
+            access_token,
+        )
+
+    def _database_credentials(self) -> tuple[str | None, str | None, str | None]:
+        """Return the one validated database authentication mode."""
+        settings = self._settings
+        return (
+            settings.database_username,
+            (
+                settings.database_password.get_secret_value()
+                if settings.database_password
+                else None
+            ),
+            (
+                settings.database_access_token.get_secret_value()
+                if settings.database_access_token
+                else None
+            ),
         )
 
     def _delete_fixture(self, item: CatalogItem) -> None:
@@ -815,22 +832,22 @@ class AcceptanceRunner:
             settings.database_kind is None
             or settings.database_host is None
             or settings.database_name is None
-            or settings.database_username is None
-            or settings.database_password is None
         ):
             raise ValueError("complete database configuration is required")
+        username, password, access_token = self._database_credentials()
         delete_acceptance_fixture(
             settings.database_kind,
             settings.database_host,
             settings.database_port,
             settings.database_name,
-            settings.database_username,
-            settings.database_password.get_secret_value(),
+            username,
+            password,
             settings.database_ssl_mode,
             settings.database_trust_certificate,
             settings.database_target,
             record["productId"],
             record["category"],
+            access_token,
         )
 
     def _check_performance(

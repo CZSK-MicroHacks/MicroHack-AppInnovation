@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "deploymentStage": "bootstrap",
   "applicationRevisionRole": null,
   "sourceCommit": "0000000000000000000000000000000000000000",

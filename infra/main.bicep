@@ -39,6 +39,20 @@ param teamName string
 @description('Exact lowercase 40-hex source commit represented by this target.')
 param sourceCommit string
 
+@description('Exact P3 source VNet resource ID used by the migration runner.')
+param migrationSourceVirtualNetworkResourceId string
+
+@description('Exact stack-specific P3 source VM resource ID used by catalog-migrate.')
+param migrationSourceVmResourceId string
+
+@description('Application revision role. Bootstrap requires an empty value.')
+@allowed([
+  ''
+  'baseline'
+  'release'
+])
+param applicationRevisionRole string
+
 @description('Facilitator signed-in user principal name.')
 param facilitatorPrincipalName string
 
@@ -76,6 +90,11 @@ var isJava = stack == 'java-postgresql'
 var sourceCommitNonHex = replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(sourceCommit, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')
 var imageDigestHash = last(split(imageDigest, ':'))
 var imageDigestNonHex = replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(imageDigestHash, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')
+var sourceVirtualNetworkSegments = split(migrationSourceVirtualNetworkResourceId, '/')
+var sourceVmSegments = split(migrationSourceVmResourceId, '/')
+var sourceSubscriptionId = sourceVirtualNetworkSegments[2]
+var sourceResourceGroupName = sourceVirtualNetworkSegments[4]
+var sourceVirtualNetworkName = last(sourceVirtualNetworkSegments)
 
 assert locationIsFrozen = location == 'swedencentral'
 assert teamNameIsLowercase = teamName == toLower(teamName) && !contains(teamName, ' ')
@@ -85,6 +104,15 @@ assert applicationSecretsArePresent = !isApplication || !empty(performanceApiKey
 assert postgresqlAdministratorSecretIsPresent = !isJava || !empty(postgresqlAdministratorPassword)
 assert postgresqlApplicationSecretIsModeSpecific = !isJava || deploymentStage == 'bootstrap' || postgresqlAuthentication == 'managed-identity' || !empty(postgresqlApplicationPassword)
 assert dotnetAuthenticationIsFixed = isJava || postgresqlAuthentication == 'managed-identity'
+assert revisionRoleMatchesStage = isApplication ? contains([
+  'baseline'
+  'release'
+], applicationRevisionRole) : empty(applicationRevisionRole)
+assert sourceVirtualNetworkIdIsTyped = length(sourceVirtualNetworkSegments) == 9 && sourceVirtualNetworkSegments[1] == 'subscriptions' && sourceVirtualNetworkSegments[3] == 'resourceGroups' && sourceVirtualNetworkSegments[5] == 'providers' && toLower(sourceVirtualNetworkSegments[6]) == 'microsoft.network' && toLower(sourceVirtualNetworkSegments[7]) == 'virtualnetworks'
+assert sourceVmIdIsTyped = length(sourceVmSegments) == 9 && sourceVmSegments[1] == 'subscriptions' && sourceVmSegments[3] == 'resourceGroups' && sourceVmSegments[5] == 'providers' && toLower(sourceVmSegments[6]) == 'microsoft.compute' && toLower(sourceVmSegments[7]) == 'virtualmachines'
+assert migrationResourcesShareSubscription = toLower(sourceVirtualNetworkSegments[2]) == toLower(subscription().subscriptionId) && toLower(sourceVmSegments[2]) == toLower(subscription().subscriptionId)
+assert migrationResourcesShareSourceScope = toLower(sourceVmSegments[4]) == toLower(sourceResourceGroupName)
+assert migrationVmMatchesStack = startsWith(toLower(last(sourceVmSegments)), isJava ? 'vm-java-' : 'vm-dotnet-')
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' = {
   name: resourceGroupName
@@ -106,6 +134,9 @@ module environment 'modules/environment.bicep' = {
     postgresqlAuthentication: postgresqlAuthentication
     teamName: teamName
     sourceCommit: sourceCommit
+    migrationSourceVirtualNetworkResourceId: migrationSourceVirtualNetworkResourceId
+    migrationSourceVmResourceId: migrationSourceVmResourceId
+    applicationRevisionRole: applicationRevisionRole
     facilitatorPrincipalName: facilitatorPrincipalName
     facilitatorPrincipalObjectId: facilitatorPrincipalObjectId
     imageRepository: imageRepository
@@ -119,5 +150,19 @@ module environment 'modules/environment.bicep' = {
   }
 }
 
+module sourcePeering 'modules/source-peering.bicep' = {
+  name: 'source-peering-${uniqueString(migrationSourceVirtualNetworkResourceId, resourceGroupName, stack)}'
+  scope: az.resourceGroup(sourceSubscriptionId, sourceResourceGroupName)
+  params: {
+    sourceVirtualNetworkName: sourceVirtualNetworkName
+    targetVirtualNetworkResourceId: environment.outputs.virtualNetworkResourceId
+    peeringName: 'to-${last(split(environment.outputs.virtualNetworkResourceId, '/'))}'
+  }
+}
+
 @description('Frozen shared Azure target-output document.')
-output targetOutput object = environment.outputs.targetOutput
+output targetOutput object = union(environment.outputs.targetOutput, {
+  network: union(environment.outputs.targetOutput.network, {
+    migrationSourceToTargetPeeringResourceId: sourcePeering.outputs.resourceId
+  })
+})

@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
 
 from catalog_migrate.contracts import (
     COMMIT_PATTERN,
+    KNOWN_SECRETS,
     guard_target,
     load_target_output,
     require_secrets,
     validate_document,
 )
+from catalog_migrate.azure import validate_migration_topology
 from catalog_migrate.database import (
     build_migration_report,
     export_postgresql,
@@ -24,14 +27,26 @@ from catalog_migrate.database import (
     target_fragment,
     timestamp,
 )
-from catalog_migrate.errors import InvalidInputError, MigrationError
+from catalog_migrate.errors import (
+    InvalidInputError,
+    MigrationError,
+    ToolError,
+    error_document,
+)
 from catalog_migrate.handoff import render_handoff
 from catalog_migrate.images import copy_images, verify_target_images
 from catalog_migrate.process import CommandRunner
 
 
+class MigrationArgumentParser(argparse.ArgumentParser):
+    """Raise typed failures instead of writing argparse usage text."""
+
+    def error(self, message: str) -> None:
+        raise InvalidInputError(f"argument error: {message}")
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="catalog-migrate")
+    parser = MigrationArgumentParser(prog="catalog-migrate")
     families = parser.add_subparsers(dest="family", required=True)
 
     sql = families.add_parser("sql")
@@ -41,6 +56,7 @@ def _parser() -> argparse.ArgumentParser:
     sql_export.add_argument("--source-database", required=True)
     sql_export.add_argument("--source-username", required=True)
     sql_export.add_argument("--artifact", required=True, type=Path)
+    sql_export.add_argument("--target-output", required=True, type=Path)
     _add_import(sql_commands.add_parser("import"))
 
     postgresql = families.add_parser("postgresql")
@@ -51,6 +67,7 @@ def _parser() -> argparse.ArgumentParser:
     postgresql_export.add_argument("--source-database", required=True)
     postgresql_export.add_argument("--source-username", required=True)
     postgresql_export.add_argument("--artifact", required=True, type=Path)
+    postgresql_export.add_argument("--target-output", required=True, type=Path)
     _add_import(postgresql_commands.add_parser("import"))
 
     images = families.add_parser("images")
@@ -74,6 +91,7 @@ def _parser() -> argparse.ArgumentParser:
     handoff.add_argument("--acceptance-report", required=True, type=Path)
     handoff.add_argument("--telemetry-report", required=True, type=Path)
     handoff.add_argument("--runtime-test-report", required=True, type=Path)
+    handoff.add_argument("--rollback-revision", required=True)
     handoff.add_argument("--output", required=True, type=Path)
     return parser
 
@@ -115,14 +133,21 @@ def _operation_result(
 def _write_json(path: Path, document: dict[str, Any]) -> None:
     if path.exists():
         raise InvalidInputError(f"output already exists: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    except OSError as error:
+        raise ToolError(f"output document could not be written: {path}") from error
 
 
 def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
     started = timestamp()
     command = f"{args.family} {args.operation}" if hasattr(args, "operation") else args.family
     if command == "sql export":
+        target = load_target_output(args.target_output, required_stage="bootstrap")
+        if target["stack"] != "dotnet-sqlserver":
+            raise InvalidInputError("SQL export requires a dotnet-sqlserver target")
+        validate_migration_topology(runner, target)
         secrets = require_secrets(
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
@@ -137,6 +162,10 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
         )
         return _operation_result(command, started, artifact=artifact)
     if command == "postgresql export":
+        target = load_target_output(args.target_output, required_stage="bootstrap")
+        if target["stack"] != "java-postgresql":
+            raise InvalidInputError("PostgreSQL export requires a java-postgresql target")
+        validate_migration_topology(runner, target)
         secrets = require_secrets(
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
@@ -152,7 +181,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
         )
         return _operation_result(command, started, artifact=artifact)
     if command in {"sql import", "postgresql import", "images copy"}:
-        target = load_target_output(args.target_output)
+        target = load_target_output(args.target_output, required_stage="bootstrap")
         section = "images" if command == "images copy" else "database"
         guard_target(
             target,
@@ -161,6 +190,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
             args.execute,
             section,
         )
+        validate_migration_topology(runner, target)
         if command == "sql import":
             require_secrets(set(), set())
             artifact = import_sql(runner, artifact_path=args.artifact, target=target)
@@ -214,7 +244,8 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
     if args.family == "verify":
         if not COMMIT_PATTERN.fullmatch(args.source_commit):
             raise InvalidInputError("source commit must be lowercase 40-hex")
-        target = load_target_output(args.target_output)
+        target = load_target_output(args.target_output, required_stage="bootstrap")
+        migration_execution = validate_migration_topology(runner, target)
         authentication = target["database"]["authentication"]
         allowed = (
             {"MIGRATION_TARGET_APPLICATION_PASSWORD"}
@@ -231,17 +262,22 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
             target=target,
             image_verification=image_verification,
             application_password=secrets.get("MIGRATION_TARGET_APPLICATION_PASSWORD"),
+            migration_execution=migration_execution,
         )
         _write_json(args.output, report)
         return report
     if args.family == "render-handoff":
         require_secrets(set(), set())
+        target = load_target_output(args.target_output, required_stage="application")
+        validate_migration_topology(runner, target)
         handoff = render_handoff(
+            runner=runner,
             target_path=args.target_output,
             migration_path=args.migration_report,
             acceptance_path=args.acceptance_report,
             telemetry_path=args.telemetry_report,
             runtime_path=args.runtime_test_report,
+            rollback_revision=args.rollback_revision,
         )
         _write_json(args.output, handoff)
         return handoff
@@ -254,21 +290,41 @@ def main(
     runner: CommandRunner | None = None,
 ) -> int:
     """Run catalog-migrate and emit exactly one JSON result or error."""
+    command: str | None = None
     try:
         args = _parser().parse_args(argv)
+        command = (
+            f"{args.family} {args.operation}"
+            if hasattr(args, "operation")
+            else args.family
+        )
         document = _execute(args, runner or CommandRunner())
         print(json.dumps(document, sort_keys=True))
         return 0
     except MigrationError as error:
+        redactions = [
+            os.environ.get(name, "")
+            for name in KNOWN_SECRETS
+        ]
         print(
             json.dumps(
-                {
-                    "schemaVersion": "1.0.0",
-                    "status": "failed",
-                    "error": str(error),
-                },
+                error_document(error, command, redactions=redactions),
                 sort_keys=True,
             ),
             file=sys.stderr,
         )
         return error.exit_code
+    except (OSError, UnicodeError) as error:
+        failure = ToolError("migration filesystem operation failed")
+        print(
+            json.dumps(error_document(failure, command), sort_keys=True),
+            file=sys.stderr,
+        )
+        return failure.exit_code
+    except Exception:
+        failure = ToolError("unexpected internal migration failure")
+        print(
+            json.dumps(error_document(failure, command), sort_keys=True),
+            file=sys.stderr,
+        )
+        return failure.exit_code

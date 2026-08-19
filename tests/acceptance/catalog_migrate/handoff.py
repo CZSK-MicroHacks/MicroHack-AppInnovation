@@ -5,21 +5,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from catalog_migrate.azure import validate_release
 from catalog_migrate.contracts import (
     load_json,
     repository_path,
     validate_document,
 )
 from catalog_migrate.errors import InvalidInputError
+from catalog_migrate.process import CommandRunner
 
 
 def render_handoff(
     *,
+    runner: CommandRunner,
     target_path: Path,
     migration_path: Path,
     acceptance_path: Path,
     telemetry_path: Path,
     runtime_path: Path,
+    rollback_revision: str,
 ) -> dict[str, Any]:
     """Consume validated evidence and render the frozen modernization contract."""
     target = load_json(target_path)
@@ -37,6 +41,7 @@ def render_handoff(
         validate_document(document, schema)
     if target["deploymentStage"] != "application" or target["application"] is None:
         raise InvalidInputError("handoff requires application-stage target output")
+    validate_release(runner, target, rollback_revision)
     stack = target["stack"]
     if (
         migration["stack"] != stack
@@ -83,7 +88,7 @@ def render_handoff(
     ):
         raise InvalidInputError("telemetry identity differs from target output")
     handoff = {
-        "schemaVersion": "1.1.0",
+        "schemaVersion": "1.2.0",
         "source": {
             "stack": stack,
             "runtimeVersion": runtime_version,
@@ -156,7 +161,7 @@ def render_handoff(
             "targetOutput": repository_path(target_path),
         },
         "rollback": {
-            "targetRevision": app["revisionName"],
+            "targetRevision": rollback_revision,
             "runbook": "infra/README.md",
         },
         "evidence": {

@@ -11,9 +11,10 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Modernization handoff: `1.2.0`
 - Acceptance report: `1.0.0`
 - Telemetry evidence: `1.0.0`
-- Toolchain lock: `1.1.0`
-- Shared Azure target output: `1.1.0`
-- Migration report and CLI: `1.1.0`
+- Toolchain lock: `1.2.0`
+- Shared Azure target output: `1.2.0`
+- Migration report: `1.1.0`
+- Migration CLI: `1.2.0`
 - Migration CLI error: `1.0.0`
 
 Breaking changes require a schema-version change and coordinator approval. Runtime
@@ -63,9 +64,10 @@ uv run python -m catalog_acceptance.handoff_cli \
 `workshop/toolchain.lock.json` is schema-validated and pins host compatibility,
 runtimes, databases, clients, containers, CLIs, IDE extensions, and installer integrity
 sources. It includes the exact Windows Server image, Windows installer URLs and hashes,
-per-platform container digests, P4 Azure SDK packages, SqlPackage, and digest-pinned
-application build/runtime images. Accepted provisioning and container builds consume
-this lock, verify downloads, and use immutable source and image references.
+per-platform container digests, P4 Azure SDK packages, the self-contained signed Windows
+SqlPackage archive, and digest-pinned application build/runtime images. Accepted
+provisioning and container builds consume this lock, verify downloads, and use immutable
+source and image references.
 
 `azure-target-output.schema.json` defines both clean bootstrap output, where application,
 image, and revision-role values are null, and complete baseline/release application output.
@@ -77,9 +79,10 @@ external image corpus, and exact source-VM/private-network execution path to the
 arguments, command/engine-specific results, exit codes, mode-specific environment-only
 secret rules, bootstrap-before-application sequencing, source-VM execution over peered
 private networks, exact database/image verification, target-output-bound workload identity
-and PostgreSQL principals, explicit target confirmation, the baseline-then-release revision
-sequence, a distinct retained rollback revision, typed JSON failures, and refusal to delete
-resources. PostgreSQL managed-identity bootstrap is fixed to
+and PostgreSQL principals, protected transient SqlPackage response-file transport, removal
+of the imported SQL Server `catalog`/`db_owner` principal, explicit target confirmation,
+the baseline-then-release revision sequence, a distinct retained rollback revision, typed
+JSON failures, and refusal to delete resources. PostgreSQL managed-identity bootstrap is fixed to
 the declared facilitator Entra administrator, the required `$HOME/.azure-365` Azure CLI
 context, transient `oss-rdbms` token authentication, and principal creation on the `postgres`
 database. Handoff migration mechanism/version values are stack-specific and must match the

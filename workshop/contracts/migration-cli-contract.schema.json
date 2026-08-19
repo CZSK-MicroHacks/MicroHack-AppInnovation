@@ -11,13 +11,14 @@
     "migrationExecution",
     "releaseVerification",
     "failureProtocol",
+    "sqlServerLegacyPrincipalCleanup",
     "postgresqlManagedIdentityBootstrap",
     "exitCodes",
     "safety"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.1.0"
+      "const": "1.2.0"
     },
     "executable": {
       "const": "catalog-migrate"
@@ -60,6 +61,9 @@
     "failureProtocol": {
       "$ref": "#/$defs/failureProtocol"
     },
+    "sqlServerLegacyPrincipalCleanup": {
+      "$ref": "#/$defs/sqlServerLegacyPrincipalCleanup"
+    },
     "postgresqlManagedIdentityBootstrap": {
       "$ref": "#/$defs/postgresqlManagedIdentityBootstrap"
     },
@@ -95,7 +99,9 @@
         "requireExactTargetConfirmation",
         "argumentsAreExact",
         "deriveTargetSettingsFromTargetOutput",
-        "secretsInEnvironmentOnly",
+        "secretInputsFromEnvironmentOnly",
+        "sqlPackagePasswordTransport",
+        "protectedSecretFilesRemoved",
         "tokensInChildProcessEnvironmentOnly",
         "rejectUndeclaredSecrets",
         "stripMigrationSecretsFromChildEnvironment",
@@ -124,7 +130,13 @@
         "deriveTargetSettingsFromTargetOutput": {
           "const": true
         },
-        "secretsInEnvironmentOnly": {
+        "secretInputsFromEnvironmentOnly": {
+          "const": true
+        },
+        "sqlPackagePasswordTransport": {
+          "const": "protected-transient-response-file"
+        },
+        "protectedSecretFilesRemoved": {
           "const": true
         },
         "tokensInChildProcessEnvironmentOnly": {
@@ -331,6 +343,30 @@
           "const": true
         },
         "secretValuesForbidden": {
+          "const": true
+        }
+      }
+    },
+    "sqlServerLegacyPrincipalCleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalName",
+        "privilegedRole",
+        "requiredBeforeApplicationPrincipalCreation",
+        "verifyAbsent"
+      ],
+      "properties": {
+        "principalName": {
+          "const": "catalog"
+        },
+        "privilegedRole": {
+          "const": "db_owner"
+        },
+        "requiredBeforeApplicationPrincipalCreation": {
+          "const": true
+        },
+        "verifyAbsent": {
           "const": true
         }
       }

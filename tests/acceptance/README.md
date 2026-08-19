@@ -48,18 +48,45 @@ the optional pytest live test may skip only for local development.
 
 Database verification uses the native client already installed with each baseline:
 `sqlcmd` for SQL Server/Azure SQL and `psql` for PostgreSQL. Credentials are passed
-only through the clients' password environment variables.
+only through client environment variables and are excluded from command arguments.
 
-For SQL Server or Azure SQL:
+For local SQL Server:
 
 ```bash
 export CATALOG_DATABASE_KIND="sqlserver"
-export CATALOG_DATABASE_HOST="sql-example.database.windows.net"
+export CATALOG_DATABASE_HOST="localhost"
 export CATALOG_DATABASE_NAME="catalog"
 export CATALOG_DATABASE_USERNAME="<user>"
 export CATALOG_DATABASE_PASSWORD="<password>"
 export CATALOG_ACCEPTANCE_PROFILE="full"
 uv run pytest tests/test_live_application.py
+```
+
+The P4 Azure SQL target is Entra-only. Run acceptance on the approved Windows
+source VM with the isolated facilitator profile and no SQL username/password
+values:
+
+```powershell
+$env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
+$env:SQLCMDACCESS_TOKEN = (
+  az account get-access-token `
+    --resource https://database.windows.net/ `
+    --query accessToken `
+    --output tsv
+).Trim()
+Remove-Item Env:CATALOG_DATABASE_USERNAME -ErrorAction SilentlyContinue
+Remove-Item Env:CATALOG_DATABASE_PASSWORD -ErrorAction SilentlyContinue
+$env:CATALOG_DATABASE_KIND = 'sqlserver'
+$env:CATALOG_DATABASE_HOST = 'sql-example.database.windows.net'
+$env:CATALOG_DATABASE_NAME = 'catalog'
+$env:CATALOG_DATABASE_SSL_MODE = 'require'
+$env:CATALOG_DATABASE_TARGET = 'managed'
+uv run python -m catalog_acceptance `
+  --profile full `
+  --output evidence/acceptance-report.json
+$acceptanceExitCode = $LASTEXITCODE
+Remove-Item Env:SQLCMDACCESS_TOKEN
+exit $acceptanceExitCode
 ```
 
 For PostgreSQL:
@@ -130,9 +157,18 @@ environment variables. Every Azure CLI child process uses
 
 Exports are source-read-only and create a BACPAC or PostgreSQL custom archive
 plus a non-secret integrity sidecar. Imports and image copy require the target
-resource ID from the application-stage target output, the same value in
+resource ID from the bootstrap-stage target output, the same value in
 `--confirm-target-resource-id`, and `--execute`. They refuse nonempty targets.
 The CLI never creates or deletes Azure resources.
+
+SQL Server export writes its environment-sourced password to a per-run
+ACL-restricted SqlPackage response file, never to argv, and overwrites/removes
+the file in `finally`. The secret is registered separately for error redaction
+and is not forwarded in the SqlPackage child environment. SQL import removes the legacy `catalog` user and
+`db_owner` membership transactionally before creating the least-privilege
+workload identity; verification requires that legacy principal to remain
+absent. Azure Files list, upload, and download use login auth with
+`--backup-intent`; Blob commands do not use the Files-only option.
 
 PostgreSQL restore always uses
 `MIGRATION_TARGET_ADMINISTRATOR_PASSWORD`. Password mode separately requires
@@ -156,5 +192,6 @@ uv run catalog-migrate render-handoff \
   --acceptance-report ../../evidence/acceptance-report.json \
   --telemetry-report ../../evidence/telemetry-report.json \
   --runtime-test-report ../../evidence/runtime-test-report.json \
+  --rollback-revision '<container-app>--baseline-000000000000' \
   --output ../../evidence/modernization-contract.json
 ```

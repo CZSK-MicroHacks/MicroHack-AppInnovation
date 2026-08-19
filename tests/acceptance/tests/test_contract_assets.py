@@ -165,7 +165,9 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "requireExactTargetConfirmation": True,
         "argumentsAreExact": True,
         "deriveTargetSettingsFromTargetOutput": True,
-        "secretsInEnvironmentOnly": True,
+        "secretInputsFromEnvironmentOnly": True,
+        "sqlPackagePasswordTransport": "protected-transient-response-file",
+        "protectedSecretFilesRemoved": True,
         "tokensInChildProcessEnvironmentOnly": True,
         "rejectUndeclaredSecrets": True,
         "stripMigrationSecretsFromChildEnvironment": True,
@@ -333,6 +335,19 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "tracebackForbidden": True,
         "secretValuesForbidden": True,
     }
+    assert contract["sqlServerLegacyPrincipalCleanup"] == {
+        "principalName": "catalog",
+        "privilegedRole": "db_owner",
+        "requiredBeforeApplicationPrincipalCreation": True,
+        "verifyAbsent": True,
+    }
+    assert contract["schemaVersion"] == "1.2.0"
+    assert contract["safety"]["secretInputsFromEnvironmentOnly"] is True
+    assert (
+        contract["safety"]["sqlPackagePasswordTransport"]
+        == "protected-transient-response-file"
+    )
+    assert contract["safety"]["protectedSecretFilesRemoved"] is True
 
     schema = load_json(
         repo_root
@@ -756,6 +771,21 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
         "indexDigest"
     ].startswith("sha256:")
     assert toolchain["tools"]["sqlPackage"]["version"] == "170.4.83"
+    assert toolchain["schemaVersion"] == "1.2.0"
+    assert toolchain["tools"]["sqlPackage"]["windowsStandalone"] == {
+        "version": "170.4.83.3",
+        "architecture": "x64",
+        "url": (
+            "https://download.microsoft.com/download/"
+            "46a13f8c-5548-42fb-b547-7e69ebc3fcca/"
+            "sqlpackage-win-x64-en-170.4.83.3.zip"
+        ),
+        "sha256": (
+            "f1c80c38a6c4e55fe2b8787de9119ee5"
+            "2313b900a05873be9d0084102344666a"
+        ),
+        "signaturePublisher": "Microsoft Corporation",
+    }
     assert toolchain["azureSdk"]["dotnet"]["azureIdentity"]["version"] == "1.21.0"
     assert (
         toolchain["azureSdk"]["dotnet"]["azureStorageBlobs"]["version"] == "12.29.1"
@@ -996,7 +1026,7 @@ def test_handoff_bundle_cross_file_consistency(
         encoding="utf-8",
     )
     target_output = {
-        "schemaVersion": "1.1.0",
+        "schemaVersion": "1.2.0",
         "deploymentStage": "application",
         "applicationRevisionRole": "release",
         "sourceCommit": handoff["source"]["commitSha"],

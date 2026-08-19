@@ -626,7 +626,7 @@ def _validate_target_resource_ids(target: dict[str, Any]) -> None:
         (
             "privatelink.database.windows.net"
             if target["database"]["family"] == "azure-sql"
-            else "privatelink.postgres.database.azure.com"
+            else "private.postgres.database.azure.com"
         ),
         (
             "privatelink.blob.core.windows.net"

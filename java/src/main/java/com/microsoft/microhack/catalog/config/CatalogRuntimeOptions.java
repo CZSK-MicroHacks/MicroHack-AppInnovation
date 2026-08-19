@@ -20,6 +20,7 @@ public record CatalogRuntimeOptions(
         String revisionName,
         String serviceInstanceId,
         String otlpEndpoint,
+        boolean azureMonitorEnabled,
         DatabaseAuthentication databaseAuthentication,
         ImageProvider imageProvider,
         URI blobServiceEndpoint,
@@ -59,6 +60,7 @@ public record CatalogRuntimeOptions(
                 revisionName,
                 serviceInstanceId,
                 otlpEndpoint,
+                false,
                 DatabaseAuthentication.PASSWORD_SECRET,
                 ImageProvider.LOCAL,
                 null,
@@ -116,6 +118,18 @@ public record CatalogRuntimeOptions(
         if (apiKey.length() > 1024) {
             throw new IllegalStateException("PERFTEST_API_KEY must not exceed 1024 characters.");
         }
+        String otlpEndpoint = optional(environment, "OTEL_EXPORTER_OTLP_ENDPOINT");
+        String applicationInsightsConnectionString =
+                optional(environment, "APPLICATIONINSIGHTS_CONNECTION_STRING");
+        if (otlpEndpoint != null && applicationInsightsConnectionString != null) {
+            throw new IllegalStateException(
+                    "OTLP and Azure Monitor exporters cannot both be configured.");
+        }
+        if (otlpEndpoint == null && applicationInsightsConnectionString == null) {
+            throw new IllegalStateException(
+                    "OTEL_EXPORTER_OTLP_ENDPOINT or APPLICATIONINSIGHTS_CONNECTION_STRING "
+                            + "is required.");
+        }
         return new CatalogRuntimeOptions(
                 databaseHost,
                 databaseName,
@@ -130,7 +144,8 @@ public record CatalogRuntimeOptions(
                 deploymentEnvironment,
                 bounded(require(environment, "CONTAINER_APP_REVISION"), "CONTAINER_APP_REVISION", 128),
                 bounded(Objects.requireNonNull(instanceId), "service.instance.id", 128),
-                parseEndpoint(require(environment, "OTEL_EXPORTER_OTLP_ENDPOINT")),
+                otlpEndpoint == null ? null : parseEndpoint(otlpEndpoint),
+                applicationInsightsConnectionString != null,
                 databaseAuthentication,
                 imageProvider,
                 blobServiceEndpoint,

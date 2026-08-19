@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import json
 import subprocess
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
 from catalog_migrate import database
-from catalog_migrate.errors import InvalidInputError, PreconditionError, ToolError
+from catalog_migrate.errors import (
+    InvalidInputError,
+    PreconditionError,
+    ToolError,
+    VerificationError,
+)
 from catalog_migrate.process import CommandRunner, ProcessResult
 
 
@@ -18,6 +24,7 @@ class RecordingRunner:
 
     def __init__(self, expected_user: dict | None = None) -> None:
         self.calls: list[tuple[list[str], dict[str, str], str | None]] = []
+        self.redactions: list[list[str]] = []
         self.expected_user = expected_user
 
     def run(
@@ -26,11 +33,13 @@ class RecordingRunner:
         *,
         environment: dict[str, str] | None = None,
         input_text: str | None = None,
+        redactions: list[str] | tuple[str, ...] = (),
         timeout: int = 300,
     ) -> ProcessResult:
         """Capture one simulated command."""
         del timeout
         self.calls.append((list(argv), dict(environment or {}), input_text))
+        self.redactions.append(list(redactions))
         if argv[:5] == ["az", "ad", "signed-in-user", "show", "--output"]:
             return ProcessResult(json.dumps(self.expected_user), "")
         if argv[:3] == ["az", "account", "get-access-token"]:
@@ -39,6 +48,15 @@ class RecordingRunner:
             return ProcessResult('{"azure-cli":"2.80.0"}', "")
         if argv[:2] == ["sqlcmd", "--version"]:
             return ProcessResult("sqlcmd 1.7.0", "")
+        if argv[0] == "sqlcmd" and any(
+            "STRING_AGG(r.name" in argument for argument in argv
+        ):
+            return ProcessResult("db_datareader,db_datawriter\n", "")
+        if argv[0] == "sqlcmd" and any(
+            "FROM sys.database_principals WHERE name = N'catalog'" in argument
+            for argument in argv
+        ):
+            return ProcessResult("0\n", "")
         if "--version" in argv:
             return ProcessResult(f"{argv[0]} (PostgreSQL) 18.6", "")
         if argv[:2] == ["SqlPackage", "/Version"]:
@@ -74,17 +92,28 @@ def test_sql_export_keeps_password_out_of_subprocess_argv(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """SqlPackage receives the source password only through child environment."""
+    """SqlPackage reads a protected transient response file without secret argv."""
     runner = RecordingRunner()
     artifact = tmp_path / "catalog.bacpac"
+    response: dict[str, object] = {}
 
     def create_artifact(*args, **kwargs) -> ProcessResult:
         result = RecordingRunner.run(runner, *args, **kwargs)
         if args[0][0] == "SqlPackage" and "/Action:Export" in args[0]:
+            response_path = Path(
+                next(argument[1:] for argument in args[0] if argument.startswith("@"))
+            )
+            response["path"] = response_path
+            response["content"] = response_path.read_text(encoding="utf-8")
             artifact.write_bytes(b"x")
         return result
 
     monkeypatch.setattr(runner, "run", create_artifact)
+    monkeypatch.setattr(
+        database,
+        "verify_source_database",
+        lambda *args, **kwargs: {"schemaVerified": True},
+    )
     database.export_sql(
         runner,
         server="localhost",
@@ -93,9 +122,43 @@ def test_sql_export_keeps_password_out_of_subprocess_argv(
         artifact_path=artifact,
         password="source-secret",
     )
-    export_call = next(call for call in runner.calls if "/Action:Export" in call[0])
+    export_index = next(
+        index
+        for index, call in enumerate(runner.calls)
+        if "/Action:Export" in call[0]
+    )
+    export_call = runner.calls[export_index]
     assert all("source-secret" not in argument for argument in export_call[0])
-    assert export_call[1]["SQLPACKAGE_SOURCEPASSWORD"] == "source-secret"
+    assert "/SourceTrustServerCertificate:True" in export_call[0]
+    assert export_call[1] == {}
+    assert runner.redactions[export_index] == ["source-secret"]
+    assert response["content"] == "/SourcePassword:source-secret\n"
+    assert not Path(response["path"]).exists()
+
+
+def test_windows_sqlpackage_response_directory_gets_a_protected_acl(
+    tmp_path: Path,
+) -> None:
+    """Windows protection removes inheritance before a response file is written."""
+    runner = RecordingRunner()
+    database._protect_secret_directory(
+        runner,
+        tmp_path,
+        platform_name="nt",
+    )
+
+    argv, environment, input_text = runner.calls[0]
+    assert argv == [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "-",
+    ]
+    assert environment == {"MIGRATION_SECRET_DIRECTORY": str(tmp_path)}
+    assert "SetAccessRuleProtection($true, $false)" in str(input_text)
+    assert "source-secret" not in str(input_text)
 
 
 def test_wrong_engine_and_changed_artifacts_are_rejected(tmp_path: Path) -> None:
@@ -181,6 +244,10 @@ def test_sql_import_supports_hyphenated_workload_identity_without_secret_argv(
         if call[0][0] == "sqlcmd" and "CREATE USER" in call[0][-1]
     )
     assert "[id-mh-team-dotnet]" in principal_call[0][-1]
+    assert "ALTER ROLE [db_owner] DROP MEMBER [catalog]" in principal_call[0][-1]
+    assert principal_call[0][-1].index("DROP USER [catalog]") < principal_call[0][
+        -1
+    ].index("CREATE USER [id-mh-team-dotnet]")
     assert principal_call[1]["SQLCMDACCESS_TOKEN"] == "transient-token"
     assert "transient-token" not in principal_call[0]
 
@@ -329,6 +396,35 @@ def test_password_role_reads_application_secret_from_environment() -> None:
     assert environment["MIGRATION_TARGET_APPLICATION_PASSWORD"] == "application-secret"
 
 
+def test_postgresql_verification_requires_each_table_privilege() -> None:
+    """A comma-list must not let one privilege stand in for all required grants."""
+    predicates = database._postgresql_table_privilege_predicates("catalog_app")
+
+    assert "SELECT,INSERT,UPDATE,DELETE" not in predicates
+    assert predicates.count("has_table_privilege(") == 8
+    for table in ("figures", "categories"):
+        for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+            assert f"'public.{table}', '{privilege}'" in predicates
+
+
+def test_migration_report_rejects_a_commit_different_from_target() -> None:
+    """Migration evidence cannot be relabeled with an unrelated release commit."""
+    with pytest.raises(InvalidInputError, match="source commit differs"):
+        database.build_migration_report(
+            RecordingRunner(),
+            stack="dotnet-sqlserver",
+            source_commit="b" * 40,
+            artifact_path=Path("unused.bacpac"),
+            target={
+                "stack": "dotnet-sqlserver",
+                "sourceCommit": "a" * 40,
+            },
+            image_verification={},
+            application_password=None,
+            migration_execution={},
+        )
+
+
 def test_command_runner_maps_timeout_and_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -379,6 +475,124 @@ def test_command_runner_redacts_child_secrets_from_failures(
 
     assert "transient-secret" not in str(error.value)
     assert "[REDACTED]" in str(error.value)
+
+
+def test_command_runner_redacts_without_forwarding_a_response_file_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SqlPackage response-file secrets redact failures without entering its environment."""
+    captured_environment: dict[str, str] = {}
+
+    def failed(*args, **kwargs):
+        captured_environment.update(kwargs["env"])
+        return subprocess.CompletedProcess(
+            args[0],
+            1,
+            stdout="",
+            stderr="authentication failed for response-secret",
+        )
+
+    monkeypatch.setattr(subprocess, "run", failed)
+
+    with pytest.raises(ToolError) as error:
+        CommandRunner().run(["tool"], redactions=["response-secret"])
+
+    assert "response-secret" not in captured_environment.values()
+    assert "response-secret" not in str(error.value)
+    assert "[REDACTED]" in str(error.value)
+
+
+def test_command_runner_uses_a_minimal_child_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inherited credentials and undeclared migration values never reach tools."""
+    captured: dict[str, str] = {}
+    monkeypatch.setenv("GITHUB_TOKEN", "host-token")
+    monkeypatch.setenv("MIGRATION_UNDECLARED_SECRET", "migration-secret")
+
+    def completed(*args, **kwargs):
+        captured.update(kwargs["env"])
+        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", completed)
+    CommandRunner().run(
+        ["tool"],
+        environment={"PGPASSWORD": "declared-secret"},
+    )
+
+    assert captured["PGPASSWORD"] == "declared-secret"
+    assert "GITHUB_TOKEN" not in captured
+    assert "MIGRATION_UNDECLARED_SECRET" not in captured
+
+
+def test_target_database_verification_reuses_the_full_acceptance_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Migration verification delegates to complete schema and corpus checks."""
+    observed: dict = {}
+
+    def verify_connection(**kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace(figure_count=198, category_count=20)
+
+    monkeypatch.setattr(
+        database,
+        "verify_database_connection",
+        verify_connection,
+        raising=False,
+    )
+    target = {
+        "stack": "dotnet-sqlserver",
+        "database": {
+            "family": "azure-sql",
+            "server": "catalog.database.windows.net",
+            "database": "catalog",
+            "authentication": "managed-identity",
+            "applicationPrincipal": {"name": "id-catalog"},
+        },
+    }
+
+    verification = database.verify_target_database(RecordingRunner(), target)
+
+    assert observed["kind"] == "sqlserver"
+    assert observed["target"] == "managed"
+    assert verification["verifiedRowCounts"] == {"figures": 198, "categories": 20}
+
+
+def test_target_database_verification_rejects_the_legacy_sql_principal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verification fails if the imported db_owner-era user still exists."""
+
+    class LegacyPrincipalRunner(RecordingRunner):
+        def run(self, argv, **kwargs) -> ProcessResult:
+            result = super().run(argv, **kwargs)
+            if argv[0] == "sqlcmd" and any(
+                "FROM sys.database_principals WHERE name = N'catalog'" in argument
+                for argument in argv
+            ):
+                return ProcessResult("1\n", "")
+            return result
+
+    monkeypatch.setattr(
+        database,
+        "verify_database_connection",
+        lambda **kwargs: SimpleNamespace(figure_count=198, category_count=20),
+        raising=False,
+    )
+    target = {
+        "stack": "dotnet-sqlserver",
+        "database": {
+            "family": "azure-sql",
+            "server": "catalog.database.windows.net",
+            "database": "catalog",
+            "authentication": "managed-identity",
+            "applicationPrincipal": {"name": "id-catalog"},
+        },
+    }
+
+    with pytest.raises(VerificationError, match="privileged legacy"):
+        database.verify_target_database(LegacyPrincipalRunner(), target)
 
 
 def test_source_contains_no_delete_or_resource_mutation_commands(repo_root: Path) -> None:

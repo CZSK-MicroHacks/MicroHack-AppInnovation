@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -13,6 +14,27 @@ from catalog_acceptance.normalization import category_slug
 
 DatabaseKind = Literal["sqlserver", "postgresql"]
 DatabaseTarget = Literal["local", "managed"]
+ClientExecutor = Callable[[list[str], dict[str, str], str], str]
+_CLIENT_ENVIRONMENT_ALLOWLIST = frozenset(
+    {
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOCALAPPDATA",
+        "PATH",
+        "PATHEXT",
+        "PROGRAMDATA",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "WINDIR",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -100,9 +122,10 @@ def _sqlserver_connection(
     host: str,
     port: int,
     database: str,
-    username: str,
+    username: str | None,
     require_encryption: bool,
     trust_certificate: bool,
+    use_access_token: bool = False,
 ) -> list[str]:
     """Build common sqlcmd connection arguments."""
     endpoint = host if "\\" in host else f"tcp:{host},{port}"
@@ -112,12 +135,16 @@ def _sqlserver_connection(
         endpoint,
         "-d",
         database,
-        "-U",
-        username,
         "-h",
         "-1",
         "-W",
     ]
+    if use_access_token:
+        connection.append("-G")
+    else:
+        if username is None:
+            raise ValueError("SQL Server username is required for password authentication")
+        connection.extend(["-U", username])
     if require_encryption:
         connection.append("-N")
     if trust_certificate:
@@ -154,19 +181,33 @@ def _database_command(
     connection: list[str],
     query: str,
     environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
 ) -> str:
     """Execute one query with the selected native client."""
     if kind == "sqlserver":
-        return _run_client(
+        return executor(
             [*connection, "-s", "\t", "-Q", f"SET NOCOUNT ON; {query}"],
             environment,
             "sqlcmd",
         )
-    return _run_client(
+    return executor(
         [*connection, "--command", query],
         environment,
         "psql",
     )
+
+
+def _execute_database_command(
+    kind: DatabaseKind,
+    connection: list[str],
+    query: str,
+    environment: dict[str, str],
+    executor: ClientExecutor,
+) -> str:
+    """Preserve the original query seam unless a custom executor is supplied."""
+    if executor is _run_client:
+        return _database_command(kind, connection, query, environment)
+    return _database_command(kind, connection, query, environment, executor)
 
 
 def _connection(
@@ -174,16 +215,35 @@ def _connection(
     host: str,
     port: int | None,
     database: str,
-    username: str,
-    password: str,
+    username: str | None,
+    password: str | None,
     ssl_mode: str,
     trust_certificate: bool,
     target: DatabaseTarget,
+    access_token: str | None = None,
 ) -> tuple[list[str], dict[str, str]]:
-    """Build client arguments and its secret-only environment."""
-    environment = os.environ.copy()
+    """Build client arguments and a minimal environment containing one credential."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name.upper() in _CLIENT_ENVIRONMENT_ALLOWLIST
+    }
     if kind == "sqlserver":
-        environment["SQLCMDPASSWORD"] = password
+        use_access_token = target == "managed"
+        if use_access_token:
+            if not access_token:
+                raise ValueError("managed Azure SQL access token is required")
+            if username is not None or password is not None:
+                raise ValueError(
+                    "managed Azure SQL forbids SQL authentication credentials"
+                )
+            environment["SQLCMDACCESS_TOKEN"] = access_token
+        else:
+            if username is None or password is None:
+                raise ValueError("SQL Server username and password are required")
+            if access_token is not None:
+                raise ValueError("SQL Server access token is not valid for a local target")
+            environment["SQLCMDPASSWORD"] = password
         return (
             _sqlserver_connection(
                 host,
@@ -192,9 +252,14 @@ def _connection(
                 username,
                 target == "managed" or ssl_mode == "require",
                 trust_certificate,
+                use_access_token,
             ),
             environment,
         )
+    if username is None or password is None:
+        raise ValueError("PostgreSQL username and password are required")
+    if access_token is not None:
+        raise ValueError("SQL Server access token is not valid for PostgreSQL")
     environment["PGPASSWORD"] = password
     environment["PGSSLMODE"] = "require" if target == "managed" else ssl_mode
     return (
@@ -213,11 +278,12 @@ def fetch_database_state(
     host: str,
     port: int | None,
     database: str,
-    username: str,
-    password: str,
+    username: str | None,
+    password: str | None,
     ssl_mode: str,
     trust_certificate: bool,
     target: DatabaseTarget,
+    access_token: str | None = None,
 ) -> DatabaseState:
     """Read complete figure and category state for comparison and reset checks."""
     connection, environment = _connection(
@@ -230,7 +296,22 @@ def fetch_database_state(
         ssl_mode,
         trust_certificate,
         target,
+        access_token,
     )
+    return fetch_database_state_with_connection(
+        kind,
+        connection,
+        environment,
+    )
+
+
+def fetch_database_state_with_connection(
+    kind: DatabaseKind,
+    connection: list[str],
+    environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
+) -> DatabaseState:
+    """Read complete catalog state through a prevalidated client connection."""
     if kind == "sqlserver":
         figures_query = (
             "SELECT LOWER(CONVERT(varchar(36), f.Id)), f.Name, f.Description, "
@@ -259,7 +340,13 @@ def fetch_database_state(
     figures = tuple(
         sorted(
             _parse_rows(
-                _database_command(kind, connection, figures_query, environment),
+                _execute_database_command(
+                    kind,
+                    connection,
+                    figures_query,
+                    environment,
+                    executor,
+                ),
                 7,
             )
         )
@@ -267,7 +354,13 @@ def fetch_database_state(
     categories = tuple(
         sorted(
             _parse_rows(
-                _database_command(kind, connection, categories_query, environment),
+                _execute_database_command(
+                    kind,
+                    connection,
+                    categories_query,
+                    environment,
+                    executor,
+                ),
                 2,
             )
         )
@@ -279,6 +372,7 @@ def _schema_rows(
     kind: DatabaseKind,
     connection: list[str],
     environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
 ) -> tuple[tuple[str, ...], ...]:
     """Read normalized application-table column metadata."""
     if kind == "sqlserver":
@@ -299,13 +393,51 @@ def _schema_rows(
             "WHERE table_schema = 'public' AND table_name IN ('categories', 'figures') "
             "ORDER BY table_name, ordinal_position;"
         )
-    return _parse_rows(_database_command(kind, connection, query, environment), 5)
+    return _parse_rows(
+        _execute_database_command(kind, connection, query, environment, executor),
+        5,
+    )
+
+
+def _table_names(
+    kind: DatabaseKind,
+    connection: list[str],
+    environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
+) -> tuple[str, ...]:
+    """Read every base table in the frozen application schema."""
+    if kind == "sqlserver":
+        query = (
+            "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+            "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_TYPE = 'BASE TABLE' "
+            "ORDER BY TABLE_NAME;"
+        )
+    else:
+        query = (
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name;"
+        )
+    return tuple(
+        row[0]
+        for row in _parse_rows(
+            _execute_database_command(
+                kind,
+                connection,
+                query,
+                environment,
+                executor,
+            ),
+            1,
+        )
+    )
 
 
 def _constraint_rows(
     kind: DatabaseKind,
     connection: list[str],
     environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
 ) -> tuple[str, ...]:
     """Read constraint names, columns, references, actions, and expressions."""
     if kind == "sqlserver":
@@ -413,7 +545,7 @@ def _constraint_rows(
     return tuple(
         "|".join(row)
         for row in _parse_rows(
-            _database_command(kind, connection, query, environment),
+            _execute_database_command(kind, connection, query, environment, executor),
             8,
         )
     )
@@ -423,6 +555,7 @@ def _index_rows(
     kind: DatabaseKind,
     connection: list[str],
     environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
 ) -> tuple[str, ...]:
     """Read index uniqueness, ordered keys, direction, and filtering."""
     if kind == "sqlserver":
@@ -468,7 +601,7 @@ def _index_rows(
     return tuple(
         "|".join(row)
         for row in _parse_rows(
-            _database_command(kind, connection, query, environment),
+            _execute_database_command(kind, connection, query, environment, executor),
             5,
         )
     )
@@ -478,6 +611,7 @@ def _migration_rows(
     kind: DatabaseKind,
     connection: list[str],
     environment: dict[str, str],
+    executor: ClientExecutor = _run_client,
 ) -> tuple[str, ...]:
     """Read the complete ordered migration history."""
     query = (
@@ -492,7 +626,7 @@ def _migration_rows(
     return tuple(
         "|".join(row)
         for row in _parse_rows(
-            _database_command(kind, connection, query, environment),
+            _execute_database_command(kind, connection, query, environment, executor),
             width,
         )
     )
@@ -503,6 +637,7 @@ def _tls_detail(
     connection: list[str],
     environment: dict[str, str],
     target: DatabaseTarget,
+    executor: ClientExecutor = _run_client,
 ) -> str:
     """Read server-reported TLS state and enforce it for managed targets."""
     query = (
@@ -512,7 +647,10 @@ def _tls_detail(
         else "SELECT ssl::text, COALESCE(version, '') FROM pg_stat_ssl "
         "WHERE pid = pg_backend_pid();"
     )
-    rows = _parse_rows(_database_command(kind, connection, query, environment), 2)
+    rows = _parse_rows(
+        _execute_database_command(kind, connection, query, environment, executor),
+        2,
+    )
     if len(rows) != 1:
         raise ValueError("database did not report one TLS connection state")
     enabled, protocol = rows[0]
@@ -551,31 +689,16 @@ def verify_database(
     host: str,
     port: int | None,
     database: str,
-    username: str,
-    password: str,
+    username: str | None,
+    password: str | None,
     ssl_mode: str,
     trust_certificate: bool,
     target: DatabaseTarget,
     items: list[CatalogItem],
     expected_categories: list[str],
+    access_token: str | None = None,
 ) -> DatabaseVerification:
     """Verify complete data, schema, constraints, indexes, migrations, and TLS."""
-    state = fetch_database_state(
-        kind,
-        host,
-        port,
-        database,
-        username,
-        password,
-        ssl_mode,
-        trust_certificate,
-        target,
-    )
-    if state.figures != _expected_rows(items):
-        raise ValueError("database figure rows differ from the canonical corpus")
-    if state.categories != _expected_categories(expected_categories):
-        raise ValueError("database categories differ from the canonical corpus")
-
     connection, environment = _connection(
         kind,
         host,
@@ -586,27 +709,67 @@ def verify_database(
         ssl_mode,
         trust_certificate,
         target,
+        access_token,
     )
+    return verify_database_connection(
+        kind=kind,
+        connection=connection,
+        environment=environment,
+        target=target,
+        items=items,
+        expected_categories=expected_categories,
+    )
+
+
+def verify_database_connection(
+    *,
+    kind: DatabaseKind,
+    connection: list[str],
+    environment: dict[str, str],
+    target: DatabaseTarget,
+    items: list[CatalogItem],
+    expected_categories: list[str],
+    executor: ClientExecutor = _run_client,
+) -> DatabaseVerification:
+    """Verify the complete contract through a prevalidated client connection."""
+    state = fetch_database_state_with_connection(
+        kind,
+        connection,
+        environment,
+        executor,
+    )
+    if state.figures != _expected_rows(items):
+        raise ValueError("database figure rows differ from the canonical corpus")
+    if state.categories != _expected_categories(expected_categories):
+        raise ValueError("database categories differ from the canonical corpus")
+
     contract = load_json(
         repository_root() / "workshop" / "contracts" / "database-contract.json"
     )[kind]
-    if tuple(sorted(_schema_rows(kind, connection, environment))) != _expected_schema(
-        contract
-    ):
+    expected_tables = tuple(
+        sorted([*contract["tables"].keys(), contract["migration"]["table"]])
+    )
+    if tuple(
+        sorted(_table_names(kind, connection, environment, executor))
+    ) != expected_tables:
+        raise ValueError("database application-table inventory differs from contract")
+    if tuple(
+        sorted(_schema_rows(kind, connection, environment, executor))
+    ) != _expected_schema(contract):
         raise ValueError("database application-table schema differs from contract")
-    if tuple(sorted(_constraint_rows(kind, connection, environment))) != tuple(
-        sorted(contract["constraints"])
-    ):
+    if tuple(
+        sorted(_constraint_rows(kind, connection, environment, executor))
+    ) != tuple(sorted(contract["constraints"])):
         raise ValueError("database constraints differ from contract")
-    if tuple(sorted(_index_rows(kind, connection, environment))) != tuple(
-        sorted(contract["indexes"])
-    ):
+    if tuple(
+        sorted(_index_rows(kind, connection, environment, executor))
+    ) != tuple(sorted(contract["indexes"])):
         raise ValueError("database indexes differ from contract")
-    if _migration_rows(kind, connection, environment) != tuple(
+    if _migration_rows(kind, connection, environment, executor) != tuple(
         contract["migration"]["orderedHistory"]
     ):
         raise ValueError("database migration history differs from contract")
-    tls_detail = _tls_detail(kind, connection, environment, target)
+    tls_detail = _tls_detail(kind, connection, environment, target, executor)
     return DatabaseVerification(
         figure_count=len(state.figures),
         category_count=len(state.categories),
@@ -619,13 +782,14 @@ def delete_acceptance_fixture(
     host: str,
     port: int | None,
     database: str,
-    username: str,
-    password: str,
+    username: str | None,
+    password: str | None,
     ssl_mode: str,
     trust_certificate: bool,
     target: DatabaseTarget,
     product_id: str,
     category_name: str,
+    access_token: str | None = None,
 ) -> None:
     """Delete only the reserved acceptance fixture and its now-empty category."""
     if not product_id.startswith("10000000-0000-4000-8000-"):
@@ -641,6 +805,7 @@ def delete_acceptance_fixture(
         ssl_mode,
         trust_certificate,
         target,
+        access_token,
     )
     if kind == "sqlserver":
         query = (

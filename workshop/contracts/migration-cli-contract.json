@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "executable": "catalog-migrate",
   "commands": [
     {
@@ -190,6 +190,12 @@
     "tracebackForbidden": true,
     "secretValuesForbidden": true
   },
+  "sqlServerLegacyPrincipalCleanup": {
+    "principalName": "catalog",
+    "privilegedRole": "db_owner",
+    "requiredBeforeApplicationPrincipalCreation": true,
+    "verifyAbsent": true
+  },
   "postgresqlManagedIdentityBootstrap": {
     "administratorSource": "target-output.database.entraAdministratorPrincipal",
     "administratorPrincipalType": "user",
@@ -233,7 +239,9 @@
     "requireExactTargetConfirmation": true,
     "argumentsAreExact": true,
     "deriveTargetSettingsFromTargetOutput": true,
-    "secretsInEnvironmentOnly": true,
+    "secretInputsFromEnvironmentOnly": true,
+    "sqlPackagePasswordTransport": "protected-transient-response-file",
+    "protectedSecretFilesRemoved": true,
     "tokensInChildProcessEnvironmentOnly": true,
     "rejectUndeclaredSecrets": true,
     "stripMigrationSecretsFromChildEnvironment": true,

@@ -270,6 +270,55 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Leave user configuration untouched and run the repository gate with `uv --no-config run ...`; use `uv --no-config lock --check --offline` for the matching lock gate.
 
+## 39. SqlPackage ignores an invented password environment variable
+**Symptom:** BACPAC export reaches SqlPackage without a password even though `SQLPACKAGE_SOURCEPASSWORD` is set.
+
+**Cause:** SqlPackage does not define that environment variable as a source-password input. Its supported non-interactive input surface includes response files.
+
+**Resolution:** Read the password only from the declared migration environment, write `/SourcePassword:<value>` to a newly created ACL-restricted response file, pass only `@<path>` in argv, register the value separately for error redaction without forwarding it to the child environment, and overwrite/remove the file in `finally`.
+
+## 40. The SqlPackage global tool requires a newer .NET runtime
+**Symptom:** The pinned SqlPackage NuGet tool installs but cannot start on the P3 .NET VM because its required .NET runtime is newer than the source VM runtime.
+
+**Cause:** The global-tool package is framework-dependent; installing the locked .NET 8 SDK alone does not satisfy the newer tool runtime.
+
+**Resolution:** Provision the exact self-contained Windows SqlPackage archive instead. Verify its SHA-256, verify the extracted executable's Authenticode publisher and version, and add that fixed directory to machine PATH.
+
+## 41. Azure Files OAuth operations require backup intent
+**Symptom:** Azure Files list, upload, or download fails despite login authentication and the privileged file-data role.
+
+**Cause:** Azure CLI Files data-plane OAuth requires both `--auth-mode login` and `--backup-intent` for this role-backed migration path.
+
+**Resolution:** Add both options to every Files list, upload, and download command. Do not add the Files-only option to Blob commands.
+
+## 42. A fixed target VNet overlaps a participant source VNet
+**Symptom:** Peering creation fails or private routes are ambiguous for the participant whose P3 VNet falls inside the target range.
+
+**Cause:** The former target `10.42.0.0/16` contains participant `user042`'s deterministic `10.42.0.0/22` source range.
+
+**Resolution:** Use non-overlapping stack-specific target ranges: `172.20.0.0/16` for .NET and `172.21.0.0/16` for Java, with deterministic subnets inside each range.
+
+## 43. Truncating before redaction leaks a long secret prefix
+**Symptom:** A typed JSON error omits the complete secret but exposes its first 1,024 characters.
+
+**Cause:** The formatter normalizes and truncates the raw tool message before replacing the full secret, so the truncated prefix no longer equals the redaction token.
+
+**Resolution:** Replace every complete known secret in the raw message first, then normalize whitespace and apply the message-length bound.
+
+## 44. SQL authentication cannot verify an Entra-only Azure SQL target
+**Symptom:** Managed .NET acceptance reaches Azure SQL but every `sqlcmd` operation fails authentication even though migration and the deployed application succeed.
+
+**Cause:** The target disables SQL authentication, while the acceptance harness supplies `-U` and `SQLCMDPASSWORD`.
+
+**Resolution:** Acquire a transient Azure SQL token through the isolated facilitator profile, supply it only as `SQLCMDACCESS_TOKEN`, invoke `sqlcmd -G` without `-U`, and use that same authentication path for corpus verification, import-state comparisons, and acceptance-fixture cleanup. Keep username/password authentication limited to local SQL Server and PostgreSQL.
+
+## 45. Homebrew `psql` is installed but not discoverable
+**Symptom:** Java database acceptance fails with `psql is required for database verification` even though Homebrew `libpq` is installed.
+
+**Cause:** Homebrew installs keg-only `libpq` clients under `/opt/homebrew/opt/libpq/bin`, which may not be on `PATH`.
+
+**Resolution:** Prepend `/opt/homebrew/opt/libpq/bin` to `PATH` for the acceptance process. The verifier carries the resulting `PATH` into its minimal child environment without forwarding unrelated host secrets.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

@@ -93,9 +93,11 @@ mutable extraction. Every tool/database installer is the exact URL from
 `workshop/toolchain.lock.json`, with digest verification and Authenticode publisher verification
 where the lock declares a publisher.
 
-VM image version, .NET, SQL Server Express, go-sqlcmd, Microsoft OpenJDK, PostgreSQL, Maven,
-VS Code, Azure CLI, uv, Python, and VS Code extension versions are pinned. There are no raw branch
-URLs, `latest` versions, or mutable package-manager fallbacks.
+VM image version, .NET, SQL Server Express, go-sqlcmd, self-contained Windows SqlPackage,
+Microsoft OpenJDK, PostgreSQL, Maven, VS Code, Azure CLI, uv, Python, and VS Code extension
+versions are pinned. SqlPackage installation verifies the locked archive digest, extracted
+executable publisher, and exact version without requiring another .NET runtime. There are no
+raw branch URLs, `latest` versions, or mutable package-manager fallbacks.
 
 VM custom data cannot be updated in place. A `terraform_data.provisioner` replacement trigger makes
 any bootstrap, provisioner, bundle-format, or transport-version change replace the two VMs rather

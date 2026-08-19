@@ -10,7 +10,12 @@ import pytest
 
 from catalog_migrate import cli
 from catalog_migrate.contracts import guard_target, load_json, require_secrets
-from catalog_migrate.errors import InvalidInputError, PreconditionError
+from catalog_migrate.errors import (
+    InvalidInputError,
+    PreconditionError,
+    ToolError,
+    error_document,
+)
 
 ARTIFACT = {
     "format": "bacpac",
@@ -29,9 +34,21 @@ IMAGE_VERIFICATION = {
 
 @pytest.fixture
 def target(repo_root: Path) -> dict:
-    """Return a valid application-stage target output."""
-    return load_json(
+    """Return a valid bootstrap-stage target output."""
+    target = load_json(
         repo_root / "workshop/contracts/azure-target-output.application.example.json"
+    )
+    target["deploymentStage"] = "bootstrap"
+    target["applicationRevisionRole"] = None
+    target["containerImage"] = None
+    target["application"] = None
+    return target
+
+
+def _dotnet_bootstrap(repo_root: Path) -> dict:
+    """Load the checked-in .NET bootstrap target fixture."""
+    return load_json(
+        repo_root / "workshop/contracts/azure-target-output.bootstrap.example.json"
     )
 
 
@@ -53,7 +70,7 @@ def test_exact_seven_commands_are_registered() -> None:
     parser = cli._parser()
     help_text = parser.format_help()
     assert "{sql,postgresql,images,verify,render-handoff}" in help_text
-    with pytest.raises(SystemExit) as error:
+    with pytest.raises(InvalidInputError) as error:
         parser.parse_args(["delete"])
     assert error.value.code == 2
 
@@ -67,6 +84,7 @@ def test_exact_seven_commands_are_registered() -> None:
             "--source-database", "catalog",
             "--source-username", "catalog",
             "--artifact", "catalog.bacpac",
+            "--target-output", "target.json",
         ],
         [
             "sql", "import",
@@ -83,6 +101,7 @@ def test_exact_seven_commands_are_registered() -> None:
             "--source-database", "catalog",
             "--source-username", "catalog",
             "--artifact", "catalog.dump",
+            "--target-output", "target.json",
         ],
         [
             "postgresql", "import",
@@ -115,6 +134,7 @@ def test_exact_seven_commands_are_registered() -> None:
             "--acceptance-report", "acceptance.json",
             "--telemetry-report", "telemetry.json",
             "--runtime-test-report", "runtime.json",
+            "--rollback-revision", "catalog--baseline-000000000000",
             "--output", "handoff.json",
         ],
     ],
@@ -123,7 +143,7 @@ def test_each_command_rejects_undeclared_arguments(arguments: list[str]) -> None
     """Every frozen command path rejects arguments outside its exact declaration."""
     parser = cli._parser()
     parser.parse_args(arguments)
-    with pytest.raises(SystemExit) as error:
+    with pytest.raises(InvalidInputError) as error:
         parser.parse_args([*arguments, "--undeclared"])
     assert error.value.code == 2
 
@@ -132,10 +152,20 @@ def test_sql_export_emits_schema_valid_result(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
+    repo_root: Path,
 ) -> None:
     """SQL export uses its one declared secret and emits the frozen result."""
     monkeypatch.setenv("MIGRATION_SOURCE_DATABASE_PASSWORD", "source-secret")
     monkeypatch.setattr(cli, "export_sql", lambda *args, **kwargs: ARTIFACT)
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
+    target = _dotnet_bootstrap(repo_root)
+    target_path = tmp_path / "target.json"
+    target_path.write_text(json.dumps(target), encoding="utf-8")
     result = cli.main(
         [
             "sql",
@@ -148,6 +178,8 @@ def test_sql_export_emits_schema_valid_result(
             "catalog",
             "--artifact",
             str(tmp_path / "catalog.bacpac"),
+            "--target-output",
+            str(target_path),
         ]
     )
     assert result == 0
@@ -158,6 +190,7 @@ def test_postgresql_export_emits_schema_valid_result(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
+    target: dict,
 ) -> None:
     """PostgreSQL export emits the exact custom-archive identity."""
     postgresql_artifact = copy.deepcopy(ARTIFACT)
@@ -172,6 +205,14 @@ def test_postgresql_export_emits_schema_valid_result(
     monkeypatch.setattr(
         cli, "export_postgresql", lambda *args, **kwargs: postgresql_artifact
     )
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
+    target_path = tmp_path / "target.json"
+    target_path.write_text(json.dumps(target), encoding="utf-8")
     result = cli.main(
         [
             "postgresql",
@@ -186,6 +227,8 @@ def test_postgresql_export_emits_schema_valid_result(
             "catalog",
             "--artifact",
             str(tmp_path / "catalog.dump"),
+            "--target-output",
+            str(target_path),
         ]
     )
     assert result == 0
@@ -200,10 +243,22 @@ def test_sql_import_requires_exact_target_and_execute(
 ) -> None:
     """SQL import consumes the target output and never accepts an inferred target."""
     target["stack"] = "dotnet-sqlserver"
+    target["network"]["migrationSourceVmResourceId"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000/"
+        "resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/"
+        "virtualMachines/vm-dotnet-user001"
+    )
+    target["network"]["migrationPrivateDnsZoneLinkResourceIds"][0] = target[
+        "network"
+    ]["migrationPrivateDnsZoneLinkResourceIds"][0].replace(
+        "private.postgres.database.azure.com",
+        "privatelink.database.windows.net",
+    )
     target["database"] = {
         "resourceId": (
             "/subscriptions/00000000-0000-0000-0000-000000000000/"
-            "resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/"
+            f"resourceGroups/{target['resourceGroup']['name']}/"
+            "providers/Microsoft.Sql/servers/"
             "sql-example/databases/catalog"
         ),
         "family": "azure-sql",
@@ -213,14 +268,20 @@ def test_sql_import_requires_exact_target_and_execute(
         "localAdministratorPrincipal": None,
         "entraAdministratorPrincipal": None,
         "applicationPrincipal": {
-            "name": "id-mh-example",
+            "name": target["workloadIdentity"]["resourceId"].rsplit("/", 1)[-1],
             "kind": "managed-identity",
-            "principalId": "00000000-0000-0000-0000-000000000002",
+            "principalId": target["workloadIdentity"]["principalId"],
         },
     }
     target_path = tmp_path / "target.json"
     target_path.write_text(json.dumps(target), encoding="utf-8")
     monkeypatch.setattr(cli, "import_sql", lambda *args, **kwargs: ARTIFACT)
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
     result = cli.main(
         [
             "sql",
@@ -242,6 +303,12 @@ def test_postgresql_import_enforces_mode_specific_secrets(
     """Password mode requires separate administrator and application secrets."""
     target_path = tmp_path / "target.json"
     target_path.write_text(json.dumps(target), encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
     monkeypatch.setenv("MIGRATION_TARGET_ADMINISTRATOR_PASSWORD", "admin-secret")
     monkeypatch.delenv("MIGRATION_TARGET_APPLICATION_PASSWORD", raising=False)
     result = cli.main(
@@ -270,6 +337,12 @@ def test_managed_postgresql_forbids_application_password(
     }
     target_path = tmp_path / "target.json"
     target_path.write_text(json.dumps(target), encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
     monkeypatch.setenv("MIGRATION_TARGET_ADMINISTRATOR_PASSWORD", "admin-secret")
     monkeypatch.setenv("MIGRATION_TARGET_APPLICATION_PASSWORD", "forbidden")
     result = cli.main(
@@ -294,6 +367,12 @@ def test_images_copy_emits_schema_valid_result(
     target_path = tmp_path / "target.json"
     target_path.write_text(json.dumps(target), encoding="utf-8")
     monkeypatch.setattr(cli, "copy_images", lambda *args, **kwargs: IMAGE_VERIFICATION)
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+        raising=False,
+    )
     result = cli.main(
         [
             "images",
@@ -334,6 +413,12 @@ def test_verify_writes_the_exact_migration_report(
         "build_migration_report",
         lambda *args, **kwargs: report,
     )
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: report["migrationExecution"],
+        raising=False,
+    )
     output = tmp_path / "migration.json"
 
     result = cli.main(
@@ -367,14 +452,24 @@ def test_render_handoff_writes_the_schema_valid_document(
     handoff = load_json(
         repo_root / "workshop/contracts/modernization-contract.example.json"
     )
+    target = load_json(
+        repo_root / "workshop/contracts/azure-target-output.application.example.json"
+    )
+    target_path = tmp_path / "target.json"
+    target_path.write_text(json.dumps(target), encoding="utf-8")
     monkeypatch.setattr(cli, "render_handoff", lambda **kwargs: handoff)
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        lambda *args, **kwargs: {"topologyValidated": True},
+    )
     output = tmp_path / "handoff.json"
 
     result = cli.main(
         [
             "render-handoff",
             "--target-output",
-            "target.json",
+            str(target_path),
             "--migration-report",
             "migration.json",
             "--acceptance-report",
@@ -383,6 +478,8 @@ def test_render_handoff_writes_the_schema_valid_document(
             "telemetry.json",
             "--runtime-test-report",
             "runtime.json",
+            "--rollback-revision",
+            "catalog--baseline-000000000000",
             "--output",
             str(output),
         ]
@@ -409,3 +506,71 @@ def test_undeclared_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MIGRATION_TARGET_ADMINISTRATOR_PASSWORD", "undeclared")
     with pytest.raises(InvalidInputError):
         require_secrets(set(), set())
+
+
+def test_cli_parser_failure_is_one_typed_json_document(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Parser failures use the frozen JSON error protocol without usage text."""
+    result = cli.main(["delete"])
+
+    captured = capsys.readouterr()
+    error = json.loads(captured.err)
+    assert captured.out == ""
+    assert error == {
+        "schemaVersion": "1.0.0",
+        "status": "failed",
+        "command": None,
+        "exitCode": 2,
+        "error": {
+            "code": "invalid-input",
+            "message": error["error"]["message"],
+        },
+    }
+    assert "\n" not in error["error"]["message"]
+
+
+def test_error_redaction_precedes_message_truncation() -> None:
+    """A long echoed secret cannot leak a truncated prefix."""
+    secret = "secret-" + ("x" * 1100)
+    document = error_document(
+        ToolError(f"external tool failed: {secret}"),
+        "sql export",
+        redactions=[secret],
+    )
+
+    assert "secret-" not in document["error"]["message"]
+    assert "[REDACTED]" in document["error"]["message"]
+
+
+def test_bootstrap_commands_reject_application_output(
+    monkeypatch: pytest.MonkeyPatch,
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    """Migration operations cannot consume an application-stage output."""
+    application = load_json(
+        repo_root / "workshop/contracts/azure-target-output.application.example.json"
+    )
+    target_path = tmp_path / "application.json"
+    target_path.write_text(json.dumps(application), encoding="utf-8")
+    monkeypatch.setenv("MIGRATION_SOURCE_DATABASE_PASSWORD", "source-secret")
+
+    result = cli.main(
+        [
+            "sql",
+            "export",
+            "--source-server",
+            "localhost",
+            "--source-database",
+            "catalog",
+            "--source-username",
+            "catalog",
+            "--artifact",
+            str(tmp_path / "catalog.bacpac"),
+            "--target-output",
+            str(target_path),
+        ]
+    )
+
+    assert result == 2

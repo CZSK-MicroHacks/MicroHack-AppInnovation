@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "verifiedOn": "2026-08-19",
   "hosts": {
     "coordinator": {
@@ -166,7 +166,14 @@
       "version": "170.4.83",
       "url": "https://www.nuget.org/api/v2/package/Microsoft.SqlPackage/170.4.83",
       "sha512": "v0gJs4fk+6g4TK24de3XpJrBbKM0mzaOfi/GKppX9ibLZpT3iIHjn84Mqw9t8b1rY+vbh3LJq2xSQSYct3ZR1A==",
-      "integrity": "NuGet repository signature and package SHA-512 are required"
+      "windowsStandalone": {
+        "version": "170.4.83.3",
+        "architecture": "x64",
+        "url": "https://download.microsoft.com/download/46a13f8c-5548-42fb-b547-7e69ebc3fcca/sqlpackage-win-x64-en-170.4.83.3.zip",
+        "sha256": "f1c80c38a6c4e55fe2b8787de9119ee52313b900a05873be9d0084102344666a",
+        "signaturePublisher": "Microsoft Corporation"
+      },
+      "integrity": "NuGet repository signature and package SHA-512 are required for package consumption; the Windows standalone archive requires its exact SHA-256 and the extracted SqlPackage executable requires the declared Authenticode publisher"
     },
     "terraform": {
       "version": "1.13.3",

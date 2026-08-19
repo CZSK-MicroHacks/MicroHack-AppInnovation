@@ -25,7 +25,7 @@
     },
     "privateDnsZoneLinks": [
       {
-        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/privateDnsZones/privatelink.postgres.database.azure.com/virtualNetworkLinks/vnet-mh-source-example",
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/privateDnsZones/private.postgres.database.azure.com/virtualNetworkLinks/vnet-mh-source-example",
         "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
         "provisioningState": "Succeeded",
         "registrationEnabled": false

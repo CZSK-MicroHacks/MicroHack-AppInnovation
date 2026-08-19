@@ -56,6 +56,34 @@ class AzureConfigurationTest {
                 .hasMessageContaining("must use HTTPS");
     }
 
+    @Test
+    void azureMonitorReplacesRatherThanDuplicatesLocalOtlp() {
+        Map<String, Object> values = defaults();
+        values.remove("OTEL_EXPORTER_OTLP_ENDPOINT");
+        values.put(
+                "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "InstrumentationKey=00000000-0000-0000-0000-000000000001");
+
+        CatalogRuntimeOptions options = CatalogRuntimeOptions.from(
+                environment(values),
+                "test");
+
+        assertThat(options.azureMonitorEnabled()).isTrue();
+        assertThat(options.otlpEndpoint()).isNull();
+    }
+
+    @Test
+    void duplicateTelemetryExportersAreRejected() {
+        Map<String, Object> values = defaults();
+        values.put(
+                "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "InstrumentationKey=00000000-0000-0000-0000-000000000001");
+
+        assertThatThrownBy(() -> CatalogRuntimeOptions.from(environment(values), "test"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot both be configured");
+    }
+
     private static StandardEnvironment environment(Map<String, Object> values) {
         StandardEnvironment environment = new StandardEnvironment();
         environment.getPropertySources().addFirst(new MapPropertySource("test", values));

@@ -33,7 +33,10 @@ and Authenticode publisher before running an installer. It does not use `winget`
 package-manager fallback chains, or raw branch URLs.
 
 Both VMs receive pinned VS Code, Azure CLI, uv, uv-managed Python 3.12.10, and exact signed
-Copilot extensions. The .NET VM additionally receives the pinned .NET modernization extensions.
+Copilot extensions. The .NET VM additionally receives the pinned .NET modernization extensions
+and the self-contained SqlPackage 170.4.83.3 Windows archive used by P4 BACPAC export.
+Provisioning verifies the archive SHA-256, the extracted executable's Microsoft Authenticode
+publisher, and its exact version before adding its directory to machine PATH.
 The Java VM receives the pinned Java migration/upgrade extensions, Microsoft OpenJDK, and the
 checksum-pinned Maven Wrapper workflow. The source archive is used directly, so provisioning does
 not introduce an unpinned Git installer that is absent from the frozen lock.

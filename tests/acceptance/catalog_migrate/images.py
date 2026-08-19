@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ def _list_command(provider: str, account: str, location: str) -> list[str]:
         "list",
         "--auth-mode",
         "login",
+        "--backup-intent",
         "--account-name",
         account,
         "--share-name",
@@ -90,18 +92,48 @@ def list_target_images(
     return items
 
 
-def _item_properties(item: dict[str, Any]) -> tuple[str, int, str | None]:
-    name = item.get("name", "")
-    properties = item.get("properties") or {}
-    size = (
-        properties.get("contentLength")
-        or properties.get("content-length")
-        or item.get("contentLength")
-        or item.get("size")
-        or 0
-    )
-    metadata = item.get("metadata") or properties.get("metadata") or {}
-    return name, int(size), metadata.get("sha256")
+def _download_command(
+    provider: str,
+    account: str,
+    location: str,
+    name: str,
+    destination: Path,
+) -> list[str]:
+    """Build one target-byte download command."""
+    if provider == "azure-blob":
+        return [
+            "az",
+            "storage",
+            "blob",
+            "download",
+            "--auth-mode",
+            "login",
+            "--account-name",
+            account,
+            "--container-name",
+            location,
+            "--name",
+            name,
+            "--file",
+            str(destination),
+        ]
+    return [
+        "az",
+        "storage",
+        "file",
+        "download",
+        "--auth-mode",
+        "login",
+        "--backup-intent",
+        "--account-name",
+        account,
+        "--share-name",
+        location,
+        "--path",
+        name,
+        "--dest",
+        str(destination),
+    ]
 
 
 def verify_target_images(
@@ -117,19 +149,31 @@ def verify_target_images(
         for item in load_catalog(Path(__file__).resolve().parents[3] / "data")
     }
     listed = list_target_images(runner, target_images)
-    parsed = [_item_properties(item) for item in listed]
-    names = {name for name, _, _ in parsed}
-    if names != expected_names or len(parsed) != len(expected_names):
+    listed_names = [str(item.get("name", "")) for item in listed]
+    if set(listed_names) != expected_names or len(listed_names) != len(expected_names):
         raise VerificationError("image target has missing, extra, or duplicate members")
+    account, location = parse_storage_resource_id(target_images["resourceId"])
+    provider = target_images["provider"]
     digest = hashlib.sha256()
     total_bytes = 0
-    for name, size, sha256 in sorted(parsed):
-        if sha256 is None or len(sha256) != 64:
-            raise VerificationError(f"image target lacks SHA-256 metadata: {name}")
-        digest.update(f"{name}\t{size}\t{sha256}\n".encode())
-        total_bytes += size
+    with tempfile.TemporaryDirectory(prefix="catalog-image-verification-") as temporary:
+        temporary_directory = Path(temporary)
+        for name in sorted(listed_names):
+            destination = temporary_directory / name
+            runner.run(
+                _download_command(provider, account, location, name, destination),
+                environment=azure_environment(),
+                timeout=600,
+            )
+            if not destination.is_file():
+                raise VerificationError(f"target image download is absent: {name}")
+            content = destination.read_bytes()
+            sha256 = hashlib.sha256(content).hexdigest()
+            size = len(content)
+            digest.update(f"{name}\t{size}\t{sha256}\n".encode())
+            total_bytes += size
     verification = {
-        "imageCount": len(parsed),
+        "imageCount": len(listed_names),
         "imageBytes": total_bytes,
         "imageSetSha256": digest.hexdigest(),
         "seedManifestVersion": manifest["schemaVersion"],
@@ -143,6 +187,56 @@ def verify_target_images(
     if verification != expected:
         raise VerificationError("image target differs from the canonical manifest")
     return verification
+
+
+def _upload_command(
+    provider: str,
+    account: str,
+    location: str,
+    member: Path,
+    sha256: str,
+) -> list[str]:
+    """Build one immutable target-byte upload command."""
+    if provider == "azure-blob":
+        return [
+            "az",
+            "storage",
+            "blob",
+            "upload",
+            "--auth-mode",
+            "login",
+            "--account-name",
+            account,
+            "--container-name",
+            location,
+            "--name",
+            member.name,
+            "--file",
+            str(member),
+            "--overwrite",
+            "false",
+            "--metadata",
+            f"sha256={sha256}",
+        ]
+    return [
+        "az",
+        "storage",
+        "file",
+        "upload",
+        "--auth-mode",
+        "login",
+        "--backup-intent",
+        "--account-name",
+        account,
+        "--share-name",
+        location,
+        "--path",
+        member.name,
+        "--source",
+        str(member),
+        "--metadata",
+        f"sha256={sha256}",
+    ]
 
 
 def copy_images(
@@ -161,46 +255,7 @@ def copy_images(
     provider = target_images["provider"]
     for member in members:
         sha256 = hashlib.sha256(member.read_bytes()).hexdigest()
-        if provider == "azure-blob":
-            argv = [
-                "az",
-                "storage",
-                "blob",
-                "upload",
-                "--auth-mode",
-                "login",
-                "--account-name",
-                account,
-                "--container-name",
-                location,
-                "--name",
-                member.name,
-                "--file",
-                str(member),
-                "--overwrite",
-                "false",
-                "--metadata",
-                f"sha256={sha256}",
-            ]
-        else:
-            argv = [
-                "az",
-                "storage",
-                "file",
-                "upload",
-                "--auth-mode",
-                "login",
-                "--account-name",
-                account,
-                "--share-name",
-                location,
-                "--path",
-                member.name,
-                "--source",
-                str(member),
-                "--metadata",
-                f"sha256={sha256}",
-            ]
+        argv = _upload_command(provider, account, location, member, sha256)
         runner.run(argv, environment=azure_environment(), timeout=600)
     actual = verify_target_images(runner, target_images)
     if actual != expected:

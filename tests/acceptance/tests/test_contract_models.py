@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr, ValidationError
 
+from catalog_acceptance import database
 from catalog_acceptance.models.contracts import (
     AcceptanceReport,
     AcceptanceSettings,
     CatalogItem,
     FULL_ACCEPTANCE_CHECKS,
 )
-from catalog_acceptance import database
+from catalog_acceptance.runner import AcceptanceRunner
 
 
 def _full_report() -> dict:
@@ -96,6 +97,88 @@ def test_managed_settings_require_verified_tls(tmp_path: Path) -> None:
             database_target="managed",
             database_ssl_mode="prefer",
         )
+
+
+def test_managed_azure_sql_settings_require_only_an_access_token(
+    tmp_path: Path,
+) -> None:
+    """Entra-only Azure SQL never accepts SQL authentication evidence."""
+    settings = AcceptanceSettings(
+        profile="full",
+        base_url="https://catalog.example.invalid",
+        performance_api_key=SecretStr("not-a-default"),
+        data_directory=tmp_path,
+        database_kind="sqlserver",
+        database_host="example.database.windows.net",
+        database_name="catalog",
+        database_access_token=SecretStr("transient-token"),
+        database_target="managed",
+        database_ssl_mode="require",
+    )
+    assert settings.database_username is None
+    assert settings.database_password is None
+    assert AcceptanceRunner(settings)._database_credentials() == (
+        None,
+        None,
+        "transient-token",
+    )
+
+    with pytest.raises(ValidationError, match="requires SQLCMDACCESS_TOKEN"):
+        AcceptanceSettings(
+            profile="full",
+            base_url="https://catalog.example.invalid",
+            performance_api_key=SecretStr("not-a-default"),
+            data_directory=tmp_path,
+            database_kind="sqlserver",
+            database_host="example.database.windows.net",
+            database_name="catalog",
+            database_target="managed",
+            database_ssl_mode="require",
+        )
+
+    with pytest.raises(ValidationError, match="forbids username and password"):
+        AcceptanceSettings(
+            profile="full",
+            base_url="https://catalog.example.invalid",
+            performance_api_key=SecretStr("not-a-default"),
+            data_directory=tmp_path,
+            database_kind="sqlserver",
+            database_host="example.database.windows.net",
+            database_name="catalog",
+            database_username="catalog",
+            database_password=SecretStr("password"),
+            database_access_token=SecretStr("transient-token"),
+            database_target="managed",
+            database_ssl_mode="require",
+        )
+
+
+def test_managed_azure_sql_connection_uses_token_authentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """sqlcmd receives Entra mode and its token only through the child environment."""
+    monkeypatch.setenv("GITHUB_TOKEN", "unrelated-host-secret")
+    monkeypatch.setenv("SQLCMDPASSWORD", "unrelated-sql-secret")
+    connection, environment = database._connection(
+        "sqlserver",
+        "example.database.windows.net",
+        1433,
+        "catalog",
+        None,
+        None,
+        "require",
+        False,
+        "managed",
+        "transient-token",
+    )
+
+    assert "-G" in connection
+    assert "-U" not in connection
+    assert "-N" in connection
+    assert "-C" not in connection
+    assert environment["SQLCMDACCESS_TOKEN"] == "transient-token"
+    assert "SQLCMDPASSWORD" not in environment
+    assert "GITHUB_TOKEN" not in environment
 
 
 def test_catalog_item_rejects_empty_normalized_category() -> None:
@@ -198,3 +281,34 @@ def test_sqlserver_constraint_query_requires_trusted_enforcement(
     assert database._constraint_rows("sqlserver", [], {}) == (
         "Figures|PK_Figures|PRIMARY KEY|Id|-|-|-|-",
     )
+
+
+def test_complete_database_verification_rejects_unexpected_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A legacy table cannot pass by hiding outside the two column queries."""
+    monkeypatch.setattr(
+        database,
+        "fetch_database_state_with_connection",
+        lambda *args, **kwargs: database.DatabaseState((), ()),
+    )
+    monkeypatch.setattr(
+        database,
+        "_table_names",
+        lambda *args, **kwargs: (
+            "Categories",
+            "Figures",
+            "__EFMigrationsHistory",
+            "LegacyData",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="table inventory"):
+        database.verify_database_connection(
+            kind="sqlserver",
+            connection=[],
+            environment={},
+            target="local",
+            items=[],
+            expected_categories=[],
+        )

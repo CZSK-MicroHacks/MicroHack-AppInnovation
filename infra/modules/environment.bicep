@@ -8,6 +8,9 @@ param postgresqlAuthentication string
 @maxLength(20)
 param teamName string
 param sourceCommit string
+param migrationSourceVirtualNetworkResourceId string
+param migrationSourceVmResourceId string
+param applicationRevisionRole string
 param facilitatorPrincipalName string
 param facilitatorPrincipalObjectId string
 param imageRepository string
@@ -41,8 +44,16 @@ var insightsName = 'appi-${baseName}'
 var databaseName = 'catalog'
 var sqlServerName = take('sql-${baseName}-${suffix}', 63)
 var postgresqlServerName = take('psql-${baseName}-${suffix}', 63)
-var revisionSuffix = take(sourceCommit, 12)
+var revisionSuffix = '${applicationRevisionRole}-${take(sourceCommit, 12)}'
 var revisionName = '${containerAppName}--${revisionSuffix}'
+var virtualNetworkAddressPrefix = isJava ? '172.21.0.0/16' : '172.20.0.0/16'
+var containerAppsSubnetPrefix = isJava ? '172.21.0.0/23' : '172.20.0.0/23'
+var privateEndpointSubnetPrefix = isJava ? '172.21.2.0/24' : '172.20.2.0/24'
+var postgresqlSubnetPrefix = isJava ? '172.21.3.0/24' : '172.20.3.0/24'
+var migrationSourceVirtualNetworkName = last(split(migrationSourceVirtualNetworkResourceId, '/'))
+var sourceToTargetPeeringName = 'to-${virtualNetworkName}'
+var targetToSourcePeeringName = 'to-${migrationSourceVirtualNetworkName}'
+var migrationDnsLinkName = 'migration-source-${take(uniqueString(migrationSourceVirtualNetworkResourceId), 8)}'
 var acrPullRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var blobDataReaderRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
 var blobDataContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
@@ -54,14 +65,15 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   properties: {
     addressSpace: {
       addressPrefixes: [
-        '10.42.0.0/16'
+        virtualNetworkAddressPrefix
       ]
     }
+
     subnets: [
       {
         name: 'container-apps'
         properties: {
-          addressPrefix: '10.42.0.0/23'
+          addressPrefix: containerAppsSubnetPrefix
           delegations: [
             {
               name: 'container-apps'
@@ -75,14 +87,14 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
       {
         name: 'private-endpoints'
         properties: {
-          addressPrefix: '10.42.2.0/24'
+          addressPrefix: privateEndpointSubnetPrefix
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
       {
         name: 'postgresql'
         properties: {
-          addressPrefix: '10.42.3.0/24'
+          addressPrefix: postgresqlSubnetPrefix
           delegations: [
             {
               name: 'postgresql'
@@ -94,6 +106,20 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         }
       }
     ]
+  }
+}
+
+resource targetToSourcePeering 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
+  parent: virtualNetwork
+  name: targetToSourcePeeringName
+  properties: {
+    allowForwardedTraffic: false
+    allowGatewayTransit: false
+    allowVirtualNetworkAccess: true
+    remoteVirtualNetwork: {
+      id: migrationSourceVirtualNetworkResourceId
+    }
+    useRemoteGateways: false
   }
 }
 
@@ -126,6 +152,19 @@ resource storageDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2
     virtualNetwork: {
       id: virtualNetwork.id
     }
+
+  }
+}
+
+resource storageMigrationDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: storagePrivateDnsZone
+  name: migrationDnsLinkName
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: migrationSourceVirtualNetworkResourceId
+    }
   }
 }
 
@@ -143,6 +182,19 @@ resource sqlDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-
     virtualNetwork: {
       id: virtualNetwork.id
     }
+
+  }
+}
+
+resource sqlMigrationDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (!isJava) {
+  parent: sqlPrivateDnsZone
+  name: migrationDnsLinkName
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: migrationSourceVirtualNetworkResourceId
+    }
   }
 }
 
@@ -159,6 +211,19 @@ resource postgresqlDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLink
     registrationEnabled: false
     virtualNetwork: {
       id: virtualNetwork.id
+    }
+
+  }
+}
+
+resource postgresqlMigrationDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (isJava) {
+  parent: postgresqlPrivateDnsZone
+  name: migrationDnsLinkName
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: migrationSourceVirtualNetworkResourceId
     }
   }
 }
@@ -342,26 +407,11 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-10-02-
   name: environmentName
   location: location
   properties: {
-    appInsightsConfiguration: {
-      connectionString: applicationInsights.properties.ConnectionString
-    }
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: workspace.properties.customerId
         sharedKey: workspace.listKeys().primarySharedKey
-      }
-    }
-    openTelemetryConfiguration: {
-      tracesConfiguration: {
-        destinations: [
-          'appInsights'
-        ]
-      }
-      logsConfiguration: {
-        destinations: [
-          'appInsights'
-        ]
       }
     }
     vnetConfiguration: {
@@ -485,8 +535,8 @@ var commonEnvironment = [
     value: sourceCommit
   }
   {
-    name: 'OTEL_EXPORTER_OTLP_ENDPOINT'
-    value: 'http://localhost:4317'
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    secretRef: 'application-insights-connection-string'
   }
   {
     name: 'CONTAINER_APP_REVISION'
@@ -535,6 +585,10 @@ var applicationSecrets = concat([
     name: 'performance-api-key'
     value: performanceApiKey
   }
+  {
+    name: 'application-insights-connection-string'
+    value: applicationInsights.properties.ConnectionString
+  }
 ], isJava && postgresqlAuthentication == 'password-secret' ? [
   {
     name: 'database-application-password'
@@ -555,6 +609,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (isApplicati
     environmentId: containerAppsEnvironment.id
     configuration: {
       activeRevisionsMode: 'Single'
+      maxInactiveRevisions: 10
       ingress: {
         allowInsecure: false
         external: true
@@ -644,8 +699,9 @@ var applicationUrl = isApplication ? 'https://${containerAppName}.${environmentD
 var imageResourceId = isBlob ? blobContainer.id : fileShare.id
 
 output targetOutput object = {
-  schemaVersion: '1.0.0'
+  schemaVersion: '1.2.0'
   deploymentStage: deploymentStage
+  applicationRevisionRole: isApplication ? applicationRevisionRole : null
   sourceCommit: sourceCommit
   stack: stack
   location: location
@@ -655,6 +711,14 @@ output targetOutput object = {
   }
   network: {
     virtualNetworkResourceId: virtualNetwork.id
+    migrationSourceVirtualNetworkResourceId: migrationSourceVirtualNetworkResourceId
+    migrationSourceVmResourceId: migrationSourceVmResourceId
+    migrationSourceToTargetPeeringResourceId: '${migrationSourceVirtualNetworkResourceId}/virtualNetworkPeerings/${sourceToTargetPeeringName}'
+    migrationTargetToSourcePeeringResourceId: targetToSourcePeering.id
+    migrationPrivateDnsZoneLinkResourceIds: [
+      storageMigrationDnsLink.id
+      isJava ? postgresqlMigrationDnsLink!.id : sqlMigrationDnsLink!.id
+    ]
   }
   containerRegistry: {
     resourceId: registry.id
@@ -692,3 +756,5 @@ output targetOutput object = {
     revisionName: revisionName
   } : null
 }
+
+output virtualNetworkResourceId string = virtualNetwork.id

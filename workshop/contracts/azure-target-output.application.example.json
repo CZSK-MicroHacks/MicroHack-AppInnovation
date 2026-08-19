@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "deploymentStage": "application",
   "applicationRevisionRole": "release",
   "sourceCommit": "0000000000000000000000000000000000000000",
@@ -16,7 +16,7 @@
     "migrationSourceToTargetPeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/virtualNetworkPeerings/to-vnet-mh-java-example",
     "migrationTargetToSourcePeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-java-example/virtualNetworkPeerings/to-vnet-mh-source-example",
     "migrationPrivateDnsZoneLinkResourceIds": [
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/privateDnsZones/privatelink.postgres.database.azure.com/virtualNetworkLinks/vnet-mh-source-example",
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/privateDnsZones/private.postgres.database.azure.com/virtualNetworkLinks/vnet-mh-source-example",
       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.Network/privateDnsZones/privatelink.file.core.windows.net/virtualNetworkLinks/vnet-mh-source-example"
     ]
   },
