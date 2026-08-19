@@ -22,9 +22,9 @@ The target dependencies and images are pinned in
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$SourceCommit = (git rev-parse HEAD).Trim()
-if ($SourceCommit -notmatch '^[0-9a-f]{40}$') {
-  throw 'Source commit must be an exact lowercase 40-hex SHA.'
+$StartingCommit = (git rev-parse HEAD).Trim()
+if ($StartingCommit -cnotmatch '^[0-9a-f]{40}$') {
+  throw 'Starting commit must be an exact lowercase 40-hex SHA.'
 }
 if (git status --porcelain) {
   throw 'Begin modernization from a clean worktree.'
@@ -115,8 +115,29 @@ database family, selects Azure Files, writes a password, weakens TLS, changes a
 frozen contract, introduces an unpinned dependency, replaces immutable images,
 skips tests, or cannot map to a supported task.
 
-Create `evidence/runtime-test-report.json` for the Surefire XML under
-`java/target/surefire-reports/` by following
+After all modernization tasks are accepted, commit the complete reviewed delta
+and recapture its identity. Do not use `$StartingCommit` for any build,
+migration, deployment, or evidence:
+
+```powershell
+New-Item -ItemType Directory -Force evidence\runtime-tests | Out-Null
+Copy-Item java\target\surefire-reports\*.xml evidence\runtime-tests\
+Remove-Item -Recurse -Force java\target
+git add -- java evidence\assessment.md evidence\modernization-plan.md `
+  evidence\task-results.json evidence\build-test-cve-summary.md `
+  evidence\runtime-tests
+git commit -m 'Accept Java Copilot modernization tasks'
+if (git status --porcelain) {
+  throw 'Accepted modernization changes must be committed and the worktree clean.'
+}
+$SourceCommit = (git rev-parse HEAD).Trim()
+if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+  throw 'Final source commit must be an exact lowercase full 40-hex SHA.'
+}
+```
+
+Create `evidence/runtime-test-report.json` for the preserved Surefire XML under
+`evidence/runtime-tests/` by following
 `workshop/contracts/runtime-test-evidence.schema.json`. It must bind all
 fourteen exact frozen test identities to `$SourceCommit`.
 
@@ -166,7 +187,9 @@ uv --no-config run catalog-migrate postgresql export `
   --source-username 'catalog' `
   --target-output $TargetOutput `
   --artifact $Artifact
+$ExportExit = $LASTEXITCODE
 Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD
+if ($ExportExit -ne 0) { exit $ExportExit }
 
 $env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD = '<target-admin-password>'
 if ($Target.database.authentication -eq 'password-secret') {
@@ -181,7 +204,11 @@ uv --no-config run catalog-migrate postgresql import `
   --target-resource-id $DatabaseResourceId `
   --confirm-target-resource-id $DatabaseResourceId `
   --execute
+$ImportExit = $LASTEXITCODE
 Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD
+Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+  -ErrorAction SilentlyContinue
+if ($ImportExit -ne 0) { exit $ImportExit }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory (Resolve-Path ..\..\data\images) `
@@ -189,21 +216,35 @@ uv --no-config run catalog-migrate images copy `
   --target-resource-id $ImageResourceId `
   --confirm-target-resource-id $ImageResourceId `
   --execute
+$ImageCopyExit = $LASTEXITCODE
+if ($ImageCopyExit -ne 0) { exit $ImageCopyExit }
 
+if ($Target.database.authentication -eq 'password-secret') {
+  $env:MIGRATION_TARGET_APPLICATION_PASSWORD = '<target-app-password>'
+} else {
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
 uv --no-config run catalog-migrate verify `
   --stack java-postgresql `
   --source-commit $SourceCommit `
   --database-artifact $Artifact `
   --target-output $TargetOutput `
   --output (Join-Path (Resolve-Path ..\..).Path 'evidence\migration-report.json')
+$VerifyExit = $LASTEXITCODE
+Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+  -ErrorAction SilentlyContinue
+if ($VerifyExit -ne 0) { exit $VerifyExit }
 Pop-Location
 ```
 
 For managed-identity mode, `catalog-migrate postgresql import` requires the
 isolated `$HOME/.azure-365` facilitator identity, a transient `oss-rdbms`
 token, and no `MIGRATION_TARGET_APPLICATION_PASSWORD`. For password-secret mode
-that application password is required. Never attribute export, restore,
-principal creation, verification, or schema/data cutover to the extension.
+that application password is scoped separately to import and verification. It
+is cleared immediately after each command, so image copy and handoff receive no
+migration secret. Never attribute export, restore, principal creation,
+verification, or schema/data cutover to the extension.
 
 ## 6. Deploy baseline and release
 
@@ -242,6 +283,17 @@ release-role application-stage output and verify the retained rollback:
 ```powershell
 $ReleaseTarget = Get-Content evidence\azure-target-output.json -Raw |
   ConvertFrom-Json
+$ReleaseRevision = $ReleaseTarget.application.revisionName
+if ($ReleaseTarget.deploymentStage -ne 'application' -or
+    $ReleaseTarget.applicationRevisionRole -ne 'release' -or
+    $ReleaseTarget.sourceCommit -ne $SourceCommit -or
+    $ReleaseTarget.containerImage.digest -ne $ImageDigest -or
+    $ReleaseRevision -ne (
+      '{0}--release-{1}' -f $ReleaseTarget.application.containerAppName,
+      $SourceCommit.Substring(0, 12)
+    )) {
+  throw 'Release output does not bind the final commit, digest, and revision.'
+}
 $RollbackRevision = '{0}--baseline-{1}' -f `
   $ReleaseTarget.application.containerAppName, $SourceCommit.Substring(0, 12)
 az containerapp revision show `
@@ -269,12 +321,18 @@ $env:CATALOG_DATABASE_USERNAME = '<acceptance-verifier>'
 $env:CATALOG_DATABASE_PASSWORD = '<acceptance-verifier-password>'
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
+$env:PERFTEST_API_KEY = '<runtime-performance-api-key>'
 uv --no-config run python -m catalog_acceptance `
   --profile full `
   --base-url $ReleaseTarget.application.url `
-  --performance-api-key '<runtime-performance-api-key>' `
+  --source-commit $SourceCommit `
+  --image-digest $ImageDigest `
+  --revision-name $ReleaseRevision `
   --output ..\..\evidence\acceptance-report.json
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$AcceptanceExit = $LASTEXITCODE
+Remove-Item Env:PERFTEST_API_KEY
+Remove-Item Env:CATALOG_DATABASE_PASSWORD
+if ($AcceptanceExit -ne 0) { exit $AcceptanceExit }
 Pop-Location
 ```
 
@@ -324,6 +382,7 @@ Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
 Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
   -ErrorAction SilentlyContinue
 Remove-Item Env:CATALOG_DATABASE_PASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force java\target -ErrorAction SilentlyContinue
 Remove-Item -Force $Artifact -ErrorAction SilentlyContinue
 git status --short

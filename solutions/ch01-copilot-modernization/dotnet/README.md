@@ -20,9 +20,9 @@ The target packages and images are pinned in `workshop/toolchain.lock.json`:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$SourceCommit = (git rev-parse HEAD).Trim()
-if ($SourceCommit -notmatch '^[0-9a-f]{40}$') {
-  throw 'Source commit must be an exact lowercase 40-hex SHA.'
+$StartingCommit = (git rev-parse HEAD).Trim()
+if ($StartingCommit -cnotmatch '^[0-9a-f]{40}$') {
+  throw 'Starting commit must be an exact lowercase 40-hex SHA.'
 }
 if (git status --porcelain) {
   throw 'Begin modernization from a clean worktree.'
@@ -108,9 +108,27 @@ to another database family, adds SQL credentials to source, chooses Azure
 Files, weakens TLS, changes a frozen contract, replaces immutable image
 references, skips tests, or reports an unsupported transformation.
 
+After all modernization tasks are accepted, commit the complete reviewed delta
+and recapture its identity. Do not use `$StartingCommit` for any build,
+migration, deployment, or evidence:
+
+```powershell
+git add -- dotnet evidence\assessment.md evidence\modernization-plan.md `
+  evidence\task-results.json evidence\build-test-cve-summary.md
+git commit -m 'Accept .NET Copilot modernization tasks'
+if (git status --porcelain) {
+  throw 'Accepted modernization changes must be committed and the worktree clean.'
+}
+$SourceCommit = (git rev-parse HEAD).Trim()
+if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+  throw 'Final source commit must be an exact lowercase full 40-hex SHA.'
+}
+```
+
 Create `evidence/runtime-test-report.json` for the native TRX by following
 `workshop/contracts/runtime-test-evidence.schema.json`. It must reference the
-TRX containing all fourteen exact frozen test identities.
+TRX containing all fourteen exact frozen test identities and bind
+`sourceCommit` to `$SourceCommit`.
 
 ## 4. Build the immutable container
 
@@ -158,7 +176,9 @@ uv --no-config run catalog-migrate sql export `
   --source-username 'catalog' `
   --target-output $TargetOutput `
   --artifact $Artifact
+$ExportExit = $LASTEXITCODE
 Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD
+if ($ExportExit -ne 0) { exit $ExportExit }
 
 uv --no-config run catalog-migrate sql import `
   --artifact $Artifact `
@@ -166,6 +186,8 @@ uv --no-config run catalog-migrate sql import `
   --target-resource-id $DatabaseResourceId `
   --confirm-target-resource-id $DatabaseResourceId `
   --execute
+$ImportExit = $LASTEXITCODE
+if ($ImportExit -ne 0) { exit $ImportExit }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory (Resolve-Path ..\..\data\images) `
@@ -173,6 +195,8 @@ uv --no-config run catalog-migrate images copy `
   --target-resource-id $ImageResourceId `
   --confirm-target-resource-id $ImageResourceId `
   --execute
+$ImageCopyExit = $LASTEXITCODE
+if ($ImageCopyExit -ne 0) { exit $ImageCopyExit }
 
 uv --no-config run catalog-migrate verify `
   --stack dotnet-sqlserver `
@@ -180,6 +204,8 @@ uv --no-config run catalog-migrate verify `
   --database-artifact $Artifact `
   --target-output $TargetOutput `
   --output (Join-Path (Resolve-Path ..\..).Path 'evidence\migration-report.json')
+$VerifyExit = $LASTEXITCODE
+if ($VerifyExit -ne 0) { exit $VerifyExit }
 Pop-Location
 ```
 
@@ -227,6 +253,17 @@ with the frozen query:
 ```powershell
 $ReleaseTarget = Get-Content evidence\azure-target-output.json -Raw |
   ConvertFrom-Json
+$ReleaseRevision = $ReleaseTarget.application.revisionName
+if ($ReleaseTarget.deploymentStage -ne 'application' -or
+    $ReleaseTarget.applicationRevisionRole -ne 'release' -or
+    $ReleaseTarget.sourceCommit -ne $SourceCommit -or
+    $ReleaseTarget.containerImage.digest -ne $ImageDigest -or
+    $ReleaseRevision -ne (
+      '{0}--release-{1}' -f $ReleaseTarget.application.containerAppName,
+      $SourceCommit.Substring(0, 12)
+    )) {
+  throw 'Release output does not bind the final commit, digest, and revision.'
+}
 $RollbackRevision = '{0}--baseline-{1}' -f `
   $ReleaseTarget.application.containerAppName, $SourceCommit.Substring(0, 12)
 az containerapp revision show `
@@ -259,13 +296,17 @@ $env:CATALOG_DATABASE_HOST = $ReleaseTarget.database.server
 $env:CATALOG_DATABASE_NAME = $ReleaseTarget.database.database
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
+$env:PERFTEST_API_KEY = '<runtime-performance-api-key>'
 uv --no-config run python -m catalog_acceptance `
   --profile full `
   --base-url $ReleaseTarget.application.url `
-  --performance-api-key '<runtime-performance-api-key>' `
+  --source-commit $SourceCommit `
+  --image-digest $ImageDigest `
+  --revision-name $ReleaseRevision `
   --output ..\..\evidence\acceptance-report.json
 $AcceptanceExit = $LASTEXITCODE
 Remove-Item Env:SQLCMDACCESS_TOKEN
+Remove-Item Env:PERFTEST_API_KEY
 if ($AcceptanceExit -ne 0) { exit $AcceptanceExit }
 Pop-Location
 ```
@@ -315,6 +356,7 @@ Remove only local transients after evidence is secured:
 ```powershell
 Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:SQLCMDACCESS_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force dotnet\src\LegoCatalog.App\bin, `
   dotnet\src\LegoCatalog.App\obj, dotnet\tests\LegoCatalog.App.Tests\bin, `
   dotnet\tests\LegoCatalog.App.Tests\obj -ErrorAction SilentlyContinue

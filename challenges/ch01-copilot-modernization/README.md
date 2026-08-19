@@ -44,8 +44,12 @@ switch to a mutable source ref, or continue with an unsigned VSIX.
 
 ## Working rules
 
-1. Record `git rev-parse HEAD` as the exact lowercase 40-hex source commit.
-   Work on a branch and keep secrets outside Git.
+1. Record the starting revision for traceability, work on a branch, and keep
+   secrets outside Git. After all accepted modernization tasks, commit the
+   reviewed changes, require a clean worktree, and recalculate the exact
+   lowercase full 40-hex source commit. That final commit, not the
+   pre-modernization revision, binds build, tag, migration, acceptance,
+   telemetry, and handoff evidence.
 2. Use the IDE experience in guided mode. Assessment, plan, and task output is
    evidence, never proof that runtime behavior, deployment, or cutover works.
 3. Review and edit every generated plan before execution. A human owns the
@@ -129,11 +133,15 @@ The shared handoff bundle is also required:
 
 Finish only when:
 
-1. every approved task has a reviewed diff and passing stack validation;
+1. every approved task has a reviewed diff and passing stack validation, all
+   accepted changes are committed, and the clean final commit is recaptured;
 2. native runtime evidence contains all fourteen frozen tests;
 3. the image commit tag resolves to the exact deployed digest and the retained
    baseline revision is healthy, inactive, distinct, and uses that same digest;
-4. full acceptance passes against the managed database and all 198 Blob images;
+4. full acceptance passes against the managed database and all 198 Blob images,
+   with its subject bound to the final source commit, immutable image digest,
+   and release revision; `PERFTEST_API_KEY` is supplied only through the
+   environment and cleared afterward;
 5. telemetry evidence has nonempty resources, traces, metrics, and logs;
 6. the rollback runbook is executable and repository-contained; and
 7. native `catalog-migrate render-handoff --path copilot-modernization
