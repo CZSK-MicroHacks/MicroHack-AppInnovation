@@ -59,7 +59,8 @@ Use these checkpoints in order:
 3. **Diff-review checkpoints**: ask Copilot for one slice only. A human reviews the
    schema, security, dependencies, configuration, error handling, and every
    generated diff before accepting it. Record the review in `review-checklist.md`,
-   then run the relevant native tests and shared acceptance tests.
+   then run the relevant native tests, static contract tests, and a shared live
+   acceptance profile against the running application. Commit every accepted slice.
 4. **Container checkpoint**: build the existing stack Dockerfile from the repository
    root. Prove non-root execution, port `8080`, `/healthz`, `/readyz`, external
    configuration, and exactly one application container.
@@ -70,11 +71,18 @@ Use these checkpoints in order:
    `infra/main.bicep` stages. Resolve the source-commit tag through the registry
    evidence command and deploy `<loginServer>/<repository>@<digest>`, never a tag.
 7. **Handoff checkpoint**: complete native runtime evidence, full acceptance,
-   telemetry evidence, `decision-log.md`, and `rollback-runbook.md`. Render and
-   validate modernization handoff 1.3.0.
+   telemetry evidence, `decision-log.md`, and `rollback-runbook.md`. The decision
+   log must contain an explicit **Architecture delta** section listing every changed
+   boundary and confirming the preserved database, one-container, Blob, readiness,
+   configuration, migration, and P4 infrastructure boundaries. Render and validate
+   modernization handoff 1.3.0.
 
-Run tests after every accepted slice. A failing or skipped required test is not a
-checkpoint.
+Run tests after every accepted slice. Static vocabulary or contract-asset tests do
+not substitute for live behavioral acceptance. A failing or skipped required test,
+an uncommitted accepted slice, or a dirty implementation tree is not a checkpoint.
+Before deriving the lowercase full 40-hex source commit used by the image tag,
+revision, migration report, and handoff, fail unless the implementation tree is
+clean; derive it only from `git rev-parse HEAD`.
 
 ## Suggested prompts
 
@@ -106,6 +114,8 @@ last passing checkpoint when any of these occurs:
   handling, undocumented configuration, or an unreviewed dependency;
 - native or shared acceptance behavior changes, required telemetry is absent, or the
   test failure cannot be explained within the approved slice.
+- the accepted implementation is uncommitted or the tree is dirty when source
+  identity would be derived.
 
 Update `bounded-plan.md` and obtain human approval before continuing.
 

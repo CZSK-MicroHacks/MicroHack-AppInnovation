@@ -100,13 +100,26 @@ dotnet test dotnet/LegoCatalog.sln \
 cd tests/acceptance
 UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
   uv --no-config run pytest -q tests/test_contract_assets.py
+UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
+  uv --no-config run python -m catalog_acceptance \
+  --profile smoke \
+  --base-url "$CATALOG_BASE_URL" \
+  --performance-api-key "$PERFTEST_API_KEY" \
+  --output "../../.workshop-tmp/dotnet-<slice-name>-acceptance.json"
 cd ../..
 git diff --check
+git add -- dotnet
+git diff --cached --check
+git commit -m "Complete bounded .NET rewrite slice <slice-name>"
 ```
 
 Record the human decision and command result in
-`evidence/review-checklist.md`. Reject the diff rather than patching around a
-contract failure.
+`evidence/review-checklist.md`. The application must be running for the shared live
+smoke profile. Run the full profile instead when a slice changes schema, persistence,
+import, or database failure behavior. Static contract tests and documentation
+vocabulary never substitute for live behavior. Reject the diff rather than patching
+around a contract failure, and do not call a slice accepted until its passing diff is
+committed.
 
 **Stop and replan** if a slice changes the SQL schema without explicit review,
 weakens canonical image-key checks, adds credentials to source, adds a broad catch,
@@ -114,114 +127,244 @@ changes one-container topology, requires a frozen-interface edit, introduces an
 unreviewed package, or fails characterization/acceptance. Return to the last passing
 slice, update `bounded-plan.md`, and obtain approval again.
 
-## 4. Container and immutable registry checkpoint
+## 4. Committed source and container checkpoint
 
-Build the checked-in Dockerfile; do not generate a parallel container definition.
+Every accepted rewrite slice must already be committed. Fail before deriving source
+identity if tracked, staged, or untracked implementation bytes remain. The lowercase
+full 40-hex commit produced here is the single identity used by the image tag,
+Container Apps revisions, migration report, runtime evidence, and handoff.
 
-**Executable proof**
+**Executable proof (PowerShell)**
 
-```bash
-SOURCE_COMMIT="$(git rev-parse HEAD)"
-test "$(printf '%s' "$SOURCE_COMMIT" | grep -E '^[0-9a-f]{40}$')"
-docker buildx build --platform linux/amd64 --load \
-  -f dotnet/Dockerfile \
-  -t "catalog-dotnet:$SOURCE_COMMIT" .
-docker image inspect "catalog-dotnet:$SOURCE_COMMIT" \
+```powershell
+$Dirty = git status --porcelain -- dotnet data
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
+    throw 'Commit every accepted slice and clean the implementation tree first.'
+}
+
+$SourceCommitLines = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$SourceCommit = ($SourceCommitLines -join '').Trim()
+if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'SOURCE_COMMIT must be a lowercase full 40-hex commit.'
+}
+
+docker buildx build --platform linux/amd64 --load `
+  -f dotnet/Dockerfile `
+  -t "catalog-dotnet:$SourceCommit" .
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+docker image inspect "catalog-dotnet:$SourceCommit" `
   --format '{{json .Config.User}} {{json .Config.ExposedPorts}}'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 ```
 
-After facilitator-approved authentication, publish the same commit-tagged image to
-the P4 ACR. The tag is used only to locate evidence. Resolve the registry digest
-with the exact frozen command:
-
-```bash
-IMAGE_DIGEST="$(
-  AZURE_CONFIG_DIR="$HOME/.azure-365" az acr manifest show-metadata \
-    --registry "<registryName>" \
-    --name "catalog-dotnet:$SOURCE_COMMIT" \
-    --subscription "<subscriptionId>" \
-    --query digest \
-    --output tsv
-)"
-test "$(printf '%s' "$IMAGE_DIGEST" | grep -E '^sha256:[0-9a-f]{64}$')"
-IMAGE_REFERENCE="<loginServer>/catalog-dotnet@$IMAGE_DIGEST"
-printf '%s\n' "$IMAGE_REFERENCE"
-```
-
-Only `IMAGE_REFERENCE`, which is immutable, may reach the application deployment.
-Do not deploy `latest`, the commit tag, or any other mutable reference.
-
-## 5. P4 Bicep and native data transfer checkpoint
+## 5. P4 bootstrap, native migration, and ordered cutover
 
 Use protected parameter documents outside the repository. They supply every required
 value from `infra/main.bicep`, including secure values, source VM/VNet resource IDs,
-facilitator identity, lowercase source commit, and the fixed
-`dotnet-sqlserver`/`azure-blob` selection. The following commands are participant
-deployment steps; this reference does not claim they were run.
+facilitator identity, and the fixed `dotnet-sqlserver`/`azure-blob` selection. The
+following participant commands are PowerShell-native; this reference does not claim
+they were run.
 
-**Executable proof**
+### Bootstrap and immutable ACR publication
 
-```bash
-AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub create \
-  --name "p5-dotnet-bootstrap-$SOURCE_COMMIT" \
-  --location swedencentral \
-  --template-file infra/main.bicep \
-  --parameters @/protected/p5-dotnet-bootstrap.json \
-  --query properties.outputs.targetOutput.value \
-  --output json > evidence/azure-target-output.json
+Run bootstrap from the committed repository root with the isolated facilitator
+profile. Every state-changing command has an immediate exit guard.
 
-TARGET_DATABASE_RESOURCE_ID="$(
-  python -c 'import json; print(json.load(open("evidence/azure-target-output.json"))["database"]["resourceId"])'
-)"
-TARGET_IMAGE_RESOURCE_ID="$(
-  python -c 'import json; print(json.load(open("evidence/azure-target-output.json"))["images"]["resourceId"])'
-)"
+```powershell
+$env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
+New-Item -ItemType Directory -Force evidence | Out-Null
+$BootstrapLines = az deployment sub create `
+  --name "p5-dotnet-bootstrap-$($SourceCommit.Substring(0, 12))" `
+  --location swedencentral `
+  --template-file infra/main.bicep `
+  --parameters "@C:\protected\p5-dotnet-bootstrap.json" `
+  --parameters deploymentStage=bootstrap stack=dotnet-sqlserver `
+    imageProvider=azure-blob sourceCommit=$SourceCommit `
+  --query properties.outputs.targetOutput.value `
+  --output json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$BootstrapOutput = $BootstrapLines -join [Environment]::NewLine
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD 'evidence\azure-target-output.json'),
+  $BootstrapOutput,
+  [System.Text.UTF8Encoding]::new($false)
+)
+
+$Bootstrap = $BootstrapOutput | ConvertFrom-Json
+$SubscriptionId = ($Bootstrap.containerRegistry.resourceId -split '/')[2]
+$RegistryName = ($Bootstrap.containerRegistry.resourceId -split '/')[-1]
+$LoginServer = $Bootstrap.containerRegistry.loginServer
+
+az acr login --name $RegistryName --subscription $SubscriptionId
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$PublishedTag = "$LoginServer/catalog-dotnet:$SourceCommit"
+docker tag "catalog-dotnet:$SourceCommit" $PublishedTag
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+docker push $PublishedTag
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$ImageDigestLines = az acr manifest show-metadata `
+  --registry $RegistryName `
+  --name "catalog-dotnet:$SourceCommit" `
+  --subscription $SubscriptionId `
+  --query digest `
+  --output tsv
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$ImageDigest = ($ImageDigestLines -join '').Trim()
+if ($ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') {
+    throw 'ACR did not return an immutable sha256 manifest digest.'
+}
+$ImageReference = "$LoginServer/catalog-dotnet@$ImageDigest"
 ```
 
-Run migration on the exact source VM declared by the bootstrap target output. Keep
-passwords only in the command-specific `MIGRATION_*` environment variables.
+The commit tag locates registry evidence only. Application deployments receive
+`ImageDigest` and therefore resolve to `ImageReference`; never deploy `latest`, the
+commit tag, or another mutable reference.
 
-```bash
-cd tests/acceptance
-uv --no-config run catalog-migrate sql export \
-  --source-server "<source-sql-server>" \
-  --source-database "<source-database>" \
-  --source-username "<source-user>" \
-  --target-output ../../evidence/azure-target-output.json \
-  --artifact /protected/catalog.bacpac
+### Windows P3 source-VM migration
 
-uv --no-config run catalog-migrate sql import \
-  --artifact /protected/catalog.bacpac \
-  --target-output ../../evidence/azure-target-output.json \
-  --target-resource-id "$TARGET_DATABASE_RESOURCE_ID" \
-  --confirm-target-resource-id "$TARGET_DATABASE_RESOURCE_ID" \
+On the exact Windows P3 source VM declared in
+`target-output.network.migrationSourceVmResourceId`, first verify the checkout and
+derive source identity. Only after that clean check, copy the bootstrap target output
+from `C:\protected\azure-target-output.json` into the checkout. Run all native
+transfer there, not from Linux, macOS, Cloud Shell, or the application. Supply
+`MIGRATION_SOURCE_DATABASE_PASSWORD` in the current PowerShell process only.
+
+```powershell
+$Dirty = git status --porcelain -- dotnet data
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
+    throw 'The Windows source-VM checkout must match committed SOURCE_COMMIT bytes.'
+}
+$SourceCommitLines = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$SourceCommit = ($SourceCommitLines -join '').Trim()
+if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'SOURCE_COMMIT must be a lowercase full 40-hex commit.'
+}
+
+$RepositoryRoot = (Resolve-Path .).Path
+$TargetOutput = Join-Path $RepositoryRoot 'evidence\azure-target-output.json'
+$MigrationReport = Join-Path $RepositoryRoot 'evidence\migration-report.json'
+$ImageDirectory = Join-Path $RepositoryRoot 'data\images'
+$DatabaseArtifact = 'C:\protected\catalog.bacpac'
+New-Item -ItemType Directory -Force (Join-Path $RepositoryRoot 'evidence') | Out-Null
+Copy-Item 'C:\protected\azure-target-output.json' $TargetOutput
+$Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
+$TargetDatabaseResourceId = $Target.database.resourceId
+$TargetImageResourceId = $Target.images.resourceId
+
+Push-Location tests\acceptance
+uv --no-config run catalog-migrate sql export `
+  --source-server '<source-sql-server>' `
+  --source-database '<source-database>' `
+  --source-username '<source-user>' `
+  --target-output $TargetOutput `
+  --artifact $DatabaseArtifact
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+
+uv --no-config run catalog-migrate sql import `
+  --artifact $DatabaseArtifact `
+  --target-output $TargetOutput `
+  --target-resource-id $TargetDatabaseResourceId `
+  --confirm-target-resource-id $TargetDatabaseResourceId `
   --execute
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-uv --no-config run catalog-migrate images copy \
-  --source-directory ../../data/images \
-  --target-output ../../evidence/azure-target-output.json \
-  --target-resource-id "$TARGET_IMAGE_RESOURCE_ID" \
-  --confirm-target-resource-id "$TARGET_IMAGE_RESOURCE_ID" \
+uv --no-config run catalog-migrate images copy `
+  --source-directory $ImageDirectory `
+  --target-output $TargetOutput `
+  --target-resource-id $TargetImageResourceId `
+  --confirm-target-resource-id $TargetImageResourceId `
   --execute
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-uv --no-config run catalog-migrate verify \
-  --stack dotnet-sqlserver \
-  --source-commit "$SOURCE_COMMIT" \
-  --database-artifact /protected/catalog.bacpac \
-  --target-output ../../evidence/azure-target-output.json \
-  --output ../../evidence/migration-report.json
-cd ../..
+uv --no-config run catalog-migrate verify `
+  --stack dotnet-sqlserver `
+  --source-commit $SourceCommit `
+  --database-artifact $DatabaseArtifact `
+  --target-output $TargetOutput `
+  --output $MigrationReport
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+Pop-Location
 ```
 
 The CLI is the only data-transfer path. It must refuse a nonempty target, verify Blob
 bytes and Azure SQL contents, remove the imported legacy privileged principal, and
 leave the source and artifact available for rollback.
 
-Deploy `baseline` and then `release` with the same `IMAGE_DIGEST` through
-`infra/main.bicep`. Keep the healthy baseline revision inactive and retained. Capture
-the release deployment's `targetOutput` as
-`evidence/azure-target-output.json`; it must describe one application container and
-the digest reference, not a tag.
+### Baseline then release
+
+Return the verified migration evidence to the facilitator checkout. Deploy baseline
+first and release second with the same digest. The release deployment output replaces
+the bootstrap document before handoff. The retained baseline is verified only after
+release has made it inactive.
+
+```powershell
+az deployment sub create `
+  --name "p5-dotnet-baseline-$($SourceCommit.Substring(0, 12))" `
+  --location swedencentral `
+  --template-file infra/main.bicep `
+  --parameters "@C:\protected\p5-dotnet-application.json" `
+  --parameters deploymentStage=application applicationRevisionRole=baseline `
+    stack=dotnet-sqlserver imageProvider=azure-blob `
+    sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --output none
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$ReleaseLines = az deployment sub create `
+  --name "p5-dotnet-release-$($SourceCommit.Substring(0, 12))" `
+  --location swedencentral `
+  --template-file infra/main.bicep `
+  --parameters "@C:\protected\p5-dotnet-application.json" `
+  --parameters deploymentStage=application applicationRevisionRole=release `
+    stack=dotnet-sqlserver imageProvider=azure-blob `
+    sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --query properties.outputs.targetOutput.value `
+  --output json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$ReleaseOutput = $ReleaseLines -join [Environment]::NewLine
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD 'evidence\azure-target-output.json'),
+  $ReleaseOutput,
+  [System.Text.UTF8Encoding]::new($false)
+)
+
+$Release = $ReleaseOutput | ConvertFrom-Json
+$ContainerAppName = $Release.application.containerAppName
+$ResourceGroup = $Release.application.resourceGroup
+$BaselineRevision = "$ContainerAppName--baseline-$($SourceCommit.Substring(0, 12))"
+$BaselineLines = az containerapp revision show `
+  --resource-group $ResourceGroup `
+  --name $ContainerAppName `
+  --revision $BaselineRevision `
+  --subscription $SubscriptionId `
+  --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$BaselineJson = $BaselineLines -join [Environment]::NewLine
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD 'evidence\baseline-revision.json'),
+  $BaselineJson,
+  [System.Text.UTF8Encoding]::new($false)
+)
+$Baseline = $BaselineJson | ConvertFrom-Json
+if (
+  $Baseline.active -ne $false -or
+  $Baseline.health -ne 'Healthy' -or
+  @($Baseline.images).Count -ne 1 -or
+  @($Baseline.images)[0] -ne $ImageReference
+) {
+    throw 'The retained baseline revision failed immutable rollback verification.'
+}
+```
+
+At this checkpoint, `evidence\azure-target-output.json` is the application-stage
+release output and describes exactly one application container at
+`$ImageReference`.
 
 ## 6. Full evidence and handoff checkpoint
 
@@ -235,7 +378,10 @@ query results into `evidence/telemetry-report.json`; never synthesize telemetry.
 
 Complete:
 
-- `evidence/decision-log.md` with accepted/rejected design choices;
+- `evidence/decision-log.md` with accepted/rejected design choices and an explicit
+  `## Architecture delta` section listing changed boundaries and confirming Azure
+  SQL, one application container, Blob images, ACA readiness, external
+  configuration, native `catalog-migrate`, and P4 Bicep remain preserved;
 - `evidence/rollback-runbook.md` with prerequisites, exact retained baseline
   revision, traffic restoration, database/artifact boundaries, verification, and
   escalation;
@@ -246,24 +392,27 @@ The frozen protocol is
 
 **Executable proof**
 
-```bash
-cd tests/acceptance
-uv --no-config run catalog-migrate render-handoff \
-  --target-output ../../evidence/azure-target-output.json \
-  --migration-report ../../evidence/migration-report.json \
-  --acceptance-report ../../evidence/acceptance-report.json \
-  --telemetry-report ../../evidence/telemetry-report.json \
-  --runtime-test-report ../../evidence/runtime-test-report.json \
-  --path copilot-rewrite \
-  --rollback-revision "<containerAppName>--baseline-${SOURCE_COMMIT:0:12}" \
-  --rollback-runbook ../../evidence/rollback-runbook.md \
-  --output ../../evidence/modernization-contract.json
+```powershell
+$RepositoryRoot = (Resolve-Path .).Path
+Push-Location tests\acceptance
+uv --no-config run catalog-migrate render-handoff `
+  --target-output (Join-Path $RepositoryRoot 'evidence\azure-target-output.json') `
+  --migration-report (Join-Path $RepositoryRoot 'evidence\migration-report.json') `
+  --acceptance-report (Join-Path $RepositoryRoot 'evidence\acceptance-report.json') `
+  --telemetry-report (Join-Path $RepositoryRoot 'evidence\telemetry-report.json') `
+  --runtime-test-report (Join-Path $RepositoryRoot 'evidence\runtime-test-report.json') `
+  --path copilot-rewrite `
+  --rollback-revision $BaselineRevision `
+  --rollback-runbook (Join-Path $RepositoryRoot 'evidence\rollback-runbook.md') `
+  --output (Join-Path $RepositoryRoot 'evidence\modernization-contract.json')
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-uv --no-config run python -m catalog_acceptance.handoff_cli \
-  ../../evidence/modernization-contract.json \
-  --contracts ../../workshop/contracts \
-  --repository-root ../..
-cd ../..
+uv --no-config run python -m catalog_acceptance.handoff_cli `
+  (Join-Path $RepositoryRoot 'evidence\modernization-contract.json') `
+  --contracts (Join-Path $RepositoryRoot 'workshop\contracts') `
+  --repository-root $RepositoryRoot
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+Pop-Location
 ```
 
 **Expected checkpoint**
