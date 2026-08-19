@@ -88,7 +88,8 @@ git diff --check
 git diff --stat
 git diff
 dotnet restore dotnet\LegoCatalog.sln
-dotnet test dotnet\LegoCatalog.sln --logger trx `
+dotnet test dotnet\LegoCatalog.sln `
+  --logger "trx;LogFileName=dotnet-modernization.trx" `
   --results-directory evidence
 ```
 
@@ -114,7 +115,8 @@ migration, deployment, or evidence:
 
 ```powershell
 git add -- dotnet evidence\assessment.md evidence\modernization-plan.md `
-  evidence\task-results.json evidence\build-test-cve-summary.md
+  evidence\task-results.json evidence\build-test-cve-summary.md `
+  evidence\ide-extensions.txt evidence\dotnet-modernization.trx
 git commit -m 'Accept .NET Copilot modernization tasks'
 if (git status --porcelain) {
   throw 'Accepted modernization changes must be committed and the worktree clean.'

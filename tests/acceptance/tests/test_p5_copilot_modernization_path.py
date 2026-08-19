@@ -160,6 +160,8 @@ def test_guides_recapture_the_clean_committed_modernized_source(
     for content in _solution_contents(repo_root).values():
         assert content.count("$SourceCommit = (git rev-parse HEAD).Trim()") == 1
         commit_position = content.index("git commit -m")
+        stage_position = content.index("git add --", 0, commit_position)
+        staged = content[stage_position:commit_position]
         clean_position = content.index(
             "if (git status --porcelain)", commit_position
         )
@@ -170,7 +172,12 @@ def test_guides_recapture_the_clean_committed_modernized_source(
         assert commit_position < clean_position < source_position < build_position
         assert "$SourceCommit -cnotmatch '^[0-9a-f]{40}$'" in content
         assert "Do not use `$StartingCommit`" in content
+        assert "evidence\\ide-extensions.txt" in staged
 
+    dotnet = _solution_contents(repo_root)["copilot-modernization-dotnet"]
+    dotnet_commit = dotnet.index("git commit -m")
+    assert '--logger "trx;LogFileName=dotnet-modernization.trx"' in dotnet
+    assert "evidence\\dotnet-modernization.trx" in dotnet[:dotnet_commit]
     java = _solution_contents(repo_root)["copilot-modernization-java"]
     java_commit = java.index("git commit -m")
     assert java.index(

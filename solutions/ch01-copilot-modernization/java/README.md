@@ -125,7 +125,7 @@ Copy-Item java\target\surefire-reports\*.xml evidence\runtime-tests\
 Remove-Item -Recurse -Force java\target
 git add -- java evidence\assessment.md evidence\modernization-plan.md `
   evidence\task-results.json evidence\build-test-cve-summary.md `
-  evidence\runtime-tests
+  evidence\ide-extensions.txt evidence\runtime-tests
 git commit -m 'Accept Java Copilot modernization tasks'
 if (git status --porcelain) {
   throw 'Accepted modernization changes must be committed and the worktree clean.'
