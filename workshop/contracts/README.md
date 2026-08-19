@@ -8,12 +8,13 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Seed contract: `1.0.0`
 - Behavior contract: `1.1.0`
 - Runtime test evidence: `1.1.0`
-- Modernization handoff: `1.1.0`
+- Modernization handoff: `1.2.0`
 - Acceptance report: `1.0.0`
 - Telemetry evidence: `1.0.0`
-- Toolchain lock: `1.0.0`
-- Shared Azure target output: `1.0.0`
-- Migration report and CLI: `1.0.0`
+- Toolchain lock: `1.1.0`
+- Shared Azure target output: `1.1.0`
+- Migration report and CLI: `1.1.0`
+- Migration CLI error: `1.0.0`
 
 Breaking changes require a schema-version change and coordinator approval. Runtime
 implementations consume these files; they must not copy or reinterpret the rules.
@@ -45,7 +46,7 @@ uv run pytest tests/test_contract_assets.py
 `modernization-contract.schema.json` requires managed-resource IDs, dependency
 authentication modes, immutable image identity, image verification, complete
 OpenTelemetry resource attributes, the repository-relative IaC location, a rollback
-target, the application-stage Azure target output, and linked migration evidence. Azure
+target, the release-role application-stage Azure target output, and linked migration evidence. Azure
 SQL is Entra-only, Blob uses managed identity, and Azure Files uses the Container Apps
 volume-secret boundary. A handoff is valid only when its referenced acceptance report is
 a full passing report, all required runtime failure-state tests pass, and its target
@@ -66,18 +67,22 @@ per-platform container digests, P4 Azure SDK packages, SqlPackage, and digest-pi
 application build/runtime images. Accepted provisioning and container builds consume
 this lock, verify downloads, and use immutable source and image references.
 
-`azure-target-output.schema.json` defines both clean bootstrap output, where application
-and image values are null, and complete application output. It freezes Sweden Central,
-typed same-scope resources, database principals, the ACA default-domain relationship, and
-commit-derived revision identity. `migration-report.schema.json` binds a verified database
-artifact and external image corpus to the same target.
+`azure-target-output.schema.json` defines both clean bootstrap output, where application,
+image, and revision-role values are null, and complete baseline/release application output.
+It freezes Sweden Central, typed target resources, the exact P3 source VM/VNet migration
+runner, database principals, the ACA default-domain relationship, and role/commit-derived
+revision identity. `migration-report.schema.json` binds a verified database artifact,
+external image corpus, and exact source-VM/private-network execution path to the same target.
 `migration-cli-contract.json` freezes the seven `catalog-migrate` command names, exact
 arguments, command/engine-specific results, exit codes, mode-specific environment-only
-secret rules, target-output-bound workload identity and PostgreSQL principals, explicit
-target confirmation, and refusal to delete resources. PostgreSQL managed-identity bootstrap
-is fixed to the declared facilitator Entra administrator, the required `$HOME/.azure-365`
-Azure CLI context, transient `oss-rdbms` token authentication, and principal creation on the
-`postgres` database. Handoff migration mechanism/version values are stack-specific and must
-match the migration report and locked tools.
+secret rules, bootstrap-before-application sequencing, source-VM execution over peered
+private networks, exact database/image verification, target-output-bound workload identity
+and PostgreSQL principals, explicit target confirmation, the baseline-then-release revision
+sequence, a distinct retained rollback revision, typed JSON failures, and refusal to delete
+resources. PostgreSQL managed-identity bootstrap is fixed to
+the declared facilitator Entra administrator, the required `$HOME/.azure-365` Azure CLI
+context, transient `oss-rdbms` token authentication, and principal creation on the `postgres`
+database. Handoff migration mechanism/version values are stack-specific and must match the
+migration report and locked tools.
 
 See `tests/acceptance/README.md` for live application and database verification.

@@ -1,14 +1,16 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "executable": "catalog-migrate",
   "commands": [
     {
       "name": "sql export",
       "mutatesTarget": false,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--source-server",
         "--source-database",
         "--source-username",
+        "--target-output",
         "--artifact"
       ],
       "requiredSecretEnvironment": [
@@ -20,6 +22,7 @@
     {
       "name": "sql import",
       "mutatesTarget": true,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--artifact",
         "--target-output",
@@ -34,11 +37,13 @@
     {
       "name": "postgresql export",
       "mutatesTarget": false,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--source-host",
         "--source-port",
         "--source-database",
         "--source-username",
+        "--target-output",
         "--artifact"
       ],
       "requiredSecretEnvironment": [
@@ -50,6 +55,7 @@
     {
       "name": "postgresql import",
       "mutatesTarget": true,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--artifact",
         "--target-output",
@@ -80,6 +86,7 @@
     {
       "name": "images copy",
       "mutatesTarget": true,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--source-directory",
         "--target-output",
@@ -94,6 +101,7 @@
     {
       "name": "verify",
       "mutatesTarget": false,
+      "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--stack",
         "--source-commit",
@@ -122,12 +130,14 @@
     {
       "name": "render-handoff",
       "mutatesTarget": false,
+      "requiredTargetOutputStage": "application",
       "arguments": [
         "--target-output",
         "--migration-report",
         "--acceptance-report",
         "--telemetry-report",
         "--runtime-test-report",
+        "--rollback-revision",
         "--output"
       ],
       "requiredSecretEnvironment": [],
@@ -135,6 +145,51 @@
       "resultSchema": "modernization-contract.schema.json"
     }
   ],
+  "migrationExecution": {
+    "host": "source-vm",
+    "sourceVmResourceIdSource": "target-output.network.migrationSourceVmResourceId",
+    "sourceVirtualNetworkResourceIdSource": "target-output.network.migrationSourceVirtualNetworkResourceId",
+    "hostIdentityEndpoint": "http://169.254.169.254/metadata/instance/compute/resourceId?api-version=2021-02-01&format=text",
+    "hostIdentityHeader": "Metadata:true",
+    "requireHostIdentityMatch": true,
+    "sourceVmNicCommand": "az vm show --ids <sourceVmResourceId> --subscription <subscriptionId> --query networkProfile.networkInterfaces[].id --output tsv",
+    "sourceNicSubnetCommand": "az network nic show --ids <nicResourceId> --subscription <subscriptionId> --query ipConfigurations[].subnet.id --output tsv",
+    "resourceStateCommand": "az resource show --ids <resourceId> --subscription <subscriptionId> --query properties.provisioningState --output tsv",
+    "peeringStateCommand": "az network vnet peering show --resource-group <resourceGroup> --vnet-name <virtualNetworkName> --name <peeringName> --subscription <subscriptionId> --query {provisioningState:provisioningState,peeringState:peeringState,remoteVirtualNetworkId:remoteVirtualNetwork.id} --output json",
+    "privateDnsLinkStateCommand": "az network private-dns link vnet show --resource-group <resourceGroup> --zone-name <privateDnsZoneName> --name <linkName> --subscription <subscriptionId> --query {provisioningState:provisioningState,virtualNetworkId:virtualNetwork.id,registrationEnabled:registrationEnabled} --output json",
+    "requiredProvisioningState": "Succeeded",
+    "requiredPeeringState": "Connected",
+    "requiredPrivateDnsRegistrationEnabled": false,
+    "requireSourceSubnetOwnership": true,
+    "requireReciprocalPeeringTargets": true,
+    "requirePrivateDnsSourceVnetTargets": true,
+    "requiresBidirectionalVnetPeering": true,
+    "requiresPrivateDnsZoneLinks": true
+  },
+  "releaseVerification": {
+    "azureCliConfigDirectory": "$HOME/.azure-365",
+    "applicationRevisionSequence": [
+      "baseline",
+      "release"
+    ],
+    "sameContainerImageForBaselineAndRelease": true,
+    "handoffTargetOutputRole": "release",
+    "rollbackRevisionRole": "baseline",
+    "containerImageCommand": "az acr manifest show-metadata --registry <registryName> --name <repository>:<tag> --subscription <subscriptionId> --query digest --output tsv",
+    "rollbackRevisionCommand": "az containerapp revision show --resource-group <resourceGroup> --name <containerAppName> --revision <rollbackRevision> --subscription <subscriptionId> --query {active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image} --output json",
+    "requiredRollbackHealthState": "Healthy",
+    "requiredRollbackActive": false,
+    "requiredRollbackContainerCount": 1,
+    "requiredRollbackRevisionTemplate": "<containerAppName>--baseline-<sourceCommitPrefix12>",
+    "rollbackImageReferenceTemplate": "<loginServer>/<repository>@<digest>"
+  },
+  "failureProtocol": {
+    "schema": "migration-error.schema.json",
+    "outputChannel": "stderr",
+    "exactlyOneDocument": true,
+    "tracebackForbidden": true,
+    "secretValuesForbidden": true
+  },
   "postgresqlManagedIdentityBootstrap": {
     "administratorSource": "target-output.database.entraAdministratorPrincipal",
     "administratorPrincipalType": "user",
@@ -181,6 +236,14 @@
     "secretsInEnvironmentOnly": true,
     "tokensInChildProcessEnvironmentOnly": true,
     "rejectUndeclaredSecrets": true,
+    "stripMigrationSecretsFromChildEnvironment": true,
+    "validateTargetResourceRelationships": true,
+    "validateSourceDatabaseContract": true,
+    "validateTargetDatabaseContract": true,
+    "hashTargetImageBytes": true,
+    "verifyCommitTagDigest": true,
+    "requireDistinctRetainedRollbackRevision": true,
+    "jsonForEveryFailure": true,
     "resourceDeletionSupported": false
   }
 }

@@ -1,14 +1,14 @@
 # Shared Azure Target Deployment Plan
 
-**Status:** Approved - contract foundation frozen
+**Status:** Approved - corrective contract refreeze in progress
 
 ## Scope and classification
 
 Implement P4 from `docs/RewritePlan.md` as an existing-application modernization:
 
 - one shared Azure Container Apps compute and operations model;
-- .NET 8 with Azure SQL Database;
-- Java 17 with Azure Database for PostgreSQL Flexible Server 18;
+- .NET 10 with Azure SQL Database;
+- Java 21 with Azure Database for PostgreSQL Flexible Server 18;
 - deterministic database and image migration with machine-readable evidence;
 - Azure Files and Blob-backed image implementations;
 - no Azure deployment, cutover, source deletion, or rollback framework in this phase.
@@ -18,7 +18,7 @@ what-if validation use Sweden Central.
 
 ## Frozen inputs
 
-- Integration branch/base: `rewrite-integration` at `5d6f954`
+- Integration branch/base: `rewrite-integration` at `703a278`
 - Behavior contract: `workshop/contracts/behavior-contract.json`
 - Data and database contracts: `workshop/contracts/`
 - Canonical corpus: `data/manifest.json`, 198 figures, 20 categories, 198 images
@@ -49,6 +49,9 @@ Consequences:
   workshop subscription.
 - Data services use private networking so public-network modification policies do not break
   the default deployment.
+- The existing P3 source VM is the migration runner. The target deployment creates
+  bidirectional peering with that VM's participant VNet and links every target private DNS
+  zone to the source VNet. It never opens a public data endpoint.
 
 ## Deployment recipe
 
@@ -64,9 +67,20 @@ The deployment has two explicit stages:
 1. `bootstrap` creates networking, ACR, identities, database, image storage, Log Analytics,
    Application Insights, and the Container Apps environment. It creates no Container App and
    accepts no placeholder or mutable image.
-2. `application` consumes an immutable repository, 40-character commit tag, and
-   `sha256:<64 hex>` digest. It creates the Container App and emits its URL, revision, and
-   complete handoff inputs.
+2. `application` consumes an immutable repository, 40-character commit tag,
+   `sha256:<64 hex>` digest, and an explicit `baseline` or `release` revision role. It creates
+   or updates the Container App and emits its URL, revision role, revision, and complete
+   handoff inputs.
+
+The required order is bootstrap, database/image migration and exact verification from the
+source VM, a healthy baseline application deployment, a release application deployment, live
+acceptance/telemetry capture against the release, and handoff rendering. The baseline and
+release deploy the same verified immutable image and use deterministic
+`baseline-<commit-prefix>` and `release-<commit-prefix>` revision suffixes. This creates a
+distinct retained revision without inventing a second artifact or generalized rollback system.
+Import, image copy, and migration verification reject application-stage output. Handoff
+rendering accepts only a release-role application output and the exact healthy baseline
+revision as its rollback target.
 
 Conditional resources and outputs use guarded ternaries so bootstrap never dereferences an
 absent Container App.
@@ -80,10 +94,13 @@ The Bicep module graph will contain:
 - resource group and deterministic naming;
 - VNet, Container Apps infrastructure subnet, private-endpoint/delegated data subnets, and
   private DNS;
+- typed source VM/VNet inputs, bidirectional source-to-target VNet peering, and source-VNet
+  links to every target private DNS zone;
 - Basic ACR with admin access disabled;
 - one user-assigned workload identity for ACR pull, Blob read, and database authentication;
 - Log Analytics and workspace-based Application Insights;
-- a Consumption Container Apps environment with managed OpenTelemetry for traces and logs;
+- direct Azure Monitor OpenTelemetry exporters for traces, metrics, and logs. Container Apps'
+  managed Application Insights destination is not used because it does not accept metrics;
 - external image storage selected by `azure-blob` or `azure-files`;
 - a conditionally deployed Container App with HTTPS-only external ingress, exact liveness and
   readiness probes, single-revision mode, and bounded scaling;
@@ -123,6 +140,9 @@ Additional controls:
   and an `oss-rdbms` access token to create the workload identity database principal; the
   password administrator remains limited to restore and local-role work.
 - Container images are referenced by digest; `latest` and branch-derived tags are rejected.
+- Before application deployment and again before handoff rendering, the facilitator resolves
+  the exact `<repository>:<40-hex commit>` ACR manifest and requires its digest to equal the
+  supplied image digest.
 - Storage public access and anonymous Blob access are disabled.
 - Application ingress is HTTPS-only.
 - Bicep outputs, migration reports, logs, and modernization contracts contain no secrets.
@@ -139,6 +159,9 @@ The shared target requires bounded runtime adaptations rather than compatibility
 - Add Azure SQL managed-identity connection support to .NET while preserving local
   integrated and explicit username/password modes.
 - Add PostgreSQL managed-identity support to Java while preserving password mode.
+- Preserve local OTLP export. In ACA, use the locked Azure Monitor exporter in each runtime
+  for all three signals and pass the Application Insights connection string only through an
+  ACA secret reference.
 - Add pinned, non-root, multi-stage Linux/amd64 Dockerfiles. The canonical seed JSON is
   included read-only; deployed applications disable startup import after migration.
 - Keep routes, health semantics, telemetry identity, database schema, and corpus behavior
@@ -157,11 +180,12 @@ The coordinator will freeze and test these contracts before starting the P4 chil
 2. Add a shared Azure target-output schema and examples for both `bootstrap` and
    `application` stages. It covers resource IDs, host names, identity IDs, provider mode,
    image reference, observability IDs, target database principals, the ACA environment
-   default domain, and guarded optional application outputs. Application URLs are derived
-   from the declared Container App/environment and revision suffixes from the source commit.
+   default domain, exact source VM/VNet migration runner, and guarded optional application
+   outputs. Application URLs are derived from the declared Container App/environment and
+   revision suffixes from the source commit.
 3. Add a migration-report schema and SQL/PostgreSQL examples. It covers source/target
-   identity, pinned tool/version, artifact hash, ordered migration history, row counts,
-   image count/bytes/hash, and terminal status.
+   identity, exact source-VM/VNet/peering/DNS execution path, pinned tool/version, artifact
+   hash, ordered migration history, row counts, image count/bytes/hash, and terminal status.
 4. Freeze the migration CLI surface and JSON output:
    - `catalog-migrate sql export`
    - `catalog-migrate sql import`
@@ -174,7 +198,9 @@ The coordinator will freeze and test these contracts before starting the P4 chil
    confirmation, and use exact argument lists plus command/engine-specific result schemas.
    PostgreSQL import derives authentication and both non-secret principal names from target
    output; administrator and application password boundaries remain distinct and application
-   passwords are required only in `password-secret` mode.
+   passwords are required only in `password-secret` mode. Mutating and verification commands
+   require bootstrap output. `render-handoff` requires application output plus an explicit,
+   distinct retained rollback revision.
 5. Add SqlPackage and all Azure SDK/base-image dependencies to
    `workshop/toolchain.lock.json` with integrity metadata.
 6. Extend acceptance tests so producer outputs, migration reports, and the modernization
@@ -188,20 +214,34 @@ interfaces or add a local workaround.
 Use the existing `uv`-managed acceptance package for the migration CLI so schema validation,
 canonical hashing, and database verification remain shared.
 
+Run it on the exact source VM declared by target output. That VM reaches target private
+endpoints only through the deployment-created bidirectional VNet peering and resolves them
+through the target private DNS zones linked to its P3 VNet.
+
+Before any source read or target connection, the CLI must retrieve the current VM resource ID
+from Azure Instance Metadata Service and match it to target output. It then proves that the
+VM's live NIC subnet belongs to the declared source VNet, both peerings are provisioned and
+`Connected` with reciprocal remote-VNet IDs, and every private-DNS link is provisioned,
+registration-disabled, and linked to that source VNet. Resource-ID shape or provisioning state
+alone is not sufficient evidence.
+
 ### SQL Server Express to Azure SQL
 
-1. Prove the source matches the database and seed contracts.
+1. Prove the source metadata, migrations, constraints, indexes, and corpus match the exact
+   database and seed contracts.
 2. Export a BACPAC with pinned SqlPackage from the read-only source.
 3. Hash and record the artifact.
 4. Require an empty, explicitly named target database.
 5. Import with Entra authentication from the facilitator's Azure CLI context.
 6. Create the Container App managed identity as a contained database user and grant only the
    application roles.
-7. Verify migration history, schema, constraints, indexes, 198 figures, and 20 categories.
+7. Verify exact migration history, tables, columns, constraints, indexes, 198 figures, and
+   20 categories against the database contract.
 
 ### PostgreSQL to Flexible Server
 
-1. Prove the source matches the database and seed contracts.
+1. Prove the source metadata, migrations, constraints, indexes, and corpus match the exact
+   database and seed contracts.
 2. Export a custom-format archive with pinned `pg_dump` 18.6.
 3. Hash and record the artifact.
 4. Require an empty, explicitly named target database.
@@ -213,7 +253,8 @@ canonical hashing, and database verification remain shared.
    `isAdmin=false` and `isMfa=false`. In password mode, create the local application role
    with the separate application password.
 7. Grant the application principal only the required database privileges.
-8. Verify migration history, schema, constraints, indexes, 198 figures, and 20 categories.
+8. Verify exact migration history, tables, columns, constraints, indexes, 198 figures, and
+   20 categories against the database contract.
 
 This bootstrap follows the official Flexible Server requirements that only a Microsoft
 Entra administrator can enable Entra database principals and that
@@ -223,9 +264,10 @@ Entra administrator can enable Entra database principals and that
 
 ### Images
 
-Copy only canonical manifest members to the selected share or Blob container. Verify exact
-count, aggregate bytes, and set hash against `data/manifest.json`; reject extra or missing
-objects.
+Copy only canonical manifest members to the selected share or Blob container. Download and
+hash the actual target bytes, then verify exact names, count, aggregate bytes, and set hash
+against `data/manifest.json`; reject corrupt, extra, or missing objects. Never trust uploader
+metadata as target proof.
 
 ### Safety boundaries
 
@@ -235,8 +277,18 @@ objects.
 - No source database, VM database, image directory, storage container/share, resource group,
   or migration artifact is deleted.
 - Credentials and tokens are environment-only and never command arguments or report fields.
+- Every child process receives a minimal allowlisted environment. All `MIGRATION_*` values are
+  stripped first, undeclared migration credentials are rejected, and emitted errors redact
+  every injected secret.
+- Every CLI failure, including argument parsing, malformed corpus input, and filesystem
+  errors, emits exactly one frozen JSON error document and frozen exit code.
 - P4 adds no generalized rollback machinery. Source backups remain intact and ACA revision
-  rollback stays the existing handoff boundary.
+  rollback stays the existing handoff boundary. The first application deployment establishes
+  a healthy `baseline` revision; the second deploys the same verified image as `release`.
+  Handoff rendering verifies that the supplied baseline rollback revision belongs to the
+  declared Container App, exactly matches the deterministic baseline name, exists, is healthy,
+  is retained/inactive, contains one container using the same digest-qualified image as the
+  release, and differs from the release revision.
 
 ## Implementation ownership
 
@@ -325,6 +377,11 @@ resource mutation is authorized by this plan.
 
 - Validate rendered Bicep outputs against the target-output schema.
 - Validate SQL and PostgreSQL dry-run reports against the migration schema.
+- Prove every bootstrap command rejects application output and handoff rendering rejects
+  bootstrap output.
+- Prove exact target resource-ID/name/principal relationships before any connection or
+  mutation, exact source/target database contracts, actual target image bytes, ACR
+  commit-tag/digest equality, and a distinct retained rollback revision.
 - Validate complete handoff fixtures through `catalog_acceptance.handoff`.
 - Scan for mutable image refs, source-code secrets, SQL administrator credentials,
   unguarded conditional-resource outputs, and secret-bearing command lines.

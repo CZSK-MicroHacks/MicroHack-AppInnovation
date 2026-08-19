@@ -7,6 +7,7 @@
   "required": [
     "schemaVersion",
     "deploymentStage",
+    "applicationRevisionRole",
     "sourceCommit",
     "stack",
     "location",
@@ -24,12 +25,23 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "deploymentStage": {
       "enum": [
         "bootstrap",
         "application"
+      ]
+    },
+    "applicationRevisionRole": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "baseline",
+        "release",
+        null
       ]
     },
     "sourceCommit": {
@@ -62,11 +74,37 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "virtualNetworkResourceId"
+        "virtualNetworkResourceId",
+        "migrationSourceVirtualNetworkResourceId",
+        "migrationSourceVmResourceId",
+        "migrationSourceToTargetPeeringResourceId",
+        "migrationTargetToSourcePeeringResourceId",
+        "migrationPrivateDnsZoneLinkResourceIds"
       ],
       "properties": {
         "virtualNetworkResourceId": {
           "$ref": "#/$defs/virtualNetworkResourceId"
+        },
+        "migrationSourceVirtualNetworkResourceId": {
+          "$ref": "#/$defs/virtualNetworkResourceId"
+        },
+        "migrationSourceVmResourceId": {
+          "$ref": "#/$defs/virtualMachineResourceId"
+        },
+        "migrationSourceToTargetPeeringResourceId": {
+          "$ref": "#/$defs/virtualNetworkPeeringResourceId"
+        },
+        "migrationTargetToSourcePeeringResourceId": {
+          "$ref": "#/$defs/virtualNetworkPeeringResourceId"
+        },
+        "migrationPrivateDnsZoneLinkResourceIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/privateDnsZoneLinkResourceId"
+          }
         }
       }
     },
@@ -263,6 +301,9 @@
           },
           "application": {
             "type": "null"
+          },
+          "applicationRevisionRole": {
+            "type": "null"
           }
         }
       },
@@ -273,6 +314,12 @@
           },
           "application": {
             "$ref": "#/$defs/application"
+          },
+          "applicationRevisionRole": {
+            "enum": [
+              "baseline",
+              "release"
+            ]
           }
         }
       }
@@ -290,6 +337,13 @@
       },
       "then": {
         "properties": {
+          "network": {
+            "properties": {
+              "migrationSourceVmResourceId": {
+                "pattern": "/virtualMachines/vm-dotnet-[^/]+$"
+              }
+            }
+          },
           "database": {
             "properties": {
               "family": {
@@ -326,6 +380,13 @@
       },
       "else": {
         "properties": {
+          "network": {
+            "properties": {
+              "migrationSourceVmResourceId": {
+                "pattern": "/virtualMachines/vm-java-[^/]+$"
+              }
+            }
+          },
           "database": {
             "properties": {
               "family": {
@@ -701,6 +762,16 @@
       "type": "string",
       "pattern": "^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[^/]+/providers/[^/]+(?:/[^/]+/[^/]+)+$"
     },
+    "privateDnsZoneLinkResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/privateDnsZones/[^/]+/virtualNetworkLinks/[^/]+$"
+        }
+      ]
+    },
     "virtualNetworkResourceId": {
       "allOf": [
         {
@@ -708,6 +779,26 @@
         },
         {
           "pattern": "/providers/Microsoft\\.Network/virtualNetworks/[^/]+$"
+        }
+      ]
+    },
+    "virtualMachineResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Compute/virtualMachines/[^/]+$"
+        }
+      ]
+    },
+    "virtualNetworkPeeringResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/virtualNetworks/[^/]+/virtualNetworkPeerings/[^/]+$"
         }
       ]
     },

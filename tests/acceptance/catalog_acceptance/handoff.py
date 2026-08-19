@@ -563,6 +563,94 @@ def _validate_target_resource_ids(target: dict[str, Any]) -> None:
             raise ValueError(f"target {name} resource ID is outside the declared scope")
         parsed[name] = resource
 
+    source_network = _parse_resource_id(
+        target["network"]["migrationSourceVirtualNetworkResourceId"]
+    )
+    source_vm = _parse_resource_id(
+        target["network"]["migrationSourceVmResourceId"]
+    )
+    if (
+        source_network["namespace"],
+        source_network["types"],
+    ) != ("microsoft.network", ("virtualnetworks",)):
+        raise ValueError("migration source network resource ID has the wrong type")
+    if (
+        source_vm["namespace"],
+        source_vm["types"],
+    ) != ("microsoft.compute", ("virtualmachines",)):
+        raise ValueError("migration source VM resource ID has the wrong type")
+    if (
+        source_network["subscription"] != resource_group["subscription"]
+        or source_vm["subscription"] != resource_group["subscription"]
+    ):
+        raise ValueError("migration source resources span multiple subscriptions")
+    if source_vm["resourceGroup"] != source_network["resourceGroup"]:
+        raise ValueError("migration source VM and network use different scopes")
+    if (
+        target["network"]["migrationSourceVirtualNetworkResourceId"].casefold()
+        == target["network"]["virtualNetworkResourceId"].casefold()
+    ):
+        raise ValueError("migration source and target networks must differ")
+    source_peering = _parse_resource_id(
+        target["network"]["migrationSourceToTargetPeeringResourceId"]
+    )
+    target_peering = _parse_resource_id(
+        target["network"]["migrationTargetToSourcePeeringResourceId"]
+    )
+    expected_peering_type = (
+        "microsoft.network",
+        ("virtualnetworks", "virtualnetworkpeerings"),
+    )
+    if (
+        source_peering["namespace"],
+        source_peering["types"],
+    ) != expected_peering_type or (
+        target_peering["namespace"],
+        target_peering["types"],
+    ) != expected_peering_type:
+        raise ValueError("migration peering resource ID has the wrong type")
+    if (
+        source_peering["subscription"] != resource_group["subscription"]
+        or source_peering["resourceGroup"] != source_network["resourceGroup"]
+        or source_peering["names"][-2] != source_network["names"][-1]
+    ):
+        raise ValueError("source migration peering does not belong to the source network")
+    if (
+        target_peering["subscription"] != resource_group["subscription"]
+        or target_peering["resourceGroup"] != resource_group["resourceGroup"]
+        or target_peering["names"][-2] != parsed["network"]["names"][-1]
+    ):
+        raise ValueError("target migration peering does not belong to the target network")
+
+    expected_private_dns_zones = {
+        (
+            "privatelink.database.windows.net"
+            if target["database"]["family"] == "azure-sql"
+            else "privatelink.postgres.database.azure.com"
+        ),
+        (
+            "privatelink.blob.core.windows.net"
+            if target["images"]["provider"] == "azure-blob"
+            else "privatelink.file.core.windows.net"
+        ),
+    }
+    linked_zones: set[str] = set()
+    for link_id in target["network"]["migrationPrivateDnsZoneLinkResourceIds"]:
+        link = _parse_resource_id(link_id)
+        if (
+            link["namespace"],
+            link["types"],
+        ) != ("microsoft.network", ("privatednszones", "virtualnetworklinks")):
+            raise ValueError("migration private DNS link resource ID has the wrong type")
+        if (
+            link["subscription"] != resource_group["subscription"]
+            or link["resourceGroup"] != resource_group["resourceGroup"]
+        ):
+            raise ValueError("migration private DNS link is outside the target scope")
+        linked_zones.add(link["names"][-2])
+    if linked_zones != expected_private_dns_zones:
+        raise ValueError("migration private DNS links differ from target endpoints")
+
     registry_name = parsed["registry"]["names"][-1]
     if target["containerRegistry"]["loginServer"] != f"{registry_name}.azurecr.io":
         raise ValueError("target registry hostname differs from its resource ID")
@@ -619,7 +707,8 @@ def _validate_target_resource_ids(target: dict[str, Any]) -> None:
         ):
             raise ValueError("target readiness URL differs from its application URL")
         expected_revision = (
-            f'{application["containerAppName"]}--{target["sourceCommit"][:12]}'
+            f'{application["containerAppName"]}--'
+            f'{target["applicationRevisionRole"]}-{target["sourceCommit"][:12]}'
         )
         if application["revisionName"] != expected_revision:
             raise ValueError(
@@ -676,6 +765,10 @@ def _validate_target_output(
     }
     checks = (
         (target["deploymentStage"] == "application", "target output is not application-stage"),
+        (
+            target["applicationRevisionRole"] == "release",
+            "target output is not the release application revision",
+        ),
         (
             target["sourceCommit"] == handoff["source"]["commitSha"],
             "target output source commit differs from handoff",
@@ -739,6 +832,43 @@ def _validate_migration_report(
         else "postgresql"
     )
     expected_database = target["database"]
+    execution = report["migrationExecution"]
+    source_virtual_network = target["network"][
+        "migrationSourceVirtualNetworkResourceId"
+    ]
+    expected_source_peering = {
+        "resourceId": target["network"]["migrationSourceToTargetPeeringResourceId"],
+        "remoteVirtualNetworkResourceId": target["network"]["virtualNetworkResourceId"],
+        "provisioningState": "Succeeded",
+        "peeringState": "Connected",
+    }
+    expected_target_peering = {
+        "resourceId": target["network"]["migrationTargetToSourcePeeringResourceId"],
+        "remoteVirtualNetworkResourceId": source_virtual_network,
+        "provisioningState": "Succeeded",
+        "peeringState": "Connected",
+    }
+
+    def peering_matches(observed: dict[str, Any], expected: dict[str, Any]) -> bool:
+        """Compare Azure resource IDs case-insensitively and states exactly."""
+        return (
+            observed["resourceId"].casefold() == expected["resourceId"].casefold()
+            and observed["remoteVirtualNetworkResourceId"].casefold()
+            == expected["remoteVirtualNetworkResourceId"].casefold()
+            and observed["provisioningState"] == expected["provisioningState"]
+            and observed["peeringState"] == expected["peeringState"]
+        )
+    observed_private_dns_links = {
+        (
+            link["resourceId"].casefold(),
+            link["virtualNetworkResourceId"].casefold(),
+        )
+        for link in execution["privateDnsZoneLinks"]
+    }
+    expected_private_dns_links = {
+        (resource_id.casefold(), source_virtual_network.casefold())
+        for resource_id in target["network"]["migrationPrivateDnsZoneLinkResourceIds"]
+    }
     expected_image_verification = {
         key: handoff["images"]["verification"][key]
         for key in (
@@ -806,6 +936,27 @@ def _validate_migration_report(
         (
             report["stack"] == handoff["source"]["stack"],
             "migration report stack differs from handoff",
+        ),
+        (
+            execution["host"] == "source-vm"
+            and execution["hostVmResourceId"].casefold()
+            == target["network"]["migrationSourceVmResourceId"].casefold()
+            and execution["sourceVirtualNetworkResourceId"].casefold()
+            == source_virtual_network.casefold()
+            and execution["sourceSubnetResourceId"].casefold().startswith(
+                f"{source_virtual_network.casefold()}/subnets/"
+            )
+            and peering_matches(
+                execution["sourceToTargetPeering"],
+                expected_source_peering,
+            )
+            and peering_matches(
+                execution["targetToSourcePeering"],
+                expected_target_peering,
+            )
+            and observed_private_dns_links == expected_private_dns_links
+            and execution["topologyValidated"] is True,
+            "migration report execution path differs from target output",
         ),
         (
             report["sourceDatabase"]["family"] == database_key
@@ -1050,8 +1201,14 @@ def validate_handoff(
         f'{handoff["application"]["url"].rstrip("/")}/readyz'
     ):
         inconsistencies.append("readiness URL does not match application URL")
-    if handoff["rollback"]["targetRevision"] == handoff["application"]["revisionName"]:
-        inconsistencies.append("rollback target must differ from the deployed revision")
+    expected_rollback_revision = (
+        f'{handoff["application"]["containerAppName"]}--'
+        f'baseline-{handoff["source"]["commitSha"][:12]}'
+    )
+    if handoff["rollback"]["targetRevision"] != expected_rollback_revision:
+        inconsistencies.append(
+            "rollback target is not the deterministic baseline revision"
+        )
 
     expected_counts = handoff["database"]["verifiedRowCounts"]
     if (

@@ -12,6 +12,7 @@
     "completedAt",
     "sourceCommit",
     "stack",
+    "migrationExecution",
     "sourceDatabase",
     "targetDatabase",
     "databaseArtifact",
@@ -20,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "runId": {
       "type": "string",
@@ -42,6 +43,52 @@
     },
     "stack": {
       "$ref": "#/$defs/stack"
+    },
+    "migrationExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "hostVmResourceId",
+        "sourceVirtualNetworkResourceId",
+        "sourceSubnetResourceId",
+        "sourceToTargetPeering",
+        "targetToSourcePeering",
+        "privateDnsZoneLinks",
+        "topologyValidated"
+      ],
+      "properties": {
+        "host": {
+          "const": "source-vm"
+        },
+        "hostVmResourceId": {
+          "$ref": "#/$defs/virtualMachineResourceId"
+        },
+        "sourceVirtualNetworkResourceId": {
+          "$ref": "#/$defs/virtualNetworkResourceId"
+        },
+        "sourceSubnetResourceId": {
+          "$ref": "#/$defs/subnetResourceId"
+        },
+        "sourceToTargetPeering": {
+          "$ref": "#/$defs/peeringEvidence"
+        },
+        "targetToSourcePeering": {
+          "$ref": "#/$defs/peeringEvidence"
+        },
+        "privateDnsZoneLinks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/privateDnsLinkEvidence"
+          }
+        },
+        "topologyValidated": {
+          "const": true
+        }
+      }
     },
     "sourceDatabase": {
       "type": "object",
@@ -255,6 +302,13 @@
       },
       "then": {
         "properties": {
+          "migrationExecution": {
+            "properties": {
+              "hostVmResourceId": {
+                "pattern": "/virtualMachines/vm-dotnet-[^/]+$"
+              }
+            }
+          },
           "sourceDatabase": {
             "properties": {
               "family": {
@@ -309,6 +363,13 @@
       },
       "else": {
         "properties": {
+          "migrationExecution": {
+            "properties": {
+              "hostVmResourceId": {
+                "pattern": "/virtualMachines/vm-java-[^/]+$"
+              }
+            }
+          },
           "sourceDatabase": {
             "properties": {
               "family": {
@@ -623,9 +684,107 @@
         }
       ]
     },
+    "peeringEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceId",
+        "remoteVirtualNetworkResourceId",
+        "provisioningState",
+        "peeringState"
+      ],
+      "properties": {
+        "resourceId": {
+          "$ref": "#/$defs/virtualNetworkPeeringResourceId"
+        },
+        "remoteVirtualNetworkResourceId": {
+          "$ref": "#/$defs/virtualNetworkResourceId"
+        },
+        "provisioningState": {
+          "const": "Succeeded"
+        },
+        "peeringState": {
+          "const": "Connected"
+        }
+      }
+    },
+    "privateDnsLinkEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceId",
+        "virtualNetworkResourceId",
+        "provisioningState",
+        "registrationEnabled"
+      ],
+      "properties": {
+        "resourceId": {
+          "$ref": "#/$defs/privateDnsZoneLinkResourceId"
+        },
+        "virtualNetworkResourceId": {
+          "$ref": "#/$defs/virtualNetworkResourceId"
+        },
+        "provisioningState": {
+          "const": "Succeeded"
+        },
+        "registrationEnabled": {
+          "const": false
+        }
+      }
+    },
+    "privateDnsZoneLinkResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/privateDnsZones/[^/]+/virtualNetworkLinks/[^/]+$"
+        }
+      ]
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "subnetResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$"
+        }
+      ]
+    },
+    "virtualMachineResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Compute/virtualMachines/[^/]+$"
+        }
+      ]
+    },
+    "virtualNetworkPeeringResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/virtualNetworks/[^/]+/virtualNetworkPeerings/[^/]+$"
+        }
+      ]
+    },
+    "virtualNetworkResourceId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/resourceId"
+        },
+        {
+          "pattern": "/providers/Microsoft\\.Network/virtualNetworks/[^/]+$"
+        }
+      ]
     },
     "stack": {
       "enum": [

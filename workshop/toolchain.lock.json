@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "verifiedOn": "2026-08-19",
   "hosts": {
     "coordinator": {
@@ -207,6 +207,13 @@
         "source": "https://www.nuget.org/packages/Azure.Storage.Blobs/12.29.1",
         "sha512": "7sbyW/WTLdaRStBVRaQSU1kXIN5EnkdowTgR9ZLtfQrklTutNs7Pj8cpw+qwCpeTyy2azMnsPc9PX8cT3pCL9w==",
         "integrity": "NuGet repository signature and package SHA-512 are required"
+      },
+      "azureMonitorOpenTelemetryExporter": {
+        "package": "Azure.Monitor.OpenTelemetry.Exporter",
+        "version": "1.8.3",
+        "source": "https://www.nuget.org/packages/Azure.Monitor.OpenTelemetry.Exporter/1.8.3",
+        "sha512": "hZ35hXxiRuJcT67u970iqqJ+z2ol3Sg23/m1wwNNh8uzK/48uB9iJ3va9PQ7gXn6kij6wzowUe5olPPfObkEug==",
+        "integrity": "NuGet repository signature and package SHA-512 are required"
       }
     },
     "java": {
@@ -232,6 +239,30 @@
         "source": "https://repo1.maven.org/maven2/com/azure/azure-identity-extensions/1.2.9/azure-identity-extensions-1.2.9.jar",
         "sha256": "38193a31810c64e0f7b7daf69f82b2cfd0425bd0a0c9f1ebede380a0dae7114e",
         "signature": "https://repo1.maven.org/maven2/com/azure/azure-identity-extensions/1.2.9/azure-identity-extensions-1.2.9.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      },
+      "azureMonitorOpenTelemetryAutoconfigure": {
+        "coordinate": "com.azure:azure-monitor-opentelemetry-autoconfigure",
+        "version": "1.6.0",
+        "source": "https://repo1.maven.org/maven2/com/azure/azure-monitor-opentelemetry-autoconfigure/1.6.0/azure-monitor-opentelemetry-autoconfigure-1.6.0.jar",
+        "sha256": "287a594fea0f2ad6bbb280c92d57f63f6e5917cd838b9a46e57e33e207763b28",
+        "signature": "https://repo1.maven.org/maven2/com/azure/azure-monitor-opentelemetry-autoconfigure/1.6.0/azure-monitor-opentelemetry-autoconfigure-1.6.0.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      },
+      "openTelemetryApi": {
+        "coordinate": "io.opentelemetry:opentelemetry-api",
+        "version": "1.58.0",
+        "source": "https://repo1.maven.org/maven2/io/opentelemetry/opentelemetry-api/1.58.0/opentelemetry-api-1.58.0.jar",
+        "sha256": "c4d8a52af3aa655e012035dcd536c82d653aa9bc91459e04977e9d406123d7a0",
+        "signature": "https://repo1.maven.org/maven2/io/opentelemetry/opentelemetry-api/1.58.0/opentelemetry-api-1.58.0.jar.asc",
+        "integrity": "Maven Central detached signature and JAR SHA-256 are required"
+      },
+      "openTelemetryLogbackAppender": {
+        "coordinate": "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0",
+        "version": "2.24.0-alpha",
+        "source": "https://repo1.maven.org/maven2/io/opentelemetry/instrumentation/opentelemetry-logback-appender-1.0/2.24.0-alpha/opentelemetry-logback-appender-1.0-2.24.0-alpha.jar",
+        "sha256": "77ec8d812dfb3c460e57daacfb04a45c46da82921f1c9823987fd15bc9738a31",
+        "signature": "https://repo1.maven.org/maven2/io/opentelemetry/instrumentation/opentelemetry-logback-appender-1.0/2.24.0-alpha/opentelemetry-logback-appender-1.0-2.24.0-alpha.jar.asc",
         "integrity": "Maven Central detached signature and JAR SHA-256 are required"
       }
     }

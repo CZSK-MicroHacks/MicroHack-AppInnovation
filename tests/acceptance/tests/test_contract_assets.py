@@ -86,6 +86,10 @@ def test_p4_target_and_migration_examples_match_schemas(repo_root: Path) -> None
         load_json(contracts / "migration-cli-contract.schema.json"),
         load_json(contracts / "migration-cli-contract.json"),
     )
+    _validate(
+        load_json(contracts / "migration-error.schema.json"),
+        load_json(contracts / "migration-error.example.json"),
+    )
     operation_schema = load_json(
         contracts / "migration-operation-result.schema.json"
     )
@@ -164,7 +168,96 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "secretsInEnvironmentOnly": True,
         "tokensInChildProcessEnvironmentOnly": True,
         "rejectUndeclaredSecrets": True,
+        "stripMigrationSecretsFromChildEnvironment": True,
+        "validateTargetResourceRelationships": True,
+        "validateSourceDatabaseContract": True,
+        "validateTargetDatabaseContract": True,
+        "hashTargetImageBytes": True,
+        "verifyCommitTagDigest": True,
+        "requireDistinctRetainedRollbackRevision": True,
+        "jsonForEveryFailure": True,
         "resourceDeletionSupported": False,
+    }
+    assert contract["migrationExecution"] == {
+        "host": "source-vm",
+        "sourceVmResourceIdSource": (
+            "target-output.network.migrationSourceVmResourceId"
+        ),
+        "sourceVirtualNetworkResourceIdSource": (
+            "target-output.network.migrationSourceVirtualNetworkResourceId"
+        ),
+        "hostIdentityEndpoint": (
+            "http://169.254.169.254/metadata/instance/compute/resourceId"
+            "?api-version=2021-02-01&format=text"
+        ),
+        "hostIdentityHeader": "Metadata:true",
+        "requireHostIdentityMatch": True,
+        "sourceVmNicCommand": (
+            "az vm show --ids <sourceVmResourceId> --subscription <subscriptionId> "
+            "--query networkProfile.networkInterfaces[].id --output tsv"
+        ),
+        "sourceNicSubnetCommand": (
+            "az network nic show --ids <nicResourceId> "
+            "--subscription <subscriptionId> "
+            "--query ipConfigurations[].subnet.id --output tsv"
+        ),
+        "resourceStateCommand": (
+            "az resource show --ids <resourceId> --subscription <subscriptionId> "
+            "--query properties.provisioningState --output tsv"
+        ),
+        "peeringStateCommand": (
+            "az network vnet peering show --resource-group <resourceGroup> "
+            "--vnet-name <virtualNetworkName> --name <peeringName> "
+            "--subscription <subscriptionId> "
+            "--query {provisioningState:provisioningState,"
+            "peeringState:peeringState,"
+            "remoteVirtualNetworkId:remoteVirtualNetwork.id} --output json"
+        ),
+        "privateDnsLinkStateCommand": (
+            "az network private-dns link vnet show "
+            "--resource-group <resourceGroup> "
+            "--zone-name <privateDnsZoneName> --name <linkName> "
+            "--subscription <subscriptionId> "
+            "--query {provisioningState:provisioningState,"
+            "virtualNetworkId:virtualNetwork.id,"
+            "registrationEnabled:registrationEnabled} --output json"
+        ),
+        "requiredProvisioningState": "Succeeded",
+        "requiredPeeringState": "Connected",
+        "requiredPrivateDnsRegistrationEnabled": False,
+        "requireSourceSubnetOwnership": True,
+        "requireReciprocalPeeringTargets": True,
+        "requirePrivateDnsSourceVnetTargets": True,
+        "requiresBidirectionalVnetPeering": True,
+        "requiresPrivateDnsZoneLinks": True,
+    }
+    assert contract["releaseVerification"] == {
+        "azureCliConfigDirectory": "$HOME/.azure-365",
+        "applicationRevisionSequence": ["baseline", "release"],
+        "sameContainerImageForBaselineAndRelease": True,
+        "handoffTargetOutputRole": "release",
+        "rollbackRevisionRole": "baseline",
+        "containerImageCommand": (
+            "az acr manifest show-metadata --registry <registryName> "
+            "--name <repository>:<tag> --subscription <subscriptionId> "
+            "--query digest --output tsv"
+        ),
+        "rollbackRevisionCommand": (
+            "az containerapp revision show --resource-group <resourceGroup> "
+            "--name <containerAppName> --revision <rollbackRevision> "
+            "--subscription <subscriptionId> "
+            "--query {active:properties.active,"
+            "health:properties.healthState,"
+            "error:properties.provisioningError,"
+            "images:properties.template.containers[].image} --output json"
+        ),
+        "requiredRollbackHealthState": "Healthy",
+        "requiredRollbackActive": False,
+        "requiredRollbackContainerCount": 1,
+        "requiredRollbackRevisionTemplate": (
+            "<containerAppName>--baseline-<sourceCommitPrefix12>"
+        ),
+        "rollbackImageReferenceTemplate": "<loginServer>/<repository>@<digest>",
     }
     mutating = {
         command["name"]
@@ -173,6 +266,18 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
     }
     assert mutating == {"sql import", "postgresql import", "images copy"}
     commands = {command["name"]: command for command in contract["commands"]}
+    assert {
+        name: command["requiredTargetOutputStage"]
+        for name, command in commands.items()
+    } == {
+        "sql export": "bootstrap",
+        "sql import": "bootstrap",
+        "postgresql export": "bootstrap",
+        "postgresql import": "bootstrap",
+        "images copy": "bootstrap",
+        "verify": "bootstrap",
+        "render-handoff": "application",
+    }
     assert "--target-output" in commands["sql import"]["arguments"]
     assert "--target-output" in commands["postgresql import"]["arguments"]
     assert "--application-username" not in commands["postgresql import"][
@@ -220,6 +325,14 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         commands["render-handoff"]["resultSchema"]
         == "modernization-contract.schema.json"
     )
+    assert "--rollback-revision" in commands["render-handoff"]["arguments"]
+    assert contract["failureProtocol"] == {
+        "schema": "migration-error.schema.json",
+        "outputChannel": "stderr",
+        "exactlyOneDocument": True,
+        "tracebackForbidden": True,
+        "secretValuesForbidden": True,
+    }
 
     schema = load_json(
         repo_root
@@ -235,6 +348,40 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
     invalid["commands"][3]["requiredSecretEnvironment"] = []
     with pytest.raises(JsonSchemaValidationError):
         _validate(schema, invalid)
+    invalid = json.loads(json.dumps(contract))
+    invalid["migrationExecution"]["requireHostIdentityMatch"] = False
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, invalid)
+    invalid = json.loads(json.dumps(contract))
+    invalid["releaseVerification"]["rollbackImageReferenceTemplate"] = "<tag>"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, invalid)
+
+
+def test_p4_migration_error_protocol_is_exact(repo_root: Path) -> None:
+    """Require typed, single-line failures with stable exit-code mappings."""
+    contracts = repo_root / "workshop" / "contracts"
+    schema = load_json(contracts / "migration-error.schema.json")
+    example = load_json(contracts / "migration-error.example.json")
+    _validate(schema, example)
+
+    invalid_cases = []
+    wrong_exit = json.loads(json.dumps(example))
+    wrong_exit["exitCode"] = 4
+    invalid_cases.append(wrong_exit)
+    multiline = json.loads(json.dumps(example))
+    multiline["error"]["message"] = "first line\nsecret traceback"
+    invalid_cases.append(multiline)
+    traceback = json.loads(json.dumps(example))
+    traceback["traceback"] = "forbidden"
+    invalid_cases.append(traceback)
+    unknown_command = json.loads(json.dumps(example))
+    unknown_command["command"] = "destroy"
+    invalid_cases.append(unknown_command)
+
+    for invalid in invalid_cases:
+        with pytest.raises(JsonSchemaValidationError):
+            _validate(schema, invalid)
 
 
 def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
@@ -280,6 +427,34 @@ def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
     with pytest.raises(JsonSchemaValidationError):
         _validate(target_schema, invalid_type)
 
+    invalid_source_type = json.loads(json.dumps(bootstrap))
+    invalid_source_type["network"]["migrationSourceVmResourceId"] = bootstrap[
+        "network"
+    ]["migrationSourceVirtualNetworkResourceId"]
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_source_type)
+
+    invalid_stack_vm = json.loads(json.dumps(bootstrap))
+    invalid_stack_vm["network"]["migrationSourceVmResourceId"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000/"
+        "resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/"
+        "virtualMachines/vm-java-user001"
+    )
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, invalid_stack_vm)
+
+    same_network = json.loads(json.dumps(bootstrap))
+    same_network["network"]["migrationSourceVirtualNetworkResourceId"] = same_network[
+        "network"
+    ]["virtualNetworkResourceId"]
+    same_network["network"]["migrationSourceVmResourceId"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000/"
+        "resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Compute/"
+        "virtualMachines/vm-dotnet-user001"
+    )
+    with pytest.raises(ValueError, match="networks must differ"):
+        _validate_target_resource_ids(same_network)
+
     invalid_host = json.loads(json.dumps(bootstrap))
     invalid_host["database"]["server"] = "sql-mh-dotnet-example.attacker.invalid"
     with pytest.raises(JsonSchemaValidationError):
@@ -300,6 +475,18 @@ def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
     application = load_json(
         contracts / "azure-target-output.application.example.json"
     )
+    baseline = json.loads(json.dumps(application))
+    baseline["applicationRevisionRole"] = "baseline"
+    baseline["application"]["revisionName"] = baseline["application"][
+        "revisionName"
+    ].replace("--release-", "--baseline-")
+    _validate(target_schema, baseline)
+    _validate_target_resource_ids(baseline)
+
+    missing_revision_role = json.loads(json.dumps(application))
+    missing_revision_role.pop("applicationRevisionRole")
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(target_schema, missing_revision_role)
     invalid_endpoint = json.loads(json.dumps(application))
     invalid_endpoint["application"]["url"] = "https://unrelated.example.invalid"
     invalid_endpoint["application"]["healthUrl"] = (
@@ -573,6 +760,21 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
     assert (
         toolchain["azureSdk"]["dotnet"]["azureStorageBlobs"]["version"] == "12.29.1"
     )
+    assert toolchain["azureSdk"]["dotnet"][
+        "azureMonitorOpenTelemetryExporter"
+    ] == {
+        "package": "Azure.Monitor.OpenTelemetry.Exporter",
+        "version": "1.8.3",
+        "source": (
+            "https://www.nuget.org/packages/"
+            "Azure.Monitor.OpenTelemetry.Exporter/1.8.3"
+        ),
+        "sha512": (
+            "hZ35hXxiRuJcT67u970iqqJ+z2ol3Sg23/m1wwNNh8uzK/"
+            "48uB9iJ3va9PQ7gXn6kij6wzowUe5olPPfObkEug=="
+        ),
+        "integrity": "NuGet repository signature and package SHA-512 are required",
+    }
     assert toolchain["azureSdk"]["java"]["azureIdentity"]["version"] == "1.18.4"
     assert (
         toolchain["azureSdk"]["java"]["azureStorageBlob"]["version"] == "12.35.1"
@@ -581,6 +783,13 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
         toolchain["azureSdk"]["java"]["azureIdentityExtensions"]["version"]
         == "1.2.9"
     )
+    assert toolchain["azureSdk"]["java"][
+        "azureMonitorOpenTelemetryAutoconfigure"
+    ]["version"] == "1.6.0"
+    assert toolchain["azureSdk"]["java"]["openTelemetryApi"]["version"] == "1.58.0"
+    assert toolchain["azureSdk"]["java"]["openTelemetryLogbackAppender"][
+        "version"
+    ] == "2.24.0-alpha"
     assert toolchain["azureSdk"]["java"]["azureIdentity"]["sha256"] == (
         "fd947ab1d6b1a8519d377e8509f34fdf70215aaa11e84826dbe017e962acb2a0"
     )
@@ -589,6 +798,11 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
     )
     assert toolchain["azureSdk"]["java"]["azureIdentityExtensions"]["sha256"] == (
         "38193a31810c64e0f7b7daf69f82b2cfd0425bd0a0c9f1ebede380a0dae7114e"
+    )
+    assert toolchain["azureSdk"]["java"][
+        "azureMonitorOpenTelemetryAutoconfigure"
+    ]["sha256"] == (
+        "287a594fea0f2ad6bbb280c92d57f63f6e5917cd838b9a46e57e33e207763b28"
     )
     assert toolchain["databases"]["postgresql"]["migrationTools"] == {
         "exportTool": "pg_dump",
@@ -782,8 +996,9 @@ def test_handoff_bundle_cross_file_consistency(
         encoding="utf-8",
     )
     target_output = {
-        "schemaVersion": "1.0.0",
+        "schemaVersion": "1.1.0",
         "deploymentStage": "application",
+        "applicationRevisionRole": "release",
         "sourceCommit": handoff["source"]["commitSha"],
         "stack": handoff["source"]["stack"],
         "location": handoff["application"]["region"],
@@ -792,7 +1007,15 @@ def test_handoff_bundle_cross_file_consistency(
             "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example",
         },
         "network": {
-            "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example"
+            "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example",
+            "migrationSourceVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+            "migrationSourceVmResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+            "migrationSourceToTargetPeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/virtualNetworkPeerings/to-vnet-mh-example",
+            "migrationTargetToSourcePeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example/virtualNetworkPeerings/to-vnet-mh-source-example",
+            "migrationPrivateDnsZoneLinkResourceIds": [
+                "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+                "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+            ],
         },
         "containerRegistry": {
             "resourceId": handoff["containerImage"]["registryResourceId"],
@@ -892,8 +1115,39 @@ def test_handoff_bundle_cross_file_consistency(
         validate_handoff(handoff_path, contracts, tmp_path)
     target_output_path.write_text(json.dumps(passing_target_output), encoding="utf-8")
 
+    baseline_target_output = json.loads(json.dumps(passing_target_output))
+    baseline_target_output["applicationRevisionRole"] = "baseline"
+    baseline_target_output["application"]["revisionName"] = baseline_target_output[
+        "application"
+    ]["revisionName"].replace("--release-", "--baseline-")
+    target_output_path.write_text(
+        json.dumps(baseline_target_output),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not the release application revision"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    target_output_path.write_text(json.dumps(passing_target_output), encoding="utf-8")
+
     migration_report_path = evidence / "migration-report.json"
     passing_migration_report = load_json(migration_report_path)
+    invalid_migration_report = json.loads(json.dumps(passing_migration_report))
+    invalid_migration_report["migrationExecution"]["hostVmResourceId"] = (
+        invalid_migration_report["migrationExecution"]["hostVmResourceId"].replace(
+            "vm-dotnet-user001",
+            "vm-dotnet-user999",
+        )
+    )
+    migration_report_path.write_text(
+        json.dumps(invalid_migration_report),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="execution path differs"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    migration_report_path.write_text(
+        json.dumps(passing_migration_report),
+        encoding="utf-8",
+    )
+
     invalid_migration_report = json.loads(json.dumps(passing_migration_report))
     invalid_migration_report["databaseVerification"]["migrationHistory"] = [
         "unrelated migration"
@@ -965,6 +1219,15 @@ def test_handoff_bundle_cross_file_consistency(
     invalid_handoff["seedManifest"]["hashes"]["imageSetSha256"] = "0" * 64
     handoff_path.write_text(json.dumps(invalid_handoff), encoding="utf-8")
     with pytest.raises(ValueError, match="canonical manifest"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    handoff_path.write_text(json.dumps(handoff), encoding="utf-8")
+
+    invalid_handoff = json.loads(json.dumps(handoff))
+    invalid_handoff["rollback"]["targetRevision"] = (
+        "ca-mh-example--baseline-111111111111"
+    )
+    handoff_path.write_text(json.dumps(invalid_handoff), encoding="utf-8")
+    with pytest.raises(ValueError, match="not the deterministic baseline revision"):
         validate_handoff(handoff_path, contracts, tmp_path)
     handoff_path.write_text(json.dumps(handoff), encoding="utf-8")
 

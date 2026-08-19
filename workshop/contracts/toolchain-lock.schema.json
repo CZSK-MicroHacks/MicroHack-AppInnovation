@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "verifiedOn": {
       "type": "string",
@@ -355,13 +355,17 @@
           "additionalProperties": false,
           "required": [
             "azureIdentity",
-            "azureStorageBlobs"
+            "azureStorageBlobs",
+            "azureMonitorOpenTelemetryExporter"
           ],
           "properties": {
             "azureIdentity": {
               "$ref": "#/$defs/nugetPackage"
             },
             "azureStorageBlobs": {
+              "$ref": "#/$defs/nugetPackage"
+            },
+            "azureMonitorOpenTelemetryExporter": {
               "$ref": "#/$defs/nugetPackage"
             }
           }
@@ -372,7 +376,10 @@
           "required": [
             "azureIdentity",
             "azureStorageBlob",
-            "azureIdentityExtensions"
+            "azureIdentityExtensions",
+            "azureMonitorOpenTelemetryAutoconfigure",
+            "openTelemetryApi",
+            "openTelemetryLogbackAppender"
           ],
           "properties": {
             "azureIdentity": {
@@ -382,6 +389,15 @@
               "$ref": "#/$defs/mavenPackage"
             },
             "azureIdentityExtensions": {
+              "$ref": "#/$defs/mavenPackage"
+            },
+            "azureMonitorOpenTelemetryAutoconfigure": {
+              "$ref": "#/$defs/mavenPackage"
+            },
+            "openTelemetryApi": {
+              "$ref": "#/$defs/mavenPackage"
+            },
+            "openTelemetryLogbackAppender": {
               "$ref": "#/$defs/mavenPackage"
             }
           }

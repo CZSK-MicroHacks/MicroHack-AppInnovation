@@ -1,6 +1,7 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "deploymentStage": "bootstrap",
+  "applicationRevisionRole": null,
   "sourceCommit": "0000000000000000000000000000000000000000",
   "stack": "dotnet-sqlserver",
   "location": "swedencentral",
@@ -9,7 +10,15 @@
     "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example"
   },
   "network": {
-    "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-dotnet-example"
+    "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-dotnet-example",
+    "migrationSourceVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+    "migrationSourceVmResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "migrationSourceToTargetPeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/virtualNetworkPeerings/to-vnet-mh-dotnet-example",
+    "migrationTargetToSourcePeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-dotnet-example/virtualNetworkPeerings/to-vnet-mh-source-example",
+    "migrationPrivateDnsZoneLinkResourceIds": [
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/vnet-mh-source-example"
+    ]
   },
   "containerRegistry": {
     "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-dotnet-example/providers/Microsoft.ContainerRegistry/registries/acrmhdotnetexample",

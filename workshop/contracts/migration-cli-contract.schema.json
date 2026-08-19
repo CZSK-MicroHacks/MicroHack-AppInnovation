@@ -8,13 +8,16 @@
     "schemaVersion",
     "executable",
     "commands",
+    "migrationExecution",
+    "releaseVerification",
+    "failureProtocol",
     "postgresqlManagedIdentityBootstrap",
     "exitCodes",
     "safety"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "executable": {
       "const": "catalog-migrate"
@@ -47,6 +50,15 @@
         }
       ],
       "items": false
+    },
+    "migrationExecution": {
+      "$ref": "#/$defs/migrationExecution"
+    },
+    "releaseVerification": {
+      "$ref": "#/$defs/releaseVerification"
+    },
+    "failureProtocol": {
+      "$ref": "#/$defs/failureProtocol"
     },
     "postgresqlManagedIdentityBootstrap": {
       "$ref": "#/$defs/postgresqlManagedIdentityBootstrap"
@@ -86,6 +98,14 @@
         "secretsInEnvironmentOnly",
         "tokensInChildProcessEnvironmentOnly",
         "rejectUndeclaredSecrets",
+        "stripMigrationSecretsFromChildEnvironment",
+        "validateTargetResourceRelationships",
+        "validateSourceDatabaseContract",
+        "validateTargetDatabaseContract",
+        "hashTargetImageBytes",
+        "verifyCommitTagDigest",
+        "requireDistinctRetainedRollbackRevision",
+        "jsonForEveryFailure",
         "resourceDeletionSupported"
       ],
       "properties": {
@@ -113,6 +133,30 @@
         "rejectUndeclaredSecrets": {
           "const": true
         },
+        "stripMigrationSecretsFromChildEnvironment": {
+          "const": true
+        },
+        "validateTargetResourceRelationships": {
+          "const": true
+        },
+        "validateSourceDatabaseContract": {
+          "const": true
+        },
+        "validateTargetDatabaseContract": {
+          "const": true
+        },
+        "hashTargetImageBytes": {
+          "const": true
+        },
+        "verifyCommitTagDigest": {
+          "const": true
+        },
+        "requireDistinctRetainedRollbackRevision": {
+          "const": true
+        },
+        "jsonForEveryFailure": {
+          "const": true
+        },
         "resourceDeletionSupported": {
           "const": false
         }
@@ -120,6 +164,177 @@
     }
   },
   "$defs": {
+    "migrationExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "sourceVmResourceIdSource",
+        "sourceVirtualNetworkResourceIdSource",
+        "hostIdentityEndpoint",
+        "hostIdentityHeader",
+        "requireHostIdentityMatch",
+        "sourceVmNicCommand",
+        "sourceNicSubnetCommand",
+        "resourceStateCommand",
+        "peeringStateCommand",
+        "privateDnsLinkStateCommand",
+        "requiredProvisioningState",
+        "requiredPeeringState",
+        "requiredPrivateDnsRegistrationEnabled",
+        "requireSourceSubnetOwnership",
+        "requireReciprocalPeeringTargets",
+        "requirePrivateDnsSourceVnetTargets",
+        "requiresBidirectionalVnetPeering",
+        "requiresPrivateDnsZoneLinks"
+      ],
+      "properties": {
+        "host": {
+          "const": "source-vm"
+        },
+        "sourceVmResourceIdSource": {
+          "const": "target-output.network.migrationSourceVmResourceId"
+        },
+        "sourceVirtualNetworkResourceIdSource": {
+          "const": "target-output.network.migrationSourceVirtualNetworkResourceId"
+        },
+        "hostIdentityEndpoint": {
+          "const": "http://169.254.169.254/metadata/instance/compute/resourceId?api-version=2021-02-01&format=text"
+        },
+        "hostIdentityHeader": {
+          "const": "Metadata:true"
+        },
+        "requireHostIdentityMatch": {
+          "const": true
+        },
+        "sourceVmNicCommand": {
+          "const": "az vm show --ids <sourceVmResourceId> --subscription <subscriptionId> --query networkProfile.networkInterfaces[].id --output tsv"
+        },
+        "sourceNicSubnetCommand": {
+          "const": "az network nic show --ids <nicResourceId> --subscription <subscriptionId> --query ipConfigurations[].subnet.id --output tsv"
+        },
+        "resourceStateCommand": {
+          "const": "az resource show --ids <resourceId> --subscription <subscriptionId> --query properties.provisioningState --output tsv"
+        },
+        "peeringStateCommand": {
+          "const": "az network vnet peering show --resource-group <resourceGroup> --vnet-name <virtualNetworkName> --name <peeringName> --subscription <subscriptionId> --query {provisioningState:provisioningState,peeringState:peeringState,remoteVirtualNetworkId:remoteVirtualNetwork.id} --output json"
+        },
+        "privateDnsLinkStateCommand": {
+          "const": "az network private-dns link vnet show --resource-group <resourceGroup> --zone-name <privateDnsZoneName> --name <linkName> --subscription <subscriptionId> --query {provisioningState:provisioningState,virtualNetworkId:virtualNetwork.id,registrationEnabled:registrationEnabled} --output json"
+        },
+        "requiredProvisioningState": {
+          "const": "Succeeded"
+        },
+        "requiredPeeringState": {
+          "const": "Connected"
+        },
+        "requiredPrivateDnsRegistrationEnabled": {
+          "const": false
+        },
+        "requireSourceSubnetOwnership": {
+          "const": true
+        },
+        "requireReciprocalPeeringTargets": {
+          "const": true
+        },
+        "requirePrivateDnsSourceVnetTargets": {
+          "const": true
+        },
+        "requiresBidirectionalVnetPeering": {
+          "const": true
+        },
+        "requiresPrivateDnsZoneLinks": {
+          "const": true
+        }
+      }
+    },
+    "releaseVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "azureCliConfigDirectory",
+        "applicationRevisionSequence",
+        "sameContainerImageForBaselineAndRelease",
+        "handoffTargetOutputRole",
+        "rollbackRevisionRole",
+        "containerImageCommand",
+        "rollbackRevisionCommand",
+        "requiredRollbackHealthState",
+        "requiredRollbackActive",
+        "requiredRollbackContainerCount",
+        "requiredRollbackRevisionTemplate",
+        "rollbackImageReferenceTemplate"
+      ],
+      "properties": {
+        "azureCliConfigDirectory": {
+          "const": "$HOME/.azure-365"
+        },
+        "applicationRevisionSequence": {
+          "const": [
+            "baseline",
+            "release"
+          ]
+        },
+        "sameContainerImageForBaselineAndRelease": {
+          "const": true
+        },
+        "handoffTargetOutputRole": {
+          "const": "release"
+        },
+        "rollbackRevisionRole": {
+          "const": "baseline"
+        },
+        "containerImageCommand": {
+          "const": "az acr manifest show-metadata --registry <registryName> --name <repository>:<tag> --subscription <subscriptionId> --query digest --output tsv"
+        },
+        "rollbackRevisionCommand": {
+          "const": "az containerapp revision show --resource-group <resourceGroup> --name <containerAppName> --revision <rollbackRevision> --subscription <subscriptionId> --query {active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image} --output json"
+        },
+        "requiredRollbackHealthState": {
+          "const": "Healthy"
+        },
+        "requiredRollbackActive": {
+          "const": false
+        },
+        "requiredRollbackContainerCount": {
+          "const": 1
+        },
+        "requiredRollbackRevisionTemplate": {
+          "const": "<containerAppName>--baseline-<sourceCommitPrefix12>"
+        },
+        "rollbackImageReferenceTemplate": {
+          "const": "<loginServer>/<repository>@<digest>"
+        }
+      }
+    },
+    "failureProtocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "outputChannel",
+        "exactlyOneDocument",
+        "tracebackForbidden",
+        "secretValuesForbidden"
+      ],
+      "properties": {
+        "schema": {
+          "const": "migration-error.schema.json"
+        },
+        "outputChannel": {
+          "const": "stderr"
+        },
+        "exactlyOneDocument": {
+          "const": true
+        },
+        "tracebackForbidden": {
+          "const": true
+        },
+        "secretValuesForbidden": {
+          "const": true
+        }
+      }
+    },
     "postgresqlManagedIdentityBootstrap": {
       "type": "object",
       "additionalProperties": false,
@@ -189,11 +404,15 @@
         "mutatesTarget": {
           "const": false
         },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
+        },
         "arguments": {
           "const": [
             "--source-server",
             "--source-database",
             "--source-username",
+            "--target-output",
             "--artifact"
           ]
         },
@@ -218,6 +437,9 @@
         },
         "mutatesTarget": {
           "const": true
+        },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
         },
         "arguments": {
           "const": [
@@ -248,12 +470,16 @@
         "mutatesTarget": {
           "const": false
         },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
+        },
         "arguments": {
           "const": [
             "--source-host",
             "--source-port",
             "--source-database",
             "--source-username",
+            "--target-output",
             "--artifact"
           ]
         },
@@ -278,6 +504,9 @@
         },
         "mutatesTarget": {
           "const": true
+        },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
         },
         "arguments": {
           "const": [
@@ -310,6 +539,9 @@
         "mutatesTarget": {
           "const": true
         },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
+        },
         "arguments": {
           "const": [
             "--source-directory",
@@ -338,6 +570,9 @@
         },
         "mutatesTarget": {
           "const": false
+        },
+        "requiredTargetOutputStage": {
+          "const": "bootstrap"
         },
         "arguments": {
           "const": [
@@ -368,6 +603,9 @@
         "mutatesTarget": {
           "const": false
         },
+        "requiredTargetOutputStage": {
+          "const": "application"
+        },
         "arguments": {
           "const": [
             "--target-output",
@@ -375,6 +613,7 @@
             "--acceptance-report",
             "--telemetry-report",
             "--runtime-test-report",
+            "--rollback-revision",
             "--output"
           ]
         },
@@ -395,6 +634,7 @@
       "required": [
         "name",
         "mutatesTarget",
+        "requiredTargetOutputStage",
         "arguments",
         "requiredSecretEnvironment",
         "secretEnvironmentByTargetAuthentication",
@@ -406,6 +646,17 @@
         },
         "mutatesTarget": {
           "type": "boolean"
+        },
+        "requiredTargetOutputStage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bootstrap",
+            "application",
+            null
+          ]
         },
         "arguments": {
           "type": "array",

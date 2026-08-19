@@ -1,11 +1,44 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "runId": "00000000-0000-0000-0000-000000000001",
   "status": "passed",
   "startedAt": "2026-08-18T00:00:00Z",
   "completedAt": "2026-08-18T00:05:00Z",
   "sourceCommit": "0000000000000000000000000000000000000000",
   "stack": "dotnet-sqlserver",
+  "migrationExecution": {
+    "host": "source-vm",
+    "hostVmResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "sourceVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+    "sourceSubnetResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/subnets/snet-vm",
+    "sourceToTargetPeering": {
+      "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/virtualNetworkPeerings/to-vnet-mh-example",
+      "remoteVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example",
+      "provisioningState": "Succeeded",
+      "peeringState": "Connected"
+    },
+    "targetToSourcePeering": {
+      "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example/virtualNetworkPeerings/to-vnet-mh-source-example",
+      "remoteVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+      "provisioningState": "Succeeded",
+      "peeringState": "Connected"
+    },
+    "privateDnsZoneLinks": [
+      {
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+        "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+        "provisioningState": "Succeeded",
+        "registrationEnabled": false
+      },
+      {
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+        "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+        "provisioningState": "Succeeded",
+        "registrationEnabled": false
+      }
+    ],
+    "topologyValidated": true
+  },
   "sourceDatabase": {
     "family": "sqlserver",
     "server": "localhost\\SQLEXPRESS",

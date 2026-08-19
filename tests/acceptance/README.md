@@ -12,6 +12,9 @@ uv sync
 uv run pytest tests/test_contract_assets.py
 ```
 
+If an incompatible user-level `uv.toml` prevents `uv` from starting, preserve that file and
+run the same gate as `uv --no-config run pytest tests/test_contract_assets.py`.
+
 ## Live HTTP verification
 
 Set the application URL and the same non-default API key configured in the runtime:

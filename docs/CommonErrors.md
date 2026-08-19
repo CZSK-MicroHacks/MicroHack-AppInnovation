@@ -242,6 +242,34 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Treat application containers as target artifacts. Resolve each exact target tag, record the labeled linux/amd64 manifest digest, pull by `tag@digest`, execute the image to prove its runtime version, and assert the complete coordinate-to-digest mapping in the contract suite before implementation starts.
 
+## 35. Container Apps managed Application Insights drops metrics
+**Symptom:** Traces and logs reach Application Insights from Azure Container Apps, but required OpenTelemetry metrics are absent.
+
+**Cause:** The managed Container Apps Application Insights destination supports traces and logs, not metrics.
+
+**Resolution:** Do not configure the managed destination. Use locked direct Azure Monitor OpenTelemetry exporters for traces, metrics, and logs in Container Apps while retaining OTLP export for local execution.
+
+## 36. Resource IDs do not prove private migration connectivity
+**Symptom:** Migration output names the expected VM, VNet, peerings, and private-DNS links, but the source VM still cannot reach private target endpoints.
+
+**Cause:** Correctly shaped resource IDs and `Succeeded` provisioning states do not prove the command is running on that VM or that peerings and DNS links reference the intended reciprocal networks.
+
+**Resolution:** Match the current host to the declared VM through Azure Instance Metadata Service, derive its live VNet from its NIC subnet, require both peerings to be `Connected` with reciprocal remote-VNet IDs, and require every target private-DNS link to reference the source VNet with registration disabled. Preserve those observations in migration evidence.
+
+## 37. Azure Monitor autoconfigure conflicts with pinned OpenTelemetry
+**Symptom:** Java compiles with Azure Monitor autoconfigure, but telemetry initialization fails or silently loses signals at runtime.
+
+**Cause:** `azure-monitor-opentelemetry-autoconfigure` 1.6.0 requires OpenTelemetry 1.58.0 while the application directly pins 1.54.1; Maven dependency management selects the incompatible older graph.
+
+**Resolution:** Lock and use OpenTelemetry core 1.58.0 with instrumentation 2.24.0-alpha, which is the matching instrumentation release, and verify the effective Maven dependency graph before runtime validation.
+
+## 38. Incompatible user `uv.toml` blocks repository tests
+**Symptom:** `uv run` exits before resolving the project because a user-level `~/.config/uv/uv.toml` contains a setting unsupported by the installed `uv`.
+
+**Cause:** User configuration is parsed before the repository command and can be newer than the active `uv` binary.
+
+**Resolution:** Leave user configuration untouched and run the repository gate with `uv --no-config run ...`; use `uv --no-config lock --check --offline` for the matching lock gate.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
