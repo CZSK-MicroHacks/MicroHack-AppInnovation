@@ -8,6 +8,10 @@ namespace LegoCatalog.App.Configuration;
 public sealed record CatalogRuntimeOptions(
     string SqlConnectionString,
     string ImagesPath,
+    CatalogImageProvider ImageProvider,
+    Uri? BlobServiceEndpoint,
+    string? BlobContainerName,
+    string? WorkloadIdentityClientId,
     string SeedPath,
     bool StartupImportEnabled,
     string PerformanceApiKey,
@@ -34,6 +38,8 @@ public sealed record CatalogRuntimeOptions(
             configuration,
             "CATALOG_DATABASE_NAME",
             "Catalog:Database:Name");
+        var authentication = ParseDatabaseAuthentication(
+            configuration["CATALOG_DATABASE_AUTHENTICATION"]);
         var username = Optional(
             configuration,
             "CATALOG_DATABASE_USERNAME",
@@ -42,7 +48,15 @@ public sealed record CatalogRuntimeOptions(
             configuration,
             "CATALOG_DATABASE_PASSWORD",
             "Catalog:Database:Password");
-        if (string.IsNullOrWhiteSpace(username) != string.IsNullOrWhiteSpace(password))
+        if (authentication == CatalogDatabaseAuthentication.ManagedIdentity
+            && (username is not null || password is not null))
+        {
+            throw new InvalidOperationException(
+                "Managed identity database authentication forbids username and password configuration.");
+        }
+
+        if (authentication == CatalogDatabaseAuthentication.Local
+            && string.IsNullOrWhiteSpace(username) != string.IsNullOrWhiteSpace(password))
         {
             throw new InvalidOperationException(
                 "CATALOG_DATABASE_USERNAME and CATALOG_DATABASE_PASSWORD must be configured together.");
@@ -63,7 +77,21 @@ public sealed record CatalogRuntimeOptions(
             MultipleActiveResultSets = false,
             PersistSecurityInfo = false,
         };
-        if (username is null)
+        var workloadIdentityClientId = Optional(configuration, "AZURE_CLIENT_ID");
+        if (authentication == CatalogDatabaseAuthentication.ManagedIdentity)
+        {
+            if (!isManagedHost)
+            {
+                throw new InvalidOperationException(
+                    "Managed identity database authentication requires an Azure SQL host.");
+            }
+
+            connection.Authentication = SqlAuthenticationMethod.ActiveDirectoryManagedIdentity;
+            connection.UserID = workloadIdentityClientId
+                ?? throw new InvalidOperationException(
+                    "AZURE_CLIENT_ID is required for managed identity database authentication.");
+        }
+        else if (username is null)
         {
             connection.IntegratedSecurity = true;
         }
@@ -76,6 +104,23 @@ public sealed record CatalogRuntimeOptions(
         var imagesPath = ResolvePath(
             Required(configuration, "CATALOG_IMAGES_PATH", "Catalog:ImagesPath"),
             contentRootPath);
+        var imageProvider = ParseImageProvider(
+            configuration["CATALOG_IMAGE_PROVIDER"]);
+        Uri? blobServiceEndpoint = null;
+        string? blobContainerName = null;
+        if (imageProvider == CatalogImageProvider.AzureBlob)
+        {
+            var endpoint = Required(configuration, "CATALOG_BLOB_SERVICE_ENDPOINT");
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out blobServiceEndpoint)
+                || blobServiceEndpoint.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new InvalidOperationException(
+                    "CATALOG_BLOB_SERVICE_ENDPOINT must be an absolute HTTPS URI.");
+            }
+
+            blobContainerName = Required(configuration, "CATALOG_BLOB_CONTAINER");
+            workloadIdentityClientId ??= Required(configuration, "AZURE_CLIENT_ID");
+        }
         var seedPath = ResolvePath(
             Required(configuration, "CATALOG_SEED_PATH", "Catalog:SeedPath"),
             contentRootPath);
@@ -97,6 +142,10 @@ public sealed record CatalogRuntimeOptions(
         return new CatalogRuntimeOptions(
             connection.ConnectionString,
             imagesPath,
+            imageProvider,
+            blobServiceEndpoint,
+            blobContainerName,
+            workloadIdentityClientId,
             seedPath,
             startupImportEnabled,
             apiKey,
@@ -125,6 +174,29 @@ public sealed record CatalogRuntimeOptions(
         }
 
         return parsed;
+    }
+
+    private static CatalogDatabaseAuthentication ParseDatabaseAuthentication(
+        string? rawValue)
+    {
+        return rawValue?.Trim() switch
+        {
+            null or "" or "local" => CatalogDatabaseAuthentication.Local,
+            "managed-identity" => CatalogDatabaseAuthentication.ManagedIdentity,
+            _ => throw new InvalidOperationException(
+                "CATALOG_DATABASE_AUTHENTICATION must be 'local' or 'managed-identity'."),
+        };
+    }
+
+    private static CatalogImageProvider ParseImageProvider(string? rawValue)
+    {
+        return rawValue?.Trim() switch
+        {
+            null or "" or "local" => CatalogImageProvider.Local,
+            "azure-blob" => CatalogImageProvider.AzureBlob,
+            _ => throw new InvalidOperationException(
+                "CATALOG_IMAGE_PROVIDER must be 'local' or 'azure-blob'."),
+        };
     }
 
     private static int? ParseOptionalPort(string? rawValue)
@@ -185,4 +257,16 @@ public sealed record CatalogRuntimeOptions(
             ?? (fallbackKey is null ? null : configuration[fallbackKey]);
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+}
+
+public enum CatalogDatabaseAuthentication
+{
+    Local,
+    ManagedIdentity,
+}
+
+public enum CatalogImageProvider
+{
+    Local,
+    AzureBlob,
 }

@@ -1,0 +1,11 @@
+using '../main.bicep'
+
+param deploymentStage = 'bootstrap'
+param stack = 'dotnet-sqlserver'
+param imageProvider = 'azure-blob'
+param postgresqlAuthentication = 'managed-identity'
+param resourceGroupName = 'rg-mh-dotnet-bootstrap-example'
+param teamName = 'dotnet-bootstrap'
+param sourceCommit = '0000000000000000000000000000000000000000'
+param facilitatorPrincipalName = 'facilitator@example.com'
+param facilitatorPrincipalObjectId = '00000000-0000-0000-0000-000000000003'

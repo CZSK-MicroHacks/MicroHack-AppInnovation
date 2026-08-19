@@ -1,5 +1,6 @@
 package com.microsoft.microhack.catalog.web;
 
+import com.microsoft.microhack.catalog.service.ImageStore;
 import com.microsoft.microhack.catalog.service.LocalImageStore;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -16,9 +17,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class ImageController {
 
-    private final LocalImageStore imageStore;
+    private final ImageStore imageStore;
 
-    public ImageController(LocalImageStore imageStore) {
+    public ImageController(ImageStore imageStore) {
         this.imageStore = imageStore;
     }
 

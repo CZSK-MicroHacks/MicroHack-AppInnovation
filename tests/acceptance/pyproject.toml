@@ -11,10 +11,19 @@ dependencies = [
   "pydantic==2.11.7",
 ]
 
+[project.scripts]
+catalog-migrate = "catalog_migrate.cli:main"
+
 [dependency-groups]
 dev = [
   "pytest==8.4.1",
 ]
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["catalog_acceptance*", "catalog_migrate*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -104,3 +104,57 @@ class-qualified native identities. Telemetry evidence must include normalized no
 query-result JSON for every named trace, metric, log, and resource attribute. Native
 tests prove each rejected document adds exactly one counter unit; exported counter
 measurements are validated as positive integral aggregates and may exceed one.
+
+## Bounded target migration
+
+Install the package and inspect the exact seven-command surface:
+
+```bash
+cd tests/acceptance
+uv sync
+uv run catalog-migrate --help
+uv run catalog-migrate sql export --help
+uv run catalog-migrate sql import --help
+uv run catalog-migrate postgresql export --help
+uv run catalog-migrate postgresql import --help
+uv run catalog-migrate images copy --help
+uv run catalog-migrate verify --help
+uv run catalog-migrate render-handoff --help
+```
+
+The commands and arguments are frozen by
+`workshop/contracts/migration-cli-contract.json`. Database and application
+passwords are accepted only through the command-specific `MIGRATION_*`
+environment variables. Every Azure CLI child process uses
+`AZURE_CONFIG_DIR="$HOME/.azure-365"`.
+
+Exports are source-read-only and create a BACPAC or PostgreSQL custom archive
+plus a non-secret integrity sidecar. Imports and image copy require the target
+resource ID from the application-stage target output, the same value in
+`--confirm-target-resource-id`, and `--execute`. They refuse nonempty targets.
+The CLI never creates or deletes Azure resources.
+
+PostgreSQL restore always uses
+`MIGRATION_TARGET_ADMINISTRATOR_PASSWORD`. Password mode separately requires
+`MIGRATION_TARGET_APPLICATION_PASSWORD`; managed-identity mode forbids that
+variable and verifies the facilitator's isolated Azure CLI identity before
+creating the workload principal.
+
+After database import and image copy, produce the report and handoff:
+
+```bash
+uv run catalog-migrate verify \
+  --stack java-postgresql \
+  --source-commit 0000000000000000000000000000000000000000 \
+  --database-artifact /protected/catalog.dump \
+  --target-output ../../evidence/azure-target-output.json \
+  --output ../../evidence/migration-report.json
+
+uv run catalog-migrate render-handoff \
+  --target-output ../../evidence/azure-target-output.json \
+  --migration-report ../../evidence/migration-report.json \
+  --acceptance-report ../../evidence/acceptance-report.json \
+  --telemetry-report ../../evidence/telemetry-report.json \
+  --runtime-test-report ../../evidence/runtime-test-report.json \
+  --output ../../evidence/modernization-contract.json
+```

@@ -33,6 +33,7 @@ public sealed class StartupImportHostedService : BackgroundService
             await using var scope = _services.CreateAsyncScope();
             var database = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
             await database.Database.MigrateAsync(stoppingToken);
+            await PreserveContractMigrationHistoryAsync(database, stoppingToken);
 
             if (_options.StartupImportEnabled)
             {
@@ -65,5 +66,22 @@ public sealed class StartupImportHostedService : BackgroundService
                 exception,
                 "Startup migration or import failed; readiness remains unavailable.");
         }
+    }
+
+    /// <summary>
+    /// Preserves the frozen source-era migration identity after a newer EF runtime applies it.
+    /// </summary>
+    private static Task<int> PreserveContractMigrationHistoryAsync(
+        CatalogDbContext database,
+        CancellationToken cancellationToken)
+    {
+        return database.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE [__EFMigrationsHistory]
+            SET [ProductVersion] = N'8.0.22'
+            WHERE [MigrationId] = N'202608180001_ContractBaseline'
+              AND [ProductVersion] <> N'8.0.22';
+            """,
+            cancellationToken);
     }
 }

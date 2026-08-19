@@ -136,7 +136,7 @@ wheels = [
 [[package]]
 name = "microhack-catalog-acceptance"
 version = "1.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "idna" },

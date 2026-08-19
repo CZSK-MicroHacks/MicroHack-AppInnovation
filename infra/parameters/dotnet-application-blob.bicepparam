@@ -1,0 +1,13 @@
+using '../main.bicep'
+
+param deploymentStage = 'application'
+param stack = 'dotnet-sqlserver'
+param imageProvider = 'azure-blob'
+param postgresqlAuthentication = 'managed-identity'
+param resourceGroupName = 'rg-mh-dotnet-application-example'
+param teamName = 'dotnet-app'
+param sourceCommit = '0000000000000000000000000000000000000000'
+param facilitatorPrincipalName = 'facilitator@example.com'
+param facilitatorPrincipalObjectId = '00000000-0000-0000-0000-000000000003'
+param imageDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+param performanceApiKey = 'SANITIZED-SECURE-VALUE-REPLACE-FOR-WHAT-IF'

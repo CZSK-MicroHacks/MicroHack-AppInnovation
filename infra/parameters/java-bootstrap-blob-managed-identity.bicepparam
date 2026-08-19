@@ -1,0 +1,12 @@
+using '../main.bicep'
+
+param deploymentStage = 'bootstrap'
+param stack = 'java-postgresql'
+param imageProvider = 'azure-blob'
+param postgresqlAuthentication = 'managed-identity'
+param resourceGroupName = 'rg-mh-java-bootstrap-example'
+param teamName = 'java-bootstrap'
+param sourceCommit = '0000000000000000000000000000000000000000'
+param facilitatorPrincipalName = 'facilitator@example.com'
+param facilitatorPrincipalObjectId = '00000000-0000-0000-0000-000000000003'
+param postgresqlAdministratorPassword = 'SANITIZED-SECURE-VALUE-REPLACE-FOR-WHAT-IF'

@@ -1,13 +1,13 @@
-# Java/PostgreSQL catalog baseline
+# Java/PostgreSQL catalog target
 
-This directory contains one intentionally monolithic Spring Boot 3.5.16 application for
-Microsoft OpenJDK 17.0.20+8 and PostgreSQL 18.6. It uses Spring MVC, Thymeleaf, JPA schema
-validation, and the Flyway-owned `V1__contract_baseline.sql` migration. It contains no
-student-facing container image or Azure infrastructure.
+This directory contains one monolithic Spring Boot 4.0.7 application for
+Microsoft OpenJDK 21.0.12+8-LTS and PostgreSQL 18.6. It uses Spring MVC, Thymeleaf, JPA schema
+validation, and the Flyway-owned `V1__contract_baseline.sql` migration. It exposes
+the same frozen routes and data behavior in local and Azure target modes.
 
 ## Prerequisites
 
-- Microsoft OpenJDK 17.0.20+8
+- Microsoft OpenJDK 21.0.12+8-LTS
 - Docker 27.4 or a PostgreSQL 18.6 service
 - `psql` 18.6 for full database acceptance
 - `uv` 0.8.22 and Python 3.12 for the shared acceptance harness
@@ -25,8 +25,14 @@ Supply every secret outside source control:
 | `CATALOG_DATABASE_NAME` | Database name |
 | `CATALOG_DATABASE_USERNAME` | Database application identity |
 | `CATALOG_DATABASE_PASSWORD` | Database password |
+| `CATALOG_DATABASE_AUTHENTICATION` | `password-secret` (default) or `managed-identity` |
+| `CATALOG_DATABASE_JDBC_AUTH_PARAMETER` | Managed identity only: `&authenticationPluginClassName=com.azure.identity.extensions.jdbc.postgresql.AzurePostgresqlAuthenticationPlugin` |
+| `AZURE_CLIENT_ID` | User-assigned workload identity client ID |
 | `CATALOG_DATABASE_SSL_MODE` | PostgreSQL JDBC SSL mode; use `disable` only locally |
 | `CATALOG_IMAGES_PATH` | Absolute or working-directory-relative canonical image directory |
+| `CATALOG_IMAGE_PROVIDER` | `local` (default) or `azure-blob` |
+| `CATALOG_BLOB_SERVICE_ENDPOINT` | Blob provider HTTPS service endpoint |
+| `CATALOG_BLOB_CONTAINER` | Blob provider container |
 | `CATALOG_SEED_PATH` | Absolute or working-directory-relative `catalog.json` |
 | `CATALOG_STARTUP_IMPORT_ENABLED` | `true` or `false`; default `true` |
 | `PERFTEST_API_KEY` | Required non-default API key |
@@ -38,6 +44,9 @@ Supply every secret outside source control:
 
 Standard `OTEL_*` exporter variables configure protocol, headers, TLS, sampling, and
 timeouts. Set `OTEL_SDK_DISABLED=true` only when intentionally running without a collector.
+Managed identity mode leaves `CATALOG_DATABASE_PASSWORD` unset; the pinned Azure JDBC
+authentication plugin refreshes PostgreSQL access tokens. Blob reads use the same
+user-assigned identity and accept only canonical lowercase UUID PNG keys.
 
 Catalog imports validate and write through a proxied transaction worker. The surrounding
 telemetry boundary reports completion only after commit and records one rejected document when
@@ -84,6 +93,19 @@ Open `http://localhost:8080/`. Liveness is `/healthz`; readiness is `/readyz`.
 ./mvnw package
 java -jar target/catalog-java-1.0.0.jar
 ```
+
+## Build the target container
+
+From the repository root:
+
+```bash
+docker buildx build --platform linux/amd64 --load \
+  -f java/Dockerfile -t mh-java:p4 .
+```
+
+The digest-pinned image runs as numeric non-root user `10001`, listens on `8080`,
+and includes the canonical seed JSON read-only. Set
+`CATALOG_STARTUP_IMPORT_ENABLED=false` after migration verification.
 
 Surefire writes native JUnit XML to `target/surefire-reports/`, including all fourteen
 frozen runtime display names and their package-qualified test classes. The conformance

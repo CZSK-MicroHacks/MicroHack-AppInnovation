@@ -32,7 +32,13 @@ builder.Services.AddSingleton<StartupState>();
 builder.Services.AddSingleton<CatalogDocumentParser>();
 builder.Services.AddScoped<IFigureRepository, FigureRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-builder.Services.AddScoped<IImageStore, LocalImageStore>();
+builder.Services.AddScoped<IImageStore>(
+    _ => runtime.ImageProvider switch
+    {
+        CatalogImageProvider.Local => new LocalImageStore(runtime),
+        CatalogImageProvider.AzureBlob => new AzureBlobImageStore(runtime),
+        _ => throw new InvalidOperationException("Unsupported catalog image provider."),
+    });
 builder.Services.AddScoped<ICatalogDatabaseHealth, CatalogDatabaseHealth>();
 builder.Services.AddScoped<FigureCatalogService>();
 builder.Services.AddScoped<ImportService>();

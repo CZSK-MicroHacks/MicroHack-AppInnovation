@@ -2,6 +2,9 @@ package com.microsoft.microhack.catalog;
 
 import com.microsoft.microhack.catalog.config.CatalogRuntimeOptions;
 import com.microsoft.microhack.catalog.config.CatalogResourceIdentity;
+import com.microsoft.microhack.catalog.service.AzureBlobImageStore;
+import com.microsoft.microhack.catalog.service.ImageStore;
+import com.microsoft.microhack.catalog.service.LocalImageStore;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender;
@@ -24,6 +27,15 @@ public class CatalogApplication {
     @Bean
     CatalogRuntimeOptions catalogRuntimeOptions(Environment environment) {
         return CatalogRuntimeOptions.from(environment, instanceId());
+    }
+
+    /** Selects the local/Azure Files-compatible or Blob-backed image provider. */
+    @Bean
+    ImageStore imageStore(CatalogRuntimeOptions options) {
+        return switch (options.imageProvider()) {
+            case LOCAL -> new LocalImageStore(options);
+            case AZURE_BLOB -> new AzureBlobImageStore(options);
+        };
     }
 
     /** Initializes the OpenTelemetry SDK using standard OTEL environment variables. */
