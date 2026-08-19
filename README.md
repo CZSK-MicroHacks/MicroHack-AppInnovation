@@ -53,8 +53,8 @@ Source code and important documentation for this application is stored in ```dot
 - You may provision GitHub Organization for participants to give them Copilot licenses and environment for challenge 03. Follow [guide](./baseInfra/github/README.md)
 - Default subscription limits in MngEnv type of subscriptions is good for 50 seats per region (50 ACA envs, 100 VM cores, 50 Grafana, ...). To scale for more configure Terraform with more regions (script will balance deployments to those - in Europe for example ["swedencentral", "germanywestcentral", "francecentral", "norwayeast"] ) or use more subscriptions (you will have to create separate deployments for this, script do not support multiple subscriptions natively).
 
-### ch01: Migrate database, containerize application, deploy to Azure
-[Challenge](/challenges/ch01/README.md) | [Solution]( /solutions/ch01/README.md)
+### ch01: Choose and complete one modernization path
+[Path selection and common acceptance gate](/challenges/ch01/README.md)
 
 ### ch02: Test autoscaling under load
 [Challenge](/challenges/ch02/README.md) | [Solution]( /solutions/ch02/README.md)
