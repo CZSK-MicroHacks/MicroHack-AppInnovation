@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -63,6 +64,109 @@ def test_handoff_example_matches_schema(repo_root: Path) -> None:
         load_json(contracts / "telemetry-evidence.schema.json"),
         load_json(contracts / "telemetry-evidence.example.json"),
     )
+
+
+def test_challenge_path_registry_is_complete(repo_root: Path) -> None:
+    """Freeze all six P5 slices on one target and exact path protocol."""
+    contracts = repo_root / "workshop" / "contracts"
+    registry = load_json(contracts / "challenge-paths.json")
+    schema = load_json(contracts / "challenge-paths.schema.json")
+    _validate(schema, registry)
+    assert registry["sharedChallenge"] == "challenges/ch01/README.md"
+    assert registry["sharedTarget"] == {
+        "infrastructure": "infra/main.bicep",
+        "migrationCommand": "catalog-migrate",
+        "handoffRenderCommand": (
+            "catalog-migrate render-handoff --path <path> "
+            "--rollback-runbook <path>"
+        ),
+        "handoffValidationCommand": "python -m catalog_acceptance.handoff_cli",
+        "handoffSchema": "workshop/contracts/modernization-contract.schema.json",
+        "acceptanceCommand": "python -m catalog_acceptance",
+    }
+    slices = registry["slices"]
+    assert {item["id"] for item in slices} == {
+        "manual-dotnet",
+        "manual-java",
+        "copilot-rewrite-dotnet",
+        "copilot-rewrite-java",
+        "copilot-modernization-dotnet",
+        "copilot-modernization-java",
+    }
+    by_id = {item["id"]: item for item in slices}
+    assert by_id["manual-dotnet"]["tooling"] == []
+    assert by_id["manual-java"]["databaseFamily"] == "postgresql-flexible"
+    assert by_id["copilot-rewrite-dotnet"]["tooling"] == [
+        "github.copilot",
+        "github.copilot-chat",
+    ]
+    assert by_id["copilot-modernization-dotnet"]["tooling"] == [
+        "github.copilot",
+        "github.copilot-chat",
+        "vscjava.migrate-java-to-azure",
+    ]
+    assert by_id["copilot-modernization-java"]["tooling"] == [
+        "github.copilot",
+        "github.copilot-chat",
+        "vscjava.migrate-java-to-azure",
+    ]
+    assert {
+        (item["challenge"], item["solution"]) for item in slices
+    } == {
+        (
+            f"challenges/ch01-{item['path']}/README.md",
+            (
+                f"solutions/ch01-{item['path']}/"
+                f"{'dotnet' if item['sourcePath'] == 'dotnet' else 'java'}/README.md"
+            ),
+        )
+        for item in slices
+    }
+    provisioner = (repo_root / "baseInfra/scripts/provision-vm.ps1").read_text(
+        encoding="utf-8"
+    )
+    common_extensions = provisioner.split("if ($Stack -eq 'dotnet')", maxsplit=1)[0]
+    assert "'vscjava.migrate-java-to-azure'" in common_extensions
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("path", "copilot-rewrite"),
+        ("stack", "java-postgresql"),
+        ("sourcePath", "java"),
+        ("dockerfile", "java/Dockerfile"),
+        ("challenge", "challenges/ch01-copilot-rewrite/README.md"),
+        ("solution", "solutions/ch01-manual/java/README.md"),
+        ("databaseFamily", "postgresql-flexible"),
+        ("imageProvider", "azure-blob"),
+        ("tooling", ["github.copilot"]),
+        (
+            "pathEvidence",
+            [
+                "evidence/characterization.md",
+                "evidence/bounded-plan.md",
+                "evidence/review-checklist.md",
+                "evidence/decision-log.md",
+            ],
+        ),
+    ],
+)
+def test_challenge_path_registry_rejects_cross_slice_mutations(
+    repo_root: Path,
+    field: str,
+    invalid_value: object,
+) -> None:
+    """Path, stack, tooling, and evidence relationships cannot drift."""
+    contracts = repo_root / "workshop" / "contracts"
+    registry = load_json(contracts / "challenge-paths.json")
+    schema = load_json(contracts / "challenge-paths.schema.json")
+    mutated = deepcopy(registry)
+    target = next(item for item in mutated["slices"] if item["id"] == "manual-dotnet")
+    target[field] = invalid_value
+
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, mutated)
 
 
 def test_p4_target_and_migration_examples_match_schemas(repo_root: Path) -> None:
@@ -328,6 +432,8 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         == "modernization-contract.schema.json"
     )
     assert "--rollback-revision" in commands["render-handoff"]["arguments"]
+    assert "--path" in commands["render-handoff"]["arguments"]
+    assert "--rollback-runbook" in commands["render-handoff"]["arguments"]
     assert contract["failureProtocol"] == {
         "schema": "migration-error.schema.json",
         "outputChannel": "stderr",
@@ -341,7 +447,7 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "requiredBeforeApplicationPrincipalCreation": True,
         "verifyAbsent": True,
     }
-    assert contract["schemaVersion"] == "1.2.0"
+    assert contract["schemaVersion"] == "1.3.0"
     assert contract["safety"]["secretInputsFromEnvironmentOnly"] is True
     assert (
         contract["safety"]["sqlPackagePasswordTransport"]
@@ -587,6 +693,10 @@ def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
     invalid_handoff = load_json(contracts / "modernization-contract.example.json")
     invalid_handoff["database"]["migrationMechanism"] = "unrelated"
     invalid_handoff["database"]["migrationVersion"] = "999"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["path"] = "manual"
     with pytest.raises(JsonSchemaValidationError):
         _validate(handoff_schema, invalid_handoff)
 
@@ -886,7 +996,10 @@ def test_handoff_bundle_cross_file_consistency(
         (repo_root / "data" / "manifest.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    (evidence / "rollback.md").write_text("rollback fixture\n", encoding="utf-8")
+    (evidence / "rollback-runbook.md").write_text(
+        "rollback fixture\n",
+        encoding="utf-8",
+    )
     runtime_example = load_json(contracts / "runtime-test-evidence.example.json")
     runtime_results = "\n".join(
         f'<UnitTestResult testId="runtime-{index}" '
@@ -1261,7 +1374,7 @@ def test_handoff_bundle_cross_file_consistency(
         validate_handoff(handoff_path, contracts, tmp_path)
     handoff_path.write_text(json.dumps(handoff), encoding="utf-8")
 
-    rollback = evidence / "rollback.md"
+    rollback = evidence / "rollback-runbook.md"
     rollback.write_text("", encoding="utf-8")
     with pytest.raises(ValueError, match="artifact is empty"):
         validate_handoff(handoff_path, contracts, tmp_path)

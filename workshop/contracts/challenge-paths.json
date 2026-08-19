@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "1.0.0",
+  "sharedChallenge": "challenges/ch01/README.md",
+  "sharedTarget": {
+    "infrastructure": "infra/main.bicep",
+    "migrationCommand": "catalog-migrate",
+    "handoffRenderCommand": "catalog-migrate render-handoff --path <path> --rollback-runbook <path>",
+    "handoffValidationCommand": "python -m catalog_acceptance.handoff_cli",
+    "handoffSchema": "workshop/contracts/modernization-contract.schema.json",
+    "acceptanceCommand": "python -m catalog_acceptance"
+  },
+  "slices": [
+    {
+      "id": "manual-dotnet",
+      "path": "manual",
+      "stack": "dotnet-sqlserver",
+      "sourcePath": "dotnet",
+      "dockerfile": "dotnet/Dockerfile",
+      "challenge": "challenges/ch01-manual/README.md",
+      "solution": "solutions/ch01-manual/dotnet/README.md",
+      "databaseFamily": "azure-sql",
+      "imageProvider": "azure-files",
+      "tooling": [],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/baseline-backup.md",
+        "evidence/managed-database-separation.json",
+        "evidence/container-build.json",
+        "evidence/iac-review.md"
+      ]
+    },
+    {
+      "id": "manual-java",
+      "path": "manual",
+      "stack": "java-postgresql",
+      "sourcePath": "java",
+      "dockerfile": "java/Dockerfile",
+      "challenge": "challenges/ch01-manual/README.md",
+      "solution": "solutions/ch01-manual/java/README.md",
+      "databaseFamily": "postgresql-flexible",
+      "imageProvider": "azure-files",
+      "tooling": [],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/baseline-backup.md",
+        "evidence/managed-database-separation.json",
+        "evidence/container-build.json",
+        "evidence/iac-review.md"
+      ]
+    },
+    {
+      "id": "copilot-rewrite-dotnet",
+      "path": "copilot-rewrite",
+      "stack": "dotnet-sqlserver",
+      "sourcePath": "dotnet",
+      "dockerfile": "dotnet/Dockerfile",
+      "challenge": "challenges/ch01-copilot-rewrite/README.md",
+      "solution": "solutions/ch01-copilot-rewrite/dotnet/README.md",
+      "databaseFamily": "azure-sql",
+      "imageProvider": "azure-blob",
+      "tooling": [
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/characterization.md",
+        "evidence/bounded-plan.md",
+        "evidence/review-checklist.md",
+        "evidence/decision-log.md"
+      ]
+    },
+    {
+      "id": "copilot-rewrite-java",
+      "path": "copilot-rewrite",
+      "stack": "java-postgresql",
+      "sourcePath": "java",
+      "dockerfile": "java/Dockerfile",
+      "challenge": "challenges/ch01-copilot-rewrite/README.md",
+      "solution": "solutions/ch01-copilot-rewrite/java/README.md",
+      "databaseFamily": "postgresql-flexible",
+      "imageProvider": "azure-blob",
+      "tooling": [
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/characterization.md",
+        "evidence/bounded-plan.md",
+        "evidence/review-checklist.md",
+        "evidence/decision-log.md"
+      ]
+    },
+    {
+      "id": "copilot-modernization-dotnet",
+      "path": "copilot-modernization",
+      "stack": "dotnet-sqlserver",
+      "sourcePath": "dotnet",
+      "dockerfile": "dotnet/Dockerfile",
+      "challenge": "challenges/ch01-copilot-modernization/README.md",
+      "solution": "solutions/ch01-copilot-modernization/dotnet/README.md",
+      "databaseFamily": "azure-sql",
+      "imageProvider": "azure-blob",
+      "tooling": [
+        "github.copilot",
+        "github.copilot-chat",
+        "vscjava.migrate-java-to-azure"
+      ],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/assessment.md",
+        "evidence/modernization-plan.md",
+        "evidence/task-results.json",
+        "evidence/build-test-cve-summary.md"
+      ]
+    },
+    {
+      "id": "copilot-modernization-java",
+      "path": "copilot-modernization",
+      "stack": "java-postgresql",
+      "sourcePath": "java",
+      "dockerfile": "java/Dockerfile",
+      "challenge": "challenges/ch01-copilot-modernization/README.md",
+      "solution": "solutions/ch01-copilot-modernization/java/README.md",
+      "databaseFamily": "postgresql-flexible",
+      "imageProvider": "azure-blob",
+      "tooling": [
+        "github.copilot",
+        "github.copilot-chat",
+        "vscjava.migrate-java-to-azure"
+      ],
+      "requiredEvidence": [
+        "evidence/azure-target-output.json",
+        "evidence/migration-report.json",
+        "evidence/acceptance-report.json",
+        "evidence/runtime-test-report.json",
+        "evidence/telemetry-report.json",
+        "evidence/modernization-contract.json",
+        "evidence/rollback-runbook.md"
+      ],
+      "pathEvidence": [
+        "evidence/assessment.md",
+        "evidence/modernization-plan.md",
+        "evidence/task-results.json",
+        "evidence/build-test-cve-summary.md"
+      ]
+    }
+  ]
+}

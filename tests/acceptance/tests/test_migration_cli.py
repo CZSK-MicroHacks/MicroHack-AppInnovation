@@ -134,7 +134,9 @@ def test_exact_seven_commands_are_registered() -> None:
             "--acceptance-report", "acceptance.json",
             "--telemetry-report", "telemetry.json",
             "--runtime-test-report", "runtime.json",
+            "--path", "manual",
             "--rollback-revision", "catalog--baseline-000000000000",
+            "--rollback-runbook", "rollback.md",
             "--output", "handoff.json",
         ],
     ],
@@ -457,7 +459,13 @@ def test_render_handoff_writes_the_schema_valid_document(
     )
     target_path = tmp_path / "target.json"
     target_path.write_text(json.dumps(target), encoding="utf-8")
-    monkeypatch.setattr(cli, "render_handoff", lambda **kwargs: handoff)
+    rendered: dict[str, object] = {}
+
+    def render(**kwargs: object) -> dict:
+        rendered.update(kwargs)
+        return handoff
+
+    monkeypatch.setattr(cli, "render_handoff", render)
     monkeypatch.setattr(
         cli,
         "validate_migration_topology",
@@ -478,14 +486,20 @@ def test_render_handoff_writes_the_schema_valid_document(
             "telemetry.json",
             "--runtime-test-report",
             "runtime.json",
+            "--path",
+            "manual",
             "--rollback-revision",
             "catalog--baseline-000000000000",
+            "--rollback-runbook",
+            str(repo_root / "infra/README.md"),
             "--output",
             str(output),
         ]
     )
 
     assert result == 0
+    assert rendered["modernization_path"] == "manual"
+    assert rendered["rollback_runbook_path"] == repo_root / "infra/README.md"
     assert json.loads(output.read_text(encoding="utf-8")) == handoff
     assert json.loads(capsys.readouterr().out) == handoff
 

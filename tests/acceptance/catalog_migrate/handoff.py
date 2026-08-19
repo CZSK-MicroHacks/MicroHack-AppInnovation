@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from catalog_migrate.azure import validate_release
 from catalog_migrate.contracts import (
@@ -23,7 +23,11 @@ def render_handoff(
     acceptance_path: Path,
     telemetry_path: Path,
     runtime_path: Path,
+    modernization_path: Literal[
+        "manual", "copilot-rewrite", "copilot-modernization"
+    ],
     rollback_revision: str,
+    rollback_runbook_path: Path,
 ) -> dict[str, Any]:
     """Consume validated evidence and render the frozen modernization contract."""
     target = load_json(target_path)
@@ -31,6 +35,21 @@ def render_handoff(
     acceptance = load_json(acceptance_path)
     telemetry = load_json(telemetry_path)
     runtime = load_json(runtime_path)
+    if modernization_path not in {
+        "manual",
+        "copilot-rewrite",
+        "copilot-modernization",
+    }:
+        raise InvalidInputError("unsupported modernization path")
+    if rollback_runbook_path.suffix.lower() != ".md":
+        raise InvalidInputError("rollback runbook must be a Markdown document")
+    rollback_runbook = repository_path(rollback_runbook_path)
+    try:
+        rollback_runbook_contents = rollback_runbook_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise InvalidInputError("rollback runbook could not be read") from error
+    if not rollback_runbook_contents.strip():
+        raise InvalidInputError("rollback runbook must not be empty")
     for document, schema in (
         (target, "azure-target-output.schema.json"),
         (migration, "migration-report.schema.json"),
@@ -39,6 +58,13 @@ def render_handoff(
         (runtime, "runtime-test-evidence.schema.json"),
     ):
         validate_document(document, schema)
+    expected_image_provider = (
+        "azure-files" if modernization_path == "manual" else "azure-blob"
+    )
+    if target["images"]["provider"] != expected_image_provider:
+        raise InvalidInputError(
+            f"{modernization_path} requires {expected_image_provider} images"
+        )
     if target["deploymentStage"] != "application" or target["application"] is None:
         raise InvalidInputError("handoff requires application-stage target output")
     validate_release(runner, target, rollback_revision)
@@ -88,7 +114,7 @@ def render_handoff(
     ):
         raise InvalidInputError("telemetry identity differs from target output")
     handoff = {
-        "schemaVersion": "1.2.0",
+        "schemaVersion": "1.3.0",
         "source": {
             "stack": stack,
             "runtimeVersion": runtime_version,
@@ -99,7 +125,7 @@ def render_handoff(
             key: load_json(Path(__file__).resolve().parents[3] / "data" / "manifest.json")[key]
             for key in ("schemaVersion", "counts", "hashes")
         },
-        "path": "manual",
+        "path": modernization_path,
         "application": {
             **app,
             "region": target["location"],
@@ -162,7 +188,7 @@ def render_handoff(
         },
         "rollback": {
             "targetRevision": rollback_revision,
-            "runbook": "infra/README.md",
+            "runbook": rollback_runbook,
         },
         "evidence": {
             "migrationReport": repository_path(migration_path),

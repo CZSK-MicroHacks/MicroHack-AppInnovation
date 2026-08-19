@@ -410,15 +410,15 @@ function Install-CommonTools {
     }
 
     $Extensions = @{
-        'github.copilot'      = '1.388.0'
-        'github.copilot-chat' = '0.48.1'
+        'github.copilot'                   = '1.388.0'
+        'github.copilot-chat'              = '0.48.1'
+        'vscjava.migrate-java-to-azure'    = '1.23.26081703'
     }
     if ($Stack -eq 'dotnet') {
         $Extensions['ms-dotnettools.vscode-dotnet-modernize'] = '1.0.1161'
         $Extensions['ms-dotnettools.upgrade-agent'] = '1.1.290'
     }
     else {
-        $Extensions['vscjava.migrate-java-to-azure'] = '1.23.26081703'
         $Extensions['vscjava.vscode-java-upgrade'] = '2.1.2'
     }
 

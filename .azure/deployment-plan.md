@@ -1,6 +1,6 @@
 # Shared Azure Target Deployment Plan
 
-**Status:** Approved - corrective contract refreeze in progress
+**Status:** Approved - P4 ready; P5 contract freeze in progress
 
 ## Scope and classification
 
@@ -15,6 +15,13 @@ Implement P4 from `docs/RewritePlan.md` as an existing-application modernization
 
 The target is a workshop/lab environment using the smallest practical SKUs. Examples and
 what-if validation use Sweden Central.
+
+P5-P9 consume this target without creating a second architecture. P5 adds six
+stack/path solution guides under one Challenge 1 rubric, P6 adds repeatable load,
+OIDC CI/CD, and observability artifacts, P7/P8 add facilitator-governed Defender
+and SRE exercises, and P9 reconciles the complete workshop documentation. P10 live
+deployment, paid-plan enablement, incident execution, cutover, and cleanup remain
+separate authorization gates.
 
 ## Frozen inputs
 
@@ -199,8 +206,9 @@ The coordinator will freeze and test these contracts before starting the P4 chil
    PostgreSQL import derives authentication and both non-secret principal names from target
    output; administrator and application password boundaries remain distinct and application
    passwords are required only in `password-secret` mode. Mutating and verification commands
-   require bootstrap output. `render-handoff` requires application output plus an explicit,
-   distinct retained rollback revision.
+   require bootstrap output. `render-handoff` requires application output plus the exact
+   selected modernization path, a nonempty repository-contained Markdown rollback runbook,
+   and an explicit distinct retained rollback revision.
 5. Add SqlPackage and all Azure SDK/base-image dependencies to
    `workshop/toolchain.lock.json` with integrity metadata.
 6. Extend acceptance tests so producer outputs, migration reports, and the modernization

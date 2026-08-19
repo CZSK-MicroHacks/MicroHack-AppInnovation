@@ -319,6 +319,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Prepend `/opt/homebrew/opt/libpq/bin` to `PATH` for the acceptance process. The verifier carries the resulting `PATH` into its minimal child environment without forwarding unrelated host secrets.
 
+## 46. The .NET VM is missing the unified modernization extension
+**Symptom:** The P5 .NET modernization path requires the frozen GitHub Copilot modernization extension, but only the Java VM reports it as installed.
+
+**Cause:** The extension retained its historical `vscjava.migrate-java-to-azure` identifier after adding supported .NET workflows, so stack-gated provisioning incorrectly treated it as Java-only.
+
+**Resolution:** Install the exact locked, signed extension on both workshop VMs. Keep database cutover in `catalog-migrate`; extension assessment and transformation output remains evidence rather than proof of data migration.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

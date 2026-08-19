@@ -192,6 +192,8 @@ uv run catalog-migrate render-handoff \
   --acceptance-report ../../evidence/acceptance-report.json \
   --telemetry-report ../../evidence/telemetry-report.json \
   --runtime-test-report ../../evidence/runtime-test-report.json \
+  --path copilot-modernization \
   --rollback-revision '<container-app>--baseline-000000000000' \
+  --rollback-runbook ../../evidence/rollback-runbook.md \
   --output ../../evidence/modernization-contract.json
 ```

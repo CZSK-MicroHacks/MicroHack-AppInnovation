@@ -8,17 +8,26 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Seed contract: `1.0.0`
 - Behavior contract: `1.1.0`
 - Runtime test evidence: `1.1.0`
-- Modernization handoff: `1.2.0`
+- Modernization handoff: `1.3.0`
 - Acceptance report: `1.0.0`
 - Telemetry evidence: `1.0.0`
 - Toolchain lock: `1.2.0`
 - Shared Azure target output: `1.2.0`
 - Migration report: `1.1.0`
-- Migration CLI: `1.2.0`
+- Migration CLI: `1.3.0`
 - Migration CLI error: `1.0.0`
+- Challenge 1 path registry: `1.0.0`
 
 Breaking changes require a schema-version change and coordinator approval. Runtime
 implementations consume these files; they must not copy or reinterpret the rules.
+
+`challenge-paths.json` is the complete P5 registry: two source stacks across manual,
+bounded Copilot rewrite, and GitHub Copilot modernization. Every slice consumes the
+same P4 Bicep, native migration command, full acceptance harness, and modernization
+handoff. Manual slices use the required Azure Files compatibility reference; the
+other reference slices use policy-compatible Blob storage. Path-specific evidence
+supplements rather than replaces the shared handoff bundle. Modernization handoff
+`1.3.0` makes that path-to-image-provider relationship executable.
 
 ## Canonical identity and image digest
 
@@ -86,6 +95,8 @@ JSON failures, and refusal to delete resources. PostgreSQL managed-identity boot
 the declared facilitator Entra administrator, the required `$HOME/.azure-365` Azure CLI
 context, transient `oss-rdbms` token authentication, and principal creation on the `postgres`
 database. Handoff migration mechanism/version values are stack-specific and must match the
-migration report and locked tools.
+migration report and locked tools. Handoff rendering also requires the selected Challenge 1
+path and a nonempty repository-contained Markdown rollback runbook; neither value is inferred
+or patched after generation.
 
 See `tests/acceptance/README.md` for live application and database verification.

@@ -10,6 +10,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from catalog_migrate.contracts import load_json
+from catalog_migrate.errors import InvalidInputError
 from catalog_migrate.handoff import render_handoff
 from catalog_migrate.process import ProcessResult
 
@@ -112,8 +113,25 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
             acceptance_path=paths["acceptance"],
             telemetry_path=paths["telemetry"],
             runtime_path=paths["runtime"],
+            modernization_path="manual",
             rollback_revision=rollback_revision,
+            rollback_runbook_path=repo_root / "infra/README.md",
         )
+        with pytest.raises(
+            InvalidInputError,
+            match="copilot-modernization requires azure-blob images",
+        ):
+            render_handoff(
+                runner=ReleaseRunner(target, rollback_revision),
+                target_path=paths["target"],
+                migration_path=paths["migration"],
+                acceptance_path=paths["acceptance"],
+                telemetry_path=paths["telemetry"],
+                runtime_path=paths["runtime"],
+                modernization_path="copilot-modernization",
+                rollback_revision=rollback_revision,
+                rollback_runbook_path=repo_root / "infra/README.md",
+            )
     finally:
         for path in paths.values():
             path.unlink(missing_ok=True)
@@ -121,8 +139,10 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
     assert handoff["source"]["frameworkVersion"] == "Spring Boot 4.0.7"
     assert handoff["database"]["migrationMechanism"] == "pg-dump-restore"
     assert handoff["database"]["migrationVersion"] == "18.6"
-    assert handoff["schemaVersion"] == "1.2.0"
+    assert handoff["schemaVersion"] == "1.3.0"
+    assert handoff["path"] == "manual"
     assert handoff["rollback"]["targetRevision"] == rollback_revision
+    assert handoff["rollback"]["runbook"] == "infra/README.md"
 
 
 def _runtime_tests(contracts: Path, stack: str) -> list[dict]:

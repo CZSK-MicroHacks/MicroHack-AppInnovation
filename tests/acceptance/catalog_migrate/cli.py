@@ -91,7 +91,13 @@ def _parser() -> argparse.ArgumentParser:
     handoff.add_argument("--acceptance-report", required=True, type=Path)
     handoff.add_argument("--telemetry-report", required=True, type=Path)
     handoff.add_argument("--runtime-test-report", required=True, type=Path)
+    handoff.add_argument(
+        "--path",
+        required=True,
+        choices=("manual", "copilot-rewrite", "copilot-modernization"),
+    )
     handoff.add_argument("--rollback-revision", required=True)
+    handoff.add_argument("--rollback-runbook", required=True, type=Path)
     handoff.add_argument("--output", required=True, type=Path)
     return parser
 
@@ -277,7 +283,9 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
             acceptance_path=args.acceptance_report,
             telemetry_path=args.telemetry_report,
             runtime_path=args.runtime_test_report,
+            modernization_path=args.path,
             rollback_revision=args.rollback_revision,
+            rollback_runbook_path=args.rollback_runbook,
         )
         _write_json(args.output, handoff)
         return handoff

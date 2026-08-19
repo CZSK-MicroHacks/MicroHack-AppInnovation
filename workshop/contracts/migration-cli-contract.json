@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.2.0",
+  "schemaVersion": "1.3.0",
   "executable": "catalog-migrate",
   "commands": [
     {
@@ -137,7 +137,9 @@
         "--acceptance-report",
         "--telemetry-report",
         "--runtime-test-report",
+        "--path",
         "--rollback-revision",
+        "--rollback-runbook",
         "--output"
       ],
       "requiredSecretEnvironment": [],

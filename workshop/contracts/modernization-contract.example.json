@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.2.0",
+  "schemaVersion": "1.3.0",
   "source": {
     "stack": "dotnet-sqlserver",
     "runtimeVersion": "8.0.30",
@@ -20,7 +20,7 @@
       "imageSetSha256": "c706eda9b7d74a2b578b02487e6527e707819bc3cdd09adc59e3cb62ffcba7be"
     }
   },
-  "path": "manual",
+  "path": "copilot-modernization",
   "application": {
     "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
     "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io",
@@ -96,7 +96,7 @@
   },
   "rollback": {
     "targetRevision": "ca-mh-example--baseline-000000000000",
-    "runbook": "evidence/rollback.md"
+    "runbook": "evidence/rollback-runbook.md"
   },
   "evidence": {
     "migrationReport": "evidence/migration-report.json",

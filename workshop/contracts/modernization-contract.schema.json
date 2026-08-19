@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.2.0"
+      "const": "1.3.0"
     },
     "source": {
       "type": "object",
@@ -468,6 +468,40 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "path": {
+            "const": "manual"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "then": {
+        "properties": {
+          "images": {
+            "properties": {
+              "provider": {
+                "const": "azure-files"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "images": {
+            "properties": {
+              "provider": {
+                "const": "azure-blob"
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {
