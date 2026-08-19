@@ -201,14 +201,16 @@ The coordinator will freeze and test these contracts before starting the P4 chil
    - `catalog-migrate images copy`
    - `catalog-migrate verify`
    - `catalog-migrate render-handoff`
-   Mutating commands consume the validated target-output document, require exact target
-   confirmation, and use exact argument lists plus command/engine-specific result schemas.
+   Transfer and verification commands consume the validated target-output document and
+   require its exact immutable source commit. Mutating commands also require exact target
+   confirmation and use exact argument lists plus command/engine-specific result schemas.
    PostgreSQL import derives authentication and both non-secret principal names from target
    output; administrator and application password boundaries remain distinct and application
    passwords are required only in `password-secret` mode. Mutating and verification commands
    require bootstrap output. `render-handoff` requires application output plus the exact
    selected modernization path, a nonempty repository-contained Markdown rollback runbook,
-   and an explicit distinct retained rollback revision.
+   its exact registry-required path evidence, and an explicit distinct retained rollback
+   revision.
 5. Add SqlPackage and all Azure SDK/base-image dependencies to
    `workshop/toolchain.lock.json` with integrity metadata.
 6. Extend acceptance tests so producer outputs, migration reports, and the modernization

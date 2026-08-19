@@ -8,7 +8,9 @@ from typing import Any, Literal
 from catalog_migrate.azure import validate_release
 from catalog_migrate.contracts import (
     load_json,
+    load_target_output,
     repository_path,
+    repository_root,
     validate_document,
 )
 from catalog_migrate.errors import InvalidInputError
@@ -23,14 +25,17 @@ def render_handoff(
     acceptance_path: Path,
     telemetry_path: Path,
     runtime_path: Path,
+    output_path: Path,
     modernization_path: Literal[
         "manual", "copilot-rewrite", "copilot-modernization"
     ],
     rollback_revision: str,
     rollback_runbook_path: Path,
+    root: Path | None = None,
 ) -> dict[str, Any]:
     """Consume validated evidence and render the frozen modernization contract."""
-    target = load_json(target_path)
+    root = (root or repository_root()).resolve()
+    target = load_target_output(target_path, required_stage="application")
     migration = load_json(migration_path)
     acceptance = load_json(acceptance_path)
     telemetry = load_json(telemetry_path)
@@ -41,30 +46,75 @@ def render_handoff(
         "copilot-modernization",
     }:
         raise InvalidInputError("unsupported modernization path")
-    if rollback_runbook_path.suffix.lower() != ".md":
-        raise InvalidInputError("rollback runbook must be a Markdown document")
-    rollback_runbook = repository_path(rollback_runbook_path)
-    try:
-        rollback_runbook_contents = rollback_runbook_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        raise InvalidInputError("rollback runbook could not be read") from error
-    if not rollback_runbook_contents.strip():
-        raise InvalidInputError("rollback runbook must not be empty")
     for document, schema in (
-        (target, "azure-target-output.schema.json"),
         (migration, "migration-report.schema.json"),
         (acceptance, "acceptance-report.schema.json"),
         (telemetry, "telemetry-evidence.schema.json"),
         (runtime, "runtime-test-evidence.schema.json"),
     ):
         validate_document(document, schema)
-    expected_image_provider = (
-        "azure-files" if modernization_path == "manual" else "azure-blob"
-    )
-    if target["images"]["provider"] != expected_image_provider:
+    registry = load_json(root / "workshop" / "contracts" / "challenge-paths.json")
+    validate_document(registry, "challenge-paths.schema.json")
+    matching_slices = [
+        item
+        for item in registry["slices"]
+        if item["path"] == modernization_path and item["stack"] == target["stack"]
+    ]
+    if len(matching_slices) != 1:
+        raise InvalidInputError("selected path and stack do not resolve to one slice")
+    selected_slice = matching_slices[0]
+    if selected_slice["databaseFamily"] != target["database"]["family"]:
+        raise InvalidInputError("selected slice differs from target database family")
+    if selected_slice["imageProvider"] != target["images"]["provider"]:
         raise InvalidInputError(
-            f"{modernization_path} requires {expected_image_provider} images"
+            f"{modernization_path} requires "
+            f"{selected_slice['imageProvider']} images"
         )
+    expected_paths = {
+        "evidence/azure-target-output.json": target_path,
+        "evidence/migration-report.json": migration_path,
+        "evidence/acceptance-report.json": acceptance_path,
+        "evidence/runtime-test-report.json": runtime_path,
+        "evidence/telemetry-report.json": telemetry_path,
+        "evidence/modernization-contract.json": output_path,
+        "evidence/rollback-runbook.md": rollback_runbook_path,
+    }
+    required_evidence = set(selected_slice["requiredEvidence"])
+    if required_evidence != set(expected_paths):
+        raise InvalidInputError("selected slice required evidence is unsupported")
+    for expected, supplied in expected_paths.items():
+        if repository_path(supplied, root) != expected:
+            raise InvalidInputError(
+                f"selected slice requires exact evidence path: {expected}"
+            )
+    rollback_runbook = repository_path(rollback_runbook_path, root)
+    try:
+        rollback_runbook_contents = rollback_runbook_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise InvalidInputError("rollback runbook could not be read") from error
+    if not rollback_runbook_contents.strip():
+        raise InvalidInputError("rollback runbook must not be empty")
+    for relative_path in selected_slice["pathEvidence"]:
+        evidence_path = root / relative_path
+        try:
+            evidence_path.resolve().relative_to(root)
+            valid_file = (
+                not evidence_path.is_symlink()
+                and evidence_path.is_file()
+                and evidence_path.stat().st_size > 0
+            )
+        except OSError as error:
+            raise InvalidInputError(
+                f"selected path evidence could not be read: {relative_path}"
+            ) from error
+        except ValueError as error:
+            raise InvalidInputError(
+                f"selected path evidence escapes the repository: {relative_path}"
+            ) from error
+        if not valid_file:
+            raise InvalidInputError(
+                f"selected path evidence must be a nonempty regular file: {relative_path}"
+            )
     if target["deploymentStage"] != "application" or target["application"] is None:
         raise InvalidInputError("handoff requires application-stage target output")
     validate_release(runner, target, rollback_revision)
@@ -113,8 +163,10 @@ def render_handoff(
         != app["revisionName"]
     ):
         raise InvalidInputError("telemetry identity differs from target output")
+    manifest = load_json(root / "data" / "manifest.json")
     handoff = {
-        "schemaVersion": "1.3.0",
+        "schemaVersion": "1.4.0",
+        "sliceId": selected_slice["id"],
         "source": {
             "stack": stack,
             "runtimeVersion": runtime_version,
@@ -122,7 +174,7 @@ def render_handoff(
             "commitSha": target["sourceCommit"],
         },
         "seedManifest": {
-            key: load_json(Path(__file__).resolve().parents[3] / "data" / "manifest.json")[key]
+            key: manifest[key]
             for key in ("schemaVersion", "counts", "hashes")
         },
         "path": modernization_path,
@@ -177,23 +229,24 @@ def render_handoff(
             **target["observability"],
         },
         "acceptance": {
-            "report": repository_path(acceptance_path),
+            "report": repository_path(acceptance_path, root),
             "profile": acceptance["profile"],
             "result": acceptance["status"],
         },
         "deployment": {
             "mechanism": "bicep",
             "iacPath": "infra",
-            "targetOutput": repository_path(target_path),
+            "targetOutput": repository_path(target_path, root),
         },
         "rollback": {
             "targetRevision": rollback_revision,
             "runbook": rollback_runbook,
         },
         "evidence": {
-            "migrationReport": repository_path(migration_path),
-            "telemetryReport": repository_path(telemetry_path),
-            "runtimeTestReport": repository_path(runtime_path),
+            "migrationReport": repository_path(migration_path, root),
+            "telemetryReport": repository_path(telemetry_path, root),
+            "runtimeTestReport": repository_path(runtime_path, root),
+            "pathEvidence": selected_slice["pathEvidence"],
         },
     }
     validate_document(handoff, "modernization-contract.schema.json")

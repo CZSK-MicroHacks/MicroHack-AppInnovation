@@ -27,8 +27,8 @@ and `tests/acceptance`; do not create another application, migration tool, or Ia
 - Obtain facilitator approval before every deployment, target mutation, identity
   assignment, traffic change, or cleanup action.
 
-Stop if the registry, migration CLI contract `1.3.0`, modernization handoff schema
-`1.3.0`, target output, or `infra/main.bicep` would need to change. This slice consumes
+Stop if the registry, migration CLI contract `1.4.0`, modernization handoff schema
+`1.4.0`, target output, or `infra/main.bicep` would need to change. This slice consumes
 those interfaces; it does not reinterpret them.
 
 ## Required progression
@@ -47,7 +47,8 @@ those interfaces; it does not reinterpret them.
 3. **Migrate with the native P4 CLI.** Use the selected `catalog-migrate sql ...` or
    `catalog-migrate postgresql ...` export/import commands, followed by
    `catalog-migrate images copy` and `catalog-migrate verify`. Imports and image copy
-   must repeat the exact target resource ID in both confirmation arguments and include
+   must repeat the exact target resource ID in both confirmation arguments, bind every
+   transfer command to the protected target with `--source-commit`, and include
    `--execute`. They must refuse a nonempty target.
 4. **Verify the migration exactly.** `evidence/migration-report.json` must prove the
    schema, migration history, constraints, indexes, complete figure/category corpus,

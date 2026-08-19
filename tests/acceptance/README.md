@@ -152,7 +152,9 @@ uv run catalog-migrate render-handoff --help
 The commands and arguments are frozen by
 `workshop/contracts/migration-cli-contract.json`. Database and application
 passwords are accepted only through the command-specific `MIGRATION_*`
-environment variables. Every Azure CLI child process uses
+environment variables. Every export, import, image-copy, and verification
+command requires the lowercase full source commit and rejects a target output
+created for another commit. Every Azure CLI child process uses
 `AZURE_CONFIG_DIR="$HOME/.azure-365"`.
 
 Exports are source-read-only and create a BACPAC or PostgreSQL custom archive

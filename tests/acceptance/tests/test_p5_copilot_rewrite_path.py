@@ -66,7 +66,8 @@ def _migration_execution_fragment(content: str) -> str:
         "### Baseline then release",
     )
     start = section.index("Push-Location tests\\acceptance")
-    end = section.index("\nPop-Location", start) + len("\nPop-Location")
+    marker = "\nfinally { Pop-Location }"
+    end = section.index(marker, start) + len(marker)
     return section[start:end]
 
 
@@ -97,6 +98,107 @@ def test_rewrite_registry_uses_only_standard_copilot_and_blob(repo_root: Path) -
         assert item["path"] == "copilot-rewrite"
         assert item["tooling"] == STANDARD_COPILOT_TOOLS
         assert item["imageProvider"] == "azure-blob"
+
+
+def test_rewrite_preflight_is_fail_fast_and_requires_each_extension(
+    repo_root: Path,
+) -> None:
+    """Execute preflight with dirty, tool, native, and contract failures."""
+    prelude = r"""
+ROOT="$PWD"
+git() {
+  case "$*" in
+    "rev-parse --show-toplevel") printf '%s\n' "$ROOT" ;;
+    "status --porcelain")
+      if [ "${DIRTY_TREE:-0}" = "1" ]; then
+        printf '%s\n' ' M implementation'
+      fi
+      ;;
+    *) return 0 ;;
+  esac
+}
+code() { printf '%s\n' "${INSTALLED_EXTENSIONS:-}"; }
+dotnet() { return "${NATIVE_EXIT:-0}"; }
+mvnw() { return "${NATIVE_EXIT:-0}"; }
+uv() { return "${CONTRACT_EXIT:-0}"; }
+mkdir() { return 0; }
+cp() { return 0; }
+"""
+    cases = {
+        "success": {
+            "extensions": "github.copilot@1.388.0\ngithub.copilot-chat@0.48.1",
+            "dirty": "0",
+            "native": "0",
+            "contract": "0",
+            "passes": True,
+        },
+        "dirty": {
+            "extensions": "github.copilot@1.388.0\ngithub.copilot-chat@0.48.1",
+            "dirty": "1",
+            "native": "0",
+            "contract": "0",
+            "passes": False,
+        },
+        "missing-copilot": {
+            "extensions": "github.copilot-chat@0.48.1",
+            "dirty": "0",
+            "native": "0",
+            "contract": "0",
+            "passes": False,
+        },
+        "missing-chat": {
+            "extensions": "github.copilot@1.388.0",
+            "dirty": "0",
+            "native": "0",
+            "contract": "0",
+            "passes": False,
+        },
+        "native-failure": {
+            "extensions": "github.copilot@1.388.0\ngithub.copilot-chat@0.48.1",
+            "dirty": "0",
+            "native": "17",
+            "contract": "0",
+            "passes": False,
+        },
+        "contract-failure": {
+            "extensions": "github.copilot@1.388.0\ngithub.copilot-chat@0.48.1",
+            "dirty": "0",
+            "native": "0",
+            "contract": "19",
+            "passes": False,
+        },
+    }
+    for stack, content in _rewrite_solution_documents(repo_root).items():
+        section = _between(
+            content,
+            "## 1. Preflight and characterization checkpoint",
+            "## 2.",
+        )
+        block = _fenced_block(section, "bash").replace("./java/mvnw", "mvnw")
+        assert block.startswith("set -euo pipefail")
+        assert block.count("grep -Fxq") == 2
+        for case, configuration in cases.items():
+            environment = {
+                **os.environ,
+                "INSTALLED_EXTENSIONS": configuration["extensions"],
+                "DIRTY_TREE": configuration["dirty"],
+                "NATIVE_EXIT": configuration["native"],
+                "CONTRACT_EXIT": configuration["contract"],
+            }
+            result = subprocess.run(
+                ["bash", "-c", prelude + "\n" + block],
+                cwd=repo_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert (result.returncode == 0) is configuration["passes"], (
+                stack,
+                case,
+                result.stdout,
+                result.stderr,
+            )
 
 
 def test_rewrite_guides_define_evidence_checkpoints_and_handoff(repo_root: Path) -> None:
@@ -229,6 +331,20 @@ def test_rewrite_migration_guards_identity_and_secret_transitions(
         assert identity_guard < export < source_cleanup < database_import
         assert database_import < image_copy < verify
         assert "read-host $prompt -assecurestring" in migration
+        for command in (
+            "catalog-migrate sql export",
+            "catalog-migrate sql import",
+            "catalog-migrate postgresql export",
+            "catalog-migrate postgresql import",
+            "catalog-migrate images copy",
+        ):
+            if command not in migration:
+                continue
+            command_start = migration.index(command)
+            command_end = migration.index("\n\n", command_start)
+            assert "--source-commit $sourcecommit" in migration[
+                command_start:command_end
+            ]
         if stack == "java-postgresql":
             admin_set = migration.index(
                 "$env:migration_target_administrator_password = "
@@ -364,6 +480,7 @@ $Residual = @(
   'MIGRATION_TARGET_APPLICATION_PASSWORD'
 ) | Where-Object { Test-Path "Env:$_" }
 [IO.File]::WriteAllText($env:RESIDUAL_LOG, ($Residual -join ','))
+[IO.File]::WriteAllText($env:LOCATION_LOG, (Get-Location).Path)
 """
     scenarios = {
         "dotnet-sqlserver": {
@@ -423,6 +540,7 @@ $Residual = @(
         for case, fail_command, fail_prompt in cases:
             invocation_log = tmp_path / f"{scenario}-{case}.invocations"
             residual_log = tmp_path / f"{scenario}-{case}.residual"
+            location_log = tmp_path / f"{scenario}-{case}.location"
             environment = {
                 key: value
                 for key, value in os.environ.items()
@@ -435,6 +553,7 @@ $Residual = @(
                     "TARGET_AUTH": configuration["authentication"],
                     "UV_INVOCATION_LOG": str(invocation_log),
                     "RESIDUAL_LOG": str(residual_log),
+                    "LOCATION_LOG": str(location_log),
                 }
             )
             script = (
@@ -460,6 +579,7 @@ $Residual = @(
             assert (result.returncode == 0) is (case == "success")
             assert residual_log.exists(), (result.returncode, result.stdout, result.stderr)
             assert residual_log.read_text(encoding="utf-8") == ""
+            assert Path(location_log.read_text(encoding="utf-8")).resolve() == repo_root
             invocations = invocation_log.read_text(encoding="utf-8").splitlines()
             for index, expected in enumerate(configuration["expected"]):
                 if index >= len(invocations):

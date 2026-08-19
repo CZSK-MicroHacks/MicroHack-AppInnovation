@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.3.0",
+  "schemaVersion": "1.4.0",
   "executable": "catalog-migrate",
   "commands": [
     {
@@ -10,6 +10,7 @@
         "--source-server",
         "--source-database",
         "--source-username",
+        "--source-commit",
         "--target-output",
         "--artifact"
       ],
@@ -25,6 +26,7 @@
       "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--artifact",
+        "--source-commit",
         "--target-output",
         "--target-resource-id",
         "--confirm-target-resource-id",
@@ -43,6 +45,7 @@
         "--source-port",
         "--source-database",
         "--source-username",
+        "--source-commit",
         "--target-output",
         "--artifact"
       ],
@@ -58,6 +61,7 @@
       "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--artifact",
+        "--source-commit",
         "--target-output",
         "--target-resource-id",
         "--confirm-target-resource-id",
@@ -89,6 +93,7 @@
       "requiredTargetOutputStage": "bootstrap",
       "arguments": [
         "--source-directory",
+        "--source-commit",
         "--target-output",
         "--target-resource-id",
         "--confirm-target-resource-id",
@@ -239,6 +244,7 @@
     "sourceReadOnly": true,
     "refuseNonemptyTarget": true,
     "requireExactTargetConfirmation": true,
+    "requireSourceCommitMatch": true,
     "argumentsAreExact": true,
     "deriveTargetSettingsFromTargetOutput": true,
     "secretInputsFromEnvironmentOnly": true,

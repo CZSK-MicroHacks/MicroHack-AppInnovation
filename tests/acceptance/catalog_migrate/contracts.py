@@ -79,6 +79,14 @@ def load_target_output(
     return target
 
 
+def require_source_commit(target: dict[str, Any], source_commit: str) -> None:
+    """Require a caller's immutable source identity to match target output."""
+    if not COMMIT_PATTERN.fullmatch(source_commit):
+        raise InvalidInputError("source commit must be lowercase 40-hex")
+    if target["sourceCommit"] != source_commit:
+        raise InvalidInputError("source commit differs from target output")
+
+
 def require_secrets(allowed: set[str], required: set[str]) -> dict[str, str]:
     """Enforce required, forbidden, and undeclared migration secrets.
 
@@ -130,13 +138,14 @@ def artifact_metadata_path(path: Path) -> Path:
     return path.with_name(f"{path.name}.metadata.json")
 
 
-def repository_path(path: Path) -> str:
+def repository_path(path: Path, root: Path | None = None) -> str:
     """Return a normalized repository-relative path.
 
     Raises:
         InvalidInputError: If the path is outside the repository.
     """
+    resolved_root = (root or repository_root()).resolve()
     try:
-        return path.resolve().relative_to(repository_root().resolve()).as_posix()
+        return path.resolve().relative_to(resolved_root).as_posix()
     except ValueError as error:
         raise InvalidInputError(f"path must be inside the repository: {path}") from error

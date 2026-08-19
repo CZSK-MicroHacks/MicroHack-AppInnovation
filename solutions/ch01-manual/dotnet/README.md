@@ -17,15 +17,31 @@ files outside the repository:
   immutable image digest, `applicationRevisionRole=baseline` or `release`, and secure
   application inputs.
 
-The facilitator injects `MIGRATION_SOURCE_DATABASE_PASSWORD`, `PERFTEST_API_KEY`, and
-other documented secret environment variables into the current process without printing
-them. Do not continue if a secret appears in command history or a checked-in file.
+The facilitator makes `PERFTEST_API_KEY` available only in the process that needs it.
+Acquire migration passwords through the protected prompt immediately before their one
+permitted command. Do not continue if a secret appears in command history or a checked-in
+file.
 
 ```powershell
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
 $SourceCommit = (git rev-parse HEAD).Trim()
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $DatabaseArtifact = 'C:\protected\manual-dotnet\catalog.bacpac'
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
 if ($SourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'immutable source commit required' }
 if (git status --porcelain) { throw 'source worktree must be clean' }
 New-Item -ItemType Directory -Force evidence, evidence\transient, evidence\telemetry |
@@ -119,36 +135,61 @@ create ACA.
 
 ## 3. Export, import, copy images, and verify
 
-Run the frozen CLI from `tests/acceptance`. The source password is environment-only.
-The export is read-only and creates a BACPAC plus integrity sidecar.
+Run the frozen CLI from `tests/acceptance`. The source password exists only for export,
+and every subsequent command rejects migration secrets. The export is read-only and
+creates a BACPAC plus integrity sidecar.
 
 ```powershell
-cd tests\acceptance
-uv --no-config run catalog-migrate sql export `
-  --source-server $env:CATALOG_DATABASE_HOST `
-  --source-database $env:CATALOG_DATABASE_NAME `
-  --source-username $env:CATALOG_DATABASE_USERNAME `
-  --target-output ..\..\evidence\azure-target-output.json `
-  --artifact $DatabaseArtifact
-
+Push-Location tests\acceptance
+try {
 $Target = Get-Content ..\..\evidence\azure-target-output.json -Raw |
   ConvertFrom-Json
+if ($Target.sourceCommit -cne $SourceCommit) {
+  throw 'bootstrap target source commit differs from this checkout'
+}
 $DatabaseId = $Target.database.resourceId
 $ImagesId = $Target.images.resourceId
 
+$ExportExit = 0
+try {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+  $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Source SQL Server database password'
+  uv --no-config run catalog-migrate sql export `
+    --source-server $env:CATALOG_DATABASE_HOST `
+    --source-database $env:CATALOG_DATABASE_NAME `
+    --source-username $env:CATALOG_DATABASE_USERNAME `
+    --source-commit $SourceCommit `
+    --target-output ..\..\evidence\azure-target-output.json `
+    --artifact $DatabaseArtifact
+  $ExportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ExportExit -ne 0) { throw 'SQL export failed' }
+
 uv --no-config run catalog-migrate sql import `
   --artifact $DatabaseArtifact `
+  --source-commit $SourceCommit `
   --target-output ..\..\evidence\azure-target-output.json `
   --target-resource-id $DatabaseId `
   --confirm-target-resource-id $DatabaseId `
   --execute
+if ($LASTEXITCODE -ne 0) { throw 'SQL import failed' }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory ..\..\data\images `
+  --source-commit $SourceCommit `
   --target-output ..\..\evidence\azure-target-output.json `
   --target-resource-id $ImagesId `
   --confirm-target-resource-id $ImagesId `
   --execute
+if ($LASTEXITCODE -ne 0) { throw 'image copy failed' }
 
 uv --no-config run catalog-migrate verify `
   --stack dotnet-sqlserver `
@@ -156,7 +197,9 @@ uv --no-config run catalog-migrate verify `
   --database-artifact $DatabaseArtifact `
   --target-output ..\..\evidence\azure-target-output.json `
   --output ..\..\evidence\migration-report.json
-cd ..\..
+if ($LASTEXITCODE -ne 0) { throw 'migration verification failed' }
+}
+finally { Pop-Location }
 ```
 
 Append the BACPAC and sidecar paths, sizes, hashes, creation time, and tested restore
@@ -409,27 +452,60 @@ Run the native suite again and retain its TRX. Create
 identities defined by `workshop/contracts/runtime-test-evidence.schema.json`.
 
 ```powershell
+$AcceptanceReport = Join-Path (Get-Location) `
+  'evidence\acceptance-report.json'
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  Remove-Item -LiteralPath $AcceptanceReport -Force -ErrorAction Stop
+}
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  throw 'stale acceptance report could not be removed'
+}
+
 dotnet test dotnet\LegoCatalog.sln --logger trx --results-directory evidence
+if ($LASTEXITCODE -ne 0) { throw 'release native tests failed' }
 
 $env:CATALOG_BASE_URL = $Target.application.url
 $env:CATALOG_SOURCE_COMMIT = $SourceCommit
 $env:CATALOG_IMAGE_DIGEST = $ImageDigest
 $env:CATALOG_REVISION_NAME = $Target.application.revisionName
-# Inject PERFTEST_API_KEY and SQLCMDACCESS_TOKEN into this process only.
-cd tests\acceptance
-uv --no-config run python -m catalog_acceptance `
-  --profile full `
-  --base-url $env:CATALOG_BASE_URL `
-  --database-kind sqlserver `
-  --database-host $Target.database.server `
-  --database-name $Target.database.database `
-  --database-ssl-mode require `
-  --database-target managed `
-  --source-commit $SourceCommit `
-  --image-digest $ImageDigest `
-  --revision-name $Target.application.revisionName `
-  --output ..\..\evidence\acceptance-report.json
-cd ..\..
+Push-Location tests\acceptance
+try {
+  $AcceptanceExit = 0
+  try {
+    $SqlAccessToken = (
+      az account get-access-token `
+        --resource https://database.windows.net/ `
+        --query accessToken `
+        --output tsv
+    ).Trim()
+    if ($LASTEXITCODE -ne 0 -or
+        [string]::IsNullOrWhiteSpace($SqlAccessToken)) {
+      throw 'Azure SQL access-token acquisition failed'
+    }
+    $env:SQLCMDACCESS_TOKEN = $SqlAccessToken
+    $env:PERFTEST_API_KEY = Read-ProtectedValue 'Runtime performance API key'
+    uv --no-config run python -m catalog_acceptance `
+      --profile full `
+      --base-url $env:CATALOG_BASE_URL `
+      --database-kind sqlserver `
+      --database-host $Target.database.server `
+      --database-name $Target.database.database `
+      --database-ssl-mode require `
+      --database-target managed `
+      --source-commit $SourceCommit `
+      --image-digest $ImageDigest `
+      --revision-name $Target.application.revisionName `
+      --output $AcceptanceReport
+    $AcceptanceExit = $LASTEXITCODE
+  }
+  finally {
+    Remove-Item Env:SQLCMDACCESS_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
+    $SqlAccessToken = $null
+  }
+  if ($AcceptanceExit -ne 0) { throw 'release full acceptance failed' }
+}
+finally { Pop-Location }
 ```
 
 Exercise successful, rejected-import, dependency-failure, and performance paths. Query
@@ -526,7 +602,8 @@ unhealthy, or has a different digest.
 ## 8. Render, validate, clean, and rejoin
 
 ```powershell
-cd tests\acceptance
+Push-Location tests\acceptance
+try {
 uv --no-config run catalog-migrate render-handoff `
   --target-output ..\..\evidence\azure-target-output.json `
   --migration-report ..\..\evidence\migration-report.json `
@@ -537,12 +614,15 @@ uv --no-config run catalog-migrate render-handoff `
   --rollback-revision $RollbackRevision `
   --rollback-runbook ..\..\evidence\rollback-runbook.md `
   --output ..\..\evidence\modernization-contract.json
+if ($LASTEXITCODE -ne 0) { throw 'handoff rendering failed' }
 
 uv --no-config run python -m catalog_acceptance.handoff_cli `
   ..\..\evidence\modernization-contract.json `
   --contracts ..\..\workshop\contracts `
   --repository-root ..\..
-cd ..\..
+if ($LASTEXITCODE -ne 0) { throw 'handoff validation failed' }
+}
+finally { Pop-Location }
 ```
 
 After validation, remove only local transient material and clear secret variables:

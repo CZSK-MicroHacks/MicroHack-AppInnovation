@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from catalog_migrate.contracts import (
-    COMMIT_PATTERN,
     KNOWN_SECRETS,
     guard_target,
     load_target_output,
+    require_source_commit,
     require_secrets,
     validate_document,
 )
@@ -55,6 +55,7 @@ def _parser() -> argparse.ArgumentParser:
     sql_export.add_argument("--source-server", required=True)
     sql_export.add_argument("--source-database", required=True)
     sql_export.add_argument("--source-username", required=True)
+    sql_export.add_argument("--source-commit", required=True)
     sql_export.add_argument("--artifact", required=True, type=Path)
     sql_export.add_argument("--target-output", required=True, type=Path)
     _add_import(sql_commands.add_parser("import"))
@@ -66,6 +67,7 @@ def _parser() -> argparse.ArgumentParser:
     postgresql_export.add_argument("--source-port", required=True, type=int)
     postgresql_export.add_argument("--source-database", required=True)
     postgresql_export.add_argument("--source-username", required=True)
+    postgresql_export.add_argument("--source-commit", required=True)
     postgresql_export.add_argument("--artifact", required=True, type=Path)
     postgresql_export.add_argument("--target-output", required=True, type=Path)
     _add_import(postgresql_commands.add_parser("import"))
@@ -103,6 +105,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_target_guard(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--source-commit", required=True)
     parser.add_argument("--target-output", required=True, type=Path)
     parser.add_argument("--target-resource-id", required=True)
     parser.add_argument("--confirm-target-resource-id", required=True)
@@ -153,6 +156,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
         target = load_target_output(args.target_output, required_stage="bootstrap")
         if target["stack"] != "dotnet-sqlserver":
             raise InvalidInputError("SQL export requires a dotnet-sqlserver target")
+        require_source_commit(target, args.source_commit)
         validate_migration_topology(runner, target)
         secrets = require_secrets(
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
@@ -171,6 +175,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
         target = load_target_output(args.target_output, required_stage="bootstrap")
         if target["stack"] != "java-postgresql":
             raise InvalidInputError("PostgreSQL export requires a java-postgresql target")
+        require_source_commit(target, args.source_commit)
         validate_migration_topology(runner, target)
         secrets = require_secrets(
             {"MIGRATION_SOURCE_DATABASE_PASSWORD"},
@@ -188,6 +193,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
         return _operation_result(command, started, artifact=artifact)
     if command in {"sql import", "postgresql import", "images copy"}:
         target = load_target_output(args.target_output, required_stage="bootstrap")
+        require_source_commit(target, args.source_commit)
         section = "images" if command == "images copy" else "database"
         guard_target(
             target,
@@ -248,9 +254,8 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
             image_verification=verification,
         )
     if args.family == "verify":
-        if not COMMIT_PATTERN.fullmatch(args.source_commit):
-            raise InvalidInputError("source commit must be lowercase 40-hex")
         target = load_target_output(args.target_output, required_stage="bootstrap")
+        require_source_commit(target, args.source_commit)
         migration_execution = validate_migration_topology(runner, target)
         authentication = target["database"]["authentication"]
         allowed = (
@@ -283,6 +288,7 @@ def _execute(args: argparse.Namespace, runner: CommandRunner) -> dict[str, Any]:
             acceptance_path=args.acceptance_report,
             telemetry_path=args.telemetry_report,
             runtime_path=args.runtime_test_report,
+            output_path=args.output,
             modernization_path=args.path,
             rollback_revision=args.rollback_revision,
             rollback_runbook_path=args.rollback_runbook,

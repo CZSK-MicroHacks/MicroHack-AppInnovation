@@ -28,10 +28,12 @@ migration extension for this path.
 **Executable proof**
 
 ```bash
+set -euo pipefail
 test "$(git rev-parse --show-toplevel)" = "$PWD"
-git status --short
-code --list-extensions --show-versions \
-  | grep -E '^(github\.copilot@1\.388\.0|github\.copilot-chat@0\.48\.1)$'
+test -z "$(git status --porcelain)"
+installed_extensions="$(code --list-extensions --show-versions)"
+grep -Fxq 'github.copilot@1.388.0' <<<"$installed_extensions"
+grep -Fxq 'github.copilot-chat@0.48.1' <<<"$installed_extensions"
 mkdir -p evidence .workshop-tmp
 ./java/mvnw -f java/pom.xml test
 cp -R java/target/surefire-reports .workshop-tmp/java-characterization
@@ -283,6 +285,7 @@ $TargetDatabaseResourceId = $Target.database.resourceId
 $TargetImageResourceId = $Target.images.resourceId
 
 Push-Location tests\acceptance
+try {
 $ExportExit = 0
 try {
   Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
@@ -296,6 +299,7 @@ try {
     --source-port 5432 `
     --source-database '<source-database>' `
     --source-username '<source-user>' `
+    --source-commit $SourceCommit `
     --target-output $TargetOutput `
     --artifact $DatabaseArtifact
   $ExportExit = $LASTEXITCODE
@@ -304,7 +308,7 @@ finally {
   Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-if ($ExportExit -ne 0) { Pop-Location; exit $ExportExit }
+if ($ExportExit -ne 0) { throw 'PostgreSQL export failed' }
 
 $ImportExit = 0
 try {
@@ -319,6 +323,7 @@ try {
   }
   uv --no-config run catalog-migrate postgresql import `
     --artifact $DatabaseArtifact `
+    --source-commit $SourceCommit `
     --target-output $TargetOutput `
     --target-resource-id $TargetDatabaseResourceId `
     --confirm-target-resource-id $TargetDatabaseResourceId `
@@ -331,15 +336,16 @@ finally {
   Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-if ($ImportExit -ne 0) { Pop-Location; exit $ImportExit }
+if ($ImportExit -ne 0) { throw 'PostgreSQL import failed' }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory $ImageDirectory `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $TargetImageResourceId `
   --confirm-target-resource-id $TargetImageResourceId `
   --execute
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { throw 'image copy failed' }
 
 $VerifyExit = 0
 try {
@@ -359,8 +365,9 @@ finally {
   Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-if ($VerifyExit -ne 0) { Pop-Location; exit $VerifyExit }
-Pop-Location
+if ($VerifyExit -ne 0) { throw 'migration verification failed' }
+}
+finally { Pop-Location }
 ```
 
 The CLI is the only data-transfer path. It must refuse a nonempty target, verify Blob
@@ -466,6 +473,7 @@ The frozen protocol is
 ```powershell
 $RepositoryRoot = (Resolve-Path .).Path
 Push-Location tests\acceptance
+try {
 uv --no-config run catalog-migrate render-handoff `
   --target-output (Join-Path $RepositoryRoot 'evidence\azure-target-output.json') `
   --migration-report (Join-Path $RepositoryRoot 'evidence\migration-report.json') `
@@ -476,14 +484,15 @@ uv --no-config run catalog-migrate render-handoff `
   --rollback-revision $BaselineRevision `
   --rollback-runbook (Join-Path $RepositoryRoot 'evidence\rollback-runbook.md') `
   --output (Join-Path $RepositoryRoot 'evidence\modernization-contract.json')
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { throw 'handoff rendering failed' }
 
 uv --no-config run python -m catalog_acceptance.handoff_cli `
   (Join-Path $RepositoryRoot 'evidence\modernization-contract.json') `
   --contracts (Join-Path $RepositoryRoot 'workshop\contracts') `
   --repository-root $RepositoryRoot
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
-Pop-Location
+if ($LASTEXITCODE -ne 0) { throw 'handoff validation failed' }
+}
+finally { Pop-Location }
 ```
 
 **Expected checkpoint**

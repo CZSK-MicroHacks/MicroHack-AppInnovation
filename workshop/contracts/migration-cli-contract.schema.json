@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.3.0"
+      "const": "1.4.0"
     },
     "executable": {
       "const": "catalog-migrate"
@@ -97,6 +97,7 @@
         "sourceReadOnly",
         "refuseNonemptyTarget",
         "requireExactTargetConfirmation",
+        "requireSourceCommitMatch",
         "argumentsAreExact",
         "deriveTargetSettingsFromTargetOutput",
         "secretInputsFromEnvironmentOnly",
@@ -122,6 +123,9 @@
           "const": true
         },
         "requireExactTargetConfirmation": {
+          "const": true
+        },
+        "requireSourceCommitMatch": {
           "const": true
         },
         "argumentsAreExact": {
@@ -448,6 +452,7 @@
             "--source-server",
             "--source-database",
             "--source-username",
+            "--source-commit",
             "--target-output",
             "--artifact"
           ]
@@ -480,6 +485,7 @@
         "arguments": {
           "const": [
             "--artifact",
+            "--source-commit",
             "--target-output",
             "--target-resource-id",
             "--confirm-target-resource-id",
@@ -515,6 +521,7 @@
             "--source-port",
             "--source-database",
             "--source-username",
+            "--source-commit",
             "--target-output",
             "--artifact"
           ]
@@ -547,6 +554,7 @@
         "arguments": {
           "const": [
             "--artifact",
+            "--source-commit",
             "--target-output",
             "--target-resource-id",
             "--confirm-target-resource-id",
@@ -581,6 +589,7 @@
         "arguments": {
           "const": [
             "--source-directory",
+            "--source-commit",
             "--target-output",
             "--target-resource-id",
             "--confirm-target-resource-id",

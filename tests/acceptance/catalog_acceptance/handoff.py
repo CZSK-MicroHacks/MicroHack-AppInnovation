@@ -1026,9 +1026,40 @@ def validate_handoff(
     )
     root = repository_root.resolve()
     try:
-        handoff_path.resolve().relative_to(root)
+        handoff_relative = handoff_path.resolve().relative_to(root).as_posix()
     except ValueError as error:
         raise ValueError("handoff file must be inside the repository root") from error
+    registry = load_json(contracts_directory / "challenge-paths.json")
+    _validate_schema(
+        contracts_directory / "challenge-paths.schema.json",
+        registry,
+    )
+    selected = [
+        item for item in registry["slices"] if item["id"] == handoff["sliceId"]
+    ]
+    if len(selected) != 1:
+        raise ValueError("handoff slice does not resolve to the path registry")
+    selected_slice = selected[0]
+    if (
+        selected_slice["path"] != handoff["path"]
+        or selected_slice["stack"] != handoff["source"]["stack"]
+        or selected_slice["databaseFamily"] != handoff["database"]["family"]
+        or selected_slice["imageProvider"] != handoff["images"]["provider"]
+    ):
+        raise ValueError("handoff selection differs from the path registry")
+    declared_evidence = {
+        handoff_relative,
+        handoff["acceptance"]["report"],
+        handoff["deployment"]["targetOutput"],
+        handoff["rollback"]["runbook"],
+        handoff["evidence"]["migrationReport"],
+        handoff["evidence"]["telemetryReport"],
+        handoff["evidence"]["runtimeTestReport"],
+    }
+    if declared_evidence != set(selected_slice["requiredEvidence"]):
+        raise ValueError("handoff required evidence differs from the path registry")
+    if handoff["evidence"]["pathEvidence"] != selected_slice["pathEvidence"]:
+        raise ValueError("handoff path evidence differs from the path registry")
 
     report_path = _resolve_repository_path(root, handoff["acceptance"]["report"])
     report_data = load_json(report_path)
@@ -1073,6 +1104,29 @@ def validate_handoff(
     )
     iac_path = _resolve_repository_path(root, handoff["deployment"]["iacPath"])
     runbook_path = _resolve_repository_path(root, handoff["rollback"]["runbook"])
+    for value in handoff["evidence"]["pathEvidence"]:
+        declared_path = root / value
+        if not declared_path.exists() and not declared_path.is_symlink():
+            raise FileNotFoundError(
+                f"referenced handoff artifact is absent: {declared_path}"
+            )
+        try:
+            if declared_path.is_symlink():
+                raise ValueError(
+                    f"handoff path evidence must not be a symlink: {declared_path}"
+                )
+            resolved_path = _resolve_repository_path(root, value)
+            valid_file = (
+                resolved_path.is_file() and resolved_path.stat().st_size > 0
+            )
+        except OSError as error:
+            raise ValueError(
+                f"handoff path evidence could not be read: {declared_path}"
+            ) from error
+        if not valid_file:
+            raise ValueError(
+                f"handoff path evidence must be a nonempty regular file: {resolved_path}"
+            )
     required_paths = [
         iac_path,
         runbook_path,
@@ -1080,9 +1134,6 @@ def validate_handoff(
         migration_path,
         target_output_path,
     ]
-    for optional_name in ("assessment", "dependencyReport"):
-        if optional_path := handoff["evidence"].get(optional_name):
-            required_paths.append(_resolve_repository_path(root, optional_path))
     for required_path in required_paths:
         if not required_path.exists():
             raise FileNotFoundError(f"referenced handoff artifact is absent: {required_path}")

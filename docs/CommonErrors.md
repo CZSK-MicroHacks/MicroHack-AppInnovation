@@ -326,6 +326,20 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Install the exact locked, signed extension on both workshop VMs. Keep database cutover in `catalog-migrate`; extension assessment and transformation output remains evidence rather than proof of data migration.
 
+## 47. PowerShell continues after a failed native command
+**Symptom:** A failed Maven, acceptance, migration, or handoff command is followed by later steps that can produce success-shaped evidence.
+
+**Cause:** `$ErrorActionPreference = 'Stop'` does not turn a native process's nonzero exit code into a terminating PowerShell error.
+
+**Resolution:** Inspect `$LASTEXITCODE` immediately after every native command and throw before any dependent step. Wrap every `Push-Location` scope in `try/finally` so success, native failure, and protected-prompt failure all restore the caller's location.
+
+## 48. Credential acquisition can preserve stale acceptance evidence
+**Symptom:** Token acquisition or a protected credential prompt fails, but an older passing `acceptance-report.json` remains available to handoff validation.
+
+**Cause:** The workflow removed the old report only immediately before invoking acceptance, after native tests and credential acquisition had already begun.
+
+**Resolution:** Resolve the exact report path and remove it with fail-closed error handling before native tests, token requests, or prompts. Produce that path only from a successful current acceptance run, and inject native, token, prompt, and acceptance-process failures in executable documentation tests to prove stale evidence is absent.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

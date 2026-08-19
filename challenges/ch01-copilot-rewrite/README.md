@@ -17,7 +17,7 @@ Choose exactly one registered slice in
 
 The only assisted-development tools are `github.copilot` and
 `github.copilot-chat`, at the versions pinned by `workshop/toolchain.lock.json`.
-Treat the registry, its schema, modernization handoff 1.3.0, migration CLI 1.3.0,
+Treat the registry, its schema, modernization handoff 1.4.0, migration CLI 1.4.0,
 `infra/main.bicep`, the selected stack Dockerfile, and `tests/acceptance` as
 read-only interfaces.
 
@@ -75,7 +75,7 @@ Use these checkpoints in order:
    log must contain an explicit **Architecture delta** section listing every changed
    boundary and confirming the preserved database, one-container, Blob, readiness,
    configuration, migration, and P4 infrastructure boundaries. Render and validate
-   modernization handoff 1.3.0.
+   modernization handoff 1.4.0.
 
 Run tests after every accepted slice. Static vocabulary or contract-asset tests do
 not substitute for live behavioral acceptance. A failing or skipped required test,

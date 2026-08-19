@@ -94,55 +94,142 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
     }
     acceptance = _acceptance(target)
     telemetry = _telemetry(target, "mh-catalog-java")
-    paths = {}
+    (tmp_path / "workshop/contracts").mkdir(parents=True)
+    for name in ("challenge-paths.json", "challenge-paths.schema.json"):
+        (tmp_path / "workshop/contracts" / name).write_text(
+            (contracts / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data/manifest.json").write_text(
+        (repo_root / "data/manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    paths: dict[str, Path] = {}
     for name, document in (
-        ("target", target),
-        ("migration", migration),
-        ("acceptance", acceptance),
-        ("telemetry", telemetry),
-        ("runtime", runtime),
+        ("azure-target-output", target),
+        ("migration-report", migration),
+        ("acceptance-report", acceptance),
+        ("telemetry-report", telemetry),
+        ("runtime-test-report", runtime),
     ):
-        path = repo_root / f"tests/acceptance/{name}-migration-test.json"
+        path = evidence / f"{name}.json"
         path.write_text(json.dumps(document), encoding="utf-8")
         paths[name] = path
-    try:
-        handoff = render_handoff(
+    for path in (
+        "baseline-backup.md",
+        "managed-database-separation.json",
+        "container-build.json",
+        "iac-review.md",
+        "rollback-runbook.md",
+    ):
+        (evidence / path).write_text("durable evidence\n", encoding="utf-8")
+    output_path = evidence / "modernization-contract.json"
+    handoff = render_handoff(
+        runner=ReleaseRunner(target, rollback_revision),
+        target_path=paths["azure-target-output"],
+        migration_path=paths["migration-report"],
+        acceptance_path=paths["acceptance-report"],
+        telemetry_path=paths["telemetry-report"],
+        runtime_path=paths["runtime-test-report"],
+        output_path=output_path,
+        modernization_path="manual",
+        rollback_revision=rollback_revision,
+        rollback_runbook_path=evidence / "rollback-runbook.md",
+        root=tmp_path,
+    )
+    with pytest.raises(
+        InvalidInputError,
+        match="copilot-modernization requires azure-blob images",
+    ):
+        render_handoff(
             runner=ReleaseRunner(target, rollback_revision),
-            target_path=paths["target"],
-            migration_path=paths["migration"],
-            acceptance_path=paths["acceptance"],
-            telemetry_path=paths["telemetry"],
-            runtime_path=paths["runtime"],
-            modernization_path="manual",
+            target_path=paths["azure-target-output"],
+            migration_path=paths["migration-report"],
+            acceptance_path=paths["acceptance-report"],
+            telemetry_path=paths["telemetry-report"],
+            runtime_path=paths["runtime-test-report"],
+            output_path=output_path,
+            modernization_path="copilot-modernization",
             rollback_revision=rollback_revision,
-            rollback_runbook_path=repo_root / "infra/README.md",
+            rollback_runbook_path=evidence / "rollback-runbook.md",
+            root=tmp_path,
         )
-        with pytest.raises(
-            InvalidInputError,
-            match="copilot-modernization requires azure-blob images",
-        ):
-            render_handoff(
-                runner=ReleaseRunner(target, rollback_revision),
-                target_path=paths["target"],
-                migration_path=paths["migration"],
-                acceptance_path=paths["acceptance"],
-                telemetry_path=paths["telemetry"],
-                runtime_path=paths["runtime"],
-                modernization_path="copilot-modernization",
-                rollback_revision=rollback_revision,
-                rollback_runbook_path=repo_root / "infra/README.md",
-            )
-    finally:
-        for path in paths.values():
-            path.unlink(missing_ok=True)
     assert handoff["source"]["runtimeVersion"] == "21.0.12"
     assert handoff["source"]["frameworkVersion"] == "Spring Boot 4.0.7"
     assert handoff["database"]["migrationMechanism"] == "pg-dump-restore"
     assert handoff["database"]["migrationVersion"] == "18.6"
-    assert handoff["schemaVersion"] == "1.3.0"
+    assert handoff["schemaVersion"] == "1.4.0"
+    assert handoff["sliceId"] == "manual-java"
     assert handoff["path"] == "manual"
     assert handoff["rollback"]["targetRevision"] == rollback_revision
-    assert handoff["rollback"]["runbook"] == "infra/README.md"
+    assert handoff["rollback"]["runbook"] == "evidence/rollback-runbook.md"
+    assert handoff["evidence"]["pathEvidence"] == [
+        "evidence/baseline-backup.md",
+        "evidence/managed-database-separation.json",
+        "evidence/container-build.json",
+        "evidence/iac-review.md",
+    ]
+
+    invalid_target = copy.deepcopy(target)
+    invalid_target["database"]["resourceId"] = target["database"]["resourceId"].replace(
+        "/resourceGroups/rg-mh-java-example/",
+        "/resourceGroups/rg-mh-other/",
+    )
+    paths["azure-target-output"].write_text(
+        json.dumps(invalid_target), encoding="utf-8"
+    )
+    with pytest.raises(InvalidInputError, match="outside the declared scope"):
+        render_handoff(
+            runner=ReleaseRunner(invalid_target, rollback_revision),
+            target_path=paths["azure-target-output"],
+            migration_path=paths["migration-report"],
+            acceptance_path=paths["acceptance-report"],
+            telemetry_path=paths["telemetry-report"],
+            runtime_path=paths["runtime-test-report"],
+            output_path=output_path,
+            modernization_path="manual",
+            rollback_revision=rollback_revision,
+            rollback_runbook_path=evidence / "rollback-runbook.md",
+            root=tmp_path,
+        )
+    paths["azure-target-output"].write_text(json.dumps(target), encoding="utf-8")
+
+    (evidence / "iac-review.md").unlink()
+    with pytest.raises(InvalidInputError, match="nonempty regular file"):
+        render_handoff(
+            runner=ReleaseRunner(target, rollback_revision),
+            target_path=paths["azure-target-output"],
+            migration_path=paths["migration-report"],
+            acceptance_path=paths["acceptance-report"],
+            telemetry_path=paths["telemetry-report"],
+            runtime_path=paths["runtime-test-report"],
+            output_path=output_path,
+            modernization_path="manual",
+            rollback_revision=rollback_revision,
+            rollback_runbook_path=evidence / "rollback-runbook.md",
+            root=tmp_path,
+        )
+    (evidence / "iac-review.md").mkdir()
+    (evidence / "iac-review.md/placeholder").write_text(
+        "not the required file\n", encoding="utf-8"
+    )
+    with pytest.raises(InvalidInputError, match="nonempty regular file"):
+        render_handoff(
+            runner=ReleaseRunner(target, rollback_revision),
+            target_path=paths["azure-target-output"],
+            migration_path=paths["migration-report"],
+            acceptance_path=paths["acceptance-report"],
+            telemetry_path=paths["telemetry-report"],
+            runtime_path=paths["runtime-test-report"],
+            output_path=output_path,
+            modernization_path="manual",
+            rollback_revision=rollback_revision,
+            rollback_runbook_path=evidence / "rollback-runbook.md",
+            root=tmp_path,
+        )
 
 
 def _runtime_tests(contracts: Path, stack: str) -> list[dict]:

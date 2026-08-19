@@ -28,10 +28,12 @@ migration extension for this path.
 **Executable proof**
 
 ```bash
+set -euo pipefail
 test "$(git rev-parse --show-toplevel)" = "$PWD"
-git status --short
-code --list-extensions --show-versions \
-  | grep -E '^(github\.copilot@1\.388\.0|github\.copilot-chat@0\.48\.1)$'
+test -z "$(git status --porcelain)"
+installed_extensions="$(code --list-extensions --show-versions)"
+grep -Fxq 'github.copilot@1.388.0' <<<"$installed_extensions"
+grep -Fxq 'github.copilot-chat@0.48.1' <<<"$installed_extensions"
 mkdir -p evidence .workshop-tmp
 dotnet restore dotnet/LegoCatalog.sln
 dotnet test dotnet/LegoCatalog.sln \
@@ -279,6 +281,7 @@ $TargetDatabaseResourceId = $Target.database.resourceId
 $TargetImageResourceId = $Target.images.resourceId
 
 Push-Location tests\acceptance
+try {
 $ExportExit = 0
 try {
   Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
@@ -291,6 +294,7 @@ try {
     --source-server '<source-sql-server>' `
     --source-database '<source-database>' `
     --source-username '<source-user>' `
+    --source-commit $SourceCommit `
     --target-output $TargetOutput `
     --artifact $DatabaseArtifact
   $ExportExit = $LASTEXITCODE
@@ -299,23 +303,25 @@ finally {
   Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-if ($ExportExit -ne 0) { Pop-Location; exit $ExportExit }
+if ($ExportExit -ne 0) { throw 'SQL export failed' }
 
 uv --no-config run catalog-migrate sql import `
   --artifact $DatabaseArtifact `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $TargetDatabaseResourceId `
   --confirm-target-resource-id $TargetDatabaseResourceId `
   --execute
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { throw 'SQL import failed' }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory $ImageDirectory `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $TargetImageResourceId `
   --confirm-target-resource-id $TargetImageResourceId `
   --execute
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { throw 'image copy failed' }
 
 uv --no-config run catalog-migrate verify `
   --stack dotnet-sqlserver `
@@ -323,8 +329,9 @@ uv --no-config run catalog-migrate verify `
   --database-artifact $DatabaseArtifact `
   --target-output $TargetOutput `
   --output $MigrationReport
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
-Pop-Location
+if ($LASTEXITCODE -ne 0) { throw 'migration verification failed' }
+}
+finally { Pop-Location }
 ```
 
 The CLI is the only data-transfer path. It must refuse a nonempty target, verify Blob
@@ -430,6 +437,7 @@ The frozen protocol is
 ```powershell
 $RepositoryRoot = (Resolve-Path .).Path
 Push-Location tests\acceptance
+try {
 uv --no-config run catalog-migrate render-handoff `
   --target-output (Join-Path $RepositoryRoot 'evidence\azure-target-output.json') `
   --migration-report (Join-Path $RepositoryRoot 'evidence\migration-report.json') `
@@ -440,14 +448,15 @@ uv --no-config run catalog-migrate render-handoff `
   --rollback-revision $BaselineRevision `
   --rollback-runbook (Join-Path $RepositoryRoot 'evidence\rollback-runbook.md') `
   --output (Join-Path $RepositoryRoot 'evidence\modernization-contract.json')
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { throw 'handoff rendering failed' }
 
 uv --no-config run python -m catalog_acceptance.handoff_cli `
   (Join-Path $RepositoryRoot 'evidence\modernization-contract.json') `
   --contracts (Join-Path $RepositoryRoot 'workshop\contracts') `
   --repository-root $RepositoryRoot
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
-Pop-Location
+if ($LASTEXITCODE -ne 0) { throw 'handoff validation failed' }
+}
+finally { Pop-Location }
 ```
 
 **Expected checkpoint**

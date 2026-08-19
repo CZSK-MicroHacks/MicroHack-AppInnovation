@@ -145,7 +145,7 @@ Finish only when:
 5. telemetry evidence has nonempty resources, traces, metrics, and logs;
 6. the rollback runbook is executable and repository-contained; and
 7. native `catalog-migrate render-handoff --path copilot-modernization
-   --rollback-runbook evidence/rollback-runbook.md ...` creates handoff `1.3.0`,
+   --rollback-runbook evidence/rollback-runbook.md ...` creates handoff `1.4.0`,
    which passes `python -m catalog_acceptance.handoff_cli`.
 
 ## Optional appendix: preview orchestration

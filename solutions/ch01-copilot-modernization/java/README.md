@@ -22,6 +22,21 @@ The target dependencies and images are pinned in
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
 $StartingCommit = (git rev-parse HEAD).Trim()
 if ($StartingCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'Starting commit must be an exact lowercase 40-hex SHA.'
@@ -170,7 +185,8 @@ $TargetOutput = (Resolve-Path evidence\azure-target-output.json).Path
 $Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
 if ($Target.deploymentStage -ne 'bootstrap' -or
     $Target.stack -ne 'java-postgresql' -or
-    $Target.images.provider -ne 'azure-blob') {
+    $Target.images.provider -ne 'azure-blob' -or
+    $Target.sourceCommit -cne $SourceCommit) {
   throw 'Wrong bootstrap target for the Java modernization slice.'
 }
 $DatabaseResourceId = $Target.database.resourceId
@@ -179,63 +195,93 @@ $Artifact = 'C:\ProgramData\MicroHack\migration\catalog.dump'
 New-Item -ItemType Directory -Force (Split-Path $Artifact) | Out-Null
 
 Push-Location tests\acceptance
-$env:MIGRATION_SOURCE_DATABASE_PASSWORD = '<source-postgresql-password>'
-uv --no-config run catalog-migrate postgresql export `
-  --source-host 'localhost' `
-  --source-port 5432 `
-  --source-database 'catalog' `
-  --source-username 'catalog' `
-  --target-output $TargetOutput `
-  --artifact $Artifact
-$ExportExit = $LASTEXITCODE
-Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD
-if ($ExportExit -ne 0) { exit $ExportExit }
+try {
+$ExportExit = 0
+try {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+  $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Source PostgreSQL database password'
+  uv --no-config run catalog-migrate postgresql export `
+    --source-host 'localhost' `
+    --source-port 5432 `
+    --source-database 'catalog' `
+    --source-username 'catalog' `
+    --source-commit $SourceCommit `
+    --target-output $TargetOutput `
+    --artifact $Artifact
+  $ExportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ExportExit -ne 0) { throw 'PostgreSQL export failed' }
 
-$env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD = '<target-admin-password>'
-if ($Target.database.authentication -eq 'password-secret') {
-  $env:MIGRATION_TARGET_APPLICATION_PASSWORD = '<target-app-password>'
-} else {
+$ImportExit = 0
+try {
+  $env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD = Read-ProtectedValue `
+    'Target PostgreSQL administrator password'
+  if ($Target.database.authentication -eq 'password-secret') {
+    $env:MIGRATION_TARGET_APPLICATION_PASSWORD = Read-ProtectedValue `
+      'Target PostgreSQL application password'
+  } else {
+    Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+      -ErrorAction SilentlyContinue
+  }
+  uv --no-config run catalog-migrate postgresql import `
+    --artifact $Artifact `
+    --source-commit $SourceCommit `
+    --target-output $TargetOutput `
+    --target-resource-id $DatabaseResourceId `
+    --confirm-target-resource-id $DatabaseResourceId `
+    --execute
+  $ImportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
   Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-uv --no-config run catalog-migrate postgresql import `
-  --artifact $Artifact `
-  --target-output $TargetOutput `
-  --target-resource-id $DatabaseResourceId `
-  --confirm-target-resource-id $DatabaseResourceId `
-  --execute
-$ImportExit = $LASTEXITCODE
-Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD
-Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
-  -ErrorAction SilentlyContinue
-if ($ImportExit -ne 0) { exit $ImportExit }
+if ($ImportExit -ne 0) { throw 'PostgreSQL import failed' }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory (Resolve-Path ..\..\data\images) `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $ImageResourceId `
   --confirm-target-resource-id $ImageResourceId `
   --execute
 $ImageCopyExit = $LASTEXITCODE
-if ($ImageCopyExit -ne 0) { exit $ImageCopyExit }
+if ($ImageCopyExit -ne 0) { throw 'image copy failed' }
 
-if ($Target.database.authentication -eq 'password-secret') {
-  $env:MIGRATION_TARGET_APPLICATION_PASSWORD = '<target-app-password>'
-} else {
+$VerifyExit = 0
+try {
+  if ($Target.database.authentication -eq 'password-secret') {
+    $env:MIGRATION_TARGET_APPLICATION_PASSWORD = Read-ProtectedValue `
+      'Target PostgreSQL application password for verification'
+  } else {
+    Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+      -ErrorAction SilentlyContinue
+  }
+  uv --no-config run catalog-migrate verify `
+    --stack java-postgresql `
+    --source-commit $SourceCommit `
+    --database-artifact $Artifact `
+    --target-output $TargetOutput `
+    --output (Join-Path (Resolve-Path ..\..).Path 'evidence\migration-report.json')
+  $VerifyExit = $LASTEXITCODE
+}
+finally {
   Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
     -ErrorAction SilentlyContinue
 }
-uv --no-config run catalog-migrate verify `
-  --stack java-postgresql `
-  --source-commit $SourceCommit `
-  --database-artifact $Artifact `
-  --target-output $TargetOutput `
-  --output (Join-Path (Resolve-Path ..\..).Path 'evidence\migration-report.json')
-$VerifyExit = $LASTEXITCODE
-Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
-  -ErrorAction SilentlyContinue
-if ($VerifyExit -ne 0) { exit $VerifyExit }
-Pop-Location
+if ($VerifyExit -ne 0) { throw 'migration verification failed' }
+}
+finally { Pop-Location }
 ```
 
 For managed-identity mode, `catalog-migrate postgresql import` requires the
@@ -313,27 +359,44 @@ same digest as release.
 Run full managed-target acceptance:
 
 ```powershell
+$AcceptanceReport = Join-Path (Get-Location) `
+  'evidence\acceptance-report.json'
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  Remove-Item -LiteralPath $AcceptanceReport -Force -ErrorAction Stop
+}
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  throw 'stale acceptance report could not be removed'
+}
+
 Push-Location tests\acceptance
+try {
 $env:CATALOG_DATABASE_KIND = 'postgresql'
 $env:CATALOG_DATABASE_HOST = $ReleaseTarget.database.server
 $env:CATALOG_DATABASE_NAME = $ReleaseTarget.database.database
 $env:CATALOG_DATABASE_USERNAME = '<acceptance-verifier>'
-$env:CATALOG_DATABASE_PASSWORD = '<acceptance-verifier-password>'
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
-$env:PERFTEST_API_KEY = '<runtime-performance-api-key>'
-uv --no-config run python -m catalog_acceptance `
-  --profile full `
-  --base-url $ReleaseTarget.application.url `
-  --source-commit $SourceCommit `
-  --image-digest $ImageDigest `
-  --revision-name $ReleaseRevision `
-  --output ..\..\evidence\acceptance-report.json
-$AcceptanceExit = $LASTEXITCODE
-Remove-Item Env:PERFTEST_API_KEY
-Remove-Item Env:CATALOG_DATABASE_PASSWORD
-if ($AcceptanceExit -ne 0) { exit $AcceptanceExit }
-Pop-Location
+$AcceptanceExit = 0
+try {
+  $env:CATALOG_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Acceptance verifier database password'
+  $env:PERFTEST_API_KEY = Read-ProtectedValue 'Runtime performance API key'
+  uv --no-config run python -m catalog_acceptance `
+    --profile full `
+    --base-url $ReleaseTarget.application.url `
+    --source-commit $SourceCommit `
+    --image-digest $ImageDigest `
+    --revision-name $ReleaseRevision `
+    --output $AcceptanceReport
+  $AcceptanceExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
+  Remove-Item Env:CATALOG_DATABASE_PASSWORD -ErrorAction SilentlyContinue
+}
+if ($AcceptanceExit -ne 0) { throw 'full acceptance failed' }
+}
+finally { Pop-Location }
 ```
 
 Exercise normal, import, performance, and controlled failure paths. Query Azure
@@ -351,10 +414,11 @@ acceptance, and escalation steps. Database rollback is never implicit. If
 native restore or verification fails, stop before deployment and retain the
 source database as authority. `catalog-migrate` supports no resource deletion.
 
-Render and validate handoff `1.3.0`:
+Render and validate handoff `1.4.0`:
 
 ```powershell
 Push-Location tests\acceptance
+try {
 uv --no-config run catalog-migrate render-handoff `
   --target-output ..\..\evidence\azure-target-output.json `
   --migration-report ..\..\evidence\migration-report.json `
@@ -365,12 +429,15 @@ uv --no-config run catalog-migrate render-handoff `
   --rollback-revision $RollbackRevision `
   --rollback-runbook ..\..\evidence\rollback-runbook.md `
   --output ..\..\evidence\modernization-contract.json
+if ($LASTEXITCODE -ne 0) { throw 'handoff rendering failed' }
 
 uv --no-config run python -m catalog_acceptance.handoff_cli `
   ..\..\evidence\modernization-contract.json `
   --contracts ..\..\workshop\contracts `
   --repository-root ..\..
-Pop-Location
+if ($LASTEXITCODE -ne 0) { throw 'handoff validation failed' }
+}
+finally { Pop-Location }
 ```
 
 ## 8. Clean transient files and rejoin

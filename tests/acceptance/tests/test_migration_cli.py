@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from catalog_migrate import cli
-from catalog_migrate.contracts import guard_target, load_json, require_secrets
+from catalog_migrate.contracts import (
+    guard_target,
+    load_json,
+    require_secrets,
+    require_source_commit,
+)
 from catalog_migrate.errors import (
     InvalidInputError,
     PreconditionError,
@@ -55,6 +60,8 @@ def _dotnet_bootstrap(repo_root: Path) -> dict:
 def _target_arguments(target: dict, target_path: Path, section: str) -> list[str]:
     resource_id = target[section]["resourceId"]
     return [
+        "--source-commit",
+        target["sourceCommit"],
         "--target-output",
         str(target_path),
         "--target-resource-id",
@@ -83,12 +90,14 @@ def test_exact_seven_commands_are_registered() -> None:
             "--source-server", "source",
             "--source-database", "catalog",
             "--source-username", "catalog",
+            "--source-commit", "0" * 40,
             "--artifact", "catalog.bacpac",
             "--target-output", "target.json",
         ],
         [
             "sql", "import",
             "--artifact", "catalog.bacpac",
+            "--source-commit", "0" * 40,
             "--target-output", "target.json",
             "--target-resource-id", "resource",
             "--confirm-target-resource-id", "resource",
@@ -100,12 +109,14 @@ def test_exact_seven_commands_are_registered() -> None:
             "--source-port", "5432",
             "--source-database", "catalog",
             "--source-username", "catalog",
+            "--source-commit", "0" * 40,
             "--artifact", "catalog.dump",
             "--target-output", "target.json",
         ],
         [
             "postgresql", "import",
             "--artifact", "catalog.dump",
+            "--source-commit", "0" * 40,
             "--target-output", "target.json",
             "--target-resource-id", "resource",
             "--confirm-target-resource-id", "resource",
@@ -114,6 +125,7 @@ def test_exact_seven_commands_are_registered() -> None:
         [
             "images", "copy",
             "--source-directory", "images",
+            "--source-commit", "0" * 40,
             "--target-output", "target.json",
             "--target-resource-id", "resource",
             "--confirm-target-resource-id", "resource",
@@ -178,6 +190,8 @@ def test_sql_export_emits_schema_valid_result(
             "catalog",
             "--source-username",
             "catalog",
+            "--source-commit",
+            target["sourceCommit"],
             "--artifact",
             str(tmp_path / "catalog.bacpac"),
             "--target-output",
@@ -227,6 +241,8 @@ def test_postgresql_export_emits_schema_valid_result(
             "catalog",
             "--source-username",
             "catalog",
+            "--source-commit",
+            target["sourceCommit"],
             "--artifact",
             str(tmp_path / "catalog.dump"),
             "--target-output",
@@ -499,6 +515,7 @@ def test_render_handoff_writes_the_schema_valid_document(
 
     assert result == 0
     assert rendered["modernization_path"] == "manual"
+    assert rendered["output_path"] == output
     assert rendered["rollback_runbook_path"] == repo_root / "infra/README.md"
     assert json.loads(output.read_text(encoding="utf-8")) == handoff
     assert json.loads(capsys.readouterr().out) == handoff
@@ -513,6 +530,60 @@ def test_target_guard_rejects_wrong_confirmation_and_execute(target: dict) -> No
         guard_target(target, resource_id, "wrong", True, "database")
     with pytest.raises(PreconditionError):
         guard_target(target, resource_id, resource_id, False, "database")
+
+
+def test_source_commit_guard_rejects_invalid_or_stale_identity(target: dict) -> None:
+    """Every transfer command binds the bootstrap target to one source commit."""
+    require_source_commit(target, target["sourceCommit"])
+    with pytest.raises(InvalidInputError, match="lowercase 40-hex"):
+        require_source_commit(target, "invalid")
+    with pytest.raises(InvalidInputError, match="differs from target output"):
+        require_source_commit(target, "1" * 40)
+
+
+def test_verify_rejects_stale_source_before_topology_or_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    target: dict,
+) -> None:
+    """Verification cannot relabel a protected target for another source commit."""
+    target_path = tmp_path / "target.json"
+    target_path.write_text(json.dumps(target), encoding="utf-8")
+    output = tmp_path / "migration.json"
+
+    def unexpected_topology(*args: object, **kwargs: object) -> dict:
+        raise AssertionError("topology must not run for stale source identity")
+
+    monkeypatch.setattr(
+        cli,
+        "validate_migration_topology",
+        unexpected_topology,
+        raising=False,
+    )
+    result = cli.main(
+        [
+            "verify",
+            "--stack",
+            "java-postgresql",
+            "--source-commit",
+            "1" * 40,
+            "--database-artifact",
+            str(tmp_path / "catalog.dump"),
+            "--target-output",
+            str(target_path),
+            "--output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert captured.out == ""
+    assert "source commit differs from target output" in json.loads(captured.err)[
+        "error"
+    ]["message"]
+    assert not output.exists()
 
 
 def test_undeclared_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

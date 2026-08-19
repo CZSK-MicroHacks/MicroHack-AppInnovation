@@ -8,13 +8,13 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Seed contract: `1.0.0`
 - Behavior contract: `1.1.0`
 - Runtime test evidence: `1.1.0`
-- Modernization handoff: `1.3.0`
+- Modernization handoff: `1.4.0`
 - Acceptance report: `1.0.0`
 - Telemetry evidence: `1.0.0`
 - Toolchain lock: `1.2.0`
 - Shared Azure target output: `1.2.0`
 - Migration report: `1.1.0`
-- Migration CLI: `1.3.0`
+- Migration CLI: `1.4.0`
 - Migration CLI error: `1.0.0`
 - Challenge 1 path registry: `1.0.0`
 
@@ -27,7 +27,9 @@ same P4 Bicep, native migration command, full acceptance harness, and modernizat
 handoff. Manual slices use the required Azure Files compatibility reference; the
 other reference slices use policy-compatible Blob storage. Path-specific evidence
 supplements rather than replaces the shared handoff bundle. Modernization handoff
-`1.3.0` makes that path-to-image-provider relationship executable.
+`1.4.0` resolves one exact registered slice and makes its stack, database, provider,
+rollback runbook, and path-specific evidence executable. Migration CLI `1.4.0` binds
+every transfer command to the exact source commit recorded by the protected target.
 
 ## Canonical identity and image digest
 

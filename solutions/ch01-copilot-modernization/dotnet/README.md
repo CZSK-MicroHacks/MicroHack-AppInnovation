@@ -20,6 +20,21 @@ The target packages and images are pinned in `workshop/toolchain.lock.json`:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
 $StartingCommit = (git rev-parse HEAD).Trim()
 if ($StartingCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'Starting commit must be an exact lowercase 40-hex SHA.'
@@ -162,7 +177,8 @@ $TargetOutput = (Resolve-Path evidence\azure-target-output.json).Path
 $Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
 if ($Target.deploymentStage -ne 'bootstrap' -or
     $Target.stack -ne 'dotnet-sqlserver' -or
-    $Target.images.provider -ne 'azure-blob') {
+    $Target.images.provider -ne 'azure-blob' -or
+    $Target.sourceCommit -cne $SourceCommit) {
   throw 'Wrong bootstrap target for the .NET modernization slice.'
 }
 $DatabaseResourceId = $Target.database.resourceId
@@ -171,34 +187,49 @@ $Artifact = 'C:\ProgramData\MicroHack\migration\catalog.bacpac'
 New-Item -ItemType Directory -Force (Split-Path $Artifact) | Out-Null
 
 Push-Location tests\acceptance
-$env:MIGRATION_SOURCE_DATABASE_PASSWORD = '<source-sql-password>'
-uv --no-config run catalog-migrate sql export `
-  --source-server '.\SQLEXPRESS' `
-  --source-database 'LegoCatalog' `
-  --source-username 'catalog' `
-  --target-output $TargetOutput `
-  --artifact $Artifact
-$ExportExit = $LASTEXITCODE
-Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD
-if ($ExportExit -ne 0) { exit $ExportExit }
+try {
+$ExportExit = 0
+try {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+  $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Source SQL Server database password'
+  uv --no-config run catalog-migrate sql export `
+    --source-server '.\SQLEXPRESS' `
+    --source-database 'LegoCatalog' `
+    --source-username 'catalog' `
+    --source-commit $SourceCommit `
+    --target-output $TargetOutput `
+    --artifact $Artifact
+  $ExportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ExportExit -ne 0) { throw 'SQL export failed' }
 
 uv --no-config run catalog-migrate sql import `
   --artifact $Artifact `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $DatabaseResourceId `
   --confirm-target-resource-id $DatabaseResourceId `
   --execute
 $ImportExit = $LASTEXITCODE
-if ($ImportExit -ne 0) { exit $ImportExit }
+if ($ImportExit -ne 0) { throw 'SQL import failed' }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory (Resolve-Path ..\..\data\images) `
+  --source-commit $SourceCommit `
   --target-output $TargetOutput `
   --target-resource-id $ImageResourceId `
   --confirm-target-resource-id $ImageResourceId `
   --execute
 $ImageCopyExit = $LASTEXITCODE
-if ($ImageCopyExit -ne 0) { exit $ImageCopyExit }
+if ($ImageCopyExit -ne 0) { throw 'image copy failed' }
 
 uv --no-config run catalog-migrate verify `
   --stack dotnet-sqlserver `
@@ -207,8 +238,9 @@ uv --no-config run catalog-migrate verify `
   --target-output $TargetOutput `
   --output (Join-Path (Resolve-Path ..\..).Path 'evidence\migration-report.json')
 $VerifyExit = $LASTEXITCODE
-if ($VerifyExit -ne 0) { exit $VerifyExit }
-Pop-Location
+if ($VerifyExit -ne 0) { throw 'migration verification failed' }
+}
+finally { Pop-Location }
 ```
 
 Do not claim the extension exported, imported, verified, or cut over the
@@ -286,31 +318,52 @@ Run full acceptance from `tests/acceptance`. Azure SQL is Entra-only, so use a
 transient token in `SQLCMDACCESS_TOKEN`, not SQL username/password:
 
 ```powershell
+$AcceptanceReport = Join-Path (Get-Location) `
+  'evidence\acceptance-report.json'
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  Remove-Item -LiteralPath $AcceptanceReport -Force -ErrorAction Stop
+}
+if (Test-Path -LiteralPath $AcceptanceReport) {
+  throw 'stale acceptance report could not be removed'
+}
+
 Push-Location tests\acceptance
+try {
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
-$env:SQLCMDACCESS_TOKEN = (
+$SqlAccessToken = (
   az account get-access-token `
     --resource https://database.windows.net/ `
     --query accessToken --output tsv
 ).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($SqlAccessToken)) {
+    throw 'Azure SQL access-token acquisition failed'
+}
 $env:CATALOG_DATABASE_KIND = 'sqlserver'
 $env:CATALOG_DATABASE_HOST = $ReleaseTarget.database.server
 $env:CATALOG_DATABASE_NAME = $ReleaseTarget.database.database
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
-$env:PERFTEST_API_KEY = '<runtime-performance-api-key>'
-uv --no-config run python -m catalog_acceptance `
-  --profile full `
-  --base-url $ReleaseTarget.application.url `
-  --source-commit $SourceCommit `
-  --image-digest $ImageDigest `
-  --revision-name $ReleaseRevision `
-  --output ..\..\evidence\acceptance-report.json
-$AcceptanceExit = $LASTEXITCODE
-Remove-Item Env:SQLCMDACCESS_TOKEN
-Remove-Item Env:PERFTEST_API_KEY
-if ($AcceptanceExit -ne 0) { exit $AcceptanceExit }
-Pop-Location
+$AcceptanceExit = 0
+try {
+  $env:SQLCMDACCESS_TOKEN = $SqlAccessToken
+  $env:PERFTEST_API_KEY = Read-ProtectedValue 'Runtime performance API key'
+  uv --no-config run python -m catalog_acceptance `
+    --profile full `
+    --base-url $ReleaseTarget.application.url `
+    --source-commit $SourceCommit `
+    --image-digest $ImageDigest `
+    --revision-name $ReleaseRevision `
+    --output $AcceptanceReport
+  $AcceptanceExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:SQLCMDACCESS_TOKEN -ErrorAction SilentlyContinue
+  Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
+  $SqlAccessToken = $null
+}
+if ($AcceptanceExit -ne 0) { throw 'full acceptance failed' }
+}
+finally { Pop-Location }
 ```
 
 Exercise normal, import, performance, and controlled failure paths. Query Azure
@@ -329,10 +382,11 @@ is not automatic: if native import verification fails, stop before application
 deployment and keep the source database authoritative; never delete resources
 through `catalog-migrate`.
 
-Render and validate handoff `1.3.0`:
+Render and validate handoff `1.4.0`:
 
 ```powershell
 Push-Location tests\acceptance
+try {
 uv --no-config run catalog-migrate render-handoff `
   --target-output ..\..\evidence\azure-target-output.json `
   --migration-report ..\..\evidence\migration-report.json `
@@ -343,12 +397,15 @@ uv --no-config run catalog-migrate render-handoff `
   --rollback-revision $RollbackRevision `
   --rollback-runbook ..\..\evidence\rollback-runbook.md `
   --output ..\..\evidence\modernization-contract.json
+if ($LASTEXITCODE -ne 0) { throw 'handoff rendering failed' }
 
 uv --no-config run python -m catalog_acceptance.handoff_cli `
   ..\..\evidence\modernization-contract.json `
   --contracts ..\..\workshop\contracts `
   --repository-root ..\..
-Pop-Location
+if ($LASTEXITCODE -ne 0) { throw 'handoff validation failed' }
+}
+finally { Pop-Location }
 ```
 
 ## 8. Clean transient files and rejoin

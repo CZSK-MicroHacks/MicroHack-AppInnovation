@@ -267,6 +267,7 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "sourceReadOnly": True,
         "refuseNonemptyTarget": True,
         "requireExactTargetConfirmation": True,
+        "requireSourceCommitMatch": True,
         "argumentsAreExact": True,
         "deriveTargetSettingsFromTargetOutput": True,
         "secretInputsFromEnvironmentOnly": True,
@@ -386,6 +387,16 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
     }
     assert "--target-output" in commands["sql import"]["arguments"]
     assert "--target-output" in commands["postgresql import"]["arguments"]
+    for name in (
+        "sql export",
+        "sql import",
+        "postgresql export",
+        "postgresql import",
+        "images copy",
+        "verify",
+    ):
+        assert "--source-commit" in commands[name]["arguments"]
+    assert contract["safety"]["requireSourceCommitMatch"] is True
     assert "--application-username" not in commands["postgresql import"][
         "arguments"
     ]
@@ -447,7 +458,7 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         "requiredBeforeApplicationPrincipalCreation": True,
         "verifyAbsent": True,
     }
-    assert contract["schemaVersion"] == "1.3.0"
+    assert contract["schemaVersion"] == "1.4.0"
     assert contract["safety"]["secretInputsFromEnvironmentOnly"] is True
     assert (
         contract["safety"]["sqlPackagePasswordTransport"]
@@ -697,6 +708,14 @@ def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
         _validate(handoff_schema, invalid_handoff)
     invalid_handoff = load_json(contracts / "modernization-contract.example.json")
     invalid_handoff["path"] = "manual"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["sliceId"] = "manual-dotnet"
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(handoff_schema, invalid_handoff)
+    invalid_handoff = load_json(contracts / "modernization-contract.example.json")
+    invalid_handoff["evidence"]["pathEvidence"][0] = "evidence/unrelated.md"
     with pytest.raises(JsonSchemaValidationError):
         _validate(handoff_schema, invalid_handoff)
 
@@ -1000,6 +1019,10 @@ def test_handoff_bundle_cross_file_consistency(
         "rollback fixture\n",
         encoding="utf-8",
     )
+    for relative_path in handoff["evidence"]["pathEvidence"]:
+        path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("path evidence fixture\n", encoding="utf-8")
     runtime_example = load_json(contracts / "runtime-test-evidence.example.json")
     runtime_results = "\n".join(
         f'<UnitTestResult testId="runtime-{index}" '
@@ -1248,6 +1271,20 @@ def test_handoff_bundle_cross_file_consistency(
         )
         == 0
     )
+    first_path_evidence = tmp_path / handoff["evidence"]["pathEvidence"][0]
+    path_evidence_contents = first_path_evidence.read_text(encoding="utf-8")
+    first_path_evidence.unlink()
+    with pytest.raises(FileNotFoundError, match="referenced handoff artifact is absent"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    first_path_evidence.mkdir()
+    (first_path_evidence / "placeholder").write_text(
+        "not the required file\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="nonempty regular file"):
+        validate_handoff(handoff_path, contracts, tmp_path)
+    (first_path_evidence / "placeholder").unlink()
+    first_path_evidence.rmdir()
+    first_path_evidence.write_text(path_evidence_contents, encoding="utf-8")
 
     target_output_path = evidence / "azure-target-output.json"
     passing_target_output = load_json(target_output_path)
