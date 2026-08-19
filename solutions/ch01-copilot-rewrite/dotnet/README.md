@@ -93,6 +93,7 @@ Ask for and accept one generated diff at a time.
 **Executable proof after every generated diff**
 
 ```bash
+set -euo pipefail
 git diff -- dotnet
 dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=<slice-name>.trx" \
@@ -231,9 +232,26 @@ On the exact Windows P3 source VM declared in
 derive source identity. Only after that clean check, copy the bootstrap target output
 from `C:\protected\azure-target-output.json` into the checkout. Run all native
 transfer there, not from Linux, macOS, Cloud Shell, or the application. Supply
-`MIGRATION_SOURCE_DATABASE_PASSWORD` in the current PowerShell process only.
+the source password only through the protected prompt. The command sequence clears it
+before invoking any command that forbids migration secrets.
 
 ```powershell
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
+
 $Dirty = git status --porcelain -- dotnet data
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
@@ -254,17 +272,34 @@ $DatabaseArtifact = 'C:\protected\catalog.bacpac'
 New-Item -ItemType Directory -Force (Join-Path $RepositoryRoot 'evidence') | Out-Null
 Copy-Item 'C:\protected\azure-target-output.json' $TargetOutput
 $Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
+if ($Target.sourceCommit -cne $SourceCommit) {
+  throw 'The protected bootstrap target does not match this source commit.'
+}
 $TargetDatabaseResourceId = $Target.database.resourceId
 $TargetImageResourceId = $Target.images.resourceId
 
 Push-Location tests\acceptance
-uv --no-config run catalog-migrate sql export `
-  --source-server '<source-sql-server>' `
-  --source-database '<source-database>' `
-  --source-username '<source-user>' `
-  --target-output $TargetOutput `
-  --artifact $DatabaseArtifact
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+$ExportExit = 0
+try {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+  $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Source SQL Server database password'
+  uv --no-config run catalog-migrate sql export `
+    --source-server '<source-sql-server>' `
+    --source-database '<source-database>' `
+    --source-username '<source-user>' `
+    --target-output $TargetOutput `
+    --artifact $DatabaseArtifact
+  $ExportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ExportExit -ne 0) { Pop-Location; exit $ExportExit }
 
 uv --no-config run catalog-migrate sql import `
   --artifact $DatabaseArtifact `
@@ -335,7 +370,7 @@ $ReleaseOutput = $ReleaseLines -join [Environment]::NewLine
 
 $Release = $ReleaseOutput | ConvertFrom-Json
 $ContainerAppName = $Release.application.containerAppName
-$ResourceGroup = $Release.application.resourceGroup
+$ResourceGroup = $Release.resourceGroup.name
 $BaselineRevision = "$ContainerAppName--baseline-$($SourceCommit.Substring(0, 12))"
 $BaselineLines = az containerapp revision show `
   --resource-group $ResourceGroup `

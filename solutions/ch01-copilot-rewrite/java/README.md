@@ -92,6 +92,7 @@ Ask for and accept one generated diff at a time.
 **Executable proof after every generated diff**
 
 ```bash
+set -euo pipefail
 git diff -- java
 ./java/mvnw -f java/pom.xml test
 rm -rf .workshop-tmp/java-<slice-name>
@@ -233,11 +234,28 @@ On the exact Windows P3 source VM declared in
 derive source identity. Only after that clean check, copy the bootstrap target output
 from `C:\protected\azure-target-output.json` into the checkout. Run all native
 transfer there, not from Linux, macOS, Cloud Shell, or the application. Supply
-`MIGRATION_SOURCE_DATABASE_PASSWORD` and
-`MIGRATION_TARGET_ADMINISTRATOR_PASSWORD` in the current PowerShell process only.
-Managed-identity mode forbids `MIGRATION_TARGET_APPLICATION_PASSWORD`.
+each password only through the protected prompt immediately before the command that
+permits it. Managed-identity mode forbids
+`MIGRATION_TARGET_APPLICATION_PASSWORD`; password-secret mode requires that value for
+import and verification but clears it between those commands.
 
 ```powershell
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
+
 $Dirty = git status --porcelain -- java data
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
@@ -258,26 +276,62 @@ $DatabaseArtifact = 'C:\protected\catalog.dump'
 New-Item -ItemType Directory -Force (Join-Path $RepositoryRoot 'evidence') | Out-Null
 Copy-Item 'C:\protected\azure-target-output.json' $TargetOutput
 $Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
+if ($Target.sourceCommit -cne $SourceCommit) {
+  throw 'The protected bootstrap target does not match this source commit.'
+}
 $TargetDatabaseResourceId = $Target.database.resourceId
 $TargetImageResourceId = $Target.images.resourceId
 
 Push-Location tests\acceptance
-uv --no-config run catalog-migrate postgresql export `
-  --source-host '<source-postgresql-host>' `
-  --source-port 5432 `
-  --source-database '<source-database>' `
-  --source-username '<source-user>' `
-  --target-output $TargetOutput `
-  --artifact $DatabaseArtifact
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+$ExportExit = 0
+try {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+  $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
+    'Source PostgreSQL database password'
+  uv --no-config run catalog-migrate postgresql export `
+    --source-host '<source-postgresql-host>' `
+    --source-port 5432 `
+    --source-database '<source-database>' `
+    --source-username '<source-user>' `
+    --target-output $TargetOutput `
+    --artifact $DatabaseArtifact
+  $ExportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_SOURCE_DATABASE_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ExportExit -ne 0) { Pop-Location; exit $ExportExit }
 
-uv --no-config run catalog-migrate postgresql import `
-  --artifact $DatabaseArtifact `
-  --target-output $TargetOutput `
-  --target-resource-id $TargetDatabaseResourceId `
-  --confirm-target-resource-id $TargetDatabaseResourceId `
-  --execute
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+$ImportExit = 0
+try {
+  $env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD = Read-ProtectedValue `
+    'Target PostgreSQL administrator password'
+  if ($Target.database.authentication -eq 'password-secret') {
+    $env:MIGRATION_TARGET_APPLICATION_PASSWORD = Read-ProtectedValue `
+      'Target PostgreSQL application password'
+  }
+  elseif ($Target.database.authentication -ne 'managed-identity') {
+    throw 'Unsupported PostgreSQL target authentication mode.'
+  }
+  uv --no-config run catalog-migrate postgresql import `
+    --artifact $DatabaseArtifact `
+    --target-output $TargetOutput `
+    --target-resource-id $TargetDatabaseResourceId `
+    --confirm-target-resource-id $TargetDatabaseResourceId `
+    --execute
+  $ImportExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_TARGET_ADMINISTRATOR_PASSWORD `
+    -ErrorAction SilentlyContinue
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($ImportExit -ne 0) { Pop-Location; exit $ImportExit }
 
 uv --no-config run catalog-migrate images copy `
   --source-directory $ImageDirectory `
@@ -287,13 +341,25 @@ uv --no-config run catalog-migrate images copy `
   --execute
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-uv --no-config run catalog-migrate verify `
-  --stack java-postgresql `
-  --source-commit $SourceCommit `
-  --database-artifact $DatabaseArtifact `
-  --target-output $TargetOutput `
-  --output $MigrationReport
-if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+$VerifyExit = 0
+try {
+  if ($Target.database.authentication -eq 'password-secret') {
+    $env:MIGRATION_TARGET_APPLICATION_PASSWORD = Read-ProtectedValue `
+      'Target PostgreSQL application password for verification'
+  }
+  uv --no-config run catalog-migrate verify `
+    --stack java-postgresql `
+    --source-commit $SourceCommit `
+    --database-artifact $DatabaseArtifact `
+    --target-output $TargetOutput `
+    --output $MigrationReport
+  $VerifyExit = $LASTEXITCODE
+}
+finally {
+  Remove-Item Env:MIGRATION_TARGET_APPLICATION_PASSWORD `
+    -ErrorAction SilentlyContinue
+}
+if ($VerifyExit -ne 0) { Pop-Location; exit $VerifyExit }
 Pop-Location
 ```
 
@@ -340,7 +406,7 @@ $ReleaseOutput = $ReleaseLines -join [Environment]::NewLine
 
 $Release = $ReleaseOutput | ConvertFrom-Json
 $ContainerAppName = $Release.application.containerAppName
-$ResourceGroup = $Release.application.resourceGroup
+$ResourceGroup = $Release.resourceGroup.name
 $BaselineRevision = "$ContainerAppName--baseline-$($SourceCommit.Substring(0, 12))"
 $BaselineLines = az containerapp revision show `
   --resource-group $ResourceGroup `
