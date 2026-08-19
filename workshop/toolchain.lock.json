@@ -238,22 +238,22 @@
   },
   "applicationContainers": {
     "dotnetBuild": {
-      "image": "mcr.microsoft.com/dotnet/sdk:8.0.424-azurelinux3.0-amd64",
-      "digest": "sha256:b3da7c196c074e9d099e98694d09fececc0db778b22b9a3415b0926b3692fd92",
+      "image": "mcr.microsoft.com/dotnet/sdk:10.0.400-azurelinux3.0-amd64",
+      "digest": "sha256:679e7b7e9d0315ad34438bee49b4fb0658c4c42a3aa08ae8557d1bd03f49c28b",
       "platform": "linux/amd64",
-      "runtimeVersion": "8.0.30"
+      "runtimeVersion": "10.0.11"
     },
     "dotnetRuntime": {
-      "image": "mcr.microsoft.com/dotnet/aspnet:8.0.30-azurelinux3.0-amd64",
-      "digest": "sha256:53842aa07e71786a5feb1086ea1c314ecaa14b47c9a9abc0134ace0f228598fc",
+      "image": "mcr.microsoft.com/dotnet/aspnet:10.0.11-azurelinux3.0-amd64",
+      "digest": "sha256:d21a49ce9556f5e50afc5a33cc45ec7a40b5739f10397368810193666e559a79",
       "platform": "linux/amd64",
-      "runtimeVersion": "8.0.30"
+      "runtimeVersion": "10.0.11"
     },
     "javaBuildRuntime": {
-      "image": "mcr.microsoft.com/openjdk/jdk:17-azurelinux",
-      "digest": "sha256:247a214856ad8fca58a89e9ec94b2f271fe965ac13eecdab768f0c967a3c7d7e",
+      "image": "mcr.microsoft.com/openjdk/jdk:21-azurelinux",
+      "digest": "sha256:06ec8d4b09883cb695aa37e3ae85d1188f124b6dbcfeff97eeb09a926f7c389f",
       "platform": "linux/amd64",
-      "runtimeVersion": "17.0.20+8"
+      "runtimeVersion": "21.0.12+8"
     }
   },
   "extensions": {

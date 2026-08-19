@@ -528,6 +528,36 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
     assert toolchain["runtimes"]["dotnet"]["targetSdk"] == "10.0.400"
     assert toolchain["runtimes"]["java"]["sourceSpringBoot"] == "3.5.16"
     assert toolchain["runtimes"]["java"]["targetSpringBoot"] == "4.0.7"
+    assert toolchain["applicationContainers"]["dotnetBuild"] == {
+        "image": (
+            "mcr.microsoft.com/dotnet/sdk:"
+            "10.0.400-azurelinux3.0-amd64"
+        ),
+        "digest": (
+            "sha256:679e7b7e9d0315ad34438bee49b4fb0658c4c42a3aa08ae8557d1bd03f49c28b"
+        ),
+        "platform": "linux/amd64",
+        "runtimeVersion": "10.0.11",
+    }
+    assert toolchain["applicationContainers"]["dotnetRuntime"] == {
+        "image": (
+            "mcr.microsoft.com/dotnet/aspnet:"
+            "10.0.11-azurelinux3.0-amd64"
+        ),
+        "digest": (
+            "sha256:d21a49ce9556f5e50afc5a33cc45ec7a40b5739f10397368810193666e559a79"
+        ),
+        "platform": "linux/amd64",
+        "runtimeVersion": "10.0.11",
+    }
+    assert toolchain["applicationContainers"]["javaBuildRuntime"] == {
+        "image": "mcr.microsoft.com/openjdk/jdk:21-azurelinux",
+        "digest": (
+            "sha256:06ec8d4b09883cb695aa37e3ae85d1188f124b6dbcfeff97eeb09a926f7c389f"
+        ),
+        "platform": "linux/amd64",
+        "runtimeVersion": "21.0.12+8",
+    }
     assert toolchain["hosts"]["workshopVm"]["azureImage"]["version"] != "latest"
     assert toolchain["databases"]["sqlserver"]["client"]["installer"]["version"] == "1.7.0"
     assert toolchain["provisioning"]["mutableRefsForbidden"] is True

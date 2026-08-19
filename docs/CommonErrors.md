@@ -235,6 +235,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Provision a distinct non-secret Entra administrator identity in addition to the local password administrator. Verify the migration caller is that declared identity, acquire an ephemeral `oss-rdbms` token, pass it only through the child `psql` environment, and create the workload principal on `postgres` with `isAdmin=false` and `isMfa=false` before granting application privileges.
 
+## 34. Target runtimes cannot use source-runtime container pins
+**Symptom:** The runtime matrix requires .NET 10 and Java 21, but the only locked application images contain .NET 8 and Java 17, so a digest-pinned target Dockerfile is impossible.
+
+**Cause:** Application container entries were copied from the source baseline while target runtime versions were frozen separately.
+
+**Resolution:** Treat application containers as target artifacts. Resolve each exact target tag, record the labeled linux/amd64 manifest digest, pull by `tag@digest`, execute the image to prove its runtime version, and assert the complete coordinate-to-digest mapping in the contract suite before implementation starts.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

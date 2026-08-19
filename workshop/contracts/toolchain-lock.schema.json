@@ -398,13 +398,64 @@
       ],
       "properties": {
         "dotnetBuild": {
-          "$ref": "#/$defs/applicationContainer"
+          "allOf": [
+            {
+              "$ref": "#/$defs/applicationContainer"
+            },
+            {
+              "properties": {
+                "image": {
+                  "const": "mcr.microsoft.com/dotnet/sdk:10.0.400-azurelinux3.0-amd64"
+                },
+                "digest": {
+                  "const": "sha256:679e7b7e9d0315ad34438bee49b4fb0658c4c42a3aa08ae8557d1bd03f49c28b"
+                },
+                "runtimeVersion": {
+                  "const": "10.0.11"
+                }
+              }
+            }
+          ]
         },
         "dotnetRuntime": {
-          "$ref": "#/$defs/applicationContainer"
+          "allOf": [
+            {
+              "$ref": "#/$defs/applicationContainer"
+            },
+            {
+              "properties": {
+                "image": {
+                  "const": "mcr.microsoft.com/dotnet/aspnet:10.0.11-azurelinux3.0-amd64"
+                },
+                "digest": {
+                  "const": "sha256:d21a49ce9556f5e50afc5a33cc45ec7a40b5739f10397368810193666e559a79"
+                },
+                "runtimeVersion": {
+                  "const": "10.0.11"
+                }
+              }
+            }
+          ]
         },
         "javaBuildRuntime": {
-          "$ref": "#/$defs/applicationContainer"
+          "allOf": [
+            {
+              "$ref": "#/$defs/applicationContainer"
+            },
+            {
+              "properties": {
+                "image": {
+                  "const": "mcr.microsoft.com/openjdk/jdk:21-azurelinux"
+                },
+                "digest": {
+                  "const": "sha256:06ec8d4b09883cb695aa37e3ae85d1188f124b6dbcfeff97eeb09a926f7c389f"
+                },
+                "runtimeVersion": {
+                  "const": "21.0.12+8"
+                }
+              }
+            }
+          ]
         }
       }
     },
