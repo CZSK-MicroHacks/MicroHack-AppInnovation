@@ -193,22 +193,40 @@ cd java
 .\mvnw.cmd spring-boot:run
 ```
 
-In a second source-VM terminal, run full acceptance against the VM URL and managed
-database:
+In a second source-VM terminal, prompt independently for the application-role password
+and canonical performance key without echoing either value. Process-scoped variables
+from the application terminal are deliberately not reused:
 
 ```powershell
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
+
 $SourceCommit = (git rev-parse HEAD).Trim()
 if ($SourceCommit -notmatch '^[0-9a-f]{40}$') {
   throw 'immutable source commit required in the acceptance terminal'
 }
 $Target = Get-Content evidence\azure-target-output.json -Raw | ConvertFrom-Json
+$env:CATALOG_DATABASE_PASSWORD = Read-ProtectedValue 'Application database password'
+$env:PERFTEST_API_KEY = Read-ProtectedValue 'Performance API key'
 $env:CATALOG_BASE_URL = 'http://localhost:8080'
 $env:CATALOG_DATABASE_KIND = 'postgresql'
 $env:CATALOG_DATABASE_HOST = $Target.database.server
 $env:CATALOG_DATABASE_PORT = '5432'
 $env:CATALOG_DATABASE_NAME = $Target.database.database
 $env:CATALOG_DATABASE_USERNAME = $Target.database.applicationPrincipal.name
-$env:CATALOG_DATABASE_PASSWORD = $env:MIGRATION_TARGET_APPLICATION_PASSWORD
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
 cd tests\acceptance
@@ -217,6 +235,8 @@ uv --no-config run python -m catalog_acceptance `
   --source-commit $SourceCommit `
   --output ..\..\evidence\transient\vm-managed-acceptance.json
 $AcceptanceExit = $LASTEXITCODE
+Remove-Item Env:CATALOG_DATABASE_PASSWORD
+Remove-Item Env:PERFTEST_API_KEY
 cd ..\..
 if ($AcceptanceExit -ne 0) { throw 'VM/managed-database acceptance failed' }
 ```

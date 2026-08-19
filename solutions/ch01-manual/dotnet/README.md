@@ -191,15 +191,33 @@ Remove-Item Env:CATALOG_DATABASE_PASSWORD -ErrorAction SilentlyContinue
 dotnet run --project dotnet\src\LegoCatalog.App\LegoCatalog.App.csproj
 ```
 
-In a second source-VM terminal, obtain the short-lived SQL access token in the
-environment and run full acceptance against the VM URL and managed database:
+In a second source-VM terminal, obtain the short-lived SQL access token and prompt for
+the canonical performance key without echoing it. Process-scoped variables from the
+application terminal are deliberately not reused:
 
 ```powershell
+function Read-ProtectedValue {
+  param([string]$Prompt)
+
+  $SecureValue = Read-Host $Prompt -AsSecureString
+  $Pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
+  try {
+    $Value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Pointer)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Pointer)
+    $SecureValue.Dispose()
+  }
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Prompt is required" }
+  return $Value
+}
+
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
 $SourceCommit = (git rev-parse HEAD).Trim()
 if ($SourceCommit -notmatch '^[0-9a-f]{40}$') {
   throw 'immutable source commit required in the acceptance terminal'
 }
+$env:PERFTEST_API_KEY = Read-ProtectedValue 'Performance API key'
 $env:SQLCMDACCESS_TOKEN = (
   az account get-access-token --resource https://database.windows.net/ `
     --query accessToken --output tsv
@@ -219,6 +237,7 @@ uv --no-config run python -m catalog_acceptance `
   --output ..\..\evidence\transient\vm-managed-acceptance.json
 $AcceptanceExit = $LASTEXITCODE
 Remove-Item Env:SQLCMDACCESS_TOKEN
+Remove-Item Env:PERFTEST_API_KEY
 cd ..\..
 if ($AcceptanceExit -ne 0) { throw 'VM/managed-database acceptance failed' }
 ```

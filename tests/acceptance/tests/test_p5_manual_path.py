@@ -197,6 +197,34 @@ def test_each_manual_stack_rehydrates_source_commit_in_second_terminal(
         assert "--source-commit $SourceCommit" in snippet
 
 
+def test_each_manual_stack_reinjects_second_terminal_secrets(
+    repo_root: Path,
+) -> None:
+    """Each acceptance terminal acquires and clears its own protected inputs."""
+    for slice_id, text in _solution_texts(repo_root).items():
+        second_terminal = text.index("In a second source-VM terminal")
+        acceptance = text.index(
+            "evidence\\transient\\vm-managed-acceptance.json",
+            second_terminal,
+        )
+        cleanup_end = text.index(
+            "VM/managed-database acceptance failed",
+            acceptance,
+        )
+        snippet = text[second_terminal:cleanup_end]
+
+        assert "Read-Host $Prompt -AsSecureString" in snippet
+        assert "$env:PERFTEST_API_KEY = Read-ProtectedValue" in snippet
+        assert "Remove-Item Env:PERFTEST_API_KEY" in snippet
+        if slice_id == "manual-java":
+            assert "$env:CATALOG_DATABASE_PASSWORD = Read-ProtectedValue" in snippet
+            assert "Remove-Item Env:CATALOG_DATABASE_PASSWORD" in snippet
+            assert "MIGRATION_TARGET_APPLICATION_PASSWORD" not in snippet
+        else:
+            assert "az account get-access-token" in snippet
+            assert "Remove-Item Env:SQLCMDACCESS_TOKEN" in snippet
+
+
 def test_each_manual_stack_uses_single_revision_rollback(repo_root: Path) -> None:
     """Rollback activates and verifies the retained revision without traffic weights."""
     for text in _solution_texts(repo_root).values():
