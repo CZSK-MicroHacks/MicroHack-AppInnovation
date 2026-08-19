@@ -78,9 +78,12 @@ those interfaces; it does not reinterpret them.
    trace, metric, and log results referenced by `evidence/telemetry-report.json`.
    Assessment, a healthy response, or a deployment success does not prove behavior.
 10. **Write and validate rollback.** `evidence/rollback-runbook.md` must name the
-    retained baseline revision and immutable digest, approval gate, traffic command,
-    health/readiness and full-acceptance checks, abort conditions, and forward-recovery
-    procedure. It must preserve both databases, exports, images, and evidence.
+    retained baseline revision and immutable digest, approval gate, the Container Apps
+    single-revision activation command, health/readiness and full-acceptance checks,
+    abort conditions, and forward-recovery procedure. Do not use weighted traffic:
+    `activeRevisionsMode` is `Single`, so activating the retained prior revision
+    deactivates the current revision. Preserve both databases, exports, images, and
+    evidence.
 11. **Render the handoff.** Run
     `catalog-migrate render-handoff --path manual --rollback-runbook evidence/rollback-runbook.md`
     with every required argument, write `evidence/modernization-contract.json`, then

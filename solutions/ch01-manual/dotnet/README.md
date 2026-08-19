@@ -178,6 +178,7 @@ $Target = Get-Content evidence\azure-target-output.json -Raw | ConvertFrom-Json
 az vm identity assign `
   --ids $Target.network.migrationSourceVmResourceId `
   --identities $Target.workloadIdentity.resourceId | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'temporary source VM identity assignment failed' }
 
 $env:CATALOG_DATABASE_HOST = $Target.database.server
 $env:CATALOG_DATABASE_NAME = $Target.database.database
@@ -195,6 +196,10 @@ environment and run full acceptance against the VM URL and managed database:
 
 ```powershell
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
+$SourceCommit = (git rev-parse HEAD).Trim()
+if ($SourceCommit -notmatch '^[0-9a-f]{40}$') {
+  throw 'immutable source commit required in the acceptance terminal'
+}
 $env:SQLCMDACCESS_TOKEN = (
   az account get-access-token --resource https://database.windows.net/ `
     --query accessToken --output tsv
@@ -210,6 +215,7 @@ $env:CATALOG_SOURCE_COMMIT = $SourceCommit
 cd tests\acceptance
 uv --no-config run python -m catalog_acceptance `
   --profile full `
+  --source-commit $SourceCommit `
   --output ..\..\evidence\transient\vm-managed-acceptance.json
 $AcceptanceExit = $LASTEXITCODE
 Remove-Item Env:SQLCMDACCESS_TOKEN
@@ -228,6 +234,7 @@ Stop the VM application and detach only the added target identity after approval
 az vm identity remove `
   --ids $Target.network.migrationSourceVmResourceId `
   --identities $Target.workloadIdentity.resourceId | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'temporary source VM identity removal failed' }
 ```
 
 **Stop:** do not containerize or deploy ACA unless the VM application passed full
@@ -277,13 +284,46 @@ Run what-if for each and verify the image is
 After approval, deploy baseline and then release:
 
 ```powershell
-az deployment sub create `
+$BaselineTargetJson = az deployment sub create `
   --name "manual-dotnet-baseline-$($SourceCommit.Substring(0,12))" `
   --location swedencentral `
   --template-file infra\main.bicep `
-  --parameters '@C:\protected\manual-dotnet-baseline.json' | Out-Null
+  --parameters '@C:\protected\manual-dotnet-baseline.json' `
+  --query properties.outputs.targetOutput.value `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'baseline deployment failed' }
+$BaselineTarget = ($BaselineTargetJson -join "`n") | ConvertFrom-Json
+$BaselineRevision = "$($BaselineTarget.application.containerAppName)--baseline-$($SourceCommit.Substring(0,12))"
+$ExpectedImage = "$($BaselineTarget.containerRegistry.loginServer)/catalog-dotnet@$ImageDigest"
+if ($BaselineTarget.deploymentStage -ne 'application' -or
+    $BaselineTarget.applicationRevisionRole -ne 'baseline' -or
+    $BaselineTarget.application.revisionName -ne $BaselineRevision -or
+    $BaselineTarget.containerImage.digest -ne $ImageDigest) {
+  throw 'baseline output differs from the approved application stage'
+}
+$BaselineStateJson = az containerapp revision show `
+  --resource-group $BaselineTarget.resourceGroup.name `
+  --name $BaselineTarget.application.containerAppName `
+  --revision $BaselineRevision `
+  --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'baseline revision lookup failed' }
+$BaselineState = ($BaselineStateJson -join "`n") | ConvertFrom-Json
+if (-not $BaselineState.active -or
+    $BaselineState.health -ne 'Healthy' -or
+    $BaselineState.images.Count -ne 1 -or
+    $BaselineState.images[0] -ne $ExpectedImage) {
+  throw 'baseline revision is not the healthy active immutable target'
+}
+$BaselineHealth = Invoke-WebRequest -UseBasicParsing `
+  -Uri $BaselineTarget.application.healthUrl -TimeoutSec 30
+$BaselineReadiness = Invoke-WebRequest -UseBasicParsing `
+  -Uri $BaselineTarget.application.readinessUrl -TimeoutSec 30
+if ($BaselineHealth.StatusCode -ne 200 -or $BaselineReadiness.StatusCode -ne 200) {
+  throw 'baseline health or readiness failed'
+}
 
-$TargetJson = az deployment sub create `
+$ReleaseTargetJson = az deployment sub create `
   --name "manual-dotnet-release-$($SourceCommit.Substring(0,12))" `
   --location swedencentral `
   --template-file infra\main.bicep `
@@ -293,17 +333,51 @@ $TargetJson = az deployment sub create `
 if ($LASTEXITCODE -ne 0) { throw 'release deployment failed' }
 [IO.File]::WriteAllText(
   (Join-Path (Get-Location) 'evidence\azure-target-output.json'),
-  ($TargetJson -join "`n") + "`n",
+  ($ReleaseTargetJson -join "`n") + "`n",
   $Utf8NoBom)
 
 $Target = Get-Content evidence\azure-target-output.json -Raw | ConvertFrom-Json
-$RollbackRevision = "$($Target.application.containerAppName)--baseline-$($SourceCommit.Substring(0,12))"
-az containerapp revision show `
+if ($Target.deploymentStage -ne 'application' -or
+    $Target.applicationRevisionRole -ne 'release' -or
+    $Target.containerImage.digest -ne $ImageDigest) {
+  throw 'release output differs from the approved application stage'
+}
+$RollbackRevision = $BaselineRevision
+$ReleaseStateJson = az containerapp revision show `
+  --resource-group $Target.resourceGroup.name `
+  --name $Target.application.containerAppName `
+  --revision $Target.application.revisionName `
+  --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'release revision lookup failed' }
+$ReleaseState = ($ReleaseStateJson -join "`n") | ConvertFrom-Json
+if (-not $ReleaseState.active -or
+    $ReleaseState.health -ne 'Healthy' -or
+    $ReleaseState.images.Count -ne 1 -or
+    $ReleaseState.images[0] -ne $ExpectedImage) {
+  throw 'release revision is not the healthy active immutable target'
+}
+$RollbackStateJson = az containerapp revision show `
   --resource-group $Target.resourceGroup.name `
   --name $Target.application.containerAppName `
   --revision $RollbackRevision `
   --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
   --output json
+if ($LASTEXITCODE -ne 0) { throw 'retained baseline lookup failed' }
+$RollbackState = ($RollbackStateJson -join "`n") | ConvertFrom-Json
+if ($RollbackState.active -or
+    $RollbackState.health -ne 'Healthy' -or
+    $RollbackState.images.Count -ne 1 -or
+    $RollbackState.images[0] -ne $ExpectedImage) {
+  throw 'retained baseline is not the healthy inactive immutable rollback target'
+}
+$ReleaseHealth = Invoke-WebRequest -UseBasicParsing `
+  -Uri $Target.application.healthUrl -TimeoutSec 30
+$ReleaseReadiness = Invoke-WebRequest -UseBasicParsing `
+  -Uri $Target.application.readinessUrl -TimeoutSec 30
+if ($ReleaseHealth.StatusCode -ne 200 -or $ReleaseReadiness.StatusCode -ne 200) {
+  throw 'release health or readiness failed'
+}
 ```
 
 Expected: release output names the full commit tag and digest; the distinct baseline
@@ -366,14 +440,64 @@ $TelemetryTemplate.queries.psobject.Properties | ForEach-Object {
 ```
 
 Write `evidence/rollback-runbook.md` with facilitator approval, the exact baseline
-revision/digest, this traffic operation, release abort conditions, health/readiness and
-full-acceptance checks, and forward recovery:
+revision/digest, release abort conditions, health/readiness and full-acceptance checks,
+and forward recovery. The shared target uses single revision mode; activate the retained
+prior revision rather than assigning traffic weights. Record this procedure during a
+healthy release but execute it only after rollback approval; normal handoff validation
+requires the retained baseline to remain inactive:
 
 ```powershell
-az containerapp ingress traffic set `
+$RollbackStateJson = az containerapp revision show `
   --resource-group $Target.resourceGroup.name `
   --name $Target.application.containerAppName `
-  --revision-weight "$RollbackRevision=100" "$($Target.application.revisionName)=0"
+  --revision $RollbackRevision `
+  --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'rollback revision lookup failed' }
+$RollbackState = ($RollbackStateJson -join "`n") | ConvertFrom-Json
+if ($RollbackState.active -or
+    $RollbackState.health -ne 'Healthy' -or
+    $RollbackState.images.Count -ne 1 -or
+    $RollbackState.images[0] -ne $ExpectedImage) {
+  throw 'rollback revision is not the retained healthy inactive immutable baseline'
+}
+az containerapp revision activate `
+  --resource-group $Target.resourceGroup.name `
+  --name $Target.application.containerAppName `
+  --revision $RollbackRevision
+if ($LASTEXITCODE -ne 0) { throw 'rollback revision activation failed' }
+$ActivatedStateJson = az containerapp revision show `
+  --resource-group $Target.resourceGroup.name `
+  --name $Target.application.containerAppName `
+  --revision $RollbackRevision `
+  --query '{active:properties.active,health:properties.healthState,error:properties.provisioningError,images:properties.template.containers[].image}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'activated rollback revision lookup failed' }
+$ActivatedState = ($ActivatedStateJson -join "`n") | ConvertFrom-Json
+if (-not $ActivatedState.active -or
+    $ActivatedState.health -ne 'Healthy' -or
+    $ActivatedState.images.Count -ne 1 -or
+    $ActivatedState.images[0] -ne $ExpectedImage) {
+  throw 'rollback revision did not become the healthy active immutable revision'
+}
+$ReleaseAfterRollbackJson = az containerapp revision show `
+  --resource-group $Target.resourceGroup.name `
+  --name $Target.application.containerAppName `
+  --revision $Target.application.revisionName `
+  --query '{active:properties.active,health:properties.healthState}' `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'superseded release revision lookup failed' }
+$ReleaseAfterRollback = ($ReleaseAfterRollbackJson -join "`n") | ConvertFrom-Json
+if ($ReleaseAfterRollback.active) {
+  throw 'single revision mode did not deactivate the superseded release'
+}
+$RollbackHealth = Invoke-WebRequest -UseBasicParsing `
+  -Uri $Target.application.healthUrl -TimeoutSec 30
+$RollbackReadiness = Invoke-WebRequest -UseBasicParsing `
+  -Uri $Target.application.readinessUrl -TimeoutSec 30
+if ($RollbackHealth.StatusCode -ne 200 -or $RollbackReadiness.StatusCode -ne 200) {
+  throw 'activated rollback revision failed health or readiness'
+}
 ```
 
 Rollback never deletes or rewinds the managed database, migration archive, Azure Files,
