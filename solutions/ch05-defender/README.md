@@ -348,24 +348,30 @@ jq -n \
 ' > "$RAW/vm-after.json"
 ```
 
-Then capture only the selected identity's exact ACR-scoped `AcrPull` assignment:
+Then capture the native ARM role-assignment list response at the exact handoff ACR
+scope, filtered to the selected workload principal:
 
 ```bash
-az role assignment list \
-  --scope "$ACR_RESOURCE_ID" \
-  --assignee-object-id "$WORKLOAD_PRINCIPAL_ID" \
-  --role AcrPull \
-  --all \
-  --output json |
-  jq '{value: .}' > "$RAW/acr-role-assignments.json"
+ROLE_ASSIGNMENTS_PATH='providers/Microsoft.Authorization/roleAssignments'
+ROLE_ASSIGNMENTS_API=2022-04-01
+ROLE_ASSIGNMENTS_FILTER="atScope() and assignedTo('${WORKLOAD_PRINCIPAL_ID}')"
+az rest --method get \
+  --url "https://management.azure.com${ACR_RESOURCE_ID}/${ROLE_ASSIGNMENTS_PATH}?api-version=${ROLE_ASSIGNMENTS_API}&%24filter=$(jq -rn --arg value "$ROLE_ASSIGNMENTS_FILTER" '$value|@uri')" \
+  > "$RAW/acr-role-assignments.json"
 
 jq -e --arg principal "$WORKLOAD_PRINCIPAL_ID" --arg scope "$ACR_RESOURCE_ID" '
   (.value | length) == 1
+  and (.nextLink == null)
+  and .value[0].type == "Microsoft.Authorization/roleAssignments"
   and .value[0].properties.principalId == $principal
   and (.value[0].id | ascii_downcase | startswith(($scope + "/providers/Microsoft.Authorization/roleAssignments/") | ascii_downcase))
   and (.value[0].properties.roleDefinitionId | endswith("/7f951dda-4ed3-4680-a7ca-43fe172d538d"))
 ' "$RAW/acr-role-assignments.json" >/dev/null
 ```
+
+Do not wrap `az role assignment list` output: that CLI command emits flattened
+`principalId` and `roleDefinitionId` fields, while this evidence requires the native
+ARM list shape under `.value[].properties`.
 
 Verify ACR admin is false, ACA `allowInsecure` is false, the identity is still assigned,
 the registry entry has no password/username, the exact digest is still deployed, and

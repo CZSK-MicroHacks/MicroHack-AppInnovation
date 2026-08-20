@@ -222,6 +222,36 @@ def test_solution_exposes_digest_bound_raw_capture_workflow() -> None:
     assert "IMAGE_DIGEST" in solution
 
 
+def test_acr_role_assignment_capture_uses_native_arm_shape() -> None:
+    """Require an ACR-scoped REST list and reject flattened CLI wrapping."""
+    solution = _read(SOLUTION)
+    assert (
+        "ROLE_ASSIGNMENTS_PATH='providers/Microsoft.Authorization/roleAssignments'"
+        in solution
+    )
+    assert "ROLE_ASSIGNMENTS_API=2022-04-01" in solution
+    assert (
+        "ROLE_ASSIGNMENTS_FILTER=\"atScope() and "
+        "assignedTo('${WORKLOAD_PRINCIPAL_ID}')\""
+    ) in solution
+    assert (
+        '"https://management.azure.com${ACR_RESOURCE_ID}/'
+        '${ROLE_ASSIGNMENTS_PATH}?api-version=${ROLE_ASSIGNMENTS_API}'
+        '&%24filter=$(jq -rn'
+    ) in solution
+    assert 'az rest --method get \\\n' in solution
+    assert '> "$RAW/acr-role-assignments.json"' in solution
+    assert ".value[0].properties.principalId" in solution
+    assert ".value[0].properties.roleDefinitionId" in solution
+    assert '.value[0].type == "Microsoft.Authorization/roleAssignments"' in solution
+    assert "(.nextLink == null)" in solution
+    assert "az role assignment list" in solution
+    assert "Do not wrap `az role assignment list` output" in solution
+    assert "jq '{value: .}'" not in solution
+    assert "--scope \"$ACR_RESOURCE_ID\"" not in solution
+    assert "--assignee-object-id \"$WORKLOAD_PRINCIPAL_ID\"" not in solution
+
+
 def test_guides_reject_fabrication_and_unsupported_attack_path_get() -> None:
     """Reject fabricated findings and unsupported direct attack-path reads."""
     combined = _read(CHALLENGE) + _read(SOLUTION)
