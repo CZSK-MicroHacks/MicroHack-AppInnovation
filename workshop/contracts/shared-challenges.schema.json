@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "consumes": {
       "type": "object",
@@ -218,7 +218,13 @@
         "source": "container-app-diagnostic-setting",
         "category": "AllMetrics",
         "destination": "handoff-log-analytics-workspace",
-        "destinationTable": "AzureMetricsV2",
+        "destinationTable": "AzureMetrics",
+        "deploymentScope": "handoff-container-app-resource-group",
+        "scope": "container-app-total",
+        "dimensionHandling": "flattened",
+        "aggregation": "Total",
+        "timeGrain": "PT1M",
+        "windowReduction": "peak",
         "requiredMetric": "Replicas"
       }
     }

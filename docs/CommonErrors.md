@@ -340,12 +340,12 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Resolve the exact report path and remove it with fail-closed error handling before native tests, token requests, or prompts. Produce that path only from a successful current acceptance run, and inject native, token, prompt, and acceptance-process failures in executable documentation tests to prove stale evidence is absent.
 
-## 49. Workbook queries target legacy Azure Monitor columns
-**Symptom:** A workbook deploys successfully, but its replica or cold-start panel fails at query time or returns unrelated data.
+## 49. Diagnostic-setting metrics are treated as dimension-preserving exports
+**Symptom:** A revision-filtered Container App replica panel queries `AzureMetricsV2` but the declared `AllMetrics` diagnostic setting cannot produce the expected rows.
 
-**Cause:** Current diagnostic-setting metric exports use the `AzureMetricsV2` table with the dynamic `Dimension` column, while legacy examples use `AzureMetrics` and `Tags`. Workspace-based Application Insights request tables expose `AppRoleInstance`, not the classic SDK name `cloud_RoleInstance`.
+**Cause:** Azure Monitor diagnostic settings flatten multidimensional platform metrics and write the legacy `AzureMetrics` shape. `logAnalyticsDestinationType: Dedicated` changes eligible resource-log destinations; it does not preserve metric dimensions or move diagnostic-setting metrics to `AzureMetricsV2`. DCR metric export preserves dimensions, but Container Apps is not a supported DCR metric-export source.
 
-**Resolution:** Export Container App `AllMetrics` to the handoff Log Analytics workspace, query `AzureMetricsV2` with `Dimension["revisionName"]`, use `AppVersion` for the OpenTelemetry service version, and use `AppRoleInstance` for the cold-start proxy. Compute each instance's first-ever request for the exact commit and revision before filtering those first requests to the evidence window; otherwise ordinary requests from long-running instances appear as cold starts. Freeze exact parameterized KQL and SHA-256 values, then validate typed result rows inside an explicit post-deployment query window.
+**Resolution:** Keep the Container App `AllMetrics` diagnostic setting, query `AzureMetrics`, and remove the unsupported `Dimension["revisionName"]` filter. For `Replicas`, select the peak `Total` at the metric's `PT1M` grain; `Maximum` is only the largest contributing revision value, not the total across flattened revision values. Use Challenge 2's ARM and load observations as the authoritative revision-scoped scaling proof. Keep the Application Insights panels bound to `AppVersion`, the revision property, and `AppRoleInstance`; compute each instance's first request before filtering the cold-start proxy to the evidence window.
 
 ## 50. Success evidence can be relabeled to unrelated cloud resources
 **Symptom:** Schema-valid load, smoke, or workbook evidence reports success even though the observed provider resource or endpoint is unrelated to the handoff.
@@ -444,6 +444,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Cause:** Job names and time windows are mutable metadata and do not identify GitHub's immutable job record.
 
 **Resolution:** Record each numeric GitHub job ID in both the declared workflow evidence and normalized API observation, then bind ID, environment, name, and window together.
+
+## 64. Cross-resource-group extension resources fail Bicep compilation
+**Symptom:** A diagnostic setting targeting an existing resource in another resource group fails Bicep compilation with BCP139.
+
+**Cause:** Extension resources must be deployed at the scope of the resource they extend. Declaring a cross-resource-group existing parent does not make an extension-resource deployment at the current scope valid.
+
+**Resolution:** Deploy the observability Bicep at the handoff Container App's resource group, which the handoff validator already proves is shared by the Application Insights component and Log Analytics workspace. Declare those resources as same-scope `existing` resources and attach the diagnostic setting to the same-scope Container App rather than constructing a cross-scope extension resource.
 
 ---
 **Planned Mitigations / Enhancements:**

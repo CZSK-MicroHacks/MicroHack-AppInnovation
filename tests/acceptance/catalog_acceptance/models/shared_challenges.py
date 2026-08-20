@@ -34,6 +34,12 @@ class StrictObservation(StrictModel):
     schema_version: Literal["1.0.0"] = Field(alias="schemaVersion")
 
 
+class ObservabilityObservation(StrictModel):
+    """Require the post-refreeze version on observability observations."""
+
+    schema_version: Literal["1.1.0"] = Field(alias="schemaVersion")
+
+
 class MetricPoint(StrictModel):
     """Represent one timestamped Azure Monitor metric value."""
 
@@ -470,12 +476,12 @@ class CountQueryResultRow(QueryResultRow):
 
 
 class ReplicaQueryResultRow(QueryResultRow):
-    """Represent one bounded ACA replica count."""
+    """Represent one app-scoped ACA replica count."""
 
-    value: StrictInt = Field(ge=1, le=3)
+    value: StrictInt = Field(ge=1)
 
 
-class QueryObservationBase(StrictObservation):
+class QueryObservationBase(ObservabilityObservation):
     """Bind one normalized workbook result to exact query inputs."""
 
     query_id: str = Field(alias="queryId", min_length=1)
@@ -551,10 +557,12 @@ class DatabaseFailureQueryObservation(QueryObservationBase):
 
 
 class ReplicaQueryObservation(QueryObservationBase):
-    """Represent exact bounded replica metric output."""
+    """Represent exact app-scoped replica metric output."""
 
     query_id: Literal["replica-count"] = Field(alias="queryId")
-    result_kind: Literal["replica-count"] = Field(alias="resultKind")
+    result_kind: Literal["container-app-peak-replica-count"] = Field(
+        alias="resultKind"
+    )
     rows: list[ReplicaQueryResultRow] = Field(min_length=1, max_length=1)
 
     @model_validator(mode="after")
@@ -578,7 +586,7 @@ class ColdStartQueryObservation(QueryObservationBase):
         return self
 
 
-class WorkbookObservation(StrictObservation):
+class WorkbookObservation(ObservabilityObservation):
     """Represent deployed workbook content captured from Azure Resource Manager."""
 
     workbook_resource_id: str = Field(
@@ -605,7 +613,7 @@ class WorkbookObservation(StrictObservation):
     captured_at: AwareDatetime = Field(alias="capturedAt")
 
 
-class DiagnosticSettingObservation(StrictObservation):
+class DiagnosticSettingObservation(ObservabilityObservation):
     """Represent ACA metric export into the handoff Log Analytics workspace."""
 
     container_app_resource_id: str = Field(
@@ -618,7 +626,7 @@ class DiagnosticSettingObservation(StrictObservation):
         alias="diagnosticSettingName"
     )
     metric_category: Literal["AllMetrics"] = Field(alias="metricCategory")
-    destination_table: Literal["AzureMetricsV2"] = Field(alias="destinationTable")
+    destination_table: Literal["AzureMetrics"] = Field(alias="destinationTable")
     enabled: StrictBool
     observed_at: AwareDatetime = Field(alias="observedAt")
 

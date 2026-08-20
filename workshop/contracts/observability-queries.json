@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "parameters": [
     "__START_TIME__",
     "__END_TIME__",
@@ -27,8 +27,8 @@
     },
     {
       "id": "replica-count",
-      "resultKind": "replica-count",
-      "template": "let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AzureMetricsV2 | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"__CONTAINER_APP_RESOURCE_ID__\" | where MetricName == \"Replicas\" | where tostring(Dimension[\"revisionName\"]) == \"__REVISION_NAME__\" | summarize value=max(Maximum), timestamp=max(TimeGenerated) | where isnotnull(value) and value > 0 | project timestamp, value"
+      "resultKind": "container-app-peak-replica-count",
+      "template": "let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AzureMetrics | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"__CONTAINER_APP_RESOURCE_ID__\" | where MetricName == \"Replicas\" and TimeGrain == \"PT1M\" | summarize value=toint(max(Total)) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value"
     },
     {
       "id": "cold-starts",

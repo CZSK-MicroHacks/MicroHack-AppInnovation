@@ -69,14 +69,22 @@ plus post-transition observations record separate exact health and readiness URL
 secrets, registry admin, and broader contributor scopes are prohibited.
 
 Observability binds the existing telemetry report and exact Application Insights and Log
-Analytics resources. An `AllMetrics` diagnostic setting sends Container App metrics to
-the handoff workspace's `AzureMetricsV2` table before a revision-filtered workbook runs.
+Analytics resources. A resource-group deployment at the handoff Container App's resource
+group configures its `AllMetrics` diagnostic setting and sends flattened platform metrics to
+the handoff workspace's `AzureMetrics` table. Azure Monitor diagnostic settings do not
+preserve Container App metric dimensions, so the replica panel is explicitly the peak
+one-minute total Container App replica count and contains no revision-dimension filter. It
+uses the `Replicas` metric's supported `Total` aggregation at its `PT1M` time grain, then
+selects the peak total without substituting the largest single-revision `Maximum`. Challenge 2 remains
+the authoritative revision-scoped 1-3 replica scaling proof.
 `observability-queries.json` freezes executable templates and result kinds for error rate,
-latency, database dependency failures, replica count, and cold starts. The validator
-renders exact resource, service, commit, revision, and time-window parameters, verifies
-the UTF-8 query SHA-256, and validates one query-specific typed result row. The cold-start
-proxy counts only instances whose first-ever request for the exact commit and revision falls
-inside the evidence window. Captured Azure Workbook `serializedData` must hash correctly;
+latency, database dependency failures, peak total Container App replica count, and cold starts.
+The four Application Insights panels remain bound to the exact service, commit, and revision;
+the replica panel is bound to the exact Container App and shared time window. The validator
+renders those inputs, verifies each UTF-8 query SHA-256, and validates one query-specific
+typed result row. The cold-start proxy counts only instances whose first-ever request for the
+exact commit and revision falls inside the evidence window. Captured Azure Workbook
+`serializedData` must hash correctly;
 recursive top-level and grouped panel inspection requires `KqlItem/1.0`, Logs query type,
 the Log Analytics workspace resource type, absent/default cross-component resources or exactly
 the handoff workspace, and exactly those five rendered queries. Nested workbook JSON and all
@@ -86,7 +94,8 @@ hashes must match their checked-in files. The checked-in workbook template itsel
 contain the five frozen query templates with the same Logs execution context, and
 `queries.kql` is the exact `// query-id: <id>` plus template sequence rendered by the
 contract library. Normalized numeric and boolean observations are strict, so JSON booleans
-cannot satisfy counts and JSON integers cannot satisfy flags. Normalized observations use the Pydantic `1.0.0` structures in
+cannot satisfy counts and JSON integers cannot satisfy flags. Load and CI/CD normalized observations retain Pydantic version `1.0.0`; the breaking
+observability metric correction uses version `1.1.0` in
 `catalog_acceptance.models.shared_challenges`.
 
 ## Canonical identity and image digest

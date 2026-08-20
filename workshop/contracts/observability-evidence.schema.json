@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "capturedAt": {
       "type": "string",
@@ -132,6 +132,8 @@
         "diagnosticSettingName",
         "metricCategory",
         "destinationTable",
+        "scope",
+        "dimensionHandling",
         "deployedAt",
         "resultFile"
       ],
@@ -151,7 +153,13 @@
           "const": "AllMetrics"
         },
         "destinationTable": {
-          "const": "AzureMetricsV2"
+          "const": "AzureMetrics"
+        },
+        "scope": {
+          "const": "container-app-total"
+        },
+        "dimensionHandling": {
+          "const": "flattened"
         },
         "deployedAt": {
           "type": "string",
@@ -249,7 +257,7 @@
         "tracesPresent",
         "metricsPresent",
         "logsPresent",
-        "revisionFilterApplied",
+        "applicationTelemetryRevisionFilterApplied",
         "workbookDeployed",
         "allPanelsEvaluated"
       ],
@@ -266,7 +274,7 @@
         "logsPresent": {
           "const": true
         },
-        "revisionFilterApplied": {
+        "applicationTelemetryRevisionFilterApplied": {
           "const": true
         },
         "workbookDeployed": {
@@ -376,7 +384,7 @@
               "const": "replica-count"
             },
             "resultKind": {
-              "const": "replica-count"
+              "const": "container-app-peak-replica-count"
             }
           }
         }

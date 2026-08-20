@@ -1352,7 +1352,7 @@ def _validate_observability(
     repository_root: Path,
     contracts_directory: Path,
 ) -> None:
-    """Validate workbook deployment and revision-filtered Azure Monitor results."""
+    """Validate workbook deployment and handoff-bound Azure Monitor results."""
     _validate_common_subject(evidence, handoff)
     _require(
         evidence["subject"]["serviceName"] == handoff["observability"]["serviceName"],

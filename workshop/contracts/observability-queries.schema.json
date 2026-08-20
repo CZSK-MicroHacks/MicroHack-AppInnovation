@@ -11,7 +11,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "parameters": {
       "const": [
@@ -132,7 +132,7 @@
               "const": "replica-count"
             },
             "resultKind": {
-              "const": "replica-count"
+              "const": "container-app-peak-replica-count"
             }
           }
         }

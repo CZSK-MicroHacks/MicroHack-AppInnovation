@@ -80,7 +80,9 @@ def _normalized_observations(
     handoff: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """Build normalized observations for one schema-valid P6 example."""
-    version = {"schemaVersion": "1.0.0"}
+    version = {
+        "schemaVersion": "1.1.0" if kind == "observability" else "1.0.0"
+    }
     if kind == "load":
         return {
             evidence["testRun"]["resultFile"]: {
@@ -344,7 +346,7 @@ def _normalized_observations(
             ],
             "diagnosticSettingName": "all-metrics-to-workspace",
             "metricCategory": "AllMetrics",
-            "destinationTable": "AzureMetricsV2",
+            "destinationTable": "AzureMetrics",
             "enabled": True,
             "observedAt": evidence["metricsExport"]["deployedAt"],
         },
@@ -569,16 +571,22 @@ def test_p6_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
     """The P6 registry and all three evidence examples remain executable."""
     contracts = _contracts(repo_root)
     registry = load_json(contracts / "shared-challenges.json")
+    assert registry["schemaVersion"] == "1.1.0"
     _validate(load_json(contracts / "shared-challenges.schema.json"), registry)
+    query_contract = load_json(contracts / "observability-queries.json")
+    assert query_contract["schemaVersion"] == "1.1.0"
     _validate(
         load_json(contracts / "observability-queries.schema.json"),
-        load_json(contracts / "observability-queries.json"),
+        query_contract,
     )
 
     for name in ("load-test", "cicd", "observability"):
+        example = load_json(contracts / f"{name}-evidence.example.json")
+        expected_version = "1.1.0" if name == "observability" else "1.0.0"
+        assert example["schemaVersion"] == expected_version
         _validate(
             load_json(contracts / f"{name}-evidence.schema.json"),
-            load_json(contracts / f"{name}-evidence.example.json"),
+            example,
         )
 
 
@@ -801,6 +809,19 @@ def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
         "replica-count",
         "cold-starts",
     ]
+    assert registry["observabilityMetrics"] == {
+        "source": "container-app-diagnostic-setting",
+        "category": "AllMetrics",
+        "destination": "handoff-log-analytics-workspace",
+        "destinationTable": "AzureMetrics",
+        "deploymentScope": "handoff-container-app-resource-group",
+        "scope": "container-app-total",
+        "dimensionHandling": "flattened",
+        "aggregation": "Total",
+        "timeGrain": "PT1M",
+        "windowReduction": "peak",
+        "requiredMetric": "Replicas",
+    }
 
 
 def test_p6_observability_templates_bind_exact_query_inputs(repo_root: Path) -> None:
@@ -831,12 +852,15 @@ def test_p6_observability_templates_bind_exact_query_inputs(repo_root: Path) -> 
             "__START_TIME__",
             "__END_TIME__",
             "__CONTAINER_APP_RESOURCE_ID__",
-            "__REVISION_NAME__",
         )
     )
-    assert "AzureMetricsV2" in replica
-    assert 'Dimension[\\"revisionName\\"]' not in replica
-    assert 'Dimension["revisionName"]' in replica
+    assert "__REVISION_NAME__" not in replica
+    assert "AzureMetrics |" in replica
+    assert "AzureMetricsV2" not in replica
+    assert "Dimension" not in replica
+    assert 'MetricName == "Replicas" and TimeGrain == "PT1M"' in replica
+    assert "toint(max(Total))" in replica
+    assert "Maximum" not in replica
     cold_starts = queries["cold-starts"]
     assert "where TimeGenerated <= endTime" in cold_starts
     assert cold_starts.index("summarize firstRequest=min(TimeGenerated)") < (
@@ -890,6 +914,19 @@ def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
     assert cicd["workflow"]["resultFile"] == "evidence/cicd/workflow-run.json"
 
     observability = load_json(contracts / "observability-evidence.example.json")
+    assert observability["metricsExport"] == {
+        "containerAppResourceId": observability["subject"]["containerAppResourceId"],
+        "workspaceResourceId": observability["source"][
+            "logAnalyticsWorkspaceResourceId"
+        ],
+        "diagnosticSettingName": "all-metrics-to-workspace",
+        "metricCategory": "AllMetrics",
+        "destinationTable": "AzureMetrics",
+        "scope": "container-app-total",
+        "dimensionHandling": "flattened",
+        "deployedAt": "2026-08-20T13:40:00Z",
+        "resultFile": "evidence/observability/metrics-export.json",
+    }
     assert [panel["id"] for panel in observability["panels"]] == [
         "error-rate",
         "latency",
@@ -898,7 +935,17 @@ def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
         "cold-starts",
     ]
     revision = observability["subject"]["revisionName"]
-    assert all(revision in panel["query"] for panel in observability["panels"])
+    revision_scoped_panels = [
+        panel for panel in observability["panels"] if panel["id"] != "replica-count"
+    ]
+    replica_panel = next(
+        panel
+        for panel in observability["panels"]
+        if panel["id"] == "replica-count"
+    )
+    assert all(revision in panel["query"] for panel in revision_scoped_panels)
+    assert revision not in replica_panel["query"]
+    assert replica_panel["resultKind"] == "container-app-peak-replica-count"
     assert all(
         hashlib.sha256(panel["query"].encode("utf-8")).hexdigest()
         == panel["querySha256"]
@@ -1714,6 +1761,58 @@ def test_p6_observability_validator_rejects_arbitrary_queries(
     )
     observations[panel["resultFile"]]["query"] = panel["query"]
     _write_json(root / panel["resultFile"], observations[panel["resultFile"]])
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="differs from the frozen template"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "observability",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+@pytest.mark.parametrize(
+    "unsupported_shape",
+    ["azure-metrics-v2", "revision-dimension", "maximum-aggregation"],
+)
+def test_p6_observability_validator_rejects_unsupported_aca_metric_queries(
+    unsupported_shape: str,
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dimensional ACA metric queries cannot claim diagnostic-setting evidence."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "observability", tmp_path, repo_root
+    )
+    panel = next(
+        item for item in evidence["panels"] if item["id"] == "replica-count"
+    )
+    if unsupported_shape == "azure-metrics-v2":
+        bad_query = panel["query"].replace("AzureMetrics |", "AzureMetricsV2 |", 1)
+    elif unsupported_shape == "revision-dimension":
+        bad_query = panel["query"].replace(
+            '| where MetricName == "Replicas" and TimeGrain == "PT1M" |',
+            '| where MetricName == "Replicas" and TimeGrain == "PT1M" '
+            '| where tostring(Dimension["revisionName"]) == '
+            f'"{handoff["application"]["revisionName"]}" |',
+            1,
+        )
+    else:
+        bad_query = panel["query"].replace(
+            "toint(max(Total))",
+            "toint(max(Maximum))",
+            1,
+        )
+    panel["query"] = bad_query
+    panel["querySha256"] = hashlib.sha256(bad_query.encode("utf-8")).hexdigest()
+    observation = observations[panel["resultFile"]]
+    observation["query"] = bad_query
+    observation["querySha256"] = panel["querySha256"]
+    _write_json(root / panel["resultFile"], observation)
     _write_json(evidence_path, evidence)
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "capturedAt": "2026-08-20T14:00:00Z",
   "subject": {
     "sliceId": "manual-dotnet",
@@ -26,7 +26,9 @@
     "workspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.OperationalInsights/workspaces/log-example",
     "diagnosticSettingName": "all-metrics-to-workspace",
     "metricCategory": "AllMetrics",
-    "destinationTable": "AzureMetricsV2",
+    "destinationTable": "AzureMetrics",
+    "scope": "container-app-total",
+    "dimensionHandling": "flattened",
     "deployedAt": "2026-08-20T13:40:00Z",
     "resultFile": "evidence/observability/metrics-export.json"
   },
@@ -69,9 +71,9 @@
     },
     {
       "id": "replica-count",
-      "resultKind": "replica-count",
-      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AzureMetricsV2 | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example\" | where MetricName == \"Replicas\" | where tostring(Dimension[\"revisionName\"]) == \"ca-mh-example--release-000000000000\" | summarize value=max(Maximum), timestamp=max(TimeGenerated) | where isnotnull(value) and value > 0 | project timestamp, value",
-      "querySha256": "5079bcd4c284fdd8e8e26bb579e095fd87283e38fc0029a493776b07f14bd99d",
+      "resultKind": "container-app-peak-replica-count",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AzureMetrics | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example\" | where MetricName == \"Replicas\" and TimeGrain == \"PT1M\" | summarize value=toint(max(Total)) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value",
+      "querySha256": "c77d5e8c0c5ace313bb7b3267864f7ab423a189fc28030df620f21d4c6bbb87a",
       "resultFile": "evidence/observability/replica-count.json",
       "rowCount": 1
     },
@@ -89,7 +91,7 @@
     "tracesPresent": true,
     "metricsPresent": true,
     "logsPresent": true,
-    "revisionFilterApplied": true,
+    "applicationTelemetryRevisionFilterApplied": true,
     "workbookDeployed": true,
     "allPanelsEvaluated": true
   }
