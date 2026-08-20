@@ -562,7 +562,21 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Cause:** `az role assignment list` emits a flattened CLI-specific shape. Wrapping that array with `jq '{value: .}'` does not recreate the native `Microsoft.Authorization/roleAssignments` ARM response and can hide producer/consumer divergence.
 
-**Resolution:** Capture the native list with `az rest` at `<acr-resource-id>/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&$filter=atScope() and assignedTo('<principal-id>')`. Preserve the raw `.value[].properties` objects, reject pagination, and require exactly one ACR-scoped AcrPull assignment for the workload principal.
+**Resolution:** Capture the native list with `az rest` at `<acr-resource-id>/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&$filter=atScope() and assignedTo('<principal-id>')`. Preserve the raw `.value[].properties` objects, and require both the capture command and common renderer to reject a non-null `nextLink` before proving exactly one ACR-scoped AcrPull assignment for the workload principal.
+
+## 81. Terraform tries to delete subscription-scoped Defender pricing
+**Symptom:** Disabling the Defender foundation or destroying its Terraform state attempts to delete `Microsoft.Security/pricings` resources, fails, and can leave paid plans active while the operator assumes teardown completed.
+
+**Cause:** The Defender pricing DELETE operation is valid only for supported resource scopes. Subscription pricing must be restored with an update, not deleted.
+
+**Resolution:** Protect subscription pricing instances with `prevent_destroy`. Complete the authorized, evidence-validated pricing restoration first, then detach only `azapi_resource.defender_pricing` from Terraform state. The remaining reviewed plan may remove the workshop budget without issuing unsupported pricing DELETE requests.
+
+## 82. Paid Defender plans can race ahead of a failed budget
+**Symptom:** A Terraform apply accepts an RFC 3339 budget start timestamp that Azure rejects, while independent pricing resources can still enable paid Defender plans.
+
+**Cause:** Azure requires a budget start date on the first day of a month and enforces additional service-side date constraints. Without a dependency, Terraform may create the budget and paid pricing concurrently.
+
+**Resolution:** Validate the documented first-of-month midnight-UTC boundary and require the start month to be the current month through twelve months ahead at plan time. Make every paid pricing resource depend on successful budget creation so any remaining service-side failure stops before a paid plan change.
 
 ---
 **Planned Mitigations / Enhancements:**

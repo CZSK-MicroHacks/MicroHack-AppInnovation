@@ -29,13 +29,15 @@ resource "azapi_resource" "defender_pricing" {
   }
 
   lifecycle {
+    prevent_destroy = true
+
     precondition {
       condition     = var.defender_facilitator_authorized && local.defender_foundation.requiresFacilitatorAuthorization
       error_message = "Defender paid plans require explicit facilitator authorization."
     }
   }
 
-  depends_on = [module.resource_providers]
+  depends_on = [module.resource_providers, azapi_resource.defender_budget]
 }
 
 resource "azapi_resource" "defender_budget" {

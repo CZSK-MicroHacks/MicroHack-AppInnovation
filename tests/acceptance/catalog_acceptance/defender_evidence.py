@@ -745,6 +745,10 @@ def _parse_registry_control(
     ]
     if len(matching_images) != 1:
         raise ValueError("Container App image must use the exact handoff digest")
+    if role_assignments.get("nextLink") is not None:
+        raise ValueError(
+            "container registry role assignment response must not be paginated"
+        )
     assignments = _require_list(
         role_assignments.get("value"),
         "containerRegistryRoleAssignments.value",

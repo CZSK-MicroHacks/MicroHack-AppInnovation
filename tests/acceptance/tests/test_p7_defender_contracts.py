@@ -827,6 +827,23 @@ def test_renderer_requires_acr_scoped_pull_role(tmp_path: Path) -> None:
         _build(root)
 
 
+def test_renderer_rejects_paginated_acr_role_assignments(tmp_path: Path) -> None:
+    """Reject an incomplete first page of registry role assignments."""
+    root = _copy_bundle(tmp_path)
+    _mutate_artifact(
+        root,
+        "workshop/contracts/fixtures/defender/acr-role-assignments.json",
+        lambda value: value.update(
+            nextLink=(
+                "https://management.azure.com/providers/"
+                "Microsoft.Authorization/roleAssignments?$skipToken=next"
+            )
+        ),
+    )
+    with pytest.raises(ValueError, match="must not be paginated"):
+        _build(root)
+
+
 def test_renderer_rejects_mutable_or_password_registry_pull(tmp_path: Path) -> None:
     """Reject a mutable image reference and any non-identity pull configuration."""
     root = _copy_bundle(tmp_path)

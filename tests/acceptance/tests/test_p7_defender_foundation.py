@@ -132,6 +132,40 @@ def test_budget_consumes_frozen_shape_and_requires_explicit_inputs(
     assert "default     = []" in _variable_body(
         variables, "defender_budget_notification_emails"
     )
+    start_date = _variable_body(variables, "defender_budget_start_date")
+    assert "^[0-9]{4}-(0[1-9]|1[0-2])-01T00:00:00Z$" in start_date
+    assert '"2017-06-01T00:00:00Z"' in start_date
+    assert start_date.count('formatdate("YYYY", plantimestamp())') == 2
+    assert start_date.count('formatdate("MM", plantimestamp())') == 2
+    assert ") >= 0" in start_date
+    assert ") <= 12" in start_date
+    assert (
+        "depends_on = [module.resource_providers, "
+        "azapi_resource.defender_budget]"
+    ) in defender
+
+
+def test_subscription_pricings_are_protected_from_unsupported_delete(
+    repo_root: Path,
+) -> None:
+    """Terraform never deletes subscription pricing resources during teardown."""
+    defender = (repo_root / "baseInfra/terraform/defender.tf").read_text(
+        encoding="utf-8"
+    )
+    readme = (repo_root / "baseInfra/terraform/README.md").read_text(
+        encoding="utf-8"
+    )
+
+    pricing = re.search(
+        r'resource "azapi_resource" "defender_pricing" \{(?P<body>.*?)'
+        r'\nresource "azapi_resource" "defender_budget"',
+        defender,
+        re.DOTALL,
+    )
+    assert pricing is not None
+    assert "prevent_destroy = true" in pricing.group("body")
+    assert "Valid only for resource scope" in readme
+    assert "terraform state rm 'azapi_resource.defender_pricing'" in readme
 
 
 def test_paid_foundation_is_default_off_and_double_authorized(

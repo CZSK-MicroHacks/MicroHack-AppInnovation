@@ -37,7 +37,7 @@ module.
 | `defender_facilitator_authorized` | `false` | Required facilitator approval for the paid foundation |
 | `defender_budget_name` | `mh-defender-workshop` | Stable subscription budget name |
 | `defender_budget_amount` | `0` | Explicit positive amount required when enabled |
-| `defender_budget_start_date` | empty | Explicit RFC 3339 budget start required when enabled |
+| `defender_budget_start_date` | empty | First day of the current month through twelve months ahead at midnight UTC |
 | `defender_budget_end_date` | empty | Explicit later RFC 3339 budget end required when enabled |
 | `defender_budget_notification_emails` | empty | One or more facilitator recipients required when enabled |
 
@@ -101,7 +101,8 @@ The Defender plans incur charges. Before a reviewed plan may contain them, an au
 2. Complete the Owner-only **Serverless Containers** portal preflight. The pricing API does not expose that
    switch, so Terraform intentionally does not model it.
 3. Set `enable_defender_foundation=true`, `defender_facilitator_authorized=true`, a positive
-   `defender_budget_amount`, explicit RFC 3339 start/end dates, and at least one facilitator email in
+   `defender_budget_amount`, a midnight-UTC start on the first day of the current month through
+   twelve months ahead, a later RFC 3339 end date, and at least one facilitator email in
    `defender_budget_notification_emails`.
 4. Review the saved plan before any separately authorized apply.
 
@@ -113,6 +114,18 @@ facilitator must capture the pre-cleanup inventory, restore every prior pricing/
 value and the Serverless Containers portal state, verify the restored pricing state, capture the
 post-cleanup inventory, and run the contract cost query. Cost data may lag, so record the query time and
 repeat cost verification until workshop charges have stopped.
+
+`Microsoft.Security/pricings@2024-01-01` DELETE is **Valid only for resource scope**; it cannot remove
+these subscription pricing objects. Terraform therefore creates the budget before changing any paid plan
+and protects every pricing instance with `prevent_destroy`. Do not disable the foundation or destroy its
+state while paid pricing remains. Only after the solution's authorized restoration and verification
+complete, detach the restored subscription pricing objects from Terraform state without changing Azure:
+
+```pwsh
+terraform state rm 'azapi_resource.defender_pricing'
+```
+
+The facilitator may then set `enable_defender_foundation=false` and review a plan that removes the budget.
 
 ## Immutable Custom Script Extension
 

@@ -257,12 +257,30 @@ variable "defender_budget_start_date" {
   default     = ""
   description = <<EOT
 Explicit RFC 3339 start date for the monthly Defender subscription budget, for example
-2026-09-01T00:00:00Z. The value is required and validated only when the Defender foundation is enabled.
+2026-09-01T00:00:00Z. Azure requires the first day of a month at midnight UTC and a date
+in the current month through twelve months ahead. The value is required and validated only when
+the Defender foundation is enabled.
 EOT
 
   validation {
-    condition     = !var.enable_defender_foundation ? true : can(timecmp(var.defender_budget_start_date, var.defender_budget_start_date))
-    error_message = "enable_defender_foundation=true requires defender_budget_start_date in RFC 3339 format."
+    condition = !var.enable_defender_foundation ? true : try(
+      can(regex("^[0-9]{4}-(0[1-9]|1[0-2])-01T00:00:00Z$", var.defender_budget_start_date)) &&
+      timecmp(var.defender_budget_start_date, "2017-06-01T00:00:00Z") >= 0 &&
+      (
+        tonumber(substr(var.defender_budget_start_date, 0, 4)) * 12 +
+        tonumber(substr(var.defender_budget_start_date, 5, 2)) -
+        tonumber(formatdate("YYYY", plantimestamp())) * 12 -
+        tonumber(formatdate("MM", plantimestamp()))
+      ) >= 0 &&
+      (
+        tonumber(substr(var.defender_budget_start_date, 0, 4)) * 12 +
+        tonumber(substr(var.defender_budget_start_date, 5, 2)) -
+        tonumber(formatdate("YYYY", plantimestamp())) * 12 -
+        tonumber(formatdate("MM", plantimestamp()))
+      ) <= 12,
+      false
+    )
+    error_message = "enable_defender_foundation=true requires defender_budget_start_date on the first day of the current month through twelve months ahead at 00:00:00Z."
   }
 }
 
