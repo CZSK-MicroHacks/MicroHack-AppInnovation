@@ -1,0 +1,14 @@
+// query-id: error-rate
+let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ "__APPLICATION_INSIGHTS_RESOURCE_ID__" | where AppRoleName == "__SERVICE_NAME__" | where AppVersion == "__SOURCE_COMMIT__" | where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__" | summarize totalRequests=count(), failedRequests=countif(Success == false) | where totalRequests > 0 and failedRequests > 0 | extend timestamp=endTime, value=100.0 * todouble(failedRequests) / todouble(totalRequests) | project timestamp, value, totalRequests, failedRequests
+
+// query-id: latency
+let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ "__APPLICATION_INSIGHTS_RESOURCE_ID__" | where AppRoleName == "__SERVICE_NAME__" | where AppVersion == "__SOURCE_COMMIT__" | where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__" | summarize value=percentile(DurationMs, 95) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value
+
+// query-id: database-dependency-failures
+let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AppDependencies | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ "__APPLICATION_INSIGHTS_RESOURCE_ID__" | where AppRoleName == "__SERVICE_NAME__" | where AppVersion == "__SOURCE_COMMIT__" | where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__" | where tostring(Properties["db.system.name"]) != "" | summarize value=countif(Success == false) | where value > 0 | extend timestamp=endTime | project timestamp, value
+
+// query-id: replica-count
+let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AzureMetrics | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ "__CONTAINER_APP_RESOURCE_ID__" | where MetricName == "Replicas" and TimeGrain == "PT1M" | summarize value=toint(max(Total)) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value
+
+// query-id: cold-starts
+let startTime = datetime(__START_TIME__); let endTime = datetime(__END_TIME__); AppRequests | where TimeGenerated <= endTime | where _ResourceId =~ "__APPLICATION_INSIGHTS_RESOURCE_ID__" | where AppRoleName == "__SERVICE_NAME__" | where AppVersion == "__SOURCE_COMMIT__" | where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__" | where isnotempty(AppRoleInstance) | summarize firstRequest=min(TimeGenerated) by AppRoleInstance | where firstRequest between (startTime .. endTime) | summarize timestamp=max(firstRequest), value=count() | where value > 0 | project timestamp, value
