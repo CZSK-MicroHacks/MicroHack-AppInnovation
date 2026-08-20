@@ -1,4 +1,5 @@
 output "resource_group_name" { value = local.rg_name }
+output "resource_group_id" { value = azapi_resource.rg.id }
 output "vnet_name" { value = local.vnet_name }
 
 output "dotnet_vm_name" { value = local.stacks.dotnet.vm_name }

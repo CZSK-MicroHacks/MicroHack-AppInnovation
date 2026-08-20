@@ -33,6 +33,13 @@ module.
 | `entra_user_password` | empty, sensitive | Set with `TF_VAR_entra_user_password` |
 | `manage_azure_resources` | `true` | Enables participant infrastructure |
 | `manage_sub_providers` | `true` | Enables explicit provider registration |
+| `enable_defender_foundation` | `false` | Opts in to the frozen paid Defender plans and subscription budget |
+| `defender_facilitator_authorized` | `false` | Required facilitator approval for the paid foundation |
+| `defender_budget_name` | `mh-defender-workshop` | Stable subscription budget name |
+| `defender_budget_amount` | `0` | Explicit positive amount required when enabled |
+| `defender_budget_start_date` | empty | Explicit RFC 3339 budget start required when enabled |
+| `defender_budget_end_date` | empty | Explicit later RFC 3339 budget end required when enabled |
+| `defender_budget_notification_emails` | empty | One or more facilitator recipients required when enabled |
 
 No secret belongs in `config.tfvars.example` or a committed `.tfvars` file. Generated secrets,
 VM custom data, and protected extension settings are still present in Terraform state. VM custom
@@ -56,6 +63,18 @@ Do not use `terraform apply -auto-approve` for the facilitator environment. Revi
 compute/disk footprint, source digest, provider registrations, and all replacements in the saved
 plan.
 
+For a dependency-safe validation and reviewed plan from the repository root, run:
+
+```pwsh
+terraform -chdir=baseInfra/terraform init -backend=false -lockfile=readonly
+terraform -chdir=baseInfra/terraform validate
+terraform -chdir=baseInfra/terraform plan -var-file=local.tfvars -out=tfplan
+terraform -chdir=baseInfra/terraform show tfplan
+```
+
+These commands do not apply the plan. Keep `enable_defender_foundation=false` for ordinary participant
+infrastructure plans.
+
 Useful outputs:
 
 ```pwsh
@@ -65,6 +84,35 @@ terraform output vm_names_by_environment
 terraform output private_ip_addresses_by_environment
 terraform output deployment_footprint
 ```
+
+## Defender for Cloud facilitator foundation
+
+The foundation reads the frozen `workshop/contracts/defender.json` version 1.1.0 and creates only its
+five `Microsoft.Security/pricings@2024-01-01` resources plus one
+`Microsoft.Consumption/budgets@2023-11-01` subscription budget. Participant users retain their existing
+resource-group Owner permission for modernization and additionally receive the built-in Security Reader
+role on only their assigned resource group. Paid-plan and policy administration remain subscription-level
+facilitator responsibilities.
+
+The Defender plans incur charges. Before a reviewed plan may contain them, an authorized facilitator must:
+
+1. Use a dedicated workshop subscription and capture the complete current Defender pricing state, including
+   pricing tier, subplan, enforce value, and extensions for every plan that cleanup could affect.
+2. Complete the Owner-only **Serverless Containers** portal preflight. The pricing API does not expose that
+   switch, so Terraform intentionally does not model it.
+3. Set `enable_defender_foundation=true`, `defender_facilitator_authorized=true`, a positive
+   `defender_budget_amount`, explicit RFC 3339 start/end dates, and at least one facilitator email in
+   `defender_budget_notification_emails`.
+4. Review the saved plan before any separately authorized apply.
+
+Enable the foundation far enough ahead of the workshop to pre-warm ACA and ACR coverage. Full Serverless
+Containers coverage can take up to 24 hours to appear; live findings and recommendations are asynchronous.
+
+Terraform does not automate Defender cleanup or restore prior settings. After the workshop, an authorized
+facilitator must capture the pre-cleanup inventory, restore every prior pricing/subplan/enforce/extension
+value and the Serverless Containers portal state, verify the restored pricing state, capture the
+post-cleanup inventory, and run the contract cost query. Cost data may lag, so record the query time and
+repeat cost verification until workshop charges have stopped.
 
 ## Immutable Custom Script Extension
 

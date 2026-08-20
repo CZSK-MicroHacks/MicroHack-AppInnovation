@@ -38,3 +38,14 @@ manage_sub_providers = true
 
 # Set true only after preflight-capacity.ps1 succeeds for these exact inputs.
 capacity_preflight_confirmed = false
+
+# Paid Defender plans and the subscription budget are disabled by default.
+enable_defender_foundation      = false
+defender_facilitator_authorized = false
+
+# Before enabling the foundation, set and review all explicit budget inputs.
+# defender_budget_name                = "mh-defender-workshop"
+# defender_budget_amount              = 500
+# defender_budget_start_date          = "2026-09-01T00:00:00Z"
+# defender_budget_end_date            = "2026-12-31T00:00:00Z"
+# defender_budget_notification_emails = ["facilitator@example.com"]

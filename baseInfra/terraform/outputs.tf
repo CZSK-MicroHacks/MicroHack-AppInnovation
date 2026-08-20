@@ -63,3 +63,18 @@ output "deployment_footprint" {
   description = "Calculated doubled VM, vCPU, OS-disk count, and OS-disk GiB footprint."
   value       = local.deployment_footprint
 }
+
+output "defender_pricing_resource_ids" {
+  description = "Map of enabled frozen Defender pricing names to subscription resource IDs."
+  value       = { for name, pricing in azapi_resource.defender_pricing : name => pricing.id }
+}
+
+output "defender_budget_resource_id" {
+  description = "Subscription budget resource ID when the Defender foundation is enabled."
+  value       = try(azapi_resource.defender_budget[0].id, null)
+}
+
+output "participant_security_reader_assignment_ids" {
+  description = "Map of participant indices to assigned-resource-group Security Reader role assignment IDs."
+  value       = { for index, assignment in azapi_resource.participant_security_reader : index => assignment.id }
+}

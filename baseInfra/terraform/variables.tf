@@ -198,3 +198,105 @@ When false: skips provider registration (assumes providers are already registere
 This is useful for workshop scenarios where users don't have subscription-level permissions to register providers.
 EOT
 }
+
+variable "enable_defender_foundation" {
+  type        = bool
+  default     = false
+  description = <<EOT
+Opt-in switch for the paid Microsoft Defender for Cloud plans and subscription budget frozen in
+workshop/contracts/defender.json. The default is false so ordinary plans cannot create paid Defender
+resources. Setting this true also requires defender_facilitator_authorized=true and valid budget inputs.
+EOT
+}
+
+variable "defender_facilitator_authorized" {
+  type        = bool
+  default     = false
+  description = <<EOT
+Explicit acknowledgement that an authorized facilitator approved creation of the paid Defender plans
+and subscription budget. This does not represent participant authorization and must remain false for
+participant-driven plans. Both this value and enable_defender_foundation must be true to enable the foundation.
+EOT
+
+  validation {
+    condition     = !var.enable_defender_foundation || var.defender_facilitator_authorized
+    error_message = "enable_defender_foundation=true requires defender_facilitator_authorized=true."
+  }
+}
+
+variable "defender_budget_name" {
+  type        = string
+  default     = "mh-defender-workshop"
+  description = <<EOT
+Name of the single subscription-level monthly cost budget created with the Defender foundation.
+Use a stable name so reviewed plans and post-workshop cost verification refer to the same resource.
+EOT
+
+  validation {
+    condition     = length(trimspace(var.defender_budget_name)) > 0
+    error_message = "defender_budget_name must not be empty."
+  }
+}
+
+variable "defender_budget_amount" {
+  type        = number
+  default     = 0
+  description = <<EOT
+Explicit monthly budget amount in the subscription billing currency. The zero default is intentionally
+invalid when enable_defender_foundation=true, forcing the facilitator to enter and review a positive amount.
+EOT
+
+  validation {
+    condition     = !var.enable_defender_foundation || var.defender_budget_amount > 0
+    error_message = "enable_defender_foundation=true requires a positive defender_budget_amount."
+  }
+}
+
+variable "defender_budget_start_date" {
+  type        = string
+  default     = ""
+  description = <<EOT
+Explicit RFC 3339 start date for the monthly Defender subscription budget, for example
+2026-09-01T00:00:00Z. The value is required and validated only when the Defender foundation is enabled.
+EOT
+
+  validation {
+    condition     = !var.enable_defender_foundation ? true : can(timecmp(var.defender_budget_start_date, var.defender_budget_start_date))
+    error_message = "enable_defender_foundation=true requires defender_budget_start_date in RFC 3339 format."
+  }
+}
+
+variable "defender_budget_end_date" {
+  type        = string
+  default     = ""
+  description = <<EOT
+Explicit RFC 3339 end date for the monthly Defender subscription budget. It must be later than
+defender_budget_start_date when the Defender foundation is enabled.
+EOT
+
+  validation {
+    condition = !var.enable_defender_foundation ? true : (
+      can(timecmp(var.defender_budget_end_date, var.defender_budget_start_date)) ?
+      timecmp(var.defender_budget_end_date, var.defender_budget_start_date) > 0 :
+      false
+    )
+    error_message = "enable_defender_foundation=true requires a valid defender_budget_end_date later than defender_budget_start_date."
+  }
+}
+
+variable "defender_budget_notification_emails" {
+  type        = set(string)
+  default     = []
+  description = <<EOT
+Facilitator email recipients for the Defender budget's actual-cost notification at the contract maximum
+threshold of 80 percent. At least one non-empty address is required when the foundation is enabled.
+EOT
+
+  validation {
+    condition = !var.enable_defender_foundation || (
+      length(var.defender_budget_notification_emails) > 0 &&
+      alltrue([for address in var.defender_budget_notification_emails : length(trimspace(address)) >= 3])
+    )
+    error_message = "enable_defender_foundation=true requires at least one non-empty facilitator notification email."
+  }
+}
