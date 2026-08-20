@@ -17,6 +17,10 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Migration CLI: `1.4.0`
 - Migration CLI error: `1.0.0`
 - Challenge 1 path registry: `1.0.0`
+- Shared Challenge 2-4 registry: `1.0.0`
+- Load-test evidence: `1.0.0`
+- CI/CD evidence: `1.0.0`
+- Observability workbook evidence: `1.0.0`
 
 Breaking changes require a schema-version change and coordinator approval. Runtime
 implementations consume these files; they must not copy or reinterpret the rules.
@@ -30,6 +34,60 @@ supplements rather than replaces the shared handoff bundle. Modernization handof
 `1.4.0` resolves one exact registered slice and makes its stack, database, provider,
 rollback runbook, and path-specific evidence executable. Migration CLI `1.4.0` binds
 every transfer command to the exact source commit recorded by the protected target.
+
+`shared-challenges.json` is the P6 producer/consumer boundary. It requires the P5
+handoff `1.4.0`, assigns nonoverlapping artifacts to load/autoscaling, CI/CD/revisions,
+and observability, including each stream's focused acceptance file, and freezes their
+evidence schemas, examples, output paths, CLI subcommands, and focused commands as one
+non-cross-wirable per-stream tuple. The CLI validates the complete P5 handoff
+before consuming any P6 evidence, checks every direct and nested handoff reference before
+resolution, recursively audits every consumed directory tree, resolves every referenced file
+inside the repository, and rejects symlinks in any path component or discovered child, empty
+files, unrelated Azure resources, and invalid observation ordering. Schema and query loading is
+bound to this checkout's exact `workshop/contracts` tree, which receives the same recursive
+symlink audit; callers cannot substitute a second contract directory.
+
+Load evidence uses normalized, timestamped Azure Load Testing and Azure Monitor output.
+It requires a `Microsoft.LoadTestService/loadTests` run with zero failed requests, an
+immediately preceding Azure Resource Manager observation of the exact 1-3 replica and
+50-concurrent-request HTTP scale rule named `http`, an observed timestamp interval equal to the
+declared run duration, measured ACA scale-out from one to at least two but no
+more than three replicas, `app_cpu_billed` for Azure SQL or `cpu_percent` for PostgreSQL,
+checked-in load-file digests, explicit baseline/load/recovery windows, and exact
+health/readiness recovery URLs. CI/CD uses separate staging and production
+GitHub OIDC subjects on one observed user-assigned identity. Both federated credentials and
+both role assignments bind the workflow client/principal IDs to `AcrPush` at the handoff
+registry and Container Apps Contributor at the handoff Container App. An observed immutable
+assignment enumeration uses the principal object ID at subscription scope with `--all`,
+`--include-inherited`, no JMESPath filter, and no Graph name enrichment. Its complete result
+must contain exactly those two resource-scoped assignments; broader inherited access fails. The
+workflow identity, ACR, and Container App must share that enumerated subscription. An immutable
+observed GitHub run binds repository, workflow path, head SHA, ref, run ID, attempt, and successful
+job IDs and windows to every build, candidate, smoke, approval, promotion, and rollback observation.
+The candidate endpoint is derived using the official `<APP_NAME>---<LABEL>` FQDN, and candidate
+plus post-transition observations record separate exact health and readiness URLs. Client
+secrets, registry admin, and broader contributor scopes are prohibited.
+
+Observability binds the existing telemetry report and exact Application Insights and Log
+Analytics resources. An `AllMetrics` diagnostic setting sends Container App metrics to
+the handoff workspace's `AzureMetricsV2` table before a revision-filtered workbook runs.
+`observability-queries.json` freezes executable templates and result kinds for error rate,
+latency, database dependency failures, replica count, and cold starts. The validator
+renders exact resource, service, commit, revision, and time-window parameters, verifies
+the UTF-8 query SHA-256, and validates one query-specific typed result row. The cold-start
+proxy counts only instances whose first-ever request for the exact commit and revision falls
+inside the evidence window. Captured Azure Workbook `serializedData` must hash correctly;
+recursive top-level and grouped panel inspection requires `KqlItem/1.0`, Logs query type,
+the Log Analytics workspace resource type, absent/default cross-component resources or exactly
+the handoff workspace, and exactly those five rendered queries. Nested workbook JSON and all
+file JSON reject non-standard `NaN` and infinity constants. The
+observed ARM `sourceId` must equal the handoff workspace, while template and query-source
+hashes must match their checked-in files. The checked-in workbook template itself must
+contain the five frozen query templates with the same Logs execution context, and
+`queries.kql` is the exact `// query-id: <id>` plus template sequence rendered by the
+contract library. Normalized numeric and boolean observations are strict, so JSON booleans
+cannot satisfy counts and JSON integers cannot satisfy flags. Normalized observations use the Pydantic `1.0.0` structures in
+`catalog_acceptance.models.shared_challenges`.
 
 ## Canonical identity and image digest
 
@@ -52,7 +110,17 @@ From `tests/acceptance/`:
 
 ```bash
 uv sync
-uv run pytest tests/test_contract_assets.py
+uv run pytest tests/test_contract_assets.py tests/test_p6_contracts.py
+```
+
+Validate one generated P6 evidence bundle only after its complete handoff exists:
+
+```bash
+uv run catalog-validate-challenge-evidence load \
+  ../../evidence/load-test-report.json \
+  --handoff ../../evidence/modernization-contract.json \
+  --contracts ../../workshop/contracts \
+  --repository-root ../..
 ```
 
 `modernization-contract.schema.json` requires managed-resource IDs, dependency

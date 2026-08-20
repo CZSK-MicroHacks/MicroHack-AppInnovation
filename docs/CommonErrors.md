@@ -340,6 +340,111 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Resolve the exact report path and remove it with fail-closed error handling before native tests, token requests, or prompts. Produce that path only from a successful current acceptance run, and inject native, token, prompt, and acceptance-process failures in executable documentation tests to prove stale evidence is absent.
 
+## 49. Workbook queries target legacy Azure Monitor columns
+**Symptom:** A workbook deploys successfully, but its replica or cold-start panel fails at query time or returns unrelated data.
+
+**Cause:** Current diagnostic-setting metric exports use the `AzureMetricsV2` table with the dynamic `Dimension` column, while legacy examples use `AzureMetrics` and `Tags`. Workspace-based Application Insights request tables expose `AppRoleInstance`, not the classic SDK name `cloud_RoleInstance`.
+
+**Resolution:** Export Container App `AllMetrics` to the handoff Log Analytics workspace, query `AzureMetricsV2` with `Dimension["revisionName"]`, use `AppVersion` for the OpenTelemetry service version, and use `AppRoleInstance` for the cold-start proxy. Compute each instance's first-ever request for the exact commit and revision before filtering those first requests to the evidence window; otherwise ordinary requests from long-running instances appear as cold starts. Freeze exact parameterized KQL and SHA-256 values, then validate typed result rows inside an explicit post-deployment query window.
+
+## 50. Success evidence can be relabeled to unrelated cloud resources
+**Symptom:** Schema-valid load, smoke, or workbook evidence reports success even though the observed provider resource or endpoint is unrelated to the handoff.
+
+**Cause:** A generic Azure resource-ID pattern, a single unconstrained smoke URL, or separately captured workbook query results prove only that some resource answered. Self-consistent declaration and observation fields do not establish provenance.
+
+**Resolution:** Constrain Azure Load Testing IDs to `Microsoft.LoadTestService/loadTests`, derive the Container Apps label FQDN as `<APP_NAME>---<LABEL>.<ENVIRONMENT_SUFFIX>`, record separate exact `/healthz` and `/readyz` URLs, and bind every transition probe to the handoff endpoints. For workbooks, parse the captured ARM `serializedData` recursively, require valid Logs query execution context, and bind the observed `sourceId` to the handoff workspace.
+
+## 51. A safe artifact directory can contain symlinked result files
+**Symptom:** A repository-local runtime-results directory passes path containment while its discovered XML results resolve to external or stale files.
+
+**Cause:** Checking only the declared directory and its parent components does not protect validators that later glob child files.
+
+**Resolution:** Before a downstream validator recursively consumes any referenced directory, walk the complete tree without following links and reject every symlinked file or directory. Keep direct and nested report references under the same component-wise check and cover directory-child links with a negative test.
+
+## 52. JSON booleans satisfy numeric evidence fields in Python
+**Symptom:** `true` validates as one replica or one result row, or integer `1` validates as an enabled flag.
+
+**Cause:** Python's `bool` subclasses `int`, and Pydantic's non-strict numeric and boolean parsing intentionally coerces compatible values.
+
+**Resolution:** Use Pydantic `StrictInt`, `StrictFloat`, and `StrictBool` for normalized cloud observations. For raw workbook JSON, check that `queryType` is exactly an `int` before comparing it with zero. Keep explicit negative tests for both coercion directions.
+
+## 53. Matching source-file hashes do not prove deployable workbook content
+**Symptom:** An empty or unrelated checked-in workbook and KQL file validate because their reported hashes match, while separately reported deployed queries are correct.
+
+**Cause:** Hash validation proves file identity but not that the file implements the frozen templates or produced the deployed panel set.
+
+**Resolution:** Parse the checked-in workbook and require the exact frozen query-template map and Logs execution context; require `queries.kql` to equal one deterministic rendering of the same contract. Independently parse captured ARM `serializedData` and require the exact rendered query map and workspace source.
+
+## 54. A downstream load contract renames an existing scale rule
+**Symptom:** The challenge contract requires a scale rule that is not present in the handoff revision, so compliant evidence would require an unowned infrastructure change.
+
+**Cause:** The consumer inferred a descriptive rule name instead of reading the authoritative P4 Bicep producer.
+
+**Resolution:** Consume the existing `http` rule with min 1, max 3, and `concurrentRequests` 50. Add an executable cross-file assertion tying the registry and evidence example to `infra/modules/environment.bicep`; do not create a replacement revision.
+
+## 55. A role assignment can claim a narrower scope than its resource ID
+**Symptom:** An observed subscription-level role-assignment ID passes while its separate `scope` field claims the handoff ACR or Container App.
+
+**Cause:** Validating role and scope as self-attested fields does not prove where Azure Resource Manager placed the assignment.
+
+**Resolution:** Split every assignment ID at `/providers/Microsoft.Authorization/roleAssignments/` and require the preceding resource ID to equal the declared scope after resource-ID normalization. Continue matching the expected principal and exact least-privilege role.
+
+## 56. Python JSON parsing accepts non-finite evidence values
+**Symptom:** A metric or query result containing `NaN` or `Infinity` can reach numeric validation even though those constants are not valid JSON.
+
+**Cause:** Python's default `json.load` accepts `NaN`, `Infinity`, and `-Infinity`, while unconstrained floating-point models can preserve them.
+
+**Resolution:** Make every JSON load fail through `parse_constant`, configure normalized Pydantic models with `allow_inf_nan=False`, and retain negative metric-point and scalar-query tests for all three constants.
+
+## 57. Strict outer JSON can hide permissive nested workbook JSON
+**Symptom:** A valid observation file contains `serializedData` as a string, and that inner workbook document still accepts `Infinity`.
+
+**Cause:** Strict parsing applies only to the outer file when nested JSON strings are decoded later with a separate permissive `json.loads`.
+
+**Resolution:** Reuse the same rejecting `parse_constant` callback for every nested workbook decode and test a non-finite value inside `serializedData`.
+
+## 58. A caller can substitute a permissive contract directory
+**Symptom:** Evidence validates against alternate schemas or query templates supplied through the CLI.
+
+**Cause:** Repository evidence paths are contained and symlink-audited, but the separately supplied contracts directory is only resolved.
+
+**Resolution:** Require the exact checked-in `workshop/contracts` path derived from the running package, recursively reject symlinks in that tree, and pass only that validated path to handoff, schema, and query validation.
+
+## 59. A filtered RBAC result can hide broader workflow access
+**Symptom:** The expected ACR and Container App assignments validate even though the same principal also has Contributor or Owner at an ancestor scope.
+
+**Cause:** A two-row normalized result does not prove that the Azure assignment query was complete.
+
+**Resolution:** Record a subscription-scope principal enumeration using `--all`, `--include-inherited`, no filter, and no Graph name enrichment. Require the complete result to contain exactly the two expected resource-scoped assignments and reject every other principal, role, or scope.
+
+## 60. Workbook KQL can silently query a second workspace
+**Symptom:** Exact frozen query text validates while a panel's `crossComponentResources` redirects execution to an unrelated workspace.
+
+**Cause:** Query text and workbook `sourceId` validation do not constrain each panel's optional cross-component execution context.
+
+**Resolution:** Recursively inspect every panel and allow `crossComponentResources` only when absent, empty, or exactly the handoff Log Analytics workspace.
+
+## 61. Load duration can disagree with run timestamps
+**Symptom:** Declaration and normalized observation agree on `durationSeconds`, but their `startedAt` and `completedAt` interval proves a different duration.
+
+**Cause:** Comparing duplicated duration fields checks consistency, not the underlying timestamp evidence.
+
+**Resolution:** Derive the interval from the observed start and completion timestamps and require it to equal the declared duration exactly.
+
+## 62. Principal enumeration can target the wrong subscription
+**Symptom:** An exhaustive assignment query for the workflow identity's subscription is paired with ACR and Container App assignments from a different subscription.
+
+**Cause:** Each resource ID is valid independently, but the enumeration scope cannot contain assignments below another subscription.
+
+**Resolution:** Derive the subscription from the UAMI resource ID and require the declared enumeration scope, ACR, Container App, and corresponding handoff resources to share it.
+
+## 63. GitHub job names and windows are replayable
+**Symptom:** A later staging or production job reuses the expected name and timestamps while the evidence still appears bound to the original workflow attempt.
+
+**Cause:** Job names and time windows are mutable metadata and do not identify GitHub's immutable job record.
+
+**Resolution:** Record each numeric GitHub job ID in both the declared workflow evidence and normalized API observation, then bind ID, environment, name, and window together.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

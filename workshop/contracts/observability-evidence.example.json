@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0.0",
+  "capturedAt": "2026-08-20T14:00:00Z",
+  "subject": {
+    "sliceId": "manual-dotnet",
+    "serviceName": "mh-catalog-dotnet",
+    "sourceCommit": "0000000000000000000000000000000000000000",
+    "revisionName": "ca-mh-example--release-000000000000",
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example"
+  },
+  "source": {
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.OperationalInsights/workspaces/log-example",
+    "serviceName": "mh-catalog-dotnet",
+    "serviceNamespace": "app-innovation",
+    "environment": "lab",
+    "directAzureMonitorExporter": true
+  },
+  "window": {
+    "startTime": "2026-08-20T13:45:00Z",
+    "endTime": "2026-08-20T13:55:00Z"
+  },
+  "telemetryReport": "evidence/telemetry-report.json",
+  "metricsExport": {
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "workspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.OperationalInsights/workspaces/log-example",
+    "diagnosticSettingName": "all-metrics-to-workspace",
+    "metricCategory": "AllMetrics",
+    "destinationTable": "AzureMetricsV2",
+    "deployedAt": "2026-08-20T13:40:00Z",
+    "resultFile": "evidence/observability/metrics-export.json"
+  },
+  "workbook": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/workbooks/00000000-0000-0000-0000-000000000001",
+    "sourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.OperationalInsights/workspaces/log-example",
+    "templateFile": "workshop/observability/workbook.json",
+    "templateSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "bicepFile": "infra/observability-workbook.bicep",
+    "queriesFile": "workshop/observability/queries.kql",
+    "queriesSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "serializedDataSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "deployedAt": "2026-08-20T13:45:00Z",
+    "resultFile": "evidence/observability/workbook.json"
+  },
+  "panels": [
+    {
+      "id": "error-rate",
+      "resultKind": "error-rate",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | summarize totalRequests=count(), failedRequests=countif(Success == false) | where totalRequests > 0 and failedRequests > 0 | extend timestamp=endTime, value=100.0 * todouble(failedRequests) / todouble(totalRequests) | project timestamp, value, totalRequests, failedRequests",
+      "querySha256": "e5d48f7cdfc5b4b02521465b7794b4b3a213807e2ab942f600538fd02515e463",
+      "resultFile": "evidence/observability/error-rate.json",
+      "rowCount": 1
+    },
+    {
+      "id": "latency",
+      "resultKind": "duration-ms",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | summarize value=percentile(DurationMs, 95) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value",
+      "querySha256": "ebbadc02cb41d901315a9d497c9042a2a39f5276d4b825b75c94521d9aee2fea",
+      "resultFile": "evidence/observability/latency.json",
+      "rowCount": 1
+    },
+    {
+      "id": "database-dependency-failures",
+      "resultKind": "failure-count",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppDependencies | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | where tostring(Properties[\"db.system.name\"]) != \"\" | summarize value=countif(Success == false) | where value > 0 | extend timestamp=endTime | project timestamp, value",
+      "querySha256": "358686002a109b93d1346eb338f9bb7d53909a36ae0220c2f2e4454260000302",
+      "resultFile": "evidence/observability/database-failures.json",
+      "rowCount": 1
+    },
+    {
+      "id": "replica-count",
+      "resultKind": "replica-count",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AzureMetricsV2 | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example\" | where MetricName == \"Replicas\" | where tostring(Dimension[\"revisionName\"]) == \"ca-mh-example--release-000000000000\" | summarize value=max(Maximum), timestamp=max(TimeGenerated) | where isnotnull(value) and value > 0 | project timestamp, value",
+      "querySha256": "5079bcd4c284fdd8e8e26bb579e095fd87283e38fc0029a493776b07f14bd99d",
+      "resultFile": "evidence/observability/replica-count.json",
+      "rowCount": 1
+    },
+    {
+      "id": "cold-starts",
+      "resultKind": "instance-first-request-count",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated <= endTime | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | where isnotempty(AppRoleInstance) | summarize firstRequest=min(TimeGenerated) by AppRoleInstance | where firstRequest between (startTime .. endTime) | summarize timestamp=max(firstRequest), value=count() | where value > 0 | project timestamp, value",
+      "querySha256": "7429654f8887a8effc4dbb57d073a2d8d7526c0cf385fc3c57d91aaec3b9b902",
+      "resultFile": "evidence/observability/cold-starts.json",
+      "rowCount": 1
+    }
+  ],
+  "assertions": {
+    "telemetryIdentityBound": true,
+    "tracesPresent": true,
+    "metricsPresent": true,
+    "logsPresent": true,
+    "revisionFilterApplied": true,
+    "workbookDeployed": true,
+    "allPanelsEvaluated": true
+  }
+}

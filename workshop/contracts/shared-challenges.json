@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "1.0.0",
+  "consumes": {
+    "handoffSchemaVersion": "1.4.0",
+    "handoffFile": "evidence/modernization-contract.json",
+    "stacks": [
+      "dotnet-sqlserver",
+      "java-postgresql"
+    ],
+    "databaseFamilies": [
+      "azure-sql",
+      "postgresql-flexible"
+    ]
+  },
+  "coordinatorOwnedFiles": [
+    "docs/CommonErrors.md",
+    "docs/ImplementationLog.md",
+    "workshop/contracts/README.md",
+    "workshop/contracts/shared-challenges.json",
+    "workshop/contracts/shared-challenges.schema.json",
+    "workshop/contracts/load-test-evidence.schema.json",
+    "workshop/contracts/load-test-evidence.example.json",
+    "workshop/contracts/cicd-evidence.schema.json",
+    "workshop/contracts/cicd-evidence.example.json",
+    "workshop/contracts/observability-evidence.schema.json",
+    "workshop/contracts/observability-evidence.example.json",
+    "workshop/contracts/observability-queries.schema.json",
+    "workshop/contracts/observability-queries.json",
+    "tests/acceptance/pyproject.toml",
+    "tests/acceptance/catalog_acceptance/models/__init__.py",
+    "tests/acceptance/catalog_acceptance/models/shared_challenges.py",
+    "tests/acceptance/catalog_acceptance/shared_challenges.py",
+    "tests/acceptance/catalog_acceptance/shared_challenges_cli.py",
+    "tests/acceptance/tests/test_p6_contracts.py"
+  ],
+  "challenges": [
+    {
+      "id": "load-autoscaling",
+      "number": 2,
+      "challenge": "challenges/ch02/README.md",
+      "solution": "solutions/ch02/README.md",
+      "artifacts": [
+        "tests/load/catalog-load.jmx",
+        "tests/load/load-test.yaml",
+        "tests/acceptance/tests/test_p6_load_challenge.py"
+      ],
+      "evidenceSchema": "workshop/contracts/load-test-evidence.schema.json",
+      "evidenceExample": "workshop/contracts/load-test-evidence.example.json",
+      "evidenceOutput": "evidence/load-test-report.json",
+      "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence load ../../evidence/load-test-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+      "validationCommand": "uv --no-config run pytest -q tests/test_p6_load_challenge.py"
+    },
+    {
+      "id": "cicd-revisions",
+      "number": 3,
+      "challenge": "challenges/ch03/README.md",
+      "solution": "solutions/ch03/README.md",
+      "artifacts": [
+        ".github/workflows/catalog-dotnet.yml",
+        ".github/workflows/catalog-java.yml",
+        "infra/github-cicd.bicep",
+        "tests/acceptance/tests/test_p6_cicd_challenge.py"
+      ],
+      "evidenceSchema": "workshop/contracts/cicd-evidence.schema.json",
+      "evidenceExample": "workshop/contracts/cicd-evidence.example.json",
+      "evidenceOutput": "evidence/cicd-report.json",
+      "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence cicd ../../evidence/cicd-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+      "validationCommand": "uv --no-config run pytest -q tests/test_p6_cicd_challenge.py"
+    },
+    {
+      "id": "observability",
+      "number": 4,
+      "challenge": "challenges/ch04/README.md",
+      "solution": "solutions/ch04/README.md",
+      "artifacts": [
+        "workshop/observability/queries.kql",
+        "workshop/observability/workbook.json",
+        "infra/observability-workbook.bicep",
+        "tests/acceptance/tests/test_p6_observability_challenge.py"
+      ],
+      "evidenceSchema": "workshop/contracts/observability-evidence.schema.json",
+      "evidenceExample": "workshop/contracts/observability-evidence.example.json",
+      "evidenceOutput": "evidence/observability-report.json",
+      "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence observability ../../evidence/observability-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+      "validationCommand": "uv --no-config run pytest -q tests/test_p6_observability_challenge.py"
+    }
+  ],
+  "cicdIdentity": {
+    "authentication": "github-oidc",
+    "repositoryPermission": {
+      "contents": "read",
+      "id-token": "write"
+    },
+    "roles": [
+      {
+        "name": "AcrPush",
+        "roleDefinitionId": "8311e382-0749-4cb8-b61a-304f252e45ec",
+        "scope": "registry"
+      },
+      {
+        "name": "Container Apps Contributor",
+        "roleDefinitionId": "358470bc-b998-42bd-ab17-a7e34c199c0f",
+        "scope": "container-app"
+      }
+    ],
+    "federatedSubjects": [
+      "repo:<owner>/<repository>:environment:staging",
+      "repo:<owner>/<repository>:environment:production"
+    ],
+    "forbidden": [
+      "client-secret",
+      "registry-admin",
+      "resource-group-contributor",
+      "subscription-contributor"
+    ]
+  },
+  "loadSignals": {
+    "testRun": {
+      "resourceType": "Microsoft.LoadTestService/loadTests"
+    },
+    "replicas": {
+      "resourceType": "Microsoft.App/containerApps",
+      "metric": "Replicas",
+      "minimum": 1,
+      "scaleOutMinimum": 2,
+      "maximum": 3,
+      "scaleRule": {
+        "name": "http",
+        "type": "http",
+        "concurrentRequests": 50
+      }
+    },
+    "azure-sql": {
+      "resourceType": "Microsoft.Sql/servers/databases",
+      "metric": "app_cpu_billed",
+      "aggregation": "Total"
+    },
+    "postgresql-flexible": {
+      "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "metric": "cpu_percent",
+      "aggregation": "Maximum"
+    }
+  },
+  "observabilityPanels": [
+    "error-rate",
+    "latency",
+    "database-dependency-failures",
+    "replica-count",
+    "cold-starts"
+  ],
+  "observabilityMetrics": {
+    "source": "container-app-diagnostic-setting",
+    "category": "AllMetrics",
+    "destination": "handoff-log-analytics-workspace",
+    "destinationTable": "AzureMetricsV2",
+    "requiredMetric": "Replicas"
+  }
+}

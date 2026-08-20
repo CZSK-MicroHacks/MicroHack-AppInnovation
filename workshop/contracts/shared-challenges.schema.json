@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/shared-challenges.schema.json",
+  "title": "Shared downstream challenge registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "consumes",
+    "coordinatorOwnedFiles",
+    "challenges",
+    "cicdIdentity",
+    "loadSignals",
+    "observabilityPanels",
+    "observabilityMetrics"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "consumes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handoffSchemaVersion",
+        "handoffFile",
+        "stacks",
+        "databaseFamilies"
+      ],
+      "properties": {
+        "handoffSchemaVersion": {
+          "const": "1.4.0"
+        },
+        "handoffFile": {
+          "const": "evidence/modernization-contract.json"
+        },
+        "stacks": {
+          "const": [
+            "dotnet-sqlserver",
+            "java-postgresql"
+          ]
+        },
+        "databaseFamilies": {
+          "const": [
+            "azure-sql",
+            "postgresql-flexible"
+          ]
+        }
+      }
+    },
+    "coordinatorOwnedFiles": {
+      "const": [
+        "docs/CommonErrors.md",
+        "docs/ImplementationLog.md",
+        "workshop/contracts/README.md",
+        "workshop/contracts/shared-challenges.json",
+        "workshop/contracts/shared-challenges.schema.json",
+        "workshop/contracts/load-test-evidence.schema.json",
+        "workshop/contracts/load-test-evidence.example.json",
+        "workshop/contracts/cicd-evidence.schema.json",
+        "workshop/contracts/cicd-evidence.example.json",
+        "workshop/contracts/observability-evidence.schema.json",
+        "workshop/contracts/observability-evidence.example.json",
+        "workshop/contracts/observability-queries.schema.json",
+        "workshop/contracts/observability-queries.json",
+        "tests/acceptance/pyproject.toml",
+        "tests/acceptance/catalog_acceptance/models/__init__.py",
+        "tests/acceptance/catalog_acceptance/models/shared_challenges.py",
+        "tests/acceptance/catalog_acceptance/shared_challenges.py",
+        "tests/acceptance/catalog_acceptance/shared_challenges_cli.py",
+        "tests/acceptance/tests/test_p6_contracts.py"
+      ]
+    },
+    "challenges": {
+      "const": [
+        {
+          "id": "load-autoscaling",
+          "number": 2,
+          "challenge": "challenges/ch02/README.md",
+          "solution": "solutions/ch02/README.md",
+          "artifacts": [
+            "tests/load/catalog-load.jmx",
+            "tests/load/load-test.yaml",
+            "tests/acceptance/tests/test_p6_load_challenge.py"
+          ],
+          "evidenceSchema": "workshop/contracts/load-test-evidence.schema.json",
+          "evidenceExample": "workshop/contracts/load-test-evidence.example.json",
+          "evidenceOutput": "evidence/load-test-report.json",
+          "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence load ../../evidence/load-test-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+          "validationCommand": "uv --no-config run pytest -q tests/test_p6_load_challenge.py"
+        },
+        {
+          "id": "cicd-revisions",
+          "number": 3,
+          "challenge": "challenges/ch03/README.md",
+          "solution": "solutions/ch03/README.md",
+          "artifacts": [
+            ".github/workflows/catalog-dotnet.yml",
+            ".github/workflows/catalog-java.yml",
+            "infra/github-cicd.bicep",
+            "tests/acceptance/tests/test_p6_cicd_challenge.py"
+          ],
+          "evidenceSchema": "workshop/contracts/cicd-evidence.schema.json",
+          "evidenceExample": "workshop/contracts/cicd-evidence.example.json",
+          "evidenceOutput": "evidence/cicd-report.json",
+          "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence cicd ../../evidence/cicd-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+          "validationCommand": "uv --no-config run pytest -q tests/test_p6_cicd_challenge.py"
+        },
+        {
+          "id": "observability",
+          "number": 4,
+          "challenge": "challenges/ch04/README.md",
+          "solution": "solutions/ch04/README.md",
+          "artifacts": [
+            "workshop/observability/queries.kql",
+            "workshop/observability/workbook.json",
+            "infra/observability-workbook.bicep",
+            "tests/acceptance/tests/test_p6_observability_challenge.py"
+          ],
+          "evidenceSchema": "workshop/contracts/observability-evidence.schema.json",
+          "evidenceExample": "workshop/contracts/observability-evidence.example.json",
+          "evidenceOutput": "evidence/observability-report.json",
+          "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence observability ../../evidence/observability-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
+          "validationCommand": "uv --no-config run pytest -q tests/test_p6_observability_challenge.py"
+        }
+      ]
+    },
+    "cicdIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authentication",
+        "repositoryPermission",
+        "roles",
+        "federatedSubjects",
+        "forbidden"
+      ],
+      "properties": {
+        "authentication": {
+          "const": "github-oidc"
+        },
+        "repositoryPermission": {
+          "const": {
+            "contents": "read",
+            "id-token": "write"
+          }
+        },
+        "roles": {
+          "const": [
+            {
+              "name": "AcrPush",
+              "roleDefinitionId": "8311e382-0749-4cb8-b61a-304f252e45ec",
+              "scope": "registry"
+            },
+            {
+              "name": "Container Apps Contributor",
+              "roleDefinitionId": "358470bc-b998-42bd-ab17-a7e34c199c0f",
+              "scope": "container-app"
+            }
+          ]
+        },
+        "federatedSubjects": {
+          "const": [
+            "repo:<owner>/<repository>:environment:staging",
+            "repo:<owner>/<repository>:environment:production"
+          ]
+        },
+        "forbidden": {
+          "const": [
+            "client-secret",
+            "registry-admin",
+            "resource-group-contributor",
+            "subscription-contributor"
+          ]
+        }
+      }
+    },
+    "loadSignals": {
+      "const": {
+        "testRun": {
+          "resourceType": "Microsoft.LoadTestService/loadTests"
+        },
+        "replicas": {
+          "resourceType": "Microsoft.App/containerApps",
+          "metric": "Replicas",
+          "minimum": 1,
+          "scaleOutMinimum": 2,
+          "maximum": 3,
+          "scaleRule": {
+            "name": "http",
+            "type": "http",
+            "concurrentRequests": 50
+          }
+        },
+        "azure-sql": {
+          "resourceType": "Microsoft.Sql/servers/databases",
+          "metric": "app_cpu_billed",
+          "aggregation": "Total"
+        },
+        "postgresql-flexible": {
+          "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers",
+          "metric": "cpu_percent",
+          "aggregation": "Maximum"
+        }
+      }
+    },
+    "observabilityPanels": {
+      "const": [
+        "error-rate",
+        "latency",
+        "database-dependency-failures",
+        "replica-count",
+        "cold-starts"
+      ]
+    },
+    "observabilityMetrics": {
+      "const": {
+        "source": "container-app-diagnostic-setting",
+        "category": "AllMetrics",
+        "destination": "handoff-log-analytics-workspace",
+        "destinationTable": "AzureMetricsV2",
+        "requiredMetric": "Replicas"
+      }
+    }
+  },
+  "$defs": {
+    "repoPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[a-zA-Z0-9._/-]+$"
+    },
+    "challenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "challenge",
+        "solution",
+        "artifacts",
+        "evidenceSchema",
+        "evidenceExample",
+        "evidenceOutput",
+        "evidenceValidationCommand",
+        "validationCommand"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "load-autoscaling",
+            "cicd-revisions",
+            "observability"
+          ]
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 4
+        },
+        "challenge": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "solution": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/repoPath"
+          }
+        },
+        "evidenceSchema": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/repoPath"
+            },
+            {
+              "pattern": "^workshop/contracts/[a-z0-9-]+\\.schema\\.json$"
+            }
+          ]
+        },
+        "evidenceExample": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/repoPath"
+            },
+            {
+              "pattern": "^workshop/contracts/[a-z0-9-]+\\.example\\.json$"
+            }
+          ]
+        },
+        "evidenceOutput": {
+          "type": "string",
+          "pattern": "^evidence/[a-z0-9-]+\\.json$"
+        },
+        "evidenceValidationCommand": {
+          "type": "string",
+          "pattern": "^uv --no-config run catalog-validate-challenge-evidence (?:load|cicd|observability) ../../evidence/[a-z0-9-]+\\.json --handoff ../../evidence/modernization-contract\\.json --contracts ../../workshop/contracts --repository-root \\.\\./\\.\\.$"
+        },
+        "validationCommand": {
+          "type": "string",
+          "pattern": "^uv --no-config run pytest -q tests/test_p6_[a-z0-9_]+\\.py$"
+        }
+      }
+    }
+  }
+}

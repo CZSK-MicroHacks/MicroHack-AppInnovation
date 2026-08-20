@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 catalog-migrate = "catalog_migrate.cli:main"
+catalog-validate-challenge-evidence = "catalog_acceptance.shared_challenges_cli:main"
 
 [dependency-groups]
 dev = [
