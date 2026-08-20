@@ -175,6 +175,35 @@ subscription settings. The validator rejects partial pages, wrong endpoints or
 collections, cross-subscription records, lifecycle timestamp overlap, and any
 before/after state drift.
 
+Render and independently validate Challenge 6 Azure SRE Agent evidence:
+
+```bash
+uv --no-config run catalog-render-sre-agent-evidence \
+  --capture evidence/sre-agent/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --output evidence/sre-agent-report.json \
+  --repository-root ../..
+
+uv --no-config run catalog-validate-sre-agent-evidence \
+  --capture evidence/sre-agent/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --report evidence/sre-agent-report.json \
+  --contracts workshop/contracts \
+  --repository-root ../..
+```
+
+The renderer binds the accepted P5 handoff and P6 CI/CD and observability reports
+to the 2026 agent and connector resources, complete Resource Graph plus inherited
+RBAC inventories, a separate facilitator portal Review-plan export, the
+seed-and-rollback activity timeline, and the source-bound investigation. That
+investigation correlates deployment history, revision traffic, request failures,
+exceptions, database dependencies, and selected-database availability before
+the agent records its hypothesis, rejected alternatives, blast radius, and
+verification plan. Cleanup must verify every protected handoff resource with ARM
+before the post-deletion cost query. The independent validator also replays both
+shared P6 validators against their referenced raw evidence. Checked-in examples
+are sanitized contract fixtures, never live evidence.
+
 Run the focused shared-contract gate with:
 
 ```bash
@@ -188,6 +217,12 @@ Run the focused Defender contract gate with:
 
 ```bash
 uv --no-config run pytest -q tests/test_p7_defender_contracts.py
+```
+
+Run the focused SRE Agent contract gate with:
+
+```bash
+uv --no-config run pytest -q tests/test_p8_sre_agent_contracts.py
 ```
 
 All paths declared by a handoff are repository-root-relative. Runtime evidence must be

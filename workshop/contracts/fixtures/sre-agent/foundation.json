@@ -1,0 +1,389 @@
+{
+  "schemaVersion": "1.0.0",
+  "observedAt": "2026-08-20T14:50:00Z",
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "participantResourceGroupId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example",
+  "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+  "agentResourceGroupId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example",
+  "agentObservability": {
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.Insights/components/appi-sre-example",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.OperationalInsights/workspaces/log-sre-example"
+  },
+  "agent": {
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example?api-version=2026-01-01"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+      "name": "sre-catalog-example",
+      "type": "Microsoft.App/agents",
+      "location": "eastus2",
+      "tags": {
+        "hidden-link:/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.Insights/components/appi-sre-example": "Resource"
+      },
+      "identity": {
+        "type": "SystemAssigned,UserAssigned",
+        "principalId": "00000000-0000-0000-0000-000000000012",
+        "userAssignedIdentities": {
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sre-example": {
+            "clientId": "00000000-0000-0000-0000-000000000011",
+            "principalId": "00000000-0000-0000-0000-000000000010"
+          }
+        }
+      },
+      "properties": {
+        "provisioningState": "Succeeded",
+        "actionConfiguration": {
+          "actionMode": "Review",
+          "accessLevel": "Low",
+          "identity": {
+            "type": "UserAssigned",
+            "identityResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sre-example"
+          }
+        },
+        "knowledgeGraphConfiguration": {
+          "managedResources": [
+            "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          ],
+          "identity": {
+            "type": "UserAssigned",
+            "identityResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sre-example"
+          }
+        },
+        "incidentManagementConfiguration": {
+          "type": "AzMonitor",
+          "connectionName": "azure-monitor"
+        },
+        "agentLoggingConfiguration": {
+          "appInsightsConnectionString": "<redacted>"
+        },
+        "upgradeChannel": "Stable"
+      }
+    }
+  },
+  "connectors": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/connectors/application-insights?api-version=2026-01-01"
+      },
+      "response": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/connectors/application-insights",
+        "name": "application-insights",
+        "type": "Microsoft.App/agents/connectors",
+        "properties": {
+          "dataConnectorType": "AppInsights",
+          "dataSource": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+          "extendedProperties": {
+            "armResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+            "resource.name": "appi-mh-example",
+            "appId": "00000000-0000-0000-0000-000000000020"
+          },
+          "identity": "system",
+          "provisioningState": "Succeeded"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/connectors/log-analytics?api-version=2026-01-01"
+      },
+      "response": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/connectors/log-analytics",
+        "name": "log-analytics",
+        "type": "Microsoft.App/agents/connectors",
+        "properties": {
+          "dataConnectorType": "LogAnalytics",
+          "dataSource": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example",
+          "extendedProperties": {
+            "armResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example",
+            "resource.name": "log-mh-example"
+          },
+          "identity": "system",
+          "provisioningState": "Succeeded"
+        }
+      }
+    }
+  ],
+  "customRollbackRole": {
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/00000000-0000-0000-0000-000000000030?api-version=2022-04-01"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/00000000-0000-0000-0000-000000000030",
+      "name": "00000000-0000-0000-0000-000000000030",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "properties": {
+        "roleName": "MicroHack Container App Traffic Rollback",
+        "type": "CustomRole",
+        "assignableScopes": [
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+        ],
+        "permissions": [
+          {
+            "actions": [
+              "Microsoft.App/containerApps/read",
+              "Microsoft.App/containerApps/write",
+              "Microsoft.App/containerApps/revisions/read"
+            ],
+            "notActions": [],
+            "dataActions": [],
+            "notDataActions": []
+          }
+        ]
+      }
+    }
+  },
+  "roleAssignments": {
+    "userAssigned": {
+      "request": {
+        "method": "POST",
+        "url": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+        "body": {
+          "subscriptions": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "query": "authorizationresources | where type =~ 'microsoft.authorization/roleassignments' | extend principalId = tostring(properties.principalId) | where principalId == '00000000-0000-0000-0000-000000000010' | project id, properties | order by id asc",
+          "options": {
+            "resultFormat": "objectArray"
+          }
+        }
+      },
+      "response": {
+        "data": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000101",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000010",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000102",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000010",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000103",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000010",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000104",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000010",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000105",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000010",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/00000000-0000-0000-0000-000000000030",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+            }
+          }
+        ],
+        "count": 5,
+        "totalRecords": 5,
+        "resultTruncated": "false",
+        "facets": []
+      },
+      "effectiveAccess": {
+        "request": {
+          "command": "az role assignment list --all --include-inherited --assignee-object-id 00000000-0000-0000-0000-000000000010 --subscription 00000000-0000-0000-0000-000000000000 --fill-principal-name false --fill-role-definition-name false --output json",
+          "assigneeObjectId": "00000000-0000-0000-0000-000000000010",
+          "subscriptionId": "00000000-0000-0000-0000-000000000000",
+          "all": true,
+          "includeInherited": true,
+          "fillPrincipalName": false,
+          "fillRoleDefinitionName": false
+        },
+        "response": [
+          {
+            "principalId": "00000000-0000-0000-0000-000000000010",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000010",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000010",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000010",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000010",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/00000000-0000-0000-0000-000000000030",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          }
+        ]
+      }
+    },
+    "systemAssigned": {
+      "request": {
+        "method": "POST",
+        "url": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+        "body": {
+          "subscriptions": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "query": "authorizationresources | where type =~ 'microsoft.authorization/roleassignments' | extend principalId = tostring(properties.principalId) | where principalId == '00000000-0000-0000-0000-000000000012' | project id, properties | order by id asc",
+          "options": {
+            "resultFormat": "objectArray"
+          }
+        }
+      },
+      "response": {
+        "data": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000106",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000012",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000107",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000012",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000108",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000012",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+            }
+          }
+        ],
+        "count": 3,
+        "totalRecords": 3,
+        "resultTruncated": "false",
+        "facets": []
+      },
+      "effectiveAccess": {
+        "request": {
+          "command": "az role assignment list --all --include-inherited --assignee-object-id 00000000-0000-0000-0000-000000000012 --subscription 00000000-0000-0000-0000-000000000000 --fill-principal-name false --fill-role-definition-name false --output json",
+          "assigneeObjectId": "00000000-0000-0000-0000-000000000012",
+          "subscriptionId": "00000000-0000-0000-0000-000000000000",
+          "all": true,
+          "includeInherited": true,
+          "fillPrincipalName": false,
+          "fillRoleDefinitionName": false
+        },
+        "response": [
+          {
+            "principalId": "00000000-0000-0000-0000-000000000012",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000012",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          },
+          {
+            "principalId": "00000000-0000-0000-0000-000000000012",
+            "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+          }
+        ]
+      }
+    },
+    "facilitator": {
+      "request": {
+        "method": "POST",
+        "url": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+        "body": {
+          "subscriptions": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "query": "authorizationresources | where type =~ 'microsoft.authorization/roleassignments' | extend principalId = tostring(properties.principalId), roleDefinitionId = tolower(tostring(properties.roleDefinitionId)) | where principalId == '00000000-0000-0000-0000-000000000013' | where roleDefinitionId endswith '/e79298df-d852-4c6d-84f9-5d13249d1e55' or roleDefinitionId endswith '/2d84a65a-63b2-4343-bbb6-31105d857bc1' or roleDefinitionId endswith '/a4b156ac-253f-4a1a-9851-96d62b71b047' | project id, properties | order by id asc",
+          "options": {
+            "resultFormat": "objectArray"
+          }
+        }
+      },
+      "response": {
+        "data": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000109",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000013",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/e79298df-d852-4c6d-84f9-5d13249d1e55",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example"
+            }
+          }
+        ],
+        "count": 1,
+        "totalRecords": 1,
+        "resultTruncated": "false",
+        "facets": []
+      }
+    },
+    "participant": {
+      "request": {
+        "method": "POST",
+        "url": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+        "body": {
+          "subscriptions": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "query": "authorizationresources | where type =~ 'microsoft.authorization/roleassignments' | extend principalId = tostring(properties.principalId), roleDefinitionId = tolower(tostring(properties.roleDefinitionId)) | where principalId == '00000000-0000-0000-0000-000000000014' | where roleDefinitionId endswith '/e79298df-d852-4c6d-84f9-5d13249d1e55' or roleDefinitionId endswith '/2d84a65a-63b2-4343-bbb6-31105d857bc1' or roleDefinitionId endswith '/a4b156ac-253f-4a1a-9851-96d62b71b047' | project id, properties | order by id asc",
+          "options": {
+            "resultFormat": "objectArray"
+          }
+        }
+      },
+      "response": {
+        "data": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000110",
+            "properties": {
+              "principalId": "00000000-0000-0000-0000-000000000014",
+              "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/2d84a65a-63b2-4343-bbb6-31105d857bc1",
+              "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example"
+            }
+          }
+        ],
+        "count": 1,
+        "totalRecords": 1,
+        "resultTruncated": "false",
+        "facets": []
+      }
+    }
+  },
+  "availabilityPreflight": {
+    "observedAt": "2026-08-20T14:49:00Z",
+    "providerRegistered": true,
+    "locationAvailable": true,
+    "networkReachable": true,
+    "agentReady": true,
+    "connectorsReady": true,
+    "goNoGo": "go"
+  }
+}

@@ -1,0 +1,938 @@
+{
+  "schemaVersion": "1.0.0",
+  "incidentStart": "2026-08-20T14:59:00Z",
+  "incidentEnd": "2026-08-20T15:10:00Z",
+  "subject": {
+    "sliceId": "copilot-modernization-dotnet",
+    "agentResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+    "agentName": "sre-catalog-example",
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+    "healthyRevision": "ca-mh-example--release-000000000000",
+    "badRevision": "ca-mh-example--sre-bad-000000000000",
+    "threadId": "thread-sre-example-0001",
+    "traceId": "00000000000000000000000000000001",
+    "correlationId": "00000000-0000-0000-0000-000000000201"
+  },
+  "seed": {
+    "createdAt": "2026-08-20T14:59:30Z",
+    "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "databaseHostEnvironmentVariable": "CATALOG_DATABASE_HOST",
+    "badDatabaseHost": "catalog.sre-drill.invalid",
+    "secretReferencesPreserved": true,
+    "imageChanged": false,
+    "healthyReadinessPath": "/readyz",
+    "drillReadinessPath": "/healthz",
+    "livenessPath": "/healthz",
+    "healthyRevision": {
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--release-000000000000?api-version=2025-01-01"
+      },
+      "response": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--release-000000000000",
+        "name": "ca-mh-example--release-000000000000",
+        "properties": {
+          "active": true,
+          "healthState": "Healthy",
+          "template": {
+            "containers": [
+              {
+                "name": "catalog",
+                "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "env": [
+                  {
+                    "name": "CATALOG_DATABASE_HOST",
+                    "value": "sql-example.database.windows.net"
+                  },
+                  {
+                    "name": "CATALOG_DATABASE_PASSWORD",
+                    "secretRef": "catalog-database-password"
+                  },
+                  {
+                    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                    "secretRef": "application-insights-connection"
+                  }
+                ],
+                "probes": [
+                  {
+                    "type": "Liveness",
+                    "httpGet": {
+                      "path": "/healthz",
+                      "port": 8080
+                    }
+                  },
+                  {
+                    "type": "Readiness",
+                    "httpGet": {
+                      "path": "/readyz",
+                      "port": 8080
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "revision": {
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--sre-bad-000000000000?api-version=2025-01-01"
+      },
+      "response": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--sre-bad-000000000000",
+        "name": "ca-mh-example--sre-bad-000000000000",
+        "properties": {
+          "active": true,
+          "healthState": "Healthy",
+          "trafficWeight": 100,
+          "template": {
+            "containers": [
+              {
+                "name": "catalog",
+                "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "env": [
+                  {
+                    "name": "CATALOG_DATABASE_HOST",
+                    "value": "catalog.sre-drill.invalid"
+                  },
+                  {
+                    "name": "CATALOG_DATABASE_PASSWORD",
+                    "secretRef": "catalog-database-password"
+                  },
+                  {
+                    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                    "secretRef": "application-insights-connection"
+                  }
+                ],
+                "probes": [
+                  {
+                    "type": "Liveness",
+                    "httpGet": {
+                      "path": "/healthz",
+                      "port": 8080
+                    }
+                  },
+                  {
+                    "type": "Readiness",
+                    "httpGet": {
+                      "path": "/healthz",
+                      "port": 8080
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "trafficBefore": {
+      "observedAt": "2026-08-20T15:00:00Z",
+      "source": "azure-container-app-revision-list",
+      "value": [
+        {
+          "name": "ca-mh-example--release-000000000000",
+          "active": true,
+          "trafficWeight": 100
+        },
+        {
+          "name": "ca-mh-example--sre-bad-000000000000",
+          "active": true,
+          "trafficWeight": 0
+        }
+      ],
+      "nextLink": null
+    },
+    "trafficBad": {
+      "observedAt": "2026-08-20T15:05:00Z",
+      "source": "azure-container-app-revision-list",
+      "value": [
+        {
+          "name": "ca-mh-example--release-000000000000",
+          "active": true,
+          "trafficWeight": 0
+        },
+        {
+          "name": "ca-mh-example--sre-bad-000000000000",
+          "active": true,
+          "trafficWeight": 100
+        }
+      ],
+      "nextLink": null
+    }
+  },
+  "alertFired": {
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202?api-version=2019-05-05"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202",
+      "name": "00000000-0000-0000-0000-000000000202",
+      "type": "Microsoft.AlertsManagement/alerts",
+      "properties": {
+        "essentials": {
+          "severity": "Sev2",
+          "signalType": "Log",
+          "monitorCondition": "Fired",
+          "monitoringService": "Log Alerts V2",
+          "alertState": "New",
+          "alertRule": "MH-SRE-example-catalog-failure",
+          "firedDateTime": "2026-08-20T15:06:00Z",
+          "targetResourceIds": [
+            "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          ]
+        }
+      }
+    }
+  },
+  "badRevisionFailures": {
+    "request": {
+      "method": "POST",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example/query?api-version=2021-10-01",
+      "query": "requests\n| where timestamp between (datetime(2026-08-20T14:59:00Z) .. datetime(2026-08-20T15:10:00Z))\n| extend RevisionName = tostring(customDimensions[\"ContainerAppRevisionName\"])\n| where RevisionName == \"ca-mh-example--sre-bad-000000000000\"\n| summarize RequestCount = count(), FailedRequests = countif(success == false), FirstFailure = minif(timestamp, success == false), LastFailure = maxif(timestamp, success == false)"
+    },
+    "response": {
+      "tables": [
+        {
+          "name": "PrimaryResult",
+          "columns": [
+            {
+              "name": "RequestCount",
+              "type": "long"
+            },
+            {
+              "name": "FailedRequests",
+              "type": "long"
+            },
+            {
+              "name": "FirstFailure",
+              "type": "datetime"
+            },
+            {
+              "name": "LastFailure",
+              "type": "datetime"
+            }
+          ],
+          "rows": [
+            [
+              12,
+              12,
+              "2026-08-20T15:05:05Z",
+              "2026-08-20T15:07:18Z"
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "investigation": {
+    "investigationEnd": "2026-08-20T15:06:05Z",
+    "deploymentHistory": {
+      "observedAt": "2026-08-20T15:06:06Z",
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions?api-version=2025-01-01"
+      },
+      "response": {
+        "value": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--release-000000000000",
+            "name": "ca-mh-example--release-000000000000",
+            "type": "Microsoft.App/containerApps/revisions",
+            "properties": {
+              "active": true,
+              "createdTime": "2026-08-20T13:30:00Z",
+              "trafficWeight": 0,
+              "template": {
+                "containers": [
+                  {
+                    "name": "catalog",
+                    "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/revisions/ca-mh-example--sre-bad-000000000000",
+            "name": "ca-mh-example--sre-bad-000000000000",
+            "type": "Microsoft.App/containerApps/revisions",
+            "properties": {
+              "active": true,
+              "createdTime": "2026-08-20T14:59:30Z",
+              "trafficWeight": 100,
+              "template": {
+                "containers": [
+                  {
+                    "name": "catalog",
+                    "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "nextLink": null
+      }
+    },
+    "requestFailures": {
+      "observedAt": "2026-08-20T15:06:07Z",
+      "request": {
+        "method": "POST",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example/query?api-version=2021-10-01",
+        "query": "requests\n| where timestamp between (datetime(2026-08-20T14:59:00Z) .. datetime(2026-08-20T15:06:05Z))\n| extend RevisionName = tostring(customDimensions[\"ContainerAppRevisionName\"])\n| where cloud_RoleName == \"mh-catalog-dotnet\" and application_Version == \"0000000000000000000000000000000000000000\" and RevisionName == \"ca-mh-example--sre-bad-000000000000\"\n| summarize RequestCount = count(), FailedRequests = countif(success == false), FirstFailure = minif(timestamp, success == false), LastFailure = maxif(timestamp, success == false)"
+      },
+      "response": {
+        "tables": [
+          {
+            "name": "PrimaryResult",
+            "columns": [
+              {
+                "name": "RequestCount",
+                "type": "long"
+              },
+              {
+                "name": "FailedRequests",
+                "type": "long"
+              },
+              {
+                "name": "FirstFailure",
+                "type": "datetime"
+              },
+              {
+                "name": "LastFailure",
+                "type": "datetime"
+              }
+            ],
+            "rows": [
+              [
+                8,
+                8,
+                "2026-08-20T15:05:05Z",
+                "2026-08-20T15:06:05Z"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "exceptions": {
+      "observedAt": "2026-08-20T15:06:08Z",
+      "request": {
+        "method": "POST",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example/query?api-version=2021-10-01",
+        "query": "exceptions\n| where timestamp between (datetime(2026-08-20T14:59:00Z) .. datetime(2026-08-20T15:06:05Z))\n| extend RevisionName = tostring(customDimensions[\"ContainerAppRevisionName\"])\n| where cloud_RoleName == \"mh-catalog-dotnet\" and application_Version == \"0000000000000000000000000000000000000000\" and RevisionName == \"ca-mh-example--sre-bad-000000000000\"\n| summarize ExceptionCount = count(), FirstException = min(timestamp), LastException = max(timestamp), ExceptionTypes = make_set(type, 16)"
+      },
+      "response": {
+        "tables": [
+          {
+            "name": "PrimaryResult",
+            "columns": [
+              {
+                "name": "ExceptionCount",
+                "type": "long"
+              },
+              {
+                "name": "FirstException",
+                "type": "datetime"
+              },
+              {
+                "name": "LastException",
+                "type": "datetime"
+              },
+              {
+                "name": "ExceptionTypes",
+                "type": "dynamic"
+              }
+            ],
+            "rows": [
+              [
+                8,
+                "2026-08-20T15:05:06Z",
+                "2026-08-20T15:06:04Z",
+                [
+                  "Microsoft.Data.SqlClient.SqlException"
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "databaseDependencies": {
+      "observedAt": "2026-08-20T15:06:09Z",
+      "request": {
+        "method": "POST",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example/query?api-version=2021-10-01",
+        "query": "dependencies\n| where timestamp between (datetime(2026-08-20T14:59:00Z) .. datetime(2026-08-20T15:06:05Z))\n| extend RevisionName = tostring(customDimensions[\"ContainerAppRevisionName\"]), DatabaseSystem = tostring(customDimensions[\"db.system.name\"])\n| where cloud_RoleName == \"mh-catalog-dotnet\" and application_Version == \"0000000000000000000000000000000000000000\" and RevisionName == \"ca-mh-example--sre-bad-000000000000\" and DatabaseSystem == \"microsoft.sql_server\"\n| summarize DependencyCount = count(), FailedDependencies = countif(success == false), FirstFailure = minif(timestamp, success == false), LastFailure = maxif(timestamp, success == false), Targets = make_set(target, 16)"
+      },
+      "response": {
+        "tables": [
+          {
+            "name": "PrimaryResult",
+            "columns": [
+              {
+                "name": "DependencyCount",
+                "type": "long"
+              },
+              {
+                "name": "FailedDependencies",
+                "type": "long"
+              },
+              {
+                "name": "FirstFailure",
+                "type": "datetime"
+              },
+              {
+                "name": "LastFailure",
+                "type": "datetime"
+              },
+              {
+                "name": "Targets",
+                "type": "dynamic"
+              }
+            ],
+            "rows": [
+              [
+                8,
+                8,
+                "2026-08-20T15:05:06Z",
+                "2026-08-20T15:06:04Z",
+                [
+                  "catalog.sre-drill.invalid"
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "databaseAvailability": {
+      "observedAt": "2026-08-20T15:06:10Z",
+      "request": {
+        "method": "GET",
+        "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog?api-version=2023-08-01"
+      },
+      "response": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+        "name": "catalog",
+        "type": "Microsoft.Sql/servers/databases",
+        "properties": {
+          "status": "Online"
+        }
+      }
+    }
+  },
+  "agentAudit": {
+    "request": {
+      "method": "POST",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.Insights/components/appi-sre-example/query?api-version=2021-10-01",
+      "query": "customEvents\n| where timestamp between (datetime(2026-08-20T14:59:00Z) .. datetime(2026-08-20T15:10:00Z))\n| where name in (\"IncidentActivitySnapshot\", \"AgentResponse\", \"AgentToolExecution\", \"AgentExecution\", \"AgentAzCliExecution\", \"ApprovalDecision\")\n| extend AgentId = tostring(customDimensions[\"gen_ai.agent.id\"]), AgentName = tostring(customDimensions[\"gen_ai.agent.name\"]), TraceId = tostring(customDimensions[\"TraceId\"]), SpanId = tostring(customDimensions[\"SpanId\"]), ParentSpanId = tostring(customDimensions[\"ParentSpanId\"]), ThreadId = tostring(customDimensions[\"ThreadId\"]), CorrelationId = tostring(customDimensions[\"CorrelationId\"]), LogTimestamp = tostring(customDimensions[\"LogTimestamp\"])\n| where AgentId == \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example\" and ThreadId == \"thread-sre-example-0001\"\n| project timestamp, name, AgentId, AgentName, TraceId, SpanId, ParentSpanId, ThreadId, CorrelationId, LogTimestamp, Properties = customDimensions\n| order by timestamp asc"
+    },
+    "response": {
+      "tables": [
+        {
+          "name": "PrimaryResult",
+          "columns": [
+            {
+              "name": "timestamp",
+              "type": "datetime"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "AgentId",
+              "type": "string"
+            },
+            {
+              "name": "AgentName",
+              "type": "string"
+            },
+            {
+              "name": "TraceId",
+              "type": "string"
+            },
+            {
+              "name": "SpanId",
+              "type": "string"
+            },
+            {
+              "name": "ParentSpanId",
+              "type": "string"
+            },
+            {
+              "name": "ThreadId",
+              "type": "string"
+            },
+            {
+              "name": "CorrelationId",
+              "type": "string"
+            },
+            {
+              "name": "LogTimestamp",
+              "type": "string"
+            },
+            {
+              "name": "Properties",
+              "type": "dynamic"
+            }
+          ],
+          "rows": [
+            [
+              "2026-08-20T15:06:05Z",
+              "IncidentActivitySnapshot",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000001",
+              "",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:06:05Z",
+              {
+                "alertId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202",
+                "alertRule": "MH-SRE-example-catalog-failure",
+                "targetResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+                "monitorCondition": "Fired"
+              }
+            ],
+            [
+              "2026-08-20T15:06:20Z",
+              "AgentResponse",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000002",
+              "0000000000000001",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:06:20Z",
+              {
+                "affectedRevision": "ca-mh-example--sre-bad-000000000000",
+                "incidentStart": "2026-08-20T14:59:00Z",
+                "investigationEnd": "2026-08-20T15:06:05Z",
+                "evidenceReferences": [
+                  "investigation.deploymentHistory",
+                  "investigation.requestFailures",
+                  "investigation.exceptions",
+                  "investigation.databaseDependencies",
+                  "investigation.databaseAvailability"
+                ],
+                "supportingEvidence": {
+                  "requestFailures": 8,
+                  "exceptions": 8,
+                  "exceptionTypes": [
+                    "Microsoft.Data.SqlClient.SqlException"
+                  ],
+                  "failedDatabaseDependencies": 8,
+                  "databaseSystem": "microsoft.sql_server",
+                  "dependencyTargets": [
+                    "catalog.sre-drill.invalid"
+                  ],
+                  "selectedDatabaseResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+                  "selectedDatabaseStatus": "Online"
+                },
+                "hypothesisCode": "bad-revision-selected-database-endpoint",
+                "alternatives": [
+                  {
+                    "code": "selected-database-platform-outage",
+                    "disposition": "rejected"
+                  },
+                  {
+                    "code": "application-image-regression",
+                    "disposition": "rejected"
+                  }
+                ],
+                "proposedOperation": "container-app-traffic-weight-update",
+                "healthyRevision": "ca-mh-example--release-000000000000",
+                "healthyRevisionWeight": 100,
+                "badRevision": "ca-mh-example--sre-bad-000000000000",
+                "badRevisionWeight": 0,
+                "blastRadius": "exact-bad-revision-traffic",
+                "verificationPlan": [
+                  "healthy-revision-100",
+                  "bad-revision-0",
+                  "health-200",
+                  "readiness-200",
+                  "alert-resolved"
+                ]
+              }
+            ],
+            [
+              "2026-08-20T15:06:30Z",
+              "AgentToolExecution",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000003",
+              "0000000000000002",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:06:30Z",
+              {
+                "phase": "review",
+                "writeExecuted": false
+              }
+            ],
+            [
+              "2026-08-20T15:07:00Z",
+              "ApprovalDecision",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000004",
+              "0000000000000002",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:07:00Z",
+              {
+                "decision": "Approved",
+                "approvedByPrincipalId": "00000000-0000-0000-0000-000000000013"
+              }
+            ],
+            [
+              "2026-08-20T15:07:10Z",
+              "AgentAzCliExecution",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000005",
+              "0000000000000004",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:07:10Z",
+              {
+                "operation": "container-app-traffic-weight-update",
+                "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+              }
+            ],
+            [
+              "2026-08-20T15:07:11Z",
+              "AgentExecution",
+              "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+              "sre-catalog-example",
+              "00000000000000000000000000000001",
+              "0000000000000006",
+              "0000000000000005",
+              "thread-sre-example-0001",
+              "00000000-0000-0000-0000-000000000201",
+              "2026-08-20T15:07:11Z",
+              {
+                "status": "Succeeded",
+                "writeExecuted": true
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "activityLog": {
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Insights/eventtypes/management/values?api-version=2015-04-01&$filter=eventTimestamp%20ge%20'2026-08-20T14:59:00Z'%20and%20eventTimestamp%20le%20'2026-08-20T15:10:00Z'%20and%20resourceUri%20eq%20'/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example'"
+    },
+    "response": {
+      "value": [
+        {
+          "eventTimestamp": "2026-08-20T15:04:59Z",
+          "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+          "caller": "00000000-0000-0000-0000-000000000013",
+          "correlationId": "00000000-0000-0000-0000-000000000200",
+          "operationName": {
+            "value": "Microsoft.App/containerApps/write"
+          },
+          "status": {
+            "value": "Succeeded"
+          },
+          "authorization": {
+            "action": "Microsoft.App/containerApps/write",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          }
+        },
+        {
+          "eventTimestamp": "2026-08-20T15:07:12Z",
+          "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+          "caller": "00000000-0000-0000-0000-000000000010",
+          "correlationId": "00000000-0000-0000-0000-000000000201",
+          "operationName": {
+            "value": "Microsoft.App/containerApps/write"
+          },
+          "status": {
+            "value": "Succeeded"
+          },
+          "authorization": {
+            "action": "Microsoft.App/containerApps/write",
+            "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          }
+        }
+      ],
+      "nextLink": null
+    }
+  },
+  "containerAppBeforeRollback": {
+    "observedAt": "2026-08-20T15:06:50Z",
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example?api-version=2025-01-01"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+      "name": "ca-mh-example",
+      "type": "Microsoft.App/containerApps",
+      "location": "swedencentral",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-mh-example": {}
+        }
+      },
+      "properties": {
+        "environmentId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/managedEnvironments/cae-mh-example",
+        "configuration": {
+          "activeRevisionsMode": "Multiple",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "traffic": [
+              {
+                "revisionName": "ca-mh-example--release-000000000000",
+                "weight": 0
+              },
+              {
+                "revisionName": "ca-mh-example--sre-bad-000000000000",
+                "weight": 100
+              }
+            ]
+          },
+          "secrets": [
+            {
+              "name": "catalog-database-password"
+            },
+            {
+              "name": "application-insights-connection"
+            }
+          ]
+        },
+        "template": {
+          "revisionSuffix": "sre-bad-000000000000",
+          "containers": [
+            {
+              "name": "catalog",
+              "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "env": [
+                {
+                  "name": "CATALOG_DATABASE_HOST",
+                  "value": "catalog.sre-drill.invalid"
+                },
+                {
+                  "name": "CATALOG_DATABASE_PASSWORD",
+                  "secretRef": "catalog-database-password"
+                },
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "secretRef": "application-insights-connection"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  }
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  }
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3
+          }
+        }
+      }
+    }
+  },
+  "containerAppAfterRollback": {
+    "observedAt": "2026-08-20T15:07:15Z",
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example?api-version=2025-01-01"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+      "name": "ca-mh-example",
+      "type": "Microsoft.App/containerApps",
+      "location": "swedencentral",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-mh-example": {}
+        }
+      },
+      "properties": {
+        "environmentId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/managedEnvironments/cae-mh-example",
+        "configuration": {
+          "activeRevisionsMode": "Multiple",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "traffic": [
+              {
+                "revisionName": "ca-mh-example--release-000000000000",
+                "weight": 100
+              },
+              {
+                "revisionName": "ca-mh-example--sre-bad-000000000000",
+                "weight": 0
+              }
+            ]
+          },
+          "secrets": [
+            {
+              "name": "catalog-database-password"
+            },
+            {
+              "name": "application-insights-connection"
+            }
+          ]
+        },
+        "template": {
+          "revisionSuffix": "sre-bad-000000000000",
+          "containers": [
+            {
+              "name": "catalog",
+              "image": "acrexample.azurecr.io/catalog-dotnet@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "env": [
+                {
+                  "name": "CATALOG_DATABASE_HOST",
+                  "value": "catalog.sre-drill.invalid"
+                },
+                {
+                  "name": "CATALOG_DATABASE_PASSWORD",
+                  "secretRef": "catalog-database-password"
+                },
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "secretRef": "application-insights-connection"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  }
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  }
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3
+          }
+        }
+      }
+    }
+  },
+  "recoveredTraffic": {
+    "observedAt": "2026-08-20T15:07:20Z",
+    "source": "azure-container-app-revision-list",
+    "value": [
+      {
+        "name": "ca-mh-example--release-000000000000",
+        "active": true,
+        "trafficWeight": 100
+      },
+      {
+        "name": "ca-mh-example--sre-bad-000000000000",
+        "active": true,
+        "trafficWeight": 0
+      }
+    ],
+    "nextLink": null
+  },
+  "recoveryHealth": [
+    {
+      "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/healthz",
+      "status": 200,
+      "observedAt": "2026-08-20T15:08:00Z"
+    },
+    {
+      "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/readyz",
+      "status": 200,
+      "observedAt": "2026-08-20T15:08:01Z"
+    }
+  ],
+  "alertResolved": {
+    "request": {
+      "method": "GET",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202?api-version=2019-05-05"
+    },
+    "response": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202",
+      "properties": {
+        "essentials": {
+          "monitorCondition": "Resolved",
+          "resolvedDateTime": "2026-08-20T15:09:00Z",
+          "targetResourceIds": [
+            "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          ]
+        }
+      }
+    }
+  },
+  "assessment": {
+    "performedByPrincipalId": "00000000-0000-0000-0000-000000000014",
+    "recordedAt": "2026-08-20T15:09:30Z",
+    "affectedRevision": "ca-mh-example--sre-bad-000000000000",
+    "rootCauseCode": "bad-revision-selected-database-endpoint",
+    "rootCause": "Revision ca-mh-example--sre-bad-000000000000 used invalid selected-database host catalog.sre-drill.invalid while the selected Azure SQL database remained Online; the retained image digest matched the healthy revision.",
+    "supportingEvidence": {
+      "requestFailures": 8,
+      "exceptions": 8,
+      "failedDatabaseDependencies": 8,
+      "selectedDatabaseStatus": "Online"
+    },
+    "evidenceReferences": [
+      "investigation.deploymentHistory",
+      "investigation.requestFailures",
+      "investigation.exceptions",
+      "investigation.databaseDependencies",
+      "investigation.databaseAvailability"
+    ],
+    "alternativesConsidered": [
+      "selected-database-platform-outage",
+      "application-image-regression"
+    ],
+    "recommendedAction": "Restore 100 percent traffic to the retained P6-proven healthy handoff revision.",
+    "preventionAction": "Validate the selected-database endpoint and readiness path before assigning production traffic.",
+    "approvedByPrincipalId": "00000000-0000-0000-0000-000000000013",
+    "participantApproved": false,
+    "autonomousExecution": false,
+    "secretChanged": false,
+    "imageChanged": false,
+    "resourceDeleted": false
+  }
+}

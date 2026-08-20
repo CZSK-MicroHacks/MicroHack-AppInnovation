@@ -1,0 +1,280 @@
+{
+  "assertions": {
+    "agentAndConnectorsReady": true,
+    "agentDeleted": true,
+    "agentResourceGroupDeleted": true,
+    "alertResolved": true,
+    "auditCorrelationComplete": true,
+    "badRevisionFailureObserved": true,
+    "crossScopeRolesRemoved": true,
+    "dualIdentityBound": true,
+    "facilitatorApprovedBeforeWrite": true,
+    "handoffImageReused": true,
+    "handoffResourcesProtected": true,
+    "healthAndReadinessRecovered": true,
+    "healthyRevisionRestored": true,
+    "investigationComplete": true,
+    "leastPrivilegeRolesExact": true,
+    "monitoringContributorExceptionExact": true,
+    "noAutonomousExecution": true,
+    "onlyTrafficRollbackExecuted": true,
+    "participantDidNotApprove": true,
+    "portalPreflightPassed": true,
+    "postDeletionCostQueried": true,
+    "quickstartPlanDisabled": true,
+    "reviewModeEnforced": true,
+    "secretReferencesPreserved": true,
+    "upstreamEvidenceBound": true
+  },
+  "capturedAt": "2026-08-22T12:02:00Z",
+  "cleanup": {
+    "agentDeletedAt": "2026-08-20T16:00:00Z",
+    "authorizedBy": "facilitator@example.invalid",
+    "completedAt": "2026-08-22T12:01:00Z",
+    "costDataThrough": "2026-08-21T23:59:59Z",
+    "costQueriedAt": "2026-08-22T12:00:00Z",
+    "evidenceExportedAt": "2026-08-20T15:55:00Z",
+    "protectedResourceCount": 16,
+    "resourceGroupDeletedAt": "2026-08-20T16:10:00Z",
+    "roleAssignmentsRemovedAt": "2026-08-20T16:05:00Z"
+  },
+  "dependencies": {
+    "cicdEvidence": {
+      "schemaVersion": "1.1.0",
+      "sha256": "cabe0e8a8911cc30c79d1b409e5a55952e9cff46aad27f9aa8ed948ba4931684"
+    },
+    "handoff": {
+      "schemaVersion": "1.4.0",
+      "sha256": "aa5a516be1fb353830a452a4500eb815b76b277fd64b0cce7afda88fce3ea7fd"
+    },
+    "observabilityEvidence": {
+      "schemaVersion": "1.1.0",
+      "sha256": "75e25e305908aef6870985c978d3550a80fb8aed3f6546fde76a96143dd96d5e"
+    },
+    "targetOutput": {
+      "schemaVersion": "1.2.0",
+      "sha256": "438419eeb79cc78cc954fb6f4d5aee83c1488b588a52fd95d9e4d2b96b87b0d9"
+    }
+  },
+  "foundation": {
+    "actionConfiguration": {
+      "accessLevel": "Low",
+      "identity": "UserAssigned",
+      "mode": "Review"
+    },
+    "agentApiVersion": "2026-01-01",
+    "availability": "go",
+    "connectorApiVersion": "2026-01-01",
+    "connectors": [
+      {
+        "dataSource": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+        "identity": "system",
+        "name": "application-insights",
+        "type": "AppInsights"
+      },
+      {
+        "dataSource": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example",
+        "identity": "system",
+        "name": "log-analytics",
+        "type": "LogAnalytics"
+      }
+    ],
+    "identities": {
+      "systemAssignedPrincipalId": "00000000-0000-0000-0000-000000000012",
+      "userAssignedPrincipalId": "00000000-0000-0000-0000-000000000010",
+      "userAssignedResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sre-example"
+    },
+    "location": "eastus2",
+    "provisioningState": "Succeeded",
+    "responsePlan": {
+      "autonomyMode": "Review",
+      "name": "catalog-reviewed-rollback",
+      "participantApprovalAllowed": false,
+      "platform": "AzureMonitor",
+      "producer": "azure-portal-facilitator-export",
+      "quickstartPlanEnabled": false,
+      "testIncidentId": "sre-preflight-0001"
+    },
+    "roleAssignments": {
+      "customRollbackRoleDefinitionId": "00000000-0000-0000-0000-000000000030",
+      "facilitatorRoleDefinitionId": "e79298df-d852-4c6d-84f9-5d13249d1e55",
+      "participantRoleDefinitionId": "2d84a65a-63b2-4343-bbb6-31105d857bc1",
+      "subscriptionMonitoringContributorException": true,
+      "systemAssignedCount": 3,
+      "userAssignedCount": 5
+    }
+  },
+  "incident": {
+    "activity": {
+      "callerPrincipalId": "00000000-0000-0000-0000-000000000010",
+      "observedAt": "2026-08-20T15:07:12Z",
+      "operation": "Microsoft.App/containerApps/write",
+      "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+    },
+    "alertFiredAt": "2026-08-20T15:06:00Z",
+    "alertId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.AlertsManagement/alerts/00000000-0000-0000-0000-000000000202",
+    "alertResolvedAt": "2026-08-20T15:09:00Z",
+    "assessment": {
+      "affectedRevision": "ca-mh-example--sre-bad-000000000000",
+      "alternativesConsidered": [
+        "selected-database-platform-outage",
+        "application-image-regression"
+      ],
+      "autonomousExecution": false,
+      "evidenceReferences": [
+        "investigation.deploymentHistory",
+        "investigation.requestFailures",
+        "investigation.exceptions",
+        "investigation.databaseDependencies",
+        "investigation.databaseAvailability"
+      ],
+      "participantApproved": false,
+      "performedByPrincipalId": "00000000-0000-0000-0000-000000000014",
+      "preventionAction": "Validate the selected-database endpoint and readiness path before assigning production traffic.",
+      "recommendedAction": "Restore 100 percent traffic to the retained P6-proven healthy handoff revision.",
+      "rootCause": "Revision ca-mh-example--sre-bad-000000000000 used invalid selected-database host catalog.sre-drill.invalid while the selected Azure SQL database remained Online; the retained image digest matched the healthy revision.",
+      "rootCauseCode": "bad-revision-selected-database-endpoint",
+      "supportingEvidence": {
+        "exceptions": 8,
+        "failedDatabaseDependencies": 8,
+        "requestFailures": 8,
+        "selectedDatabaseStatus": "Online"
+      }
+    },
+    "audit": {
+      "approvedAt": "2026-08-20T15:07:00Z",
+      "correlationId": "00000000-0000-0000-0000-000000000201",
+      "eventNames": [
+        "IncidentActivitySnapshot",
+        "AgentResponse",
+        "AgentToolExecution",
+        "ApprovalDecision",
+        "AgentAzCliExecution",
+        "AgentExecution"
+      ],
+      "executedAt": "2026-08-20T15:07:11Z",
+      "threadId": "thread-sre-example-0001",
+      "traceId": "00000000000000000000000000000001"
+    },
+    "badDatabaseHost": "catalog.sre-drill.invalid",
+    "badRevision": "ca-mh-example--sre-bad-000000000000",
+    "end": "2026-08-20T15:10:00Z",
+    "failedRequests": 12,
+    "health": [
+      {
+        "observedAt": "2026-08-20T15:08:00Z",
+        "status": 200,
+        "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/healthz"
+      },
+      {
+        "observedAt": "2026-08-20T15:08:01Z",
+        "status": 200,
+        "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/readyz"
+      }
+    ],
+    "healthyRevision": "ca-mh-example--release-000000000000",
+    "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "investigation": {
+      "affectedRevision": "ca-mh-example--sre-bad-000000000000",
+      "alternativesRejected": [
+        "selected-database-platform-outage",
+        "application-image-regression"
+      ],
+      "blastRadius": "exact-bad-revision-traffic",
+      "deploymentCount": 2,
+      "evidenceObservedAt": "2026-08-20T15:06:10Z",
+      "evidenceReferences": [
+        "investigation.deploymentHistory",
+        "investigation.requestFailures",
+        "investigation.exceptions",
+        "investigation.databaseDependencies",
+        "investigation.databaseAvailability"
+      ],
+      "hypothesisCode": "bad-revision-selected-database-endpoint",
+      "supportingEvidence": {
+        "databaseSystem": "microsoft.sql_server",
+        "dependencyTargets": [
+          "catalog.sre-drill.invalid"
+        ],
+        "exceptionTypes": [
+          "Microsoft.Data.SqlClient.SqlException"
+        ],
+        "exceptions": 8,
+        "failedDatabaseDependencies": 8,
+        "requestFailures": 8,
+        "selectedDatabaseResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+        "selectedDatabaseStatus": "Online"
+      },
+      "verificationPlan": [
+        "healthy-revision-100",
+        "bad-revision-0",
+        "health-200",
+        "readiness-200",
+        "alert-resolved"
+      ],
+      "windowEnd": "2026-08-20T15:06:05Z"
+    },
+    "start": "2026-08-20T14:59:00Z",
+    "traffic": {
+      "badRevisionAt100At": "2026-08-20T15:05:00Z",
+      "healthyRevisionAt100At": "2026-08-20T15:07:20Z"
+    }
+  },
+  "provenance": {
+    "artifacts": [
+      {
+        "kind": "cicd-evidence",
+        "path": "workshop/contracts/fixtures/sre-agent/cicd-evidence.json",
+        "sha256": "cabe0e8a8911cc30c79d1b409e5a55952e9cff46aad27f9aa8ed948ba4931684"
+      },
+      {
+        "kind": "observability-evidence",
+        "path": "workshop/contracts/fixtures/sre-agent/observability-evidence.json",
+        "sha256": "75e25e305908aef6870985c978d3550a80fb8aed3f6546fde76a96143dd96d5e"
+      },
+      {
+        "kind": "sre-agent-cleanup",
+        "path": "workshop/contracts/fixtures/sre-agent/cleanup.json",
+        "sha256": "1688f1e8abdee559981220d46e3782efd11f5d66215e011e08a1bdd8da37379c"
+      },
+      {
+        "kind": "sre-agent-foundation",
+        "path": "workshop/contracts/fixtures/sre-agent/foundation.json",
+        "sha256": "5a9ff73ef851440d29461313e20e109303eafff7fd314ea6131dbc32a123f302"
+      },
+      {
+        "kind": "sre-agent-incident",
+        "path": "workshop/contracts/fixtures/sre-agent/incident.json",
+        "sha256": "46a819e9697331841d61107efc2fa3b85a7be07dfaae3b10b6cae9b5e8b2f850"
+      },
+      {
+        "kind": "sre-agent-response-plan",
+        "path": "workshop/contracts/fixtures/sre-agent/response-plan-preflight.json",
+        "sha256": "8f377bc615a6abf10c007e18ce4cf9542a4e1aa327c8ace33ee54cd0ff296540"
+      },
+      {
+        "kind": "target-output",
+        "path": "workshop/contracts/fixtures/defender/target-output.json",
+        "sha256": "438419eeb79cc78cc954fb6f4d5aee83c1488b588a52fd95d9e4d2b96b87b0d9"
+      }
+    ],
+    "captureManifest": {
+      "kind": "sre-agent-capture-manifest",
+      "path": "workshop/contracts/sre-agent-evidence-capture.example.json",
+      "sha256": "0edc50369c316f7ac70744d229473f98503622d89db07bea457a3a4ba40a3ca8"
+    }
+  },
+  "schemaVersion": "1.0.0",
+  "subject": {
+    "agentResourceGroupId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example",
+    "agentResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example",
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example",
+    "participantResourceGroupId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example",
+    "sliceId": "copilot-modernization-dotnet",
+    "sourceCommit": "0000000000000000000000000000000000000000",
+    "stack": "dotnet-sqlserver",
+    "subscriptionId": "00000000-0000-0000-0000-000000000000"
+  }
+}

@@ -578,6 +578,20 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Validate the documented first-of-month midnight-UTC boundary and require the start month to be the current month through twelve months ahead at plan time. Make every paid pricing resource depend on successful budget creation so any remaining service-side failure stops before a paid plan change.
 
+## 83. A reviewed rollback is mistaken for an investigated incident
+**Symptom:** An SRE Agent report proves that a fixed rollback was reviewed and approved, but it can pass without establishing why the incident occurred or whether rollback is appropriate.
+
+**Cause:** Approval chronology proves authorization, not diagnosis. A narrative hypothesis can also be fabricated unless it is derived from preserved producer responses.
+
+**Resolution:** Capture complete Container App revision history, revision-bound request failures and exceptions, database dependency failures, and selected-database availability before the AgentResponse. Derive the hypothesis, rejected alternatives, blast radius, verification plan, and final assessment from those exact captures, and reject any mismatch.
+
+## 84. Equal audit and investigation timestamps imply false causality
+**Symptom:** Investigation evidence is reported as following the alert-bound agent snapshot even though the first capture has the same timestamp.
+
+**Cause:** A non-strict chronology comparison establishes ordering only syntactically; equal timestamps do not prove the agent observed the incident before collecting diagnostic evidence.
+
+**Resolution:** Require the first investigation observation to be strictly later than `IncidentActivitySnapshot`, and retain an equality-boundary regression that moves the snapshot to the first capture time.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

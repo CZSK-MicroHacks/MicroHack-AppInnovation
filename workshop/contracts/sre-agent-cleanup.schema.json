@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microhack.example/schemas/sre-agent-cleanup.schema.json",
+  "title": "MicroHack Azure SRE Agent cleanup capture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "authorization",
+    "evidenceExportedAt",
+    "agentDeletedAt",
+    "agentVerification",
+    "roleAssignmentsRemovedAt",
+    "roleAssignmentVerification",
+    "resourceGroupDeletedAt",
+    "resourceGroupVerification",
+    "costVerification",
+    "protectedResources",
+    "protectedResourceVerification",
+    "completedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorized",
+        "authorizedBy",
+        "authorizedByPrincipalId",
+        "authorizedAt",
+        "scope"
+      ],
+      "properties": {
+        "authorized": {
+          "const": true
+        },
+        "authorizedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorizedByPrincipalId": {
+          "$ref": "#/$defs/guid"
+        },
+        "authorizedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "scope": {
+          "const": "sre-agent-only"
+        }
+      }
+    },
+    "evidenceExportedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "agentDeletedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "agentVerification": {
+      "$ref": "#/$defs/notFound"
+    },
+    "roleAssignmentsRemovedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "roleAssignmentVerification": {
+      "type": "object"
+    },
+    "resourceGroupDeletedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "resourceGroupVerification": {
+      "$ref": "#/$defs/notFound"
+    },
+    "costVerification": {
+      "type": "object"
+    },
+    "protectedResources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/resourceId"
+      }
+    },
+    "protectedResourceVerification": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request",
+          "statusCode",
+          "observedAt"
+        ],
+        "properties": {
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "method",
+              "url"
+            ],
+            "properties": {
+              "method": {
+                "const": "GET"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^/subscriptions/.+\\?api-version="
+              }
+            }
+          },
+          "statusCode": {
+            "const": 200
+          },
+          "observedAt": {
+            "$ref": "#/$defs/timestamp"
+          }
+        }
+      }
+    },
+    "completedAt": {
+      "$ref": "#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "resourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-f-]+/"
+    },
+    "guid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "notFound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request",
+        "statusCode",
+        "observedAt"
+      ],
+      "properties": {
+        "request": {
+          "type": "object"
+        },
+        "statusCode": {
+          "const": 404
+        },
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}
