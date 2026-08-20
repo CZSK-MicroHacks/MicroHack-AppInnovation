@@ -411,11 +411,11 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Resolution:** Require the exact checked-in `workshop/contracts` path derived from the running package, recursively reject symlinks in that tree, and pass only that validated path to handoff, schema, and query validation.
 
 ## 59. A filtered RBAC result can hide broader workflow access
-**Symptom:** The expected ACR and Container App assignments validate even though the same principal also has Contributor or Owner at an ancestor scope.
+**Symptom:** The expected ACR and Container App assignments validate even though the same principal also has Contributor or Owner at an ancestor scope, or the audit command fails before returning evidence.
 
-**Cause:** A two-row normalized result does not prove that the Azure assignment query was complete.
+**Cause:** A two-row normalized result does not prove that the Azure assignment query was complete. In addition, Azure CLI rejects `az role assignment list --all --scope ...`, and the deployment UAMI's two least-privilege roles do not include subscription-level `Microsoft.Authorization/roleAssignments/read`.
 
-**Resolution:** Record a subscription-scope principal enumeration using `--all`, `--include-inherited`, no filter, and no Graph name enrichment. Require the complete result to contain exactly the two expected resource-scoped assignments and reject every other principal, role, or scope.
+**Resolution:** Run the audit from a separate facilitator session with `Microsoft.Authorization/roleAssignments/read` (`Reader` is the minimum matching built-in role), select the handoff subscription, and execute `az role assignment list --all --include-inherited --assignee-object-id <principal-id> --fill-principal-name false --fill-role-definition-name false --output json` without `--scope`. Preserve each raw subscription-scoped `roleDefinitionId` ARM resource ID, normalize only its terminal GUID, and require the digest-bound raw and normalized forms to contain exactly the two expected resource-scoped assignments.
 
 ## 60. Workbook KQL can silently query a second workspace
 **Symptom:** Exact frozen query text validates while a panel's `crossComponentResources` redirects execution to an unrelated workspace.
@@ -436,7 +436,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Cause:** Each resource ID is valid independently, but the enumeration scope cannot contain assignments below another subscription.
 
-**Resolution:** Derive the subscription from the UAMI resource ID and require the declared enumeration scope, ACR, Container App, and corresponding handoff resources to share it.
+**Resolution:** Derive the selected `subscriptionId` from the UAMI resource ID and require the ACR, Container App, and corresponding handoff resources to share it. Do not encode that subscription as `--scope` when `--all` is present.
 
 ## 63. GitHub job names and windows are replayable
 **Symptom:** A later staging or production job reuses the expected name and timestamps while the evidence still appears bound to the original workflow attempt.
@@ -451,6 +451,34 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Cause:** Extension resources must be deployed at the scope of the resource they extend. Declaring a cross-resource-group existing parent does not make an extension-resource deployment at the current scope valid.
 
 **Resolution:** Deploy the observability Bicep at the handoff Container App's resource group, which the handoff validator already proves is shared by the Application Insights component and Log Analytics workspace. Declare those resources as same-scope `existing` resources and attach the diagnostic setting to the same-scope Container App rather than constructing a cross-scope extension resource.
+
+## 65. Load evidence has no deterministic producer
+**Symptom:** A guide can describe valid Azure Load Testing and metric output while leaving participants to hand-assemble normalized JSON that may not match the captured responses.
+
+**Cause:** The schema and validator consume normalized observations but do not define how raw Azure responses become those observations.
+
+**Resolution:** Capture the exact Load Testing run, Container App ARM response, replica metric, and database metric in a versioned manifest with path and SHA-256 bindings. Require the canonical capture, handoff, report, raw-response, and generated-observation paths; schema-validate the capture before rendering and the report before writing. Render through `catalog-render-load-evidence`, and have the common validator repeat the same pure transformation. Reject duplicate JSON keys, non-finite or missing values, path/symlink escapes, digest drift, and every input/output collision.
+
+## 66. A delayed baseline metric point satisfies scale-out
+**Symptom:** Recovery polling passes even though no point proves that replicas reached two or more while the load test was running.
+
+**Cause:** A broad metric window or final maximum can mistake delayed ingestion after the run for in-load scale-out, while missing points may be treated as zero.
+
+**Resolution:** Partition the revision-filtered `Replicas`/`Maximum`/`PT1M` series by the observed run timestamps. Require a one-replica point before load, a value from two through three during load, and a final one-replica point after load. Missing aggregation values fail instead of becoming zero.
+
+## 67. Workflow head SHA is forced to equal application source SHA
+**Symptom:** A checked-in handoff must name the commit that already contains that same handoff and workflow, creating an unsatisfiable self-reference.
+
+**Cause:** The workflow control commit and application build source were modeled as one Git identity.
+
+**Resolution:** Dispatch the stack workflow from a later control commit, hash and read `evidence/modernization-contract.json` there, then separately check out `handoff.source.commitSha` for build/test. During validation, read the handoff blob at `workflow.headSha` with `git cat-file` and require its SHA-256 to equal both the recorded digest and the current handoff file. Continue deriving the image tag and candidate revision suffix only from the handoff source commit.
+
+## 68. Protected-job approval and rollback are modeled in the wrong order
+**Symptom:** Evidence expects production approval after the production job starts, or promotion failure exits before rollback can run.
+
+**Cause:** GitHub protected-environment approval gates job start, and rollback was installed only after the risky promotion path.
+
+**Resolution:** Require staging completion, then approval, then production job start. Arm a simple shell trap before promotion, record its guard/promotion/rollback lifecycle, and validate digest-bound raw Container App revision lists for pre-promotion, promotion, and rollback so active, health, traffic, and image state cannot be hardcoded.
 
 ---
 **Planned Mitigations / Enhancements:**

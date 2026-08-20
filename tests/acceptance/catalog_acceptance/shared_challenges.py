@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypeVar
@@ -29,7 +30,9 @@ from catalog_acceptance.models.shared_challenges import (
     LatencyQueryObservation,
     QueryObservationBase,
     ReplicaQueryObservation,
+    RoleAssignmentEnumerationObservation,
     RevisionObservation,
+    RollbackSafetyObservation,
     ScaleConfigurationObservation,
     SmokeObservation,
     TrafficObservation,
@@ -47,12 +50,41 @@ def _reject_nonfinite_json_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON constant is forbidden: {value}")
 
 
+def _reject_duplicate_json_members(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    """Build one JSON object while rejecting duplicate member names."""
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON member is forbidden: {key}")
+        value[key] = child
+    return value
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     """Load one strict JSON object from disk."""
     with path.open(encoding="utf-8") as handle:
-        value = json.load(handle, parse_constant=_reject_nonfinite_json_constant)
+        value = json.load(
+            handle,
+            parse_constant=_reject_nonfinite_json_constant,
+            object_pairs_hook=_reject_duplicate_json_members,
+        )
     if not isinstance(value, dict):
         raise ValueError(f"expected a JSON object: {path}")
+    return value
+
+
+def _load_json_array(path: Path) -> list[Any]:
+    """Load one strict JSON array from disk."""
+    with path.open(encoding="utf-8") as handle:
+        value = json.load(
+            handle,
+            parse_constant=_reject_nonfinite_json_constant,
+            object_pairs_hook=_reject_duplicate_json_members,
+        )
+    if not isinstance(value, list):
+        raise ValueError(f"expected a JSON array: {path}")
     return value
 
 
@@ -111,6 +143,37 @@ def _require(condition: bool, message: str) -> None:
     """Raise a stable validation error when a contract invariant is false."""
     if not condition:
         raise ValueError(message)
+
+
+def _read_control_commit_blob(
+    repository_root: Path,
+    commit_sha: str,
+    repository_path: str,
+) -> bytes:
+    """Read one exact Git blob from the declared workflow control commit."""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository_root),
+                "cat-file",
+                "blob",
+                f"{commit_sha}:{repository_path}",
+            ],
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except OSError as error:
+        raise ValueError("git is unavailable for workflow control validation") from error
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("workflow control commit lookup timed out") from error
+    if result.returncode != 0:
+        raise ValueError(
+            "workflow control commit does not contain the declared handoff"
+        )
+    return result.stdout
 
 
 def _resolve_evidence_file(repository_root: Path, value: str) -> Path:
@@ -458,9 +521,18 @@ def _validate_load(
     evidence: dict[str, Any],
     handoff: dict[str, Any],
     repository_root: Path,
+    handoff_path: Path,
 ) -> None:
     """Validate load success, scale-out, database load, and recovery observations."""
     _validate_common_subject(evidence, handoff)
+    capture = evidence["capture"]
+    _require(
+        capture["manifestSha256"]
+        == _sha256(
+            _resolve_evidence_file(repository_root, capture["manifestFile"])
+        ),
+        "load capture manifest digest differs from the referenced file",
+    )
     subject = evidence["subject"]
     _require(
         subject["databaseFamily"] == handoff["database"]["family"],
@@ -677,7 +749,7 @@ def _validate_load(
     ]
     _require(bool(before and during and after), "replica window lacks baseline, run, or recovery points")
     _require(
-        max(before) == evidence["replicas"]["baselineObserved"],
+        max(before) == evidence["replicas"]["baselineObserved"] == 1,
         "observed replica baseline differs from metric output",
     )
     peak = max(during)
@@ -706,8 +778,12 @@ def _validate_load(
         "replica metric contains a value outside configured bounds",
     )
     _require(
-        any(point.value == evidence["replicas"]["minimumConfigured"] for point in after),
-        "replicas did not recover to the configured minimum in time",
+        after[-1].value == evidence["replicas"]["minimumConfigured"],
+        "final post-load replica point did not recover to the configured minimum",
+    )
+    _require(
+        all(point.value.is_integer() for point in replica.points),
+        "replica metric contains a fractional value",
     )
 
     database = _load_observation(
@@ -804,9 +880,175 @@ def _validate_load(
         "recovery checks fall outside the declared recovery window",
     )
     _require(
+        any(
+            point.value == evidence["replicas"]["minimumConfigured"]
+            and point.timestamp <= recovery.observed_at
+            for point in after
+        ),
+        "health recovery was recorded before replica recovery",
+    )
+    _require(
         recovery.observed_at <= captured_at,
         "load report was captured before recovery evidence",
     )
+    from catalog_acceptance.load_evidence import build_load_evidence
+
+    expected_report, expected_observations = build_load_evidence(
+        repository_root / evidence["capture"]["manifestFile"],
+        handoff_path,
+        repository_root,
+    )
+    _require(
+        evidence == expected_report,
+        "load report differs from deterministic raw-capture rendering",
+    )
+    for path, expected in expected_observations.items():
+        _require(
+            _load_json(_resolve_evidence_file(repository_root, path)) == expected,
+            f"normalized load observation differs from raw capture: {path}",
+        )
+
+
+def _validate_role_assignment_raw_capture(
+    enumeration: RoleAssignmentEnumerationObservation,
+    identity: IdentityObservation,
+    repository_root: Path,
+) -> None:
+    """Verify the facilitator's raw Azure CLI result against normalized roles."""
+    raw_path = _resolve_evidence_file(
+        repository_root,
+        enumeration.raw_result_file,
+    )
+    _require(
+        _sha256(raw_path) == enumeration.raw_result_sha256,
+        "role assignment raw-result digest differs",
+    )
+    raw_assignments = _load_json_array(raw_path)
+    normalized = {
+        (
+            assignment.resource_id.casefold(),
+            assignment.principal_id.casefold(),
+            assignment.role_definition_id.casefold(),
+            assignment.scope.casefold(),
+        )
+        for assignment in identity.role_assignments
+    }
+    observed: set[tuple[str, str, str, str]] = set()
+    role_definition_prefix = (
+        f"/subscriptions/{enumeration.subscription_id}/providers/"
+        "Microsoft.Authorization/roleDefinitions/"
+    ).casefold()
+    for index, value in enumerate(raw_assignments):
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"raw role assignment {index} must be an object"
+            )
+        fields = tuple(
+            value.get(name)
+            for name in ("id", "principalId", "roleDefinitionId", "scope")
+        )
+        if not all(isinstance(field, str) and field for field in fields):
+            raise ValueError(
+                f"raw role assignment {index} lacks exact identity fields"
+            )
+        role_definition_id = fields[2].casefold()
+        if (
+            not role_definition_id.startswith(role_definition_prefix)
+            or "/" in role_definition_id.removeprefix(role_definition_prefix)
+        ):
+            raise ValueError(
+                f"raw role assignment {index} has an invalid role definition ID"
+            )
+        observed.add(
+            (
+                fields[0].casefold(),
+                fields[1].casefold(),
+                role_definition_id.removeprefix(role_definition_prefix),
+                fields[3].casefold(),
+            )
+        )
+    _require(
+        len(observed) == len(raw_assignments),
+        "raw role assignment result contains duplicates",
+    )
+    _require(
+        observed == normalized,
+        "normalized role assignments differ from facilitator raw output",
+    )
+
+
+def _load_revision_states(
+    declaration: dict[str, Any],
+    container_app_resource_id: str,
+    repository_root: Path,
+) -> dict[str, dict[str, Any]]:
+    """Load one digest-bound Container App revision-list response."""
+    _require(
+        declaration["source"] == "azure-container-app-revision-list",
+        "revision state source is not the Azure revision list",
+    )
+    raw_path = _resolve_evidence_file(
+        repository_root,
+        declaration["rawResultFile"],
+    )
+    _require(
+        _sha256(raw_path) == declaration["rawResultSha256"],
+        "revision-list raw-result digest differs",
+    )
+    raw_revisions = _load_json_array(raw_path)
+    states: dict[str, dict[str, Any]] = {}
+    expected_id_prefix = (
+        f"{container_app_resource_id.rstrip('/')}/revisions/".casefold()
+    )
+    for index, value in enumerate(raw_revisions):
+        if not isinstance(value, dict):
+            raise ValueError(f"raw revision {index} must be an object")
+        name = value.get("name")
+        resource_id = value.get("id")
+        properties = value.get("properties")
+        if (
+            not isinstance(name, str)
+            or not name
+            or not isinstance(resource_id, str)
+            or not resource_id.casefold().startswith(expected_id_prefix)
+            or not isinstance(properties, dict)
+        ):
+            raise ValueError(
+                f"raw revision {index} lacks exact Container App identity"
+            )
+        active = properties.get("active")
+        health_state = properties.get("healthState")
+        traffic_weight = properties.get("trafficWeight")
+        template = properties.get("template")
+        containers = (
+            template.get("containers")
+            if isinstance(template, dict)
+            else None
+        )
+        if (
+            not isinstance(active, bool)
+            or not isinstance(health_state, str)
+            or isinstance(traffic_weight, bool)
+            or not isinstance(traffic_weight, int)
+            or not isinstance(containers, list)
+            or not containers
+            or not all(
+                isinstance(container, dict)
+                and isinstance(container.get("image"), str)
+                and container["image"]
+                for container in containers
+            )
+        ):
+            raise ValueError(f"raw revision {index} has invalid state fields")
+        if name in states:
+            raise ValueError(f"raw revision name is duplicated: {name}")
+        states[name] = {
+            "active": active,
+            "healthState": health_state,
+            "trafficWeight": traffic_weight,
+            "images": [container["image"] for container in containers],
+        }
+    return states
 
 
 def _validate_cicd(
@@ -829,6 +1071,29 @@ def _validate_cicd(
         workflow["file"] == expected_workflow,
         "workflow file differs from the handoff stack",
     )
+    _require(
+        workflow["handoffFile"] == "evidence/modernization-contract.json",
+        "workflow handoff path differs from the frozen control input",
+    )
+    _require(
+        workflow["headSha"] != handoff["source"]["commitSha"],
+        "workflow control SHA must differ from the handoff source commit",
+    )
+    handoff_path = _resolve_evidence_file(
+        repository_root,
+        workflow["handoffFile"],
+    )
+    control_handoff = _read_control_commit_blob(
+        repository_root,
+        workflow["headSha"],
+        workflow["handoffFile"],
+    )
+    _require(
+        workflow["handoffSha256"] == _sha256(handoff_path)
+        and workflow["handoffSha256"]
+        == hashlib.sha256(control_handoff).hexdigest(),
+        "workflow handoff digest differs from the control-commit blob",
+    )
     workflow_observation = _load_observation(
         repository_root,
         workflow["resultFile"],
@@ -849,12 +1114,16 @@ def _validate_cicd(
             "observed GitHub workflow path differs",
         ),
         (
-            workflow_observation.head_sha == handoff["source"]["commitSha"],
-            "observed GitHub workflow head SHA differs from handoff",
+            workflow_observation.head_sha == workflow["headSha"],
+            "observed GitHub workflow head SHA differs from control commit",
         ),
         (
             workflow_observation.ref == workflow["ref"],
             "observed GitHub workflow ref differs",
+        ),
+        (
+            workflow_observation.event == workflow["event"],
+            "observed GitHub workflow event differs",
         ),
     ):
         _require(passed, message)
@@ -893,10 +1162,12 @@ def _validate_cicd(
         "workflow identity and handoff resources must share one subscription",
     )
     role_enumeration = identity["roleAssignmentEnumeration"]
+    expected_subscription_id = expected_subscription_scope.split("/")[2]
     _require(
         role_enumeration["assigneeObjectId"].casefold()
         == identity["principalId"].casefold()
-        and _same_resource(role_enumeration["scope"], expected_subscription_scope),
+        and role_enumeration["subscriptionId"].casefold()
+        == expected_subscription_id.casefold(),
         "declared role assignment enumeration differs from the workflow principal",
     )
     for environment in ("staging", "production"):
@@ -984,13 +1255,17 @@ def _validate_cicd(
     ):
         _require(passed, message)
     observed_enumeration = identity_observation.role_assignment_enumeration
+    declared_enumeration = RoleAssignmentEnumerationObservation.model_validate(
+        role_enumeration
+    )
     _require(
-        observed_enumeration.assignee_object_id.casefold()
+        observed_enumeration == declared_enumeration
+        and observed_enumeration.assignee_object_id.casefold()
         == identity["principalId"].casefold()
-        and _same_resource(
-            observed_enumeration.scope,
-            expected_subscription_scope,
-        ),
+        and observed_enumeration.subscription_id.casefold()
+        == expected_subscription_id.casefold()
+        and observed_enumeration.performed_at
+        == identity_observation.observed_at,
         "observed role assignment enumeration differs from the workflow principal",
     )
     observed_credentials = {
@@ -1057,6 +1332,11 @@ def _validate_cicd(
     _require(
         observed_roles == expected_roles,
         "observed role assignments do not bind exact roles and scopes to the workflow principal",
+    )
+    _validate_role_assignment_raw_capture(
+        observed_enumeration,
+        identity_observation,
+        repository_root,
     )
 
     build = _load_observation(
@@ -1227,6 +1507,7 @@ def _validate_cicd(
     )
 
     traffic_observations: dict[str, TrafficObservation] = {}
+    raw_revision_states: dict[str, dict[str, dict[str, Any]]] = {}
     expected_weights = {
         "before": (100, 0),
         "promotion": (0, 100),
@@ -1240,6 +1521,12 @@ def _validate_cicd(
             TrafficObservation,
         )
         traffic_observations[stage] = observation
+        stage_states = _load_revision_states(
+            declaration,
+            handoff["application"]["resourceId"],
+            repository_root,
+        )
+        raw_revision_states[stage] = stage_states
         _require_workflow_binding(observation, workflow_observation)
         _require(
             str(observation.run_id) == workflow["runId"]
@@ -1285,10 +1572,75 @@ def _validate_cicd(
             == handoff["application"]["readinessUrl"].rstrip("/"),
             f"{stage} health checks target different application endpoints",
         )
+        _require(
+            revisions["previous"] in stage_states
+            and revisions["candidate"] in stage_states,
+            f"{stage} raw revision list omits a retained revision",
+        )
+        previous_state = stage_states[revisions["previous"]]
+        candidate_state = stage_states[revisions["candidate"]]
+        _require(
+            previous_state["active"] == observation.previous_active
+            and previous_state["healthState"]
+            == observation.previous_health_state
+            and previous_state["trafficWeight"]
+            == observation.previous_weight
+            and candidate_state["active"] == observation.candidate_active
+            and candidate_state["healthState"]
+            == observation.candidate_health_state
+            and candidate_state["trafficWeight"]
+            == observation.candidate_weight,
+            f"{stage} normalized revision state differs from raw Azure output",
+        )
+        _require(
+            image["reference"] in candidate_state["images"],
+            f"{stage} candidate image differs from raw Azure output",
+        )
 
     before = traffic_observations["before"]
     promotion = traffic_observations["promotion"]
     rollback = traffic_observations["rollback"]
+    safety_declaration = evidence["traffic"]["safety"]
+    safety = _load_observation(
+        repository_root,
+        safety_declaration["resultFile"],
+        RollbackSafetyObservation,
+    )
+    _require_workflow_binding(safety, workflow_observation)
+    _require(
+        str(safety.run_id) == workflow["runId"]
+        and safety.run_attempt == workflow["runAttempt"],
+        "rollback safety workflow attempt differs",
+    )
+    for field, actual in (
+        ("mechanism", safety.mechanism),
+        ("guardInstalledAt", safety.guard_installed_at),
+        ("promotionAttemptedAt", safety.promotion_attempted_at),
+        ("rollbackAttemptedAt", safety.rollback_attempted_at),
+        ("rollbackCompletedAt", safety.rollback_completed_at),
+        ("executesOnFailure", safety.executes_on_failure),
+        ("promotionSucceeded", safety.promotion_succeeded),
+        ("rollbackSucceeded", safety.rollback_succeeded),
+    ):
+        expected = safety_declaration[field]
+        if isinstance(actual, datetime):
+            expected = _parse_time(expected)
+        _require(
+            actual == expected,
+            f"rollback safety {field} differs",
+        )
+    before_candidate_state = raw_revision_states["before"][
+        revisions["candidate"]
+    ]
+    _require(
+        candidate.active == before_candidate_state["active"]
+        and candidate.health_state == before_candidate_state["healthState"]
+        and candidate.traffic_weight
+        == before_candidate_state["trafficWeight"]
+        and candidate.image_reference
+        in before_candidate_state["images"],
+        "candidate observation differs from pre-promotion raw revision state",
+    )
     staging = workflow["jobs"]["staging"]
     production = workflow["jobs"]["production"]
     staging_start = datetime.fromisoformat(staging["startedAt"].replace("Z", "+00:00"))
@@ -1300,14 +1652,18 @@ def _validate_cicd(
         production["completedAt"].replace("Z", "+00:00")
     )
     _require(
-        staging_start < staging_end <= production_start < production_end,
-        "staging and production job windows overlap or are out of order",
+        staging_start
+        < staging_end
+        <= approval.approved_at
+        <= production_start
+        < production_end,
+        "staging, approval, and production windows are out of order",
     )
     _require(
-        staging_start
+        production_end
         <= identity_observation.observed_at
-        <= production_end,
-        "OIDC and RBAC observation falls outside the workflow run",
+        <= _parse_time(evidence["capturedAt"]),
+        "CI/CD report was captured before post-run evidence",
     )
     _require(
         staging_start
@@ -1319,28 +1675,44 @@ def _validate_cicd(
     )
     _require(
         production_start
-        <= approval.approved_at
+        <= safety.guard_installed_at
+        <= safety.promotion_attempted_at
         <= promotion.observed_at
-        < rollback.observed_at
+        < safety.rollback_attempted_at
+        <= rollback.observed_at
+        <= safety.rollback_completed_at
         <= production_end,
-        "approval, promotion, or rollback falls outside the production job",
+        "promotion and fail-safe rollback fall outside the production job",
     )
     _require(
         build.completed_at
         <= candidate.observed_at
         <= smoke.observed_at
-        < approval.approved_at
+        <= before.observed_at
+        <= staging_end
+        <= approval.approved_at
+        <= production_start
+        <= safety.guard_installed_at
+        <= safety.promotion_attempted_at
         <= promotion.observed_at
-        < rollback.observed_at,
+        < safety.rollback_attempted_at
+        <= rollback.observed_at
+        <= safety.rollback_completed_at,
         "CI/CD observations violate build-smoke-approval-promotion-rollback order",
     )
     _require(
-        smoke.observed_at <= before.observed_at <= approval.approved_at,
+        smoke.observed_at <= before.observed_at <= staging_end,
         "pre-promotion traffic was not observed before approval",
     )
     _require(
-        max(rollback.observed_at, production_end)
+        production_end
         <= workflow_observation.captured_at
+        <= _parse_time(evidence["capturedAt"])
+        and max(
+            safety.rollback_completed_at,
+            identity_observation.observed_at,
+            workflow_observation.captured_at,
+        )
         <= _parse_time(evidence["capturedAt"]),
         "CI/CD report was captured before rollback evidence",
     )
@@ -1683,7 +2055,7 @@ def validate_shared_challenge_evidence(
     _validate_schema(evidence, kind, contracts)
     _validate_referenced_files(evidence, root)
     if kind == "load":
-        _validate_load(evidence, handoff, root)
+        _validate_load(evidence, handoff, root, safe_handoff_path)
     elif kind == "cicd":
         _validate_cicd(evidence, handoff, root)
     else:

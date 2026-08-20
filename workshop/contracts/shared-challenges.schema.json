@@ -10,13 +10,15 @@
     "coordinatorOwnedFiles",
     "challenges",
     "cicdIdentity",
+    "cicdProtocol",
     "loadSignals",
+    "loadEvidenceProtocol",
     "observabilityPanels",
     "observabilityMetrics"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.1.0"
+      "const": "1.2.0"
     },
     "consumes": {
       "type": "object",
@@ -55,8 +57,19 @@
         "workshop/contracts/README.md",
         "workshop/contracts/shared-challenges.json",
         "workshop/contracts/shared-challenges.schema.json",
+        "workshop/contracts/load-evidence-capture.schema.json",
+        "workshop/contracts/load-evidence-capture.example.json",
         "workshop/contracts/load-test-evidence.schema.json",
         "workshop/contracts/load-test-evidence.example.json",
+        "workshop/contracts/fixtures/cicd/before-revisions.json",
+        "workshop/contracts/fixtures/cicd/promotion-revisions.json",
+        "workshop/contracts/fixtures/cicd/role-assignments.json",
+        "workshop/contracts/fixtures/cicd/rollback-revisions.json",
+        "workshop/contracts/fixtures/load/azure-sql.json",
+        "workshop/contracts/fixtures/load/container-app.json",
+        "workshop/contracts/fixtures/load/postgresql.json",
+        "workshop/contracts/fixtures/load/replicas.json",
+        "workshop/contracts/fixtures/load/test-run.json",
         "workshop/contracts/cicd-evidence.schema.json",
         "workshop/contracts/cicd-evidence.example.json",
         "workshop/contracts/observability-evidence.schema.json",
@@ -66,9 +79,12 @@
         "tests/acceptance/pyproject.toml",
         "tests/acceptance/catalog_acceptance/models/__init__.py",
         "tests/acceptance/catalog_acceptance/models/shared_challenges.py",
+        "tests/acceptance/catalog_acceptance/load_evidence.py",
+        "tests/acceptance/catalog_acceptance/load_evidence_cli.py",
         "tests/acceptance/catalog_acceptance/shared_challenges.py",
         "tests/acceptance/catalog_acceptance/shared_challenges_cli.py",
-        "tests/acceptance/tests/test_p6_contracts.py"
+        "tests/acceptance/tests/test_p6_contracts.py",
+        "tests/acceptance/tests/test_p6_load_renderer.py"
       ]
     },
     "challenges": {
@@ -83,9 +99,12 @@
             "tests/load/load-test.yaml",
             "tests/acceptance/tests/test_p6_load_challenge.py"
           ],
+          "captureSchema": "workshop/contracts/load-evidence-capture.schema.json",
+          "captureExample": "workshop/contracts/load-evidence-capture.example.json",
           "evidenceSchema": "workshop/contracts/load-test-evidence.schema.json",
           "evidenceExample": "workshop/contracts/load-test-evidence.example.json",
           "evidenceOutput": "evidence/load-test-report.json",
+          "evidenceRenderCommand": "uv --no-config run catalog-render-load-evidence --capture ../../evidence/load/capture.json --handoff ../../evidence/modernization-contract.json --output ../../evidence/load-test-report.json --repository-root ../..",
           "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence load ../../evidence/load-test-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..",
           "validationCommand": "uv --no-config run pytest -q tests/test_p6_load_challenge.py"
         },
@@ -175,6 +194,31 @@
         }
       }
     },
+    "cicdProtocol": {
+      "const": {
+        "evidenceVersion": "1.1.0",
+        "trigger": "workflow_dispatch",
+        "workflowHead": "control-commit",
+        "handoffCheckout": "workflow-head",
+        "applicationCheckout": "handoff-source-commit",
+        "sourceIdentity": "handoff.source.commitSha",
+        "roleAudit": {
+          "executionBoundary": "facilitator-session",
+          "requiredPermission": "Microsoft.Authorization/roleAssignments/read",
+          "minimumBuiltInRole": "Reader",
+          "command": "az role assignment list --all --include-inherited --assignee-object-id <principal-id> --fill-principal-name false --fill-role-definition-name false --output json"
+        },
+        "approvalOrdering": [
+          "staging-complete",
+          "production-approved",
+          "production-started",
+          "promotion",
+          "rollback"
+        ],
+        "revisionStateSource": "azure-container-app-revision-list",
+        "rollbackGuard": "shell-trap"
+      }
+    },
     "loadSignals": {
       "const": {
         "testRun": {
@@ -201,6 +245,30 @@
           "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers",
           "metric": "cpu_percent",
           "aggregation": "Maximum"
+        }
+      }
+    },
+    "loadEvidenceProtocol": {
+      "const": {
+        "captureManifestVersion": "1.0.0",
+        "evidenceVersion": "1.1.0",
+        "renderer": "catalog-render-load-evidence",
+        "evidenceOutput": "evidence/load-test-report.json",
+        "testRun": {
+          "status": "DONE",
+          "virtualUsers": 40,
+          "durationSeconds": 300,
+          "maximumErrors": 0
+        },
+        "replicas": {
+          "aggregation": "Maximum",
+          "interval": "PT1M",
+          "dimension": "revisionName",
+          "requiredPhases": [
+            "baseline-one-before-load",
+            "scale-out-during-load",
+            "recovery-one-after-load"
+          ]
         }
       }
     },
@@ -299,6 +367,30 @@
         "evidenceOutput": {
           "type": "string",
           "pattern": "^evidence/[a-z0-9-]+\\.json$"
+        },
+        "captureSchema": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/repoPath"
+            },
+            {
+              "pattern": "^workshop/contracts/[a-z0-9-]+\\.schema\\.json$"
+            }
+          ]
+        },
+        "captureExample": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/repoPath"
+            },
+            {
+              "pattern": "^workshop/contracts/[a-z0-9-]+\\.example\\.json$"
+            }
+          ]
+        },
+        "evidenceRenderCommand": {
+          "type": "string",
+          "pattern": "^uv --no-config run catalog-render-load-evidence .+$"
         },
         "evidenceValidationCommand": {
           "type": "string",

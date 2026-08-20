@@ -125,6 +125,41 @@ The command fails if the acceptance report is not a full passing run or if the s
 stack, database family, corpus counts, image verification, application URL, service
 identity, environment, version, or revision differs across the bundle.
 
+## Shared challenge evidence
+
+Render Challenge 2 evidence from the digest-bound Azure capture manifest, then run the
+common handoff-aware validator:
+
+```bash
+uv --no-config run catalog-render-load-evidence \
+  --capture ../../evidence/load/capture.json \
+  --handoff ../../evidence/modernization-contract.json \
+  --output ../../evidence/load-test-report.json \
+  --repository-root ../..
+
+uv --no-config run catalog-validate-challenge-evidence load \
+  ../../evidence/load-test-report.json \
+  --handoff ../../evidence/modernization-contract.json \
+  --contracts ../../workshop/contracts \
+  --repository-root ../..
+```
+
+The renderer writes the report plus all five normalized observations. The validator
+recomputes them from the raw responses and rejects digest drift, missing metric values,
+delayed scale-out, or manually altered normalized output. CI/CD evidence uses the same
+common validator with `cicd` and requires a distinct workflow control SHA, an exact source
+checkout, facilitator-owned RBAC audit output, raw revision-list transitions, approval
+before production starts, and a rollback trap armed before promotion.
+
+Run the focused shared-contract gate with:
+
+```bash
+uv --no-config run pytest -q \
+  tests/test_contract_assets.py \
+  tests/test_p6_contracts.py \
+  tests/test_p6_load_renderer.py
+```
+
 All paths declared by a handoff are repository-root-relative. Runtime evidence must be
 native TRX or Surefire JUnit XML containing all fourteen frozen tests under their exact
 class-qualified native identities. Telemetry evidence must include normalized non-empty

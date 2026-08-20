@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import math
+from pathlib import PurePosixPath
 from typing import Literal
 
 from pydantic import (
@@ -34,8 +35,20 @@ class StrictObservation(StrictModel):
     schema_version: Literal["1.0.0"] = Field(alias="schemaVersion")
 
 
+class LoadObservation(StrictModel):
+    """Require the deterministic-renderer version on load observations."""
+
+    schema_version: Literal["1.1.0"] = Field(alias="schemaVersion")
+
+
 class ObservabilityObservation(StrictModel):
     """Require the post-refreeze version on observability observations."""
+
+    schema_version: Literal["1.1.0"] = Field(alias="schemaVersion")
+
+
+class CicdObservation(StrictModel):
+    """Require the corrected workflow protocol version on CI/CD observations."""
 
     schema_version: Literal["1.1.0"] = Field(alias="schemaVersion")
 
@@ -55,7 +68,7 @@ class MetricPoint(StrictModel):
         return value
 
 
-class MetricObservation(StrictObservation):
+class MetricObservation(LoadObservation):
     """Represent normalized Azure Monitor metric output for one resource."""
 
     resource_id: str = Field(alias="resourceId", pattern=r"^/subscriptions/")
@@ -80,7 +93,7 @@ class MetricObservation(StrictObservation):
         return self
 
 
-class LoadRunObservation(StrictObservation):
+class LoadRunObservation(LoadObservation):
     """Represent normalized Azure Load Testing run statistics."""
 
     resource_id: str = Field(
@@ -123,7 +136,7 @@ class LoadRunObservation(StrictObservation):
         return self
 
 
-class ScaleConfigurationObservation(StrictObservation):
+class ScaleConfigurationObservation(LoadObservation):
     """Represent the observed Container App autoscale configuration."""
 
     source: Literal["azure-resource-manager"]
@@ -141,7 +154,7 @@ class ScaleConfigurationObservation(StrictObservation):
     observed_at: AwareDatetime = Field(alias="observedAt")
 
 
-class HealthObservation(StrictObservation):
+class HealthObservation(LoadObservation):
     """Represent health and readiness checks against one deployed revision."""
 
     health_url: AnyHttpUrl = Field(alias="healthUrl")
@@ -152,7 +165,148 @@ class HealthObservation(StrictObservation):
     readiness_status: StrictInt = Field(alias="readinessStatus", ge=200, le=200)
 
 
-class WorkflowRunObservation(StrictObservation):
+def _validate_repository_file(value: str) -> str:
+    """Validate one normalized repository-relative capture path."""
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError("capture paths must be normalized repository-relative paths")
+    return value
+
+
+class LoadCaptureFile(StrictModel):
+    """Bind one raw Azure response to its repository path and digest."""
+
+    file: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    _validate_file = field_validator("file")(_validate_repository_file)
+
+
+class LoadRunCapture(LoadCaptureFile):
+    """Describe the raw Azure Load Testing run response."""
+
+    resource_id: str = Field(alias="resourceId", pattern=r"^/subscriptions/")
+
+
+class LoadScaleCapture(LoadCaptureFile):
+    """Describe the raw Container App scale-configuration response."""
+
+    observed_at: AwareDatetime = Field(alias="observedAt")
+
+
+class LoadMetricCapture(LoadCaptureFile):
+    """Describe one bounded Azure Monitor metric response."""
+
+    resource_id: str = Field(alias="resourceId", pattern=r"^/subscriptions/")
+    metric_name: str = Field(alias="metricName", min_length=1)
+    aggregation: Literal["Maximum", "Total"]
+    interval: Literal["PT1M"]
+    start: AwareDatetime
+    end: AwareDatetime
+    revision_name: str | None = Field(
+        default=None,
+        alias="revisionName",
+        min_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_window(self) -> "LoadMetricCapture":
+        """Require a forward metric query interval."""
+        if self.end <= self.start:
+            raise ValueError("metric capture end must be later than start")
+        return self
+
+
+class LoadRecoveryCapture(StrictModel):
+    """Capture the post-load health and readiness observation."""
+
+    observed_at: AwareDatetime = Field(alias="observedAt")
+    health_url: AnyHttpUrl = Field(alias="healthUrl")
+    health_status: Literal[200] = Field(alias="healthStatus")
+    readiness_url: AnyHttpUrl = Field(alias="readinessUrl")
+    readiness_status: Literal[200] = Field(alias="readinessStatus")
+
+
+class LoadArtifactCapture(StrictModel):
+    """Bind the checked-in Azure Load Testing and JMeter inputs."""
+
+    configuration_file: str = Field(alias="configurationFile")
+    configuration_sha256: str = Field(
+        alias="configurationSha256",
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    jmeter_file: str = Field(alias="jmeterFile")
+    jmeter_sha256: str = Field(alias="jmeterSha256", pattern=r"^[0-9a-f]{64}$")
+
+    _validate_configuration_file = field_validator("configuration_file")(
+        _validate_repository_file
+    )
+    _validate_jmeter_file = field_validator("jmeter_file")(
+        _validate_repository_file
+    )
+
+
+class LoadEvidenceCapture(StrictModel):
+    """Define trusted inputs for deterministic load evidence rendering."""
+
+    schema_version: Literal["1.0.0"] = Field(alias="schemaVersion")
+    captured_at: AwareDatetime = Field(alias="capturedAt")
+    baseline_start: AwareDatetime = Field(alias="baselineStart")
+    test_run: LoadRunCapture = Field(alias="testRun")
+    scale_configuration: LoadScaleCapture = Field(alias="scaleConfiguration")
+    replicas: LoadMetricCapture
+    database_signal: LoadMetricCapture = Field(alias="databaseSignal")
+    recovery: LoadRecoveryCapture
+    artifacts: LoadArtifactCapture
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> "LoadEvidenceCapture":
+        """Enforce frozen metric identities and capture ordering."""
+        if (
+            self.replicas.metric_name != "Replicas"
+            or self.replicas.aggregation != "Maximum"
+            or self.replicas.revision_name is None
+        ):
+            raise ValueError(
+                "replicas must capture revision-filtered Replicas/Maximum/PT1M"
+            )
+        if (
+            (
+                self.database_signal.metric_name,
+                self.database_signal.aggregation,
+            )
+            not in {
+                ("app_cpu_billed", "Total"),
+                ("cpu_percent", "Maximum"),
+            }
+            or self.database_signal.revision_name is not None
+        ):
+            raise ValueError(
+                "databaseSignal must use a frozen family metric without a revision"
+            )
+        if self.scale_configuration.observed_at > self.baseline_start:
+            raise ValueError(
+                "scale configuration must be observed no later than baseline start"
+            )
+        if self.captured_at < self.recovery.observed_at:
+            raise ValueError("capturedAt must not precede recovery observedAt")
+        if len(
+            {
+                self.test_run.file,
+                self.scale_configuration.file,
+                self.replicas.file,
+                self.database_signal.file,
+            }
+        ) != 4:
+            raise ValueError("raw capture files must be distinct")
+        return self
+
+
+class WorkflowRunObservation(CicdObservation):
     """Bind a normalized CI/CD observation to one immutable workflow attempt."""
 
     run_id: StrictInt = Field(alias="runId", ge=1)
@@ -194,7 +348,7 @@ class GitHubRunObservation(WorkflowRunObservation):
 
     status: Literal["completed"]
     conclusion: Literal["success"]
-    event: Literal["push", "workflow_dispatch"]
+    event: Literal["workflow_dispatch"]
     jobs: list[WorkflowJobObservation] = Field(min_length=2, max_length=2)
     captured_at: AwareDatetime = Field(alias="capturedAt")
 
@@ -276,10 +430,30 @@ class RoleAssignmentEnumerationObservation(StrictModel):
             r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         ),
     )
-    scope: str = Field(
-        pattern=r"^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-"
-        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    execution_boundary: Literal["facilitator-session"] = Field(
+        alias="executionBoundary"
     )
+    subscription_id: str = Field(
+        alias="subscriptionId",
+        pattern=(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        ),
+    )
+    required_permission: Literal[
+        "Microsoft.Authorization/roleAssignments/read"
+    ] = Field(alias="requiredPermission")
+    minimum_built_in_role: Literal["Reader"] = Field(alias="minimumBuiltInRole")
+    command: str = Field(min_length=1)
+    raw_result_file: str = Field(
+        alias="rawResultFile",
+        pattern=r"^evidence/cicd/[a-z0-9-]+\.raw\.json$",
+    )
+    raw_result_sha256: str = Field(
+        alias="rawResultSha256",
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    performed_at: AwareDatetime = Field(alias="performedAt")
     all_assignments: StrictBool = Field(alias="all")
     include_inherited: StrictBool = Field(alias="includeInherited")
     fill_principal_name: StrictBool = Field(alias="fillPrincipalName")
@@ -298,6 +472,16 @@ class RoleAssignmentEnumerationObservation(StrictModel):
         ):
             raise ValueError(
                 "role assignment enumeration must be complete and unfiltered"
+            )
+        expected_command = (
+            "az role assignment list --all --include-inherited "
+            f"--assignee-object-id {self.assignee_object_id} "
+            "--fill-principal-name false --fill-role-definition-name false "
+            "--output json"
+        )
+        if self.command != expected_command:
+            raise ValueError(
+                "role assignment enumeration command differs from the frozen CLI"
             )
         return self
 
@@ -436,6 +620,31 @@ class TrafficObservation(WorkflowRunObservation):
         """Require the two declared revision weights to account for all traffic."""
         if self.previous_weight + self.candidate_weight != 100:
             raise ValueError("revision traffic weights must total 100")
+        return self
+
+
+class RollbackSafetyObservation(WorkflowRunObservation):
+    """Represent the fail-safe promotion and rollback lifecycle."""
+
+    mechanism: Literal["shell-trap"]
+    guard_installed_at: AwareDatetime = Field(alias="guardInstalledAt")
+    promotion_attempted_at: AwareDatetime = Field(alias="promotionAttemptedAt")
+    rollback_attempted_at: AwareDatetime = Field(alias="rollbackAttemptedAt")
+    rollback_completed_at: AwareDatetime = Field(alias="rollbackCompletedAt")
+    executes_on_failure: Literal[True] = Field(alias="executesOnFailure")
+    promotion_succeeded: Literal[True] = Field(alias="promotionSucceeded")
+    rollback_succeeded: Literal[True] = Field(alias="rollbackSucceeded")
+
+    @model_validator(mode="after")
+    def validate_lifecycle(self) -> "RollbackSafetyObservation":
+        """Require the guard before promotion and a completed rollback after it."""
+        if not (
+            self.guard_installed_at
+            <= self.promotion_attempted_at
+            < self.rollback_attempted_at
+            <= self.rollback_completed_at
+        ):
+            raise ValueError("rollback safety lifecycle timestamps are out of order")
         return self
 
 

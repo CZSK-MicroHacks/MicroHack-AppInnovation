@@ -19,7 +19,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "capturedAt": {
       "type": "string",
@@ -33,10 +33,14 @@
       "additionalProperties": false,
       "required": [
         "file",
+        "headSha",
+        "handoffFile",
+        "handoffSha256",
         "runId",
         "runAttempt",
         "repository",
         "ref",
+        "event",
         "jobs",
         "resultFile"
       ],
@@ -46,6 +50,17 @@
             ".github/workflows/catalog-dotnet.yml",
             ".github/workflows/catalog-java.yml"
           ]
+        },
+        "headSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "handoffFile": {
+          "const": "evidence/modernization-contract.json"
+        },
+        "handoffSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         },
         "runId": {
           "type": "string",
@@ -62,6 +77,9 @@
         "ref": {
           "type": "string",
           "pattern": "^refs/(?:heads|tags)/.+$"
+        },
+        "event": {
+          "const": "workflow_dispatch"
         },
         "resultFile": {
           "$ref": "#/$defs/evidencePath"
@@ -193,7 +211,14 @@
           "additionalProperties": false,
           "required": [
             "assigneeObjectId",
-            "scope",
+            "executionBoundary",
+            "subscriptionId",
+            "requiredPermission",
+            "minimumBuiltInRole",
+            "command",
+            "rawResultFile",
+            "rawResultSha256",
+            "performedAt",
             "all",
             "includeInherited",
             "fillPrincipalName",
@@ -204,9 +229,33 @@
             "assigneeObjectId": {
               "$ref": "#/$defs/uuid"
             },
-            "scope": {
+            "executionBoundary": {
+              "const": "facilitator-session"
+            },
+            "subscriptionId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "requiredPermission": {
+              "const": "Microsoft.Authorization/roleAssignments/read"
+            },
+            "minimumBuiltInRole": {
+              "const": "Reader"
+            },
+            "command": {
               "type": "string",
-              "pattern": "^/subscriptions/[0-9a-fA-F-]{36}$"
+              "pattern": "^az role assignment list --all --include-inherited --assignee-object-id [0-9a-fA-F-]{36} --fill-principal-name false --fill-role-definition-name false --output json$"
+            },
+            "rawResultFile": {
+              "type": "string",
+              "pattern": "^evidence/cicd/[a-z0-9-]+\\.raw\\.json$"
+            },
+            "rawResultSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "performedAt": {
+              "type": "string",
+              "format": "date-time"
             },
             "all": {
               "const": true
@@ -377,7 +426,8 @@
       "required": [
         "before",
         "promotion",
-        "rollback"
+        "rollback",
+        "safety"
       ],
       "properties": {
         "before": {
@@ -388,6 +438,9 @@
         },
         "rollback": {
           "$ref": "#/$defs/previousTraffic"
+        },
+        "safety": {
+          "$ref": "#/$defs/rollbackSafety"
         }
       }
     },
@@ -400,7 +453,11 @@
         "approvalPrecededPromotion",
         "promotionVerified",
         "rollbackVerified",
-        "previousRevisionRetained"
+        "previousRevisionRetained",
+        "sourceCommitCheckedOut",
+        "roleAuditExternal",
+        "revisionStateObserved",
+        "rollbackGuardArmed"
       ],
       "properties": {
         "immutableImage": {
@@ -419,6 +476,18 @@
           "const": true
         },
         "previousRevisionRetained": {
+          "const": true
+        },
+        "sourceCommitCheckedOut": {
+          "const": true
+        },
+        "roleAuditExternal": {
+          "const": true
+        },
+        "revisionStateObserved": {
+          "const": true
+        },
+        "rollbackGuardArmed": {
           "const": true
         }
       }
@@ -533,6 +602,9 @@
         "previous",
         "candidate",
         "observedAt",
+        "source",
+        "rawResultFile",
+        "rawResultSha256",
         "resultFile"
       ],
       "properties": {
@@ -545,6 +617,17 @@
         "observedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "source": {
+          "const": "azure-container-app-revision-list"
+        },
+        "rawResultFile": {
+          "type": "string",
+          "pattern": "^evidence/cicd/[a-z0-9-]+\\.raw\\.json$"
+        },
+        "rawResultSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         },
         "resultFile": {
           "$ref": "#/$defs/evidencePath"
@@ -558,6 +641,9 @@
         "previous",
         "candidate",
         "observedAt",
+        "source",
+        "rawResultFile",
+        "rawResultSha256",
         "resultFile"
       ],
       "properties": {
@@ -570,6 +656,65 @@
         "observedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "source": {
+          "const": "azure-container-app-revision-list"
+        },
+        "rawResultFile": {
+          "type": "string",
+          "pattern": "^evidence/cicd/[a-z0-9-]+\\.raw\\.json$"
+        },
+        "rawResultSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "resultFile": {
+          "$ref": "#/$defs/evidencePath"
+        }
+      }
+    },
+    "rollbackSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism",
+        "guardInstalledAt",
+        "promotionAttemptedAt",
+        "rollbackAttemptedAt",
+        "rollbackCompletedAt",
+        "executesOnFailure",
+        "promotionSucceeded",
+        "rollbackSucceeded",
+        "resultFile"
+      ],
+      "properties": {
+        "mechanism": {
+          "const": "shell-trap"
+        },
+        "guardInstalledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "promotionAttemptedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "rollbackAttemptedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "rollbackCompletedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "executesOnFailure": {
+          "const": true
+        },
+        "promotionSucceeded": {
+          "const": true
+        },
+        "rollbackSucceeded": {
+          "const": true
         },
         "resultFile": {
           "$ref": "#/$defs/evidencePath"

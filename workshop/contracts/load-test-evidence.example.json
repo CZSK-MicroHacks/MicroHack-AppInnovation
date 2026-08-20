@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "capturedAt": "2026-08-20T12:15:00Z",
   "subject": {
     "sliceId": "manual-dotnet",
@@ -8,19 +8,23 @@
     "sourceCommit": "0000000000000000000000000000000000000000",
     "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "revisionName": "ca-mh-example--release-000000000000",
-    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
-    "databaseResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog"
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "databaseResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog"
+  },
+  "capture": {
+    "manifestFile": "evidence/load/capture.json",
+    "manifestSha256": "2197e9a22c432314e66989a7961d92602b91313bcbcd6ddb3e0806a8af678af9"
   },
   "windows": {
-    "baselineStart": "2026-08-20T11:55:00Z",
+    "baselineStart": "2026-08-20T11:50:00Z",
     "loadStart": "2026-08-20T12:00:00Z",
     "loadEnd": "2026-08-20T12:05:00Z",
     "recoveryEnd": "2026-08-20T12:15:00Z"
   },
   "testRun": {
-    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.LoadTestService/loadTests/lt-example",
-    "testId": "catalog-autoscaling",
-    "testRunId": "catalog-autoscaling-000001",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.LoadTestService/loadTests/lt-mh-example",
+    "testId": "catalog-dotnet",
+    "testRunId": "catalog-dotnet-run-000001",
     "configurationFile": "tests/load/load-test.yaml",
     "configurationSha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "jmeterFile": "tests/load/catalog-load.jmx",
@@ -37,18 +41,18 @@
   },
   "scaleConfiguration": {
     "source": "azure-resource-manager",
-    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
     "revisionName": "ca-mh-example--release-000000000000",
     "minimumReplicas": 1,
     "maximumReplicas": 3,
     "ruleName": "http",
     "ruleType": "http",
     "concurrentRequests": 50,
-    "observedAt": "2026-08-20T11:54:00Z",
+    "observedAt": "2026-08-20T11:49:00Z",
     "resultFile": "evidence/load/scale-configuration.json"
   },
   "replicas": {
-    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
     "metric": "Replicas",
     "minimumConfigured": 1,
     "maximumConfigured": 3,
@@ -57,12 +61,12 @@
     "resultFile": "evidence/load/replicas.json"
   },
   "databaseSignal": {
-    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
     "family": "azure-sql",
     "metric": "app_cpu_billed",
     "aggregation": "Total",
-    "baseline": 0,
-    "peak": 120,
+    "baseline": 4,
+    "peak": 12,
     "unit": "count",
     "resultFile": "evidence/load/database.json"
   },

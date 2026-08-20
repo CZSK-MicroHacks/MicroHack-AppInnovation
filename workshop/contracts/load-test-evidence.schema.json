@@ -8,6 +8,7 @@
     "schemaVersion",
     "capturedAt",
     "subject",
+    "capture",
     "windows",
     "testRun",
     "scaleConfiguration",
@@ -18,7 +19,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "capturedAt": {
       "type": "string",
@@ -26,6 +27,23 @@
     },
     "subject": {
       "$ref": "#/$defs/subject"
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestFile",
+        "manifestSha256"
+      ],
+      "properties": {
+        "manifestFile": {
+          "const": "evidence/load/capture.json"
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "windows": {
       "type": "object",

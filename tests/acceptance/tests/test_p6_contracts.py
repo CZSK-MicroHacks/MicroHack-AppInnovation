@@ -6,6 +6,7 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import subprocess
 from typing import Any
 
 import pytest
@@ -24,6 +25,46 @@ def _validate(schema: dict, instance: object) -> None:
 def _contracts(repo_root: Path) -> Path:
     """Return the repository contract directory."""
     return repo_root / "workshop/contracts"
+
+
+def _commit_control_handoff(repository_root: Path, handoff_path: Path) -> str:
+    """Commit the synthetic handoff and return its immutable control SHA."""
+    subprocess.run(
+        ["git", "-C", str(repository_root), "init", "--quiet"],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository_root),
+            "add",
+            str(handoff_path.relative_to(repository_root)),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository_root),
+            "-c",
+            "user.name=Contract Test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "Add control handoff",
+        ],
+        check=True,
+    )
+    return subprocess.run(
+        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -80,9 +121,7 @@ def _normalized_observations(
     handoff: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """Build normalized observations for one schema-valid P6 example."""
-    version = {
-        "schemaVersion": "1.1.0" if kind == "observability" else "1.0.0"
-    }
+    version = {"schemaVersion": "1.1.0"}
     if kind == "load":
         return {
             evidence["testRun"]["resultFile"]: {
@@ -105,7 +144,7 @@ def _normalized_observations(
                 "failedRequests": 0,
                 "virtualUsers": evidence["testRun"]["virtualUsers"],
                 "durationSeconds": evidence["testRun"]["durationSeconds"],
-                "capturedAt": "2026-08-20T12:06:00Z",
+                "capturedAt": evidence["capturedAt"],
             },
             evidence["scaleConfiguration"]["resultFile"]: {
                 **version,
@@ -126,7 +165,7 @@ def _normalized_observations(
                 "resourceId": handoff["application"]["resourceId"],
                 "metric": "Replicas",
                 "aggregation": "Maximum",
-                "startTime": "2026-08-20T11:55:00Z",
+                "startTime": "2026-08-20T11:50:00Z",
                 "endTime": "2026-08-20T12:15:00Z",
                 "points": [
                     {"timestamp": "2026-08-20T11:59:00Z", "value": 1},
@@ -140,11 +179,17 @@ def _normalized_observations(
                 "resourceId": handoff["database"]["resourceId"],
                 "metric": "app_cpu_billed",
                 "aggregation": "Total",
-                "startTime": "2026-08-20T11:55:00Z",
+                "startTime": "2026-08-20T11:50:00Z",
                 "endTime": "2026-08-20T12:15:00Z",
                 "points": [
-                    {"timestamp": "2026-08-20T11:59:00Z", "value": 0},
-                    {"timestamp": "2026-08-20T12:03:00Z", "value": 120},
+                    {
+                        "timestamp": "2026-08-20T11:59:00Z",
+                        "value": evidence["databaseSignal"]["baseline"],
+                    },
+                    {
+                        "timestamp": "2026-08-20T12:03:00Z",
+                        "value": evidence["databaseSignal"]["peak"],
+                    },
                 ],
             },
             evidence["recovery"]["resultFile"]: {
@@ -152,7 +197,7 @@ def _normalized_observations(
                 "healthUrl": handoff["application"]["healthUrl"],
                 "readinessUrl": handoff["application"]["readinessUrl"],
                 "revisionName": handoff["application"]["revisionName"],
-                "observedAt": "2026-08-20T12:10:00Z",
+                "observedAt": evidence["windows"]["recoveryEnd"],
                 "healthStatus": 200,
                 "readinessStatus": 200,
             },
@@ -167,7 +212,7 @@ def _normalized_observations(
             "runAttempt": evidence["workflow"]["runAttempt"],
             "githubRepository": evidence["workflow"]["repository"],
             "workflowPath": evidence["workflow"]["file"],
-            "headSha": handoff["source"]["commitSha"],
+            "headSha": evidence["workflow"]["headSha"],
             "ref": evidence["workflow"]["ref"],
         }
 
@@ -218,7 +263,7 @@ def _normalized_observations(
                     }
                     for environment in ("staging", "production")
                 ],
-                "capturedAt": "2026-08-20T13:30:00Z",
+                "capturedAt": "2026-08-20T13:31:00Z",
             },
             evidence["identity"]["resultFile"]: {
                 **run_binding,
@@ -283,7 +328,9 @@ def _normalized_observations(
                         "scope": evidence["identity"]["containerAppScope"],
                     },
                 ],
-                "observedAt": "2026-08-20T12:31:00Z",
+                "observedAt": evidence["identity"][
+                    "roleAssignmentEnumeration"
+                ]["performedAt"],
             },
             evidence["image"]["resultFile"]: {
                 **run_binding,
@@ -335,6 +382,14 @@ def _normalized_observations(
             evidence["traffic"]["rollback"]["resultFile"]: traffic(
                 100, 0, evidence["traffic"]["rollback"]["observedAt"]
             ),
+            evidence["traffic"]["safety"]["resultFile"]: {
+                **run_binding,
+                **{
+                    key: value
+                    for key, value in evidence["traffic"]["safety"].items()
+                    if key != "resultFile"
+                },
+            },
         }
     serialized_data = _serialized_workbook(evidence)
     observations: dict[str, dict[str, Any]] = {
@@ -403,6 +458,275 @@ def _normalized_observations(
             "rows": [row],
         }
     return observations
+
+
+def _materialize_load_capture(
+    repository_root: Path,
+    evidence: dict[str, Any],
+    handoff: dict[str, Any],
+    observations: dict[str, dict[str, Any]],
+) -> None:
+    """Create raw Azure responses and their digest-bound capture manifest."""
+    raw_directory = repository_root / "evidence/load/raw"
+    run = observations[evidence["testRun"]["resultFile"]]
+    scale = observations[evidence["scaleConfiguration"]["resultFile"]]
+    replicas = observations[evidence["replicas"]["resultFile"]]
+    database = observations[evidence["databaseSignal"]["resultFile"]]
+
+    raw_documents = {
+        "test-run.json": {
+            "testRunId": run["testRunId"],
+            "testId": run["testId"],
+            "status": "DONE",
+            "executionStartDateTime": run["startedAt"],
+            "executionEndDateTime": run["completedAt"],
+            "duration": run["durationSeconds"] * 1000,
+            "virtualUsers": run["virtualUsers"],
+            "testRunStatistics": {
+                "Total": {
+                    "sampleCount": run["totalRequests"],
+                    "errorCount": run["failedRequests"],
+                }
+            },
+        },
+        "container-app.json": {
+            "id": handoff["application"]["resourceId"],
+            "type": "Microsoft.App/containerApps",
+            "etag": scale["etag"],
+            "properties": {
+                "provisioningState": scale["provisioningState"],
+                "latestReadyRevisionName": handoff["application"]["revisionName"],
+                "template": {
+                    "scale": {
+                        "minReplicas": scale["minimumReplicas"],
+                        "maxReplicas": scale["maximumReplicas"],
+                        "rules": [
+                            {
+                                "name": scale["ruleName"],
+                                "http": {
+                                    "metadata": {
+                                        "concurrentRequests": str(
+                                            scale["concurrentRequests"]
+                                        )
+                                    }
+                                },
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    }
+
+    def metric_response(
+        observation: dict[str, Any],
+        unit: str,
+        revision_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Build one representative Azure Monitor metric response."""
+        metric = observation["metric"]
+        aggregation = observation["aggregation"].casefold()
+        metadata = (
+            [
+                {
+                    "name": {
+                        "value": "revisionName",
+                        "localizedValue": "Revision Name",
+                    },
+                    "value": revision_name,
+                }
+            ]
+            if revision_name is not None
+            else []
+        )
+        return {
+            "cost": 1,
+            "timespan": (
+                f"{observation['startTime']}/{observation['endTime']}"
+            ),
+            "interval": "PT1M",
+            "value": [
+                {
+                    "id": (
+                        f"{observation['resourceId']}/providers/"
+                        f"Microsoft.Insights/metrics/{metric}"
+                    ),
+                    "type": "Microsoft.Insights/metrics",
+                    "name": {
+                        "value": metric,
+                        "localizedValue": metric,
+                    },
+                    "unit": unit,
+                    "timeseries": [
+                        {
+                            "metadatavalues": metadata,
+                            "data": [
+                                {
+                                    "timeStamp": point["timestamp"],
+                                    aggregation: point["value"],
+                                }
+                                for point in observation["points"]
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    raw_documents["replicas.json"] = metric_response(
+        replicas,
+        "Count",
+        handoff["application"]["revisionName"],
+    )
+    raw_documents["database.json"] = metric_response(
+        database,
+        "Count"
+        if evidence["databaseSignal"]["unit"] == "count"
+        else "Percent",
+    )
+    raw_hashes: dict[str, str] = {}
+    for name, value in raw_documents.items():
+        path = raw_directory / name
+        _write_json(path, value)
+        raw_hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    capture = {
+        "schemaVersion": "1.0.0",
+        "capturedAt": evidence["capturedAt"],
+        "baselineStart": evidence["windows"]["baselineStart"],
+        "testRun": {
+            "file": "evidence/load/raw/test-run.json",
+            "sha256": raw_hashes["test-run.json"],
+            "resourceId": evidence["testRun"]["resourceId"],
+        },
+        "scaleConfiguration": {
+            "file": "evidence/load/raw/container-app.json",
+            "sha256": raw_hashes["container-app.json"],
+            "observedAt": evidence["scaleConfiguration"]["observedAt"],
+        },
+        "replicas": {
+            "file": "evidence/load/raw/replicas.json",
+            "sha256": raw_hashes["replicas.json"],
+            "resourceId": handoff["application"]["resourceId"],
+            "metricName": "Replicas",
+            "aggregation": "Maximum",
+            "interval": "PT1M",
+            "start": replicas["startTime"],
+            "end": replicas["endTime"],
+            "revisionName": handoff["application"]["revisionName"],
+        },
+        "databaseSignal": {
+            "file": "evidence/load/raw/database.json",
+            "sha256": raw_hashes["database.json"],
+            "resourceId": handoff["database"]["resourceId"],
+            "metricName": database["metric"],
+            "aggregation": database["aggregation"],
+            "interval": "PT1M",
+            "start": database["startTime"],
+            "end": database["endTime"],
+        },
+        "recovery": {
+            "observedAt": evidence["windows"]["recoveryEnd"],
+            "healthUrl": evidence["recovery"]["healthUrl"],
+            "healthStatus": evidence["recovery"]["healthStatus"],
+            "readinessUrl": evidence["recovery"]["readinessUrl"],
+            "readinessStatus": evidence["recovery"]["readinessStatus"],
+        },
+        "artifacts": {
+            "configurationFile": evidence["testRun"]["configurationFile"],
+            "configurationSha256": evidence["testRun"][
+                "configurationSha256"
+            ],
+            "jmeterFile": evidence["testRun"]["jmeterFile"],
+            "jmeterSha256": evidence["testRun"]["jmeterSha256"],
+        },
+    }
+    capture_path = repository_root / evidence["capture"]["manifestFile"]
+    _write_json(capture_path, capture)
+    evidence["capture"]["manifestSha256"] = hashlib.sha256(
+        capture_path.read_bytes()
+    ).hexdigest()
+
+
+def _materialize_cicd_raw_captures(
+    repository_root: Path,
+    evidence: dict[str, Any],
+    handoff: dict[str, Any],
+    observations: dict[str, dict[str, Any]],
+) -> None:
+    """Create raw RBAC and revision-list responses for CI/CD validation."""
+    identity = observations[evidence["identity"]["resultFile"]]
+    enumeration = evidence["identity"]["roleAssignmentEnumeration"]
+    role_path = repository_root / enumeration["rawResultFile"]
+    role_rows = [
+        {
+            "id": assignment["resourceId"],
+            "principalId": assignment["principalId"],
+            "roleDefinitionId": (
+                f"/subscriptions/{enumeration['subscriptionId']}/providers/"
+                "Microsoft.Authorization/roleDefinitions/"
+                f"{assignment['roleDefinitionId']}"
+            ),
+            "scope": assignment["scope"],
+        }
+        for assignment in identity["roleAssignments"]
+    ]
+    role_path.parent.mkdir(parents=True, exist_ok=True)
+    role_path.write_text(
+        json.dumps(role_rows, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    role_sha256 = hashlib.sha256(role_path.read_bytes()).hexdigest()
+    enumeration["rawResultSha256"] = role_sha256
+    identity["roleAssignmentEnumeration"]["rawResultSha256"] = role_sha256
+
+    previous = evidence["revisions"]["previous"]
+    candidate = evidence["revisions"]["candidate"]
+    application_id = handoff["application"]["resourceId"]
+    previous_image = (
+        f"{handoff['containerImage']['registry']}/"
+        f"{handoff['containerImage']['repository']}@"
+        f"{handoff['containerImage']['digest']}"
+    )
+    candidate_image = evidence["image"]["reference"]
+    for stage in ("before", "promotion", "rollback"):
+        declaration = evidence["traffic"][stage]
+        observation = observations[declaration["resultFile"]]
+        raw_revisions = [
+            {
+                "id": f"{application_id}/revisions/{previous}",
+                "name": previous,
+                "properties": {
+                    "active": observation["previousActive"],
+                    "healthState": observation["previousHealthState"],
+                    "trafficWeight": observation["previousWeight"],
+                    "template": {
+                        "containers": [{"image": previous_image}]
+                    },
+                },
+            },
+            {
+                "id": f"{application_id}/revisions/{candidate}",
+                "name": candidate,
+                "properties": {
+                    "active": observation["candidateActive"],
+                    "healthState": observation["candidateHealthState"],
+                    "trafficWeight": observation["candidateWeight"],
+                    "template": {
+                        "containers": [{"image": candidate_image}]
+                    },
+                },
+            },
+        ]
+        raw_path = repository_root / declaration["rawResultFile"]
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(
+            json.dumps(raw_revisions, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        declaration["rawResultSha256"] = hashlib.sha256(
+            raw_path.read_bytes()
+        ).hexdigest()
 
 
 def _prepare_validator_bundle(
@@ -506,8 +830,17 @@ def _prepare_validator_bundle(
 
     repository_root = tmp_path / "repository"
     evidence_path = repository_root / "evidence" / f"{name}-report.json"
-    _write_json(repository_root / "evidence/modernization-contract.json", handoff)
+    handoff_path = repository_root / "evidence/modernization-contract.json"
     _write_declared_files(evidence, repository_root)
+    _write_json(handoff_path, handoff)
+    if kind == "cicd":
+        evidence["workflow"]["headSha"] = _commit_control_handoff(
+            repository_root,
+            handoff_path,
+        )
+        evidence["workflow"]["handoffSha256"] = hashlib.sha256(
+            handoff_path.read_bytes()
+        ).hexdigest()
     if kind == "observability":
         query_contract = load_json(
             _contracts(repo_root) / "observability-queries.json"
@@ -561,6 +894,20 @@ def _prepare_validator_bundle(
             _serialized_workbook(evidence).encode("utf-8")
         ).hexdigest()
     observations = _normalized_observations(kind, evidence, handoff)
+    if kind == "load":
+        _materialize_load_capture(
+            repository_root,
+            evidence,
+            handoff,
+            observations,
+        )
+    elif kind == "cicd":
+        _materialize_cicd_raw_captures(
+            repository_root,
+            evidence,
+            handoff,
+            observations,
+        )
     for path, observation in observations.items():
         _write_json(repository_root / path, observation)
     _write_json(evidence_path, evidence)
@@ -571,7 +918,7 @@ def test_p6_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
     """The P6 registry and all three evidence examples remain executable."""
     contracts = _contracts(repo_root)
     registry = load_json(contracts / "shared-challenges.json")
-    assert registry["schemaVersion"] == "1.1.0"
+    assert registry["schemaVersion"] == "1.2.0"
     _validate(load_json(contracts / "shared-challenges.schema.json"), registry)
     query_contract = load_json(contracts / "observability-queries.json")
     assert query_contract["schemaVersion"] == "1.1.0"
@@ -582,11 +929,77 @@ def test_p6_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
 
     for name in ("load-test", "cicd", "observability"):
         example = load_json(contracts / f"{name}-evidence.example.json")
-        expected_version = "1.1.0" if name == "observability" else "1.0.0"
+        expected_version = "1.1.0"
         assert example["schemaVersion"] == expected_version
         _validate(
             load_json(contracts / f"{name}-evidence.schema.json"),
             example,
+        )
+    capture_example = load_json(
+        contracts / "load-evidence-capture.example.json"
+    )
+    _validate(
+        load_json(contracts / "load-evidence-capture.schema.json"),
+        capture_example,
+    )
+
+
+def test_p6_cicd_raw_fixtures_preserve_azure_response_shapes(
+    repo_root: Path,
+) -> None:
+    """Sanitized raw fixtures retain RBAC and revision transition fields."""
+    fixtures = _contracts(repo_root) / "fixtures/cicd"
+    assignments = json.loads(
+        (fixtures / "role-assignments.json").read_text(encoding="utf-8")
+    )
+    assert {
+        (assignment["roleDefinitionId"], assignment["scope"])
+        for assignment in assignments
+    } == {
+        (
+            (
+                "/subscriptions/00000000-0000-0000-0000-000000000000/"
+                "providers/Microsoft.Authorization/roleDefinitions/"
+                "8311e382-0749-4cb8-b61a-304f252e45ec"
+            ),
+            (
+                "/subscriptions/00000000-0000-0000-0000-000000000000/"
+                "resourceGroups/rg-mh-example/providers/"
+                "Microsoft.ContainerRegistry/registries/acrexample"
+            ),
+        ),
+        (
+            (
+                "/subscriptions/00000000-0000-0000-0000-000000000000/"
+                "providers/Microsoft.Authorization/roleDefinitions/"
+                "358470bc-b998-42bd-ab17-a7e34c199c0f"
+            ),
+            (
+                "/subscriptions/00000000-0000-0000-0000-000000000000/"
+                "resourceGroups/rg-mh-example/providers/"
+                "Microsoft.App/containerApps/ca-mh-example"
+            ),
+        ),
+    }
+    expected_weights = {
+        "before-revisions.json": (100, 0),
+        "promotion-revisions.json": (0, 100),
+        "rollback-revisions.json": (100, 0),
+    }
+    for name, weights in expected_weights.items():
+        revisions = json.loads(
+            (fixtures / name).read_text(encoding="utf-8")
+        )
+        assert tuple(
+            revision["properties"]["trafficWeight"]
+            for revision in revisions
+        ) == weights
+        assert all(
+            revision["properties"]["active"]
+            and revision["properties"]["healthState"] == "Healthy"
+            and revision["properties"]["template"]["containers"][0]["image"]
+            .startswith("acrexample.azurecr.io/")
+            for revision in revisions
         )
 
 
@@ -612,9 +1025,17 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
                 "tests/load/load-test.yaml",
                 "tests/acceptance/tests/test_p6_load_challenge.py",
             ],
+            "captureSchema": "workshop/contracts/load-evidence-capture.schema.json",
+            "captureExample": "workshop/contracts/load-evidence-capture.example.json",
             "evidenceSchema": "workshop/contracts/load-test-evidence.schema.json",
             "evidenceExample": "workshop/contracts/load-test-evidence.example.json",
             "evidenceOutput": "evidence/load-test-report.json",
+            "evidenceRenderCommand": (
+                "uv --no-config run catalog-render-load-evidence --capture "
+                "../../evidence/load/capture.json --handoff "
+                "../../evidence/modernization-contract.json --output "
+                "../../evidence/load-test-report.json --repository-root ../.."
+            ),
             "evidenceValidationCommand": (
                 "uv --no-config run catalog-validate-challenge-evidence load "
                 "../../evidence/load-test-report.json --handoff "
@@ -681,8 +1102,19 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
         "workshop/contracts/README.md",
         "workshop/contracts/shared-challenges.json",
         "workshop/contracts/shared-challenges.schema.json",
+        "workshop/contracts/load-evidence-capture.schema.json",
+        "workshop/contracts/load-evidence-capture.example.json",
         "workshop/contracts/load-test-evidence.schema.json",
         "workshop/contracts/load-test-evidence.example.json",
+        "workshop/contracts/fixtures/cicd/before-revisions.json",
+        "workshop/contracts/fixtures/cicd/promotion-revisions.json",
+        "workshop/contracts/fixtures/cicd/role-assignments.json",
+        "workshop/contracts/fixtures/cicd/rollback-revisions.json",
+        "workshop/contracts/fixtures/load/azure-sql.json",
+        "workshop/contracts/fixtures/load/container-app.json",
+        "workshop/contracts/fixtures/load/postgresql.json",
+        "workshop/contracts/fixtures/load/replicas.json",
+        "workshop/contracts/fixtures/load/test-run.json",
         "workshop/contracts/cicd-evidence.schema.json",
         "workshop/contracts/cicd-evidence.example.json",
         "workshop/contracts/observability-evidence.schema.json",
@@ -692,9 +1124,12 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
         "tests/acceptance/pyproject.toml",
         "tests/acceptance/catalog_acceptance/models/__init__.py",
         "tests/acceptance/catalog_acceptance/models/shared_challenges.py",
+        "tests/acceptance/catalog_acceptance/load_evidence.py",
+        "tests/acceptance/catalog_acceptance/load_evidence_cli.py",
         "tests/acceptance/catalog_acceptance/shared_challenges.py",
         "tests/acceptance/catalog_acceptance/shared_challenges_cli.py",
         "tests/acceptance/tests/test_p6_contracts.py",
+        "tests/acceptance/tests/test_p6_load_renderer.py",
     }
     assert all((repo_root / path).is_file() for path in coordinator_owned)
     owned: set[str] = set()
@@ -708,6 +1143,14 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
             challenge["evidenceSchema"],
             challenge["evidenceExample"],
             challenge["evidenceOutput"],
+            *(
+                [
+                    challenge["captureSchema"],
+                    challenge["captureExample"],
+                ]
+                if challenge["id"] == "load-autoscaling"
+                else []
+            ),
         ):
             pure_path = PurePosixPath(path)
             assert not pure_path.is_absolute()
@@ -738,6 +1181,26 @@ def test_p6_registry_schema_rejects_cross_wired_stream_contracts(
 
     with pytest.raises(JsonSchemaValidationError):
         _validate(schema, registry)
+
+
+def test_p6_cicd_schema_rejects_invalid_all_plus_scope_enumeration(
+    repo_root: Path,
+) -> None:
+    """The Azure CLI `--all` audit cannot also declare a rejected scope."""
+    contracts = _contracts(repo_root)
+    schema = load_json(contracts / "cicd-evidence.schema.json")
+    evidence = deepcopy(load_json(contracts / "cicd-evidence.example.json"))
+    enumeration = evidence["identity"]["roleAssignmentEnumeration"]
+    enumeration["scope"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000"
+    )
+    enumeration["command"] = enumeration["command"].replace(
+        " --output json",
+        f" --scope {enumeration['scope']} --output json",
+    )
+
+    with pytest.raises(JsonSchemaValidationError):
+        _validate(schema, evidence)
 
 
 def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
@@ -775,9 +1238,37 @@ def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
             "subscription-contributor",
         ],
     }
+    assert registry["cicdProtocol"] == {
+        "evidenceVersion": "1.1.0",
+        "trigger": "workflow_dispatch",
+        "workflowHead": "control-commit",
+        "handoffCheckout": "workflow-head",
+        "applicationCheckout": "handoff-source-commit",
+        "sourceIdentity": "handoff.source.commitSha",
+        "roleAudit": {
+            "executionBoundary": "facilitator-session",
+            "requiredPermission": "Microsoft.Authorization/roleAssignments/read",
+            "minimumBuiltInRole": "Reader",
+            "command": (
+                "az role assignment list --all --include-inherited "
+                "--assignee-object-id <principal-id> "
+                "--fill-principal-name false "
+                "--fill-role-definition-name false --output json"
+            ),
+        },
+        "approvalOrdering": [
+            "staging-complete",
+            "production-approved",
+            "production-started",
+            "promotion",
+            "rollback",
+        ],
+        "revisionStateSource": "azure-container-app-revision-list",
+        "rollbackGuard": "shell-trap",
+    }
     assert registry["loadSignals"] == {
         "testRun": {
-            "resourceType": "Microsoft.LoadTestService/loadTests",
+            "resourceType": "Microsoft.LoadTestService/loadTests"
         },
         "replicas": {
             "resourceType": "Microsoft.App/containerApps",
@@ -800,6 +1291,28 @@ def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
             "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers",
             "metric": "cpu_percent",
             "aggregation": "Maximum",
+        },
+    }
+    assert registry["loadEvidenceProtocol"] == {
+        "captureManifestVersion": "1.0.0",
+        "evidenceVersion": "1.1.0",
+        "renderer": "catalog-render-load-evidence",
+        "evidenceOutput": "evidence/load-test-report.json",
+        "testRun": {
+            "status": "DONE",
+            "virtualUsers": 40,
+            "durationSeconds": 300,
+            "maximumErrors": 0,
+        },
+        "replicas": {
+            "aggregation": "Maximum",
+            "interval": "PT1M",
+            "dimension": "revisionName",
+            "requiredPhases": [
+                "baseline-one-before-load",
+                "scale-out-during-load",
+                "recovery-one-after-load",
+            ],
         },
     }
     assert registry["observabilityPanels"] == [
@@ -888,7 +1401,7 @@ def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
         "ruleName": "http",
         "ruleType": "http",
         "concurrentRequests": 50,
-        "observedAt": "2026-08-20T11:54:00Z",
+        "observedAt": "2026-08-20T11:49:00Z",
         "resultFile": "evidence/load/scale-configuration.json",
     }
 
@@ -912,6 +1425,32 @@ def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
         ":environment:production"
     )
     assert cicd["workflow"]["resultFile"] == "evidence/cicd/workflow-run.json"
+    assert cicd["workflow"]["headSha"] != cicd["subject"]["sourceCommit"]
+    assert cicd["workflow"]["event"] == "workflow_dispatch"
+    assert (
+        cicd["approval"]["approvedAt"]
+        <= cicd["workflow"]["jobs"]["production"]["startedAt"]
+    )
+    enumeration = cicd["identity"]["roleAssignmentEnumeration"]
+    assert "scope" not in enumeration
+    assert enumeration["executionBoundary"] == "facilitator-session"
+    assert enumeration["minimumBuiltInRole"] == "Reader"
+    assert "--all --include-inherited" in enumeration["command"]
+    assert "--scope" not in enumeration["command"]
+    assert all(
+        transition["source"] == "azure-container-app-revision-list"
+        and transition["rawResultFile"].endswith(".raw.json")
+        for transition in (
+            cicd["traffic"]["before"],
+            cicd["traffic"]["promotion"],
+            cicd["traffic"]["rollback"],
+        )
+    )
+    assert cicd["traffic"]["safety"]["mechanism"] == "shell-trap"
+    assert (
+        cicd["traffic"]["safety"]["guardInstalledAt"]
+        <= cicd["traffic"]["safety"]["promotionAttemptedAt"]
+    )
 
     observability = load_json(contracts / "observability-evidence.example.json")
     assert observability["metricsExport"] == {
@@ -1225,9 +1764,9 @@ def test_p6_load_validator_rejects_unrelated_successful_run(
         "load", tmp_path, repo_root
     )
     run_path = evidence["testRun"]["resultFile"]
-    observations[run_path]["resourceId"] = observations[run_path]["resourceId"].replace(
-        "lt-example", "lt-other"
-    )
+    observations[run_path]["resourceId"] = observations[run_path][
+        "resourceId"
+    ].replace("lt-mh-example", "lt-other")
     _write_json(root / run_path, observations[run_path])
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 
@@ -1292,16 +1831,57 @@ def test_p6_load_validator_rejects_changed_test_artifacts(
         )
 
 
+def test_p6_load_validator_recomputes_normalized_raw_capture(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Digest-valid raw changes must be reflected in normalized observations."""
+    root, evidence_path, evidence, handoff, _ = _prepare_validator_bundle(
+        "load", tmp_path, repo_root
+    )
+    raw_path = root / "evidence/load/raw/test-run.json"
+    raw = load_json(raw_path)
+    raw["testRunStatistics"]["Total"]["sampleCount"] += 1
+    _write_json(raw_path, raw)
+    capture_path = root / evidence["capture"]["manifestFile"]
+    capture = load_json(capture_path)
+    capture["testRun"]["sha256"] = hashlib.sha256(
+        raw_path.read_bytes()
+    ).hexdigest()
+    _write_json(capture_path, capture)
+    evidence["capture"]["manifestSha256"] = hashlib.sha256(
+        capture_path.read_bytes()
+    ).hexdigest()
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(
+        ValueError,
+        match="normalized load observation differs from raw capture",
+    ):
+        shared_challenges.validate_shared_challenge_evidence(
+            "load",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
 def test_p6_load_validator_rejects_report_predating_recovery(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A report cannot replay recovery evidence captured after the report."""
-    root, evidence_path, evidence, handoff, _ = _prepare_validator_bundle(
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
         "load", tmp_path, repo_root
     )
     evidence["capturedAt"] = "2026-08-20T12:09:00Z"
+    run_path = evidence["testRun"]["resultFile"]
+    observations[run_path]["capturedAt"] = "2026-08-20T12:06:00Z"
+    _write_json(root / run_path, observations[run_path])
     _write_json(evidence_path, evidence)
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 
@@ -1377,7 +1957,7 @@ def test_p6_cicd_validator_rejects_unrelated_github_run(
         "cicd", tmp_path, repo_root
     )
     workflow_path = evidence["workflow"]["resultFile"]
-    observations[workflow_path]["headSha"] = "1" * 40
+    observations[workflow_path]["headSha"] = "2" * 40
     _write_json(root / workflow_path, observations[workflow_path])
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 
@@ -1386,6 +1966,84 @@ def test_p6_cicd_validator_rejects_unrelated_github_run(
             "cicd",
             evidence_path,
             root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_separates_control_and_source_commits(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workflow control commit cannot masquerade as application source."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    source_commit = handoff["source"]["commitSha"]
+    evidence["workflow"]["headSha"] = source_commit
+    for path, observation in observations.items():
+        if "headSha" in observation:
+            observation["headSha"] = source_commit
+            _write_json(root / path, observation)
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="control SHA must differ"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_rejects_handoff_digest_drift(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The workflow must build from the exact handoff read at its head SHA."""
+    root, evidence_path, evidence, handoff, _ = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    evidence["workflow"]["handoffSha256"] = "f" * 64
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="handoff digest differs"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_binds_handoff_to_control_commit(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A current handoff cannot be relabeled as the control commit's blob."""
+    root, evidence_path, evidence, handoff, _ = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    handoff_path = root / "evidence/modernization-contract.json"
+    handoff_path.write_bytes(handoff_path.read_bytes() + b"\n")
+    evidence["workflow"]["handoffSha256"] = hashlib.sha256(
+        handoff_path.read_bytes()
+    ).hexdigest()
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="control-commit blob"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            handoff_path,
             _contracts(repo_root),
             root,
         )
@@ -1527,8 +2185,8 @@ def test_p6_cicd_validator_rejects_cross_subscription_identity_enumeration(
         original_subscription,
         identity_subscription,
     )
-    identity["roleAssignmentEnumeration"]["scope"] = (
-        f"/subscriptions/{identity_subscription}"
+    identity["roleAssignmentEnumeration"]["subscriptionId"] = (
+        identity_subscription
     )
     for environment in ("staging", "production"):
         identity["federatedCredentialResourceIds"][environment] = identity[
@@ -1537,8 +2195,10 @@ def test_p6_cicd_validator_rejects_cross_subscription_identity_enumeration(
 
     identity_path = identity["resultFile"]
     observations[identity_path]["resourceId"] = identity["resourceId"]
-    observations[identity_path]["roleAssignmentEnumeration"]["scope"] = (
-        f"/subscriptions/{identity_subscription}"
+    observations[identity_path]["roleAssignmentEnumeration"][
+        "subscriptionId"
+    ] = (
+        identity_subscription
     )
     for credential in observations[identity_path]["federatedCredentials"]:
         credential["resourceId"] = credential["resourceId"].replace(
@@ -1648,6 +2308,121 @@ def test_p6_cicd_validator_rejects_role_ids_outside_declared_scope(
         )
 
 
+def test_p6_cicd_validator_rejects_raw_role_audit_divergence(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Normalized least privilege must equal facilitator raw Azure output."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    enumeration = evidence["identity"]["roleAssignmentEnumeration"]
+    raw_path = root / enumeration["rawResultFile"]
+    raw_assignments = json.loads(raw_path.read_text(encoding="utf-8"))
+    raw_assignments[0]["scope"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000"
+    )
+    raw_path.write_text(
+        json.dumps(raw_assignments, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    raw_sha256 = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+    enumeration["rawResultSha256"] = raw_sha256
+    identity_path = evidence["identity"]["resultFile"]
+    observations[identity_path]["roleAssignmentEnumeration"][
+        "rawResultSha256"
+    ] = raw_sha256
+    _write_json(root / identity_path, observations[identity_path])
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="differ from facilitator raw output"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_requires_raw_role_definition_resource_ids(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raw Azure CLI roles retain full role-definition resource IDs."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    enumeration = evidence["identity"]["roleAssignmentEnumeration"]
+    raw_path = root / enumeration["rawResultFile"]
+    raw_assignments = json.loads(raw_path.read_text(encoding="utf-8"))
+    for assignment in raw_assignments:
+        assignment["roleDefinitionId"] = assignment["roleDefinitionId"].rsplit(
+            "/", maxsplit=1
+        )[-1]
+    raw_path.write_text(
+        json.dumps(raw_assignments, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    raw_sha256 = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+    enumeration["rawResultSha256"] = raw_sha256
+    identity_path = evidence["identity"]["resultFile"]
+    observations[identity_path]["roleAssignmentEnumeration"][
+        "rawResultSha256"
+    ] = raw_sha256
+    _write_json(root / identity_path, observations[identity_path])
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="invalid role definition ID"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_rejects_hardcoded_revision_state(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Normalized health cannot disagree with the raw Azure revision list."""
+    root, evidence_path, evidence, handoff, _ = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    promotion = evidence["traffic"]["promotion"]
+    raw_path = root / promotion["rawResultFile"]
+    raw_revisions = json.loads(raw_path.read_text(encoding="utf-8"))
+    candidate = evidence["revisions"]["candidate"]
+    next(
+        revision for revision in raw_revisions if revision["name"] == candidate
+    )["properties"]["healthState"] = "Unhealthy"
+    raw_path.write_text(
+        json.dumps(raw_revisions, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    promotion["rawResultSha256"] = hashlib.sha256(
+        raw_path.read_bytes()
+    ).hexdigest()
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="differs from raw Azure output"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
 def test_p6_cicd_validator_rejects_replayed_workflow_attempt(
     tmp_path: Path,
     repo_root: Path,
@@ -1709,7 +2484,7 @@ def test_p6_cicd_validator_rejects_report_predating_rollback(
     _write_json(evidence_path, evidence)
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 
-    with pytest.raises(ValueError, match="captured before rollback"):
+    with pytest.raises(ValueError, match="captured before post-run evidence"):
         shared_challenges.validate_shared_challenge_evidence(
             "cicd",
             evidence_path,
@@ -1736,6 +2511,59 @@ def test_p6_cicd_validator_rejects_promotion_before_approval(
     monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
 
     with pytest.raises(ValueError, match="production job|violate"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_requires_approval_before_production_job(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub environment approval must precede the protected job start."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    evidence["approval"]["approvedAt"] = "2026-08-20T13:12:00Z"
+    approval_path = evidence["approval"]["resultFile"]
+    observations[approval_path]["approvedAt"] = "2026-08-20T13:12:00Z"
+    _write_json(root / approval_path, observations[approval_path])
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="approval.*out of order"):
+        shared_challenges.validate_shared_challenge_evidence(
+            "cicd",
+            evidence_path,
+            root / "evidence/modernization-contract.json",
+            _contracts(repo_root),
+            root,
+        )
+
+
+def test_p6_cicd_validator_requires_guard_before_promotion(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rollback trap installed after promotion is not fail-safe."""
+    root, evidence_path, evidence, handoff, observations = _prepare_validator_bundle(
+        "cicd", tmp_path, repo_root
+    )
+    safety = evidence["traffic"]["safety"]
+    safety["guardInstalledAt"] = "2026-08-20T13:15:00Z"
+    safety_path = safety["resultFile"]
+    observations[safety_path]["guardInstalledAt"] = safety["guardInstalledAt"]
+    _write_json(root / safety_path, observations[safety_path])
+    _write_json(evidence_path, evidence)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+
+    with pytest.raises(ValueError, match="lifecycle timestamps are out of order"):
         shared_challenges.validate_shared_challenge_evidence(
             "cicd",
             evidence_path,

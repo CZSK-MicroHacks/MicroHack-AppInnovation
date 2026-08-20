@@ -1,20 +1,24 @@
 {
-  "schemaVersion": "1.0.0",
-  "capturedAt": "2026-08-20T13:30:00Z",
+  "schemaVersion": "1.1.0",
+  "capturedAt": "2026-08-20T13:35:00Z",
   "subject": {
     "sliceId": "manual-dotnet",
     "stack": "dotnet-sqlserver",
     "sourceCommit": "0000000000000000000000000000000000000000",
-    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "containerAppResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
     "revisionName": "ca-mh-example--release-000000000000",
     "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   },
   "workflow": {
     "file": ".github/workflows/catalog-dotnet.yml",
+    "headSha": "1111111111111111111111111111111111111111",
+    "handoffFile": "evidence/modernization-contract.json",
+    "handoffSha256": "80ad3807c92e453a3e67564046a79a60ea6762fed38fe79aa9d9a263bf8d59b8",
     "runId": "100001",
     "runAttempt": 1,
     "repository": "example/MicroHack-AppInnovation",
     "ref": "refs/heads/main",
+    "event": "workflow_dispatch",
     "resultFile": "evidence/cicd/workflow-run.json",
     "jobs": {
       "staging": {
@@ -40,24 +44,31 @@
   "identity": {
     "authentication": "github-oidc",
     "identityKind": "user-assigned-managed-identity",
-    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github",
     "clientId": "00000000-0000-0000-0000-000000000003",
     "principalId": "00000000-0000-0000-0000-000000000004",
     "stagingFederatedSubject": "repo:example/MicroHack-AppInnovation:environment:staging",
     "productionFederatedSubject": "repo:example/MicroHack-AppInnovation:environment:production",
     "federatedCredentialResourceIds": {
-      "staging": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github/federatedIdentityCredentials/staging",
-      "production": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github/federatedIdentityCredentials/production"
+      "staging": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github/federatedIdentityCredentials/staging",
+      "production": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-github/federatedIdentityCredentials/production"
     },
     "acrRoleDefinitionId": "8311e382-0749-4cb8-b61a-304f252e45ec",
-    "acrScope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
+    "acrScope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
     "containerAppRoleDefinitionId": "358470bc-b998-42bd-ab17-a7e34c199c0f",
-    "containerAppScope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "containerAppScope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
     "clientSecretUsed": false,
     "registryAdminUsed": false,
     "roleAssignmentEnumeration": {
       "assigneeObjectId": "00000000-0000-0000-0000-000000000004",
-      "scope": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "executionBoundary": "facilitator-session",
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "requiredPermission": "Microsoft.Authorization/roleAssignments/read",
+      "minimumBuiltInRole": "Reader",
+      "command": "az role assignment list --all --include-inherited --assignee-object-id 00000000-0000-0000-0000-000000000004 --fill-principal-name false --fill-role-definition-name false --output json",
+      "rawResultFile": "evidence/cicd/role-assignments.raw.json",
+      "rawResultSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "performedAt": "2026-08-20T13:31:00Z",
       "all": true,
       "includeInherited": true,
       "fillPrincipalName": false,
@@ -94,7 +105,7 @@
   "approval": {
     "environment": "production",
     "reviewer": "facilitator@example.invalid",
-    "approvedAt": "2026-08-20T13:10:00Z",
+    "approvedAt": "2026-08-20T13:00:00Z",
     "resultFile": "evidence/cicd/approval.json"
   },
   "traffic": {
@@ -102,19 +113,39 @@
       "previous": 100,
       "candidate": 0,
       "observedAt": "2026-08-20T12:50:00Z",
+      "source": "azure-container-app-revision-list",
+      "rawResultFile": "evidence/cicd/before-revisions.raw.json",
+      "rawResultSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "resultFile": "evidence/cicd/before.json"
     },
     "promotion": {
       "previous": 0,
       "candidate": 100,
       "observedAt": "2026-08-20T13:15:00Z",
+      "source": "azure-container-app-revision-list",
+      "rawResultFile": "evidence/cicd/promotion-revisions.raw.json",
+      "rawResultSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "resultFile": "evidence/cicd/promotion.json"
     },
     "rollback": {
       "previous": 100,
       "candidate": 0,
       "observedAt": "2026-08-20T13:25:00Z",
+      "source": "azure-container-app-revision-list",
+      "rawResultFile": "evidence/cicd/rollback-revisions.raw.json",
+      "rawResultSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "resultFile": "evidence/cicd/rollback.json"
+    },
+    "safety": {
+      "mechanism": "shell-trap",
+      "guardInstalledAt": "2026-08-20T13:11:00Z",
+      "promotionAttemptedAt": "2026-08-20T13:14:00Z",
+      "rollbackAttemptedAt": "2026-08-20T13:24:00Z",
+      "rollbackCompletedAt": "2026-08-20T13:26:00Z",
+      "executesOnFailure": true,
+      "promotionSucceeded": true,
+      "rollbackSucceeded": true,
+      "resultFile": "evidence/cicd/rollback-safety.json"
     }
   },
   "assertions": {
@@ -123,6 +154,10 @@
     "approvalPrecededPromotion": true,
     "promotionVerified": true,
     "rollbackVerified": true,
-    "previousRevisionRetained": true
+    "previousRevisionRetained": true,
+    "sourceCommitCheckedOut": true,
+    "roleAuditExternal": true,
+    "revisionStateObserved": true,
+    "rollbackGuardArmed": true
   }
 }

@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/load-evidence-capture.schema.json",
+  "title": "Challenge 2 raw load evidence capture manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "capturedAt",
+    "baselineStart",
+    "testRun",
+    "scaleConfiguration",
+    "replicas",
+    "databaseSignal",
+    "recovery",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "capturedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "baselineStart": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "testRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "resourceId"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/rawPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resourceId": {
+          "$ref": "#/$defs/loadTestResourceId"
+        }
+      }
+    },
+    "scaleConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "observedAt"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/rawPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "replicas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "resourceId",
+        "metricName",
+        "aggregation",
+        "interval",
+        "start",
+        "end",
+        "revisionName"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/rawPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "metricName": {
+          "const": "Replicas"
+        },
+        "aggregation": {
+          "const": "Maximum"
+        },
+        "interval": {
+          "const": "PT1M"
+        },
+        "start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "end": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "revisionName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "databaseSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "resourceId",
+        "metricName",
+        "aggregation",
+        "interval",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/rawPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "metricName": {
+          "enum": [
+            "app_cpu_billed",
+            "cpu_percent"
+          ]
+        },
+        "aggregation": {
+          "enum": [
+            "Total",
+            "Maximum"
+          ]
+        },
+        "interval": {
+          "const": "PT1M"
+        },
+        "start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "end": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metricName": {
+                "const": "app_cpu_billed"
+              }
+            },
+            "required": [
+              "metricName"
+            ]
+          },
+          "then": {
+            "properties": {
+              "aggregation": {
+                "const": "Total"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "aggregation": {
+                "const": "Maximum"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observedAt",
+        "healthUrl",
+        "healthStatus",
+        "readinessUrl",
+        "readinessStatus"
+      ],
+      "properties": {
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "healthUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "healthStatus": {
+          "const": 200
+        },
+        "readinessUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "readinessStatus": {
+          "const": 200
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurationFile",
+        "configurationSha256",
+        "jmeterFile",
+        "jmeterSha256"
+      ],
+      "properties": {
+        "configurationFile": {
+          "const": "tests/load/load-test.yaml"
+        },
+        "configurationSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "jmeterFile": {
+          "const": "tests/load/catalog-load.jmx"
+        },
+        "jmeterSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[^/]+/providers/[^/]+/.+$"
+    },
+    "loadTestResourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[^/]+/providers/Microsoft\\.LoadTestService/loadTests/[^/]+$"
+    },
+    "rawPath": {
+      "type": "string",
+      "pattern": "^evidence/load/raw/[a-z0-9-]+\\.json$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    }
+  }
+}
