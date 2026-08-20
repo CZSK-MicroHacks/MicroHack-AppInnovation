@@ -63,7 +63,9 @@ baseline before the run, at least two replicas during the run, and a final one-r
 after the run; a delayed baseline point cannot satisfy scale-out. Database proof remains
 `app_cpu_billed`/`Total` for Azure SQL or `cpu_percent`/`Maximum` for PostgreSQL, with explicit
 baseline/load windows, exact checked-in asset digests, and handoff-bound health/readiness
-recovery URLs. CI/CD uses separate staging and production
+recovery URLs. Azure SQL metrics use the handoff database resource; PostgreSQL metrics use the
+flexible-server parent of the handoff database child because `cpu_percent` is server-scoped.
+CI/CD uses separate staging and production
 GitHub OIDC subjects on one observed user-assigned identity. Both federated credentials and
 both role assignments bind the workflow client/principal IDs to `AcrPush` at the handoff
 registry and Container Apps Contributor at the handoff Container App. An observed immutable
@@ -148,9 +150,9 @@ Render one load bundle from its digest-bound capture manifest:
 
 ```bash
 uv --no-config run catalog-render-load-evidence \
-  --capture ../../evidence/load/capture.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --output ../../evidence/load-test-report.json \
+  --capture evidence/load/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --output evidence/load-test-report.json \
   --repository-root ../..
 ```
 
@@ -158,9 +160,9 @@ Validate one generated P6 evidence bundle only after its complete handoff exists
 
 ```bash
 uv --no-config run catalog-validate-challenge-evidence load \
-  ../../evidence/load-test-report.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --contracts ../../workshop/contracts \
+  evidence/load-test-report.json \
+  --handoff evidence/modernization-contract.json \
+  --contracts workshop/contracts \
   --repository-root ../..
 ```
 

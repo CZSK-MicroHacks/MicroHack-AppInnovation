@@ -57,20 +57,22 @@ Hash every raw response and both checked-in load assets into the canonical
 `evidence/load/capture.json`. Include the exact Load Testing resource ID,
 baseline time, metric resource IDs/windows, scale observation time, recovery
 time, recent Container App ARM `etag`, and exact handoff health/readiness URLs
-and statuses.
+and statuses. Azure SQL metrics use the handoff database resource ID.
+PostgreSQL `cpu_percent` uses the flexible-server parent of the handoff
+database child.
 
 Do not manually create or edit `evidence/load-test-report.json` or any of the
 five normalized observations. The frozen renderer must produce them:
 
 ```bash
 cd tests/acceptance
-uv --no-config run catalog-render-load-evidence --capture ../../evidence/load/capture.json --handoff ../../evidence/modernization-contract.json --output ../../evidence/load-test-report.json --repository-root ../..
+uv --no-config run catalog-render-load-evidence --capture evidence/load/capture.json --handoff evidence/modernization-contract.json --output evidence/load-test-report.json --repository-root ../..
 ```
 
 Then run the common fail-closed validator:
 
 ```bash
-uv --no-config run catalog-validate-challenge-evidence load ../../evidence/load-test-report.json --handoff ../../evidence/modernization-contract.json --contracts ../../workshop/contracts --repository-root ../..
+uv --no-config run catalog-validate-challenge-evidence load evidence/load-test-report.json --handoff evidence/modernization-contract.json --contracts workshop/contracts --repository-root ../..
 ```
 
 The challenge fails on any missing or changed raw file, digest drift, redirect,

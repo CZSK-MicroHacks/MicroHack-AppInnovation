@@ -6,6 +6,7 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
+import shlex
 import shutil
 from typing import Any
 
@@ -76,7 +77,8 @@ def _prepare_renderer_repository(
         handoff["database"]["resourceId"] = (
             "/subscriptions/00000000-0000-0000-0000-000000000000/"
             "resourceGroups/rg-mh-example/providers/"
-            "Microsoft.DBforPostgreSQL/flexibleServers/psql-example"
+            "Microsoft.DBforPostgreSQL/flexibleServers/psql-example/"
+            "databases/catalog"
         )
     handoff_path = repository / "evidence/modernization-contract.json"
     _write(handoff_path, handoff)
@@ -89,7 +91,9 @@ def _prepare_renderer_repository(
         capture["databaseSignal"].update(
             {
                 "sha256": _sha256(database_path),
-                "resourceId": handoff["database"]["resourceId"],
+                "resourceId": handoff["database"]["resourceId"].rsplit(
+                    "/databases/", maxsplit=1
+                )[0],
                 "metricName": "cpu_percent",
                 "aggregation": "Maximum",
             }
@@ -133,7 +137,13 @@ def test_renderer_builds_both_database_family_bundles(
 
     assert report["schemaVersion"] == "1.1.0"
     assert report["databaseSignal"] == {
-        "resourceId": report["subject"]["databaseResourceId"],
+        "resourceId": (
+            report["subject"]["databaseResourceId"]
+            if database_family == "azure-sql"
+            else report["subject"]["databaseResourceId"].rsplit(
+                "/databases/", maxsplit=1
+            )[0]
+        ),
         "family": database_family,
         "metric": metric,
         "aggregation": aggregation,
@@ -145,6 +155,13 @@ def test_renderer_builds_both_database_family_bundles(
     assert report["replicas"]["baselineObserved"] == 1
     assert report["replicas"]["peakObserved"] == 3
     assert report["recovery"]["observedReplicas"] == 1
+    if database_family == "postgresql-flexible":
+        assert report["subject"]["databaseResourceId"].endswith(
+            "/flexibleServers/psql-example/databases/catalog"
+        )
+        assert report["databaseSignal"]["resourceId"].endswith(
+            "/flexibleServers/psql-example"
+        )
     assert set(observations) == {
         "evidence/load/test-run.json",
         "evidence/load/scale-configuration.json",
@@ -226,6 +243,69 @@ def test_renderer_cli_writes_a_deterministic_complete_bundle(
             ],
         },
     ]
+
+
+def test_registry_renderer_command_runs_from_acceptance_directory(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The exact published command resolves repository-relative arguments."""
+    repository, _, _ = _prepare_renderer_repository(tmp_path, repo_root)
+    acceptance = repository / "tests/acceptance"
+    acceptance.mkdir(parents=True)
+    registry = _load(repo_root / "workshop/contracts/shared-challenges.json")
+    command = next(
+        challenge["evidenceRenderCommand"]
+        for challenge in registry["challenges"]
+        if challenge["id"] == "load-autoscaling"
+    )
+    arguments = shlex.split(command)
+    assert arguments[:4] == [
+        "uv",
+        "--no-config",
+        "run",
+        "catalog-render-load-evidence",
+    ]
+    monkeypatch.chdir(acceptance)
+
+    assert render_main(arguments[4:]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["status"] == "passed"
+    assert status["report"] == "evidence/load-test-report.json"
+
+
+def test_renderer_cli_reports_missing_handoff_slice_as_json(
+    tmp_path: Path,
+    repo_root: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A malformed handoff fails through the CLI's machine-readable boundary."""
+    repository, capture_path, handoff_path = _prepare_renderer_repository(
+        tmp_path,
+        repo_root,
+    )
+    handoff = _load(handoff_path)
+    del handoff["sliceId"]
+    _write(handoff_path, handoff)
+
+    assert (
+        render_main(
+            [
+                "--capture",
+                str(capture_path.relative_to(repository)),
+                "--handoff",
+                str(handoff_path.relative_to(repository)),
+                "--repository-root",
+                str(repository),
+            ]
+        )
+        == 1
+    )
+    status = json.loads(capsys.readouterr().out)
+    assert status["status"] == "failed"
+    assert "handoff sliceId" in status["error"]
 
 
 def test_renderer_rejects_delayed_scale_out_as_recovery(

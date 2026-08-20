@@ -21,13 +21,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--contracts", required=True, type=Path)
     parser.add_argument("--repository-root", required=True, type=Path)
     args = parser.parse_args(argv)
+    root = args.repository_root.resolve()
 
     validate_shared_challenge_evidence(
         args.kind,
-        args.evidence,
-        args.handoff,
-        args.contracts,
-        args.repository_root,
+        root / args.evidence,
+        root / args.handoff,
+        root / args.contracts,
+        root,
     )
     print(
         json.dumps(

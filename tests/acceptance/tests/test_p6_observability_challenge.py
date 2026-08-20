@@ -196,9 +196,9 @@ def test_guides_bind_frozen_live_evidence_and_common_validator() -> None:
 
     validator = (
         "catalog-validate-challenge-evidence observability "
-        "\\\n  ../../evidence/observability-report.json "
-        "\\\n  --handoff ../../evidence/modernization-contract.json "
-        "\\\n  --contracts ../../workshop/contracts "
+        "\\\n  evidence/observability-report.json "
+        "\\\n  --handoff evidence/modernization-contract.json "
+        "\\\n  --contracts workshop/contracts "
         "\\\n  --repository-root ../.."
     )
     assert validator in challenge

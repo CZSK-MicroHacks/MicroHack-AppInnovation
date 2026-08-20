@@ -132,15 +132,15 @@ common handoff-aware validator:
 
 ```bash
 uv --no-config run catalog-render-load-evidence \
-  --capture ../../evidence/load/capture.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --output ../../evidence/load-test-report.json \
+  --capture evidence/load/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --output evidence/load-test-report.json \
   --repository-root ../..
 
 uv --no-config run catalog-validate-challenge-evidence load \
-  ../../evidence/load-test-report.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --contracts ../../workshop/contracts \
+  evidence/load-test-report.json \
+  --handoff evidence/modernization-contract.json \
+  --contracts workshop/contracts \
   --repository-root ../..
 ```
 

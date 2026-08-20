@@ -6,6 +6,8 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import shlex
+import shutil
 import subprocess
 from typing import Any
 
@@ -15,6 +17,7 @@ from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 
 from catalog_acceptance.manifest import load_json
 from catalog_acceptance import shared_challenges
+from catalog_acceptance.shared_challenges_cli import main as shared_cli_main
 
 
 def _validate(schema: dict, instance: object) -> None:
@@ -944,6 +947,51 @@ def test_p6_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
     )
 
 
+def test_registry_validator_command_runs_from_acceptance_directory(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The exact published validator command resolves from tests/acceptance."""
+    root, _, _, handoff, _ = _prepare_validator_bundle(
+        "load",
+        tmp_path,
+        repo_root,
+    )
+    shutil.copytree(
+        _contracts(repo_root),
+        root / "workshop/contracts",
+    )
+    acceptance = root / "tests/acceptance"
+    acceptance.mkdir(parents=True, exist_ok=True)
+    registry = load_json(_contracts(repo_root) / "shared-challenges.json")
+    command = next(
+        challenge["evidenceValidationCommand"]
+        for challenge in registry["challenges"]
+        if challenge["id"] == "load-autoscaling"
+    )
+    arguments = shlex.split(command)
+    assert arguments[:4] == [
+        "uv",
+        "--no-config",
+        "run",
+        "catalog-validate-challenge-evidence",
+    ]
+    monkeypatch.setattr(shared_challenges, "_PACKAGE_REPOSITORY_ROOT", root)
+    monkeypatch.setattr(shared_challenges, "validate_handoff", lambda *_: handoff)
+    monkeypatch.chdir(acceptance)
+
+    assert shared_cli_main(arguments[4:]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status == {
+        "status": "passed",
+        "kind": "load",
+        "evidence": "evidence/load-test-report.json",
+        "handoff": "evidence/modernization-contract.json",
+    }
+
+
 def test_p6_cicd_raw_fixtures_preserve_azure_response_shapes(
     repo_root: Path,
 ) -> None:
@@ -1032,15 +1080,15 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
             "evidenceOutput": "evidence/load-test-report.json",
             "evidenceRenderCommand": (
                 "uv --no-config run catalog-render-load-evidence --capture "
-                "../../evidence/load/capture.json --handoff "
-                "../../evidence/modernization-contract.json --output "
-                "../../evidence/load-test-report.json --repository-root ../.."
+                "evidence/load/capture.json --handoff "
+                "evidence/modernization-contract.json --output "
+                "evidence/load-test-report.json --repository-root ../.."
             ),
             "evidenceValidationCommand": (
                 "uv --no-config run catalog-validate-challenge-evidence load "
-                "../../evidence/load-test-report.json --handoff "
-                "../../evidence/modernization-contract.json --contracts "
-                "../../workshop/contracts --repository-root ../.."
+                "evidence/load-test-report.json --handoff "
+                "evidence/modernization-contract.json --contracts "
+                "workshop/contracts --repository-root ../.."
             ),
             "validationCommand": (
                 "uv --no-config run pytest -q tests/test_p6_load_challenge.py"
@@ -1062,9 +1110,9 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
             "evidenceOutput": "evidence/cicd-report.json",
             "evidenceValidationCommand": (
                 "uv --no-config run catalog-validate-challenge-evidence cicd "
-                "../../evidence/cicd-report.json --handoff "
-                "../../evidence/modernization-contract.json --contracts "
-                "../../workshop/contracts --repository-root ../.."
+                "evidence/cicd-report.json --handoff "
+                "evidence/modernization-contract.json --contracts "
+                "workshop/contracts --repository-root ../.."
             ),
             "validationCommand": (
                 "uv --no-config run pytest -q tests/test_p6_cicd_challenge.py"
@@ -1086,9 +1134,9 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
             "evidenceOutput": "evidence/observability-report.json",
             "evidenceValidationCommand": (
                 "uv --no-config run catalog-validate-challenge-evidence observability "
-                "../../evidence/observability-report.json --handoff "
-                "../../evidence/modernization-contract.json --contracts "
-                "../../workshop/contracts --repository-root ../.."
+                "evidence/observability-report.json --handoff "
+                "evidence/modernization-contract.json --contracts "
+                "workshop/contracts --repository-root ../.."
             ),
             "validationCommand": (
                 "uv --no-config run pytest -q tests/test_p6_observability_challenge.py"

@@ -487,6 +487,27 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Recreate the child commit from the new exact coordinator base, import only its owned files, and update the owned consumer assertion to the new registry version while preserving the stream-specific contract version. Require one clean commit and rerun both the focused and full integrated acceptance gates before declaring the new base frozen.
 
+## 70. Repository-relative evidence arguments are written as working-directory paths
+**Symptom:** A published P6 renderer or validator command fails even when run from the documented `tests/acceptance` directory.
+
+**Cause:** The command uses `../../evidence` while the CLI also prepends `--repository-root`, or a second CLI preserves lexical `..` components during containment checks. The two tools silently implement different path conventions.
+
+**Resolution:** Freeze all P6 CLI inputs as repository-root-relative (`evidence/...` and `workshop/contracts`) and resolve them exactly once against `--repository-root`. Keep `--repository-root ../..` as the only working-directory-relative argument. Execute the exact registry command strings from a synthetic `tests/acceptance` directory in acceptance tests.
+
+## 71. A PostgreSQL database child is used as the server metric scope
+**Symptom:** `az monitor metrics list` or raw normalization cannot obtain `cpu_percent` for the PostgreSQL resource ID from the modernization handoff.
+
+**Cause:** The handoff identifies `Microsoft.DBforPostgreSQL/flexibleServers/databases`, while `cpu_percent` is exposed by the parent `Microsoft.DBforPostgreSQL/flexibleServers` resource.
+
+**Resolution:** Preserve the database-child resource ID in the evidence subject, derive its exact flexible-server parent for the PostgreSQL metric capture and normalized observation, and validate that parent-child relationship. Azure SQL continues using its handoff database resource directly.
+
+## 72. A malformed handoff bypasses the renderer's JSON error boundary
+**Symptom:** `catalog-render-load-evidence` prints a Python traceback instead of one machine-readable failed result.
+
+**Cause:** A required handoff field is indexed after partial validation omitted it, raising `KeyError`, while the CLI intentionally catches only operational and validation errors.
+
+**Resolution:** Validate every handoff field before indexing it. In particular, require a nonempty `sliceId` alongside the nested source, application, database, and image fields, and retain a CLI regression that removes it and expects JSON failure.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

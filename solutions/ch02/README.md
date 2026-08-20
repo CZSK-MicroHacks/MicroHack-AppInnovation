@@ -57,14 +57,20 @@ DATABASE_RESOURCE_ID=$(jq -er '.database.resourceId' "$HANDOFF")
 [[ "$READINESS_URL" == "$APP_URL/readyz" ]]
 CATALOG_BASE_HOST=${APP_URL#https://}
 
+# cpu_percent is emitted at the PostgreSQL flexible-server parent, not its
+# handoff database child. Azure SQL remains database-scoped.
 case "$DATABASE_FAMILY:$STACK" in
   azure-sql:dotnet-sqlserver)
     DATABASE_METRIC=app_cpu_billed
     DATABASE_AGGREGATION=Total
+    DATABASE_METRIC_RESOURCE_ID=$DATABASE_RESOURCE_ID
     ;;
   postgresql-flexible:java-postgresql)
     DATABASE_METRIC=cpu_percent
     DATABASE_AGGREGATION=Maximum
+    [[ "$DATABASE_RESOURCE_ID" == */flexibleServers/*/databases/* ]]
+    DATABASE_METRIC_RESOURCE_ID=${DATABASE_RESOURCE_ID%/databases/*}
+    [[ "$DATABASE_METRIC_RESOURCE_ID" == */flexibleServers/* ]]
     ;;
   *)
     printf 'Unsupported handoff database/stack pair: %s/%s\n' \
@@ -206,7 +212,7 @@ Capture the database window through the observed run end:
 
 ```bash
 az monitor metrics list \
-  --resource "$DATABASE_RESOURCE_ID" \
+  --resource "$DATABASE_METRIC_RESOURCE_ID" \
   --metric "$DATABASE_METRIC" \
   --aggregation "$DATABASE_AGGREGATION" \
   --interval PT1M \
@@ -338,7 +344,7 @@ jq -n \
   --arg revision "$APP_REVISION" \
   --arg databaseFile "evidence/load/raw/database.json" \
   --arg databaseSha "$DATABASE_SHA" \
-  --arg databaseResourceId "$DATABASE_RESOURCE_ID" \
+  --arg databaseResourceId "$DATABASE_METRIC_RESOURCE_ID" \
   --arg databaseMetric "$DATABASE_METRIC" \
   --arg databaseAggregation "$DATABASE_AGGREGATION" \
   --arg databaseEnd "$DATABASE_END" \
@@ -412,15 +418,15 @@ frozen renderer and then the common validator:
 (
   cd tests/acceptance
   uv --no-config run catalog-render-load-evidence \
-    --capture ../../evidence/load/capture.json \
-    --handoff ../../evidence/modernization-contract.json \
-    --output ../../evidence/load-test-report.json \
+    --capture evidence/load/capture.json \
+    --handoff evidence/modernization-contract.json \
+    --output evidence/load-test-report.json \
     --repository-root ../..
 
   uv --no-config run catalog-validate-challenge-evidence load \
-    ../../evidence/load-test-report.json \
-    --handoff ../../evidence/modernization-contract.json \
-    --contracts ../../workshop/contracts \
+    evidence/load-test-report.json \
+    --handoff evidence/modernization-contract.json \
+    --contracts workshop/contracts \
     --repository-root ../..
 )
 ```

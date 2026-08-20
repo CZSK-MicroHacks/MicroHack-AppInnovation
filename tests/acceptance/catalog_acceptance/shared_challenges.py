@@ -524,6 +524,10 @@ def _validate_load(
     handoff_path: Path,
 ) -> None:
     """Validate load success, scale-out, database load, and recovery observations."""
+    from catalog_acceptance.load_evidence import (
+        expected_database_metric_resource_id,
+    )
+
     _validate_common_subject(evidence, handoff)
     capture = evidence["capture"]
     _require(
@@ -792,14 +796,15 @@ def _validate_load(
         MetricObservation,
     )
     declared_database = evidence["databaseSignal"]
+    expected_database_resource_id = expected_database_metric_resource_id(handoff)
     _require(
-        _same_resource(database.resource_id, handoff["database"]["resourceId"]),
+        _same_resource(database.resource_id, expected_database_resource_id),
         "database metric is for a different resource",
     )
     _require(
         _same_resource(
             declared_database["resourceId"],
-            handoff["database"]["resourceId"],
+            expected_database_resource_id,
         ),
         "declared database metric resource differs from handoff",
     )

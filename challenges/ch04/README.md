@@ -116,9 +116,9 @@ From `tests/acceptance`, run the common validator:
 ```bash
 UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
   uv --no-config run catalog-validate-challenge-evidence observability \
-  ../../evidence/observability-report.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --contracts ../../workshop/contracts \
+  evidence/observability-report.json \
+  --handoff evidence/modernization-contract.json \
+  --contracts workshop/contracts \
   --repository-root ../..
 ```
 

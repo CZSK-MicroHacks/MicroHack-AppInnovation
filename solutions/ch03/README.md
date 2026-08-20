@@ -391,9 +391,9 @@ jq -n \
 
 cd tests/acceptance
 uv --no-config run catalog-validate-challenge-evidence cicd \
-  ../../evidence/cicd-report.json \
-  --handoff ../../evidence/modernization-contract.json \
-  --contracts ../../workshop/contracts \
+  evidence/cicd-report.json \
+  --handoff evidence/modernization-contract.json \
+  --contracts workshop/contracts \
   --repository-root ../..
 ```
 

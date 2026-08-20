@@ -129,7 +129,8 @@ def _prepare_capture(
         handoff["database"]["resourceId"] = (
             "/subscriptions/00000000-0000-0000-0000-000000000000/"
             "resourceGroups/rg-mh-example/providers/"
-            "Microsoft.DBforPostgreSQL/flexibleServers/psql-example"
+            "Microsoft.DBforPostgreSQL/flexibleServers/psql-example/"
+            "databases/catalog"
         )
     handoff_path = repository / "evidence/modernization-contract.json"
     _write_json(handoff_path, handoff)
@@ -151,7 +152,9 @@ def _prepare_capture(
     if database_family == "postgresql-flexible":
         capture["databaseSignal"].update(
             {
-                "resourceId": handoff["database"]["resourceId"],
+                "resourceId": handoff["database"]["resourceId"].rsplit(
+                    "/databases/", maxsplit=1
+                )[0],
                 "metricName": "cpu_percent",
                 "aggregation": "Maximum",
             }
@@ -237,6 +240,7 @@ def test_guides_require_raw_capture_renderer_and_common_validator() -> None:
         "300",
         "app_cpu_billed",
         "cpu_percent",
+        "flexible-server parent",
         "Total",
         "Maximum",
         "Replicas",
@@ -257,6 +261,7 @@ def test_guides_require_raw_capture_renderer_and_common_validator() -> None:
         assert "create a replacement revision" in normalized
         assert "not live proof" in normalized
         assert "do not manually" in normalized
+    assert "DATABASE_METRIC_RESOURCE_ID" in GUIDES[1].read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(("slice_id", "stack", "database_family"), SLICES)

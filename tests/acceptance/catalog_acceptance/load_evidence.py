@@ -422,6 +422,7 @@ def _validate_scale_lifecycle(
 
 def _validate_handoff(handoff: dict[str, Any]) -> None:
     """Require the load renderer's frozen handoff fields."""
+    _require_string(handoff.get("sliceId"), "handoff sliceId")
     required_paths = (
         ("source", "stack"),
         ("source", "commitSha"),
@@ -438,6 +439,51 @@ def _validate_handoff(handoff: dict[str, Any]) -> None:
         value = _require_mapping(handoff.get(parent), parent).get(child)
         if not isinstance(value, str) or not value:
             raise ValueError(f"handoff {parent}.{child} is required")
+
+
+def expected_database_metric_resource_id(handoff: dict[str, Any]) -> str:
+    """Return the Azure resource that exposes the handoff database metric.
+
+    Args:
+        handoff: Validated modernization handoff document.
+
+    Returns:
+        The database resource for Azure SQL or flexible-server parent for PostgreSQL.
+
+    Raises:
+        ValueError: If the database family or PostgreSQL child resource ID is invalid.
+    """
+    resource_id = _require_string(
+        _require_mapping(handoff.get("database"), "database").get("resourceId"),
+        "handoff database.resourceId",
+    ).rstrip("/")
+    family = _require_string(
+        _require_mapping(handoff.get("database"), "database").get("family"),
+        "handoff database.family",
+    )
+    if family == "azure-sql":
+        return resource_id
+    if family != "postgresql-flexible":
+        raise ValueError(f"unsupported database family: {family}")
+    parts = resource_id.strip("/").split("/")
+    lowered = [part.casefold() for part in parts]
+    try:
+        provider_index = lowered.index("providers")
+    except ValueError as error:
+        raise ValueError(
+            "PostgreSQL handoff database must be a flexible-server database child"
+        ) from error
+    if (
+        len(parts) < 10
+        or lowered[-2] != "databases"
+        or lowered[-4] != "flexibleservers"
+        or provider_index + 1 >= len(parts)
+        or lowered[provider_index + 1] != "microsoft.dbforpostgresql"
+    ):
+        raise ValueError(
+            "PostgreSQL handoff database must be a flexible-server database child"
+        )
+    return "/" + "/".join(parts[:-2])
 
 
 def build_load_evidence(
@@ -494,7 +540,8 @@ def build_load_evidence(
         raise ValueError("capture replica resource ID does not match handoff")
     if capture.replicas.revision_name != handoff["application"]["revisionName"]:
         raise ValueError("capture replica revision does not match handoff")
-    if capture.database_signal.resource_id != handoff["database"]["resourceId"]:
+    database_metric_resource_id = expected_database_metric_resource_id(handoff)
+    if capture.database_signal.resource_id != database_metric_resource_id:
         raise ValueError("capture database resource ID does not match handoff")
     database_family = handoff["database"]["family"]
     if database_family not in _DATABASE_SIGNALS:
@@ -620,7 +667,7 @@ def build_load_evidence(
         },
         _RESULT_FILES["databaseSignal"]: {
             "schemaVersion": _OBSERVATION_VERSION,
-            "resourceId": handoff["database"]["resourceId"],
+            "resourceId": database_metric_resource_id,
             "metric": metric_name,
             "aggregation": aggregation,
             "startTime": _format_datetime(capture.database_signal.start),
@@ -719,7 +766,7 @@ def build_load_evidence(
         },
         "databaseSignal": {
             "resultFile": _RESULT_FILES["databaseSignal"],
-            "resourceId": handoff["database"]["resourceId"],
+            "resourceId": database_metric_resource_id,
             "family": database_family,
             "metric": metric_name,
             "aggregation": aggregation,
