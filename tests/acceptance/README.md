@@ -151,6 +151,30 @@ common validator with `cicd` and requires a distinct workflow control SHA, an ex
 checkout, facilitator-owned RBAC audit output, raw revision-list transitions, approval
 before production starts, and a rollback trap armed before promotion.
 
+Render and independently validate Challenge 5 Defender evidence from
+`tests/acceptance`:
+
+```bash
+uv --no-config run catalog-render-defender-evidence \
+  --capture evidence/defender/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --output evidence/defender-report.json \
+  --repository-root ../..
+
+uv --no-config run catalog-validate-defender-evidence \
+  --capture evidence/defender/capture.json \
+  --handoff evidence/modernization-contract.json \
+  --report evidence/defender-report.json \
+  --contracts workshop/contracts \
+  --repository-root ../..
+```
+
+The cleanup capture is a digest-bound composite: one complete four-table Resource
+Graph response plus exact ARM list responses for Defender auto-provisioning and
+subscription settings. The validator rejects partial pages, wrong endpoints or
+collections, cross-subscription records, lifecycle timestamp overlap, and any
+before/after state drift.
+
 Run the focused shared-contract gate with:
 
 ```bash
@@ -158,6 +182,12 @@ uv --no-config run pytest -q \
   tests/test_contract_assets.py \
   tests/test_p6_contracts.py \
   tests/test_p6_load_renderer.py
+```
+
+Run the focused Defender contract gate with:
+
+```bash
+uv --no-config run pytest -q tests/test_p7_defender_contracts.py
 ```
 
 All paths declared by a handoff are repository-root-relative. Runtime evidence must be

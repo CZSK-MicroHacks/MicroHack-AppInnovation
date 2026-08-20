@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.2.0",
+  "deploymentStage": "application",
+  "applicationRevisionRole": "release",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "stack": "dotnet-sqlserver",
+  "location": "swedencentral",
+  "resourceGroup": {
+    "name": "rg-mh-example",
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example"
+  },
+  "network": {
+    "virtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example",
+    "migrationSourceVirtualNetworkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example",
+    "migrationSourceVmResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "migrationSourceToTargetPeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/virtualNetworkPeerings/to-vnet-mh-example",
+    "migrationTargetToSourcePeeringResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-example/virtualNetworkPeerings/to-vnet-mh-source-example",
+    "migrationPrivateDnsZoneLinkResourceIds": [
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/vnet-mh-source-example",
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/vnet-mh-source-example"
+    ]
+  },
+  "containerRegistry": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
+    "loginServer": "acrexample.azurecr.io"
+  },
+  "workloadIdentity": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-mh-example",
+    "clientId": "00000000-0000-0000-0000-000000000001",
+    "principalId": "00000000-0000-0000-0000-000000000002"
+  },
+  "containerAppsEnvironmentResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/managedEnvironments/cae-mh-example",
+  "containerAppsEnvironmentDefaultDomain": "example.swedencentral.azurecontainerapps.io",
+  "database": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/databases/catalog",
+    "family": "azure-sql",
+    "server": "sql-example.database.windows.net",
+    "database": "catalog",
+    "authentication": "managed-identity",
+    "localAdministratorPrincipal": null,
+    "entraAdministratorPrincipal": null,
+    "applicationPrincipal": {
+      "name": "id-mh-example",
+      "kind": "managed-identity",
+      "principalId": "00000000-0000-0000-0000-000000000002"
+    }
+  },
+  "images": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Storage/storageAccounts/stexample/blobServices/default/containers/catalog-images",
+    "provider": "azure-blob",
+    "location": "catalog-images",
+    "authentication": "managed-identity"
+  },
+  "observability": {
+    "applicationInsightsResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Insights/components/appi-mh-example",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.OperationalInsights/workspaces/log-mh-example"
+  },
+  "containerImage": {
+    "repository": "catalog-dotnet",
+    "tag": "0000000000000000000000000000000000000000",
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "application": {
+    "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example",
+    "url": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io",
+    "healthUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/healthz",
+    "readinessUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/readyz",
+    "containerAppName": "ca-mh-example",
+    "revisionName": "ca-mh-example--release-000000000000"
+  }
+}

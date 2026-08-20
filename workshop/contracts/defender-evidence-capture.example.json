@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.1.0",
+  "capturedAt": "2025-01-01T10:05:00Z",
+  "identity": {
+    "handoff": {
+      "file": "workshop/contracts/fixtures/defender/handoff.json",
+      "sha256": "aa5a516be1fb353830a452a4500eb815b76b277fd64b0cce7afda88fce3ea7fd"
+    },
+    "targetOutput": {
+      "file": "workshop/contracts/fixtures/defender/target-output.json",
+      "sha256": "438419eeb79cc78cc954fb6f4d5aee83c1488b588a52fd95d9e4d2b96b87b0d9"
+    },
+    "labProfile": {
+      "file": "workshop/defender/lab-profile.json",
+      "sha256": "d68c9e3a0730f67a365a995944edcd17e977bf54a5e1af29335d834d4a98d65c"
+    },
+    "cleanupManifest": {
+      "file": "workshop/contracts/fixtures/defender/cleanup-manifest.json",
+      "sha256": "0fe6d54451dec2d2b8610b42752d8654c29d25fdd8469aa514043ba24e70bbb2"
+    }
+  },
+  "foundation": {
+    "subscriptionId": "00000000-0000-0000-0000-000000000000",
+    "dedicatedWorkshopSubscription": true,
+    "facilitatorChangeApproval": "facilitator-approved-demo",
+    "pricings": {
+      "file": "workshop/contracts/fixtures/defender/pricings.json",
+      "sha256": "410474a34523a9ce7e482bf2e7439496d47d0a847192d1830fd012cee25b9d9e"
+    },
+    "budget": {
+      "file": "workshop/contracts/fixtures/defender/budget.json",
+      "sha256": "03c32b3f5872591617b5fc2ebcd2a0d8b6217d39dfa05c95a2977039faf40d74",
+      "queriedAt": "2025-01-01T09:10:00Z",
+      "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "apiVersion": "2023-11-01"
+    },
+    "legacyVmCoverage": {
+      "file": "workshop/contracts/fixtures/defender/legacy-vm-coverage.json",
+      "sha256": "bd46e0a4a97718c5434ebfc676ee327be24393e4daea438bf0647df0721ff7a5"
+    },
+    "seedSnapshot": {
+      "file": "workshop/contracts/fixtures/defender/seed-snapshot.json",
+      "sha256": "0fa78865a95c26ac1c0fff0112df2eb07ff6e178cec43aa57a3961002eedd816"
+    },
+    "manualPreflight": {
+      "file": "workshop/contracts/fixtures/defender/manual-preflight.json",
+      "sha256": "1e25b452a436383ebfd994f9528e1fc316b531a046179d1d2464b679edb4d93f"
+    }
+  },
+  "resources": {
+    "containerRegistry": {
+      "before": {
+        "file": "workshop/contracts/fixtures/defender/acr-before.json",
+        "sha256": "125a9b52612ffa8e1373e318a287034df8f302c1f65f50044ca944f0574f7138"
+      },
+      "after": {
+        "file": "workshop/contracts/fixtures/defender/acr-after.json",
+        "sha256": "32d1617eef06c768c34a65eb6900ea3efceca09a96813cab01a9eefb220748ff"
+      }
+    },
+    "containerRegistryRoleAssignments": {
+      "file": "workshop/contracts/fixtures/defender/acr-role-assignments.json",
+      "sha256": "b221ab9551d2451244ea8319765c0ac4867425c4c2621bb1f54042109a0d4ff0"
+    },
+    "containerApp": {
+      "before": {
+        "file": "workshop/contracts/fixtures/defender/container-app-before.json",
+        "sha256": "72def39441f1254266fba06d6aab6d90d1dbe5c0903f43037d4bff879f97a4be"
+      },
+      "after": {
+        "file": "workshop/contracts/fixtures/defender/container-app-after.json",
+        "sha256": "d499122839d9528ae4aeec5ad6e0bc4348eb86ced06ea7561972a7027482b4dd"
+      }
+    },
+    "database": {
+      "before": {
+        "file": "workshop/contracts/fixtures/defender/database-before.json",
+        "sha256": "264a947bd8b9d84c145788eaac520d3ab7c82b7614a40932ede20965ae321a29"
+      },
+      "after": {
+        "file": "workshop/contracts/fixtures/defender/database-after.json",
+        "sha256": "62cd82266dff17165d5aefe6d87bf4f245fed12ec79e995a5b668f10e7ec769f"
+      }
+    },
+    "legacyVm": {
+      "before": {
+        "file": "workshop/contracts/fixtures/defender/vm-before.json",
+        "sha256": "901f57cf0bf87784723d7aa8f51fba5f1ea301563bc82f009222f32228c27821"
+      },
+      "after": {
+        "file": "workshop/contracts/fixtures/defender/vm-after.json",
+        "sha256": "1218486be4dc7c009b352dac01a712f39543096e2fa1973ecce1adadb6ebeed5"
+      }
+    }
+  },
+  "decisions": {
+    "containerAppIngress": {
+      "disposition": "justified",
+      "justification": "Public HTTPS ingress remains necessary for the participant-facing workshop catalog endpoint.",
+      "compensatingControls": [
+        "HTTPS-only ingress",
+        "No insecure HTTP transport",
+        "Revision health and readiness probes"
+      ]
+    },
+    "databaseNetwork": {
+      "disposition": "remediated",
+      "justification": null,
+      "compensatingControls": []
+    },
+    "legacyVmExposure": {
+      "disposition": "remediated",
+      "justification": null,
+      "compensatingControls": []
+    }
+  },
+  "imageAssessment": {
+    "file": "workshop/contracts/fixtures/defender/image-assessment.json",
+    "sha256": "95699761a868892e0f92b11bf38866dc59742f49dcfc8576c5af580dde8b8663",
+    "queriedAt": "2025-01-01T09:50:00Z",
+    "status": "completed",
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "registryResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
+    "apiVersion": "2019-01-01-preview"
+  },
+  "securityContext": {
+    "recommendations": {
+      "file": "workshop/contracts/fixtures/defender/recommendations.json",
+      "sha256": "ac61fa50bfe1bc1f1976fd337f410561034065cbff05d8cfdbe1c7e1e1310025",
+      "queriedAt": "2025-01-01T09:51:00Z",
+      "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "apiVersion": "2020-01-01"
+    },
+    "secureScore": {
+      "file": "workshop/contracts/fixtures/defender/secure-score.json",
+      "sha256": "ac99f08427bd996f40e2bf553227c056f99f46b9ef15ef99348e2b46006f5d44",
+      "queriedAt": "2025-01-01T09:52:00Z",
+      "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "apiVersion": "2020-01-01"
+    },
+    "mcsb": {
+      "file": "workshop/contracts/fixtures/defender/mcsb.json",
+      "sha256": "4be6db403b2a84dd080a66b6d2918d2ef953c3022af099b7d5263e35b3e04008",
+      "queriedAt": "2025-01-01T09:53:00Z",
+      "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "apiVersion": "2019-01-01-preview"
+    },
+    "attackPaths": {
+      "file": "workshop/contracts/fixtures/defender/attack-paths.json",
+      "sha256": "6b25afca31e1cc337e3aaf564bfb63767656f3a88024d1dc7146ac3e565cfc8d",
+      "queriedAt": "2025-01-01T09:54:00Z",
+      "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+      "apiVersion": "2022-10-01"
+    }
+  },
+  "health": {
+    "observedAt": "2025-01-01T10:00:00Z",
+    "revisionName": "ca-mh-example--release-000000000000",
+    "healthUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/healthz",
+    "healthStatus": 200,
+    "readinessUrl": "https://ca-mh-example.example.swedencentral.azurecontainerapps.io/readyz",
+    "readinessStatus": 200
+  }
+}

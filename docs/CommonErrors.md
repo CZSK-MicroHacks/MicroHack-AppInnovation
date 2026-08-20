@@ -508,6 +508,55 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Validate every handoff field before indexing it. In particular, require a nonempty `sliceId` alongside the nested source, application, database, and image fields, and retain a CLI regression that removes it and expects JSON failure.
 
+## 73. One selected VM is mistaken for subscription-wide Defender coverage
+**Symptom:** Defender for Servers P2 is enabled and evidence proves only the migration source VM, leaving the retained sibling workload outside the demonstrated challenge scope.
+
+**Cause:** A selected handoff resource is not a complete inventory, and subscription pricing without `enforce: "True"` can still be overridden at descendant scopes.
+
+**Resolution:** Require subscription-enforced `VirtualMachines` Standard/P2, derive both retained VM names from the selected source VM's participant suffix, and preserve digest-bound successful ARM responses for the .NET and Java VMs. Restore and verify the prior `enforce` value during cleanup.
+
+## 74. Live Defender queries are used as deterministic workshop findings
+**Symptom:** A correct workshop run fails because recommendations, Secure Score, MCSB, or image subassessments have not populated yet, or an empty response is presented as the expected learning example.
+
+**Cause:** Defender findings are asynchronous and may legitimately be empty during the challenge window.
+
+**Resolution:** Grade current live evidence on exact query attempt and provenance, with asynchronous results optional. Separately require a digest-bound pre-warmed snapshot captured earlier from distinct artifacts, with nonempty recommendation coverage, an unhealthy finding, Secure Score, MCSB control, and matching image subassessment.
+
+## 75. A Defender operation and scope identify the wrong nested collection
+**Symptom:** An empty image or compliance response passes provenance checks even though the request used another assessment key or regulatory standard.
+
+**Cause:** The parent ACR or subscription, operation label, API version, and timestamp do not identify nested path parameters such as `assessmentName` or `regulatoryComplianceStandardName`.
+
+**Resolution:** Preserve and validate the exact request `resourcePath`. Bind image records to the requested assessment collection and MCSB control IDs to the requested standard, for both current and pre-warmed evidence.
+
+## 76. Equal timestamps impersonate later cleanup verification
+**Symptom:** Cleanup completion, restored pricing, post-cleanup inventory, and cost evidence share a timestamp but are reported as an ordered restoration proof.
+
+**Cause:** A less-than chronology check permits equality, which establishes no before/after relationship.
+
+**Resolution:** Require cleanup completion strictly after paid-plan enablement, both restoration observations strictly after cleanup, and Cost Management verification strictly after both observations. Keep equality-boundary regressions for every transition.
+
+## 77. Argparse failures escape a JSON CLI boundary
+**Symptom:** A missing or unknown command argument prints argparse usage text and exits with `SystemExit(2)` instead of returning the documented machine-readable failure object.
+
+**Cause:** `parse_args()` runs before the command's exception boundary and argparse handles errors by writing directly to stderr.
+
+**Resolution:** Use an argument parser whose `error()` raises a validation exception, invoke it inside the command's JSON failure boundary, and test empty and malformed renderer and validator invocations.
+
+## 78. Defender attack paths are modeled as a direct ARM GET
+**Symptom:** An empty `Microsoft.Security/attackPaths` response is accepted even though no supported request produced it.
+
+**Cause:** Defender for Cloud documents attack-path retrieval through Azure Resource Graph, not a direct Defender resource-list endpoint.
+
+**Resolution:** POST one exact subscription-bound `securityresources` query to `Microsoft.ResourceGraph/resources`, preserve the complete raw request and response, reject truncation or pagination, and bind every returned attack-path ID, type, and subscription to the selected subscription. Include its query time in the pre-warmed/current evidence chronology.
+
+## 79. One cleanup Resource Graph query claims unsupported resource types
+**Symptom:** A cleanup inventory fixture contains Defender settings or monitoring associations that its declared ARG tables cannot return, so before/after equality can succeed on fabricated evidence.
+
+**Cause:** Azure Resource Graph exposes VM and Arc extensions through `Resources`, DCR associations through `InsightResources`, Defender pricings through `SecurityResources`, and policy assignments through `PolicyResources`. Defender auto-provisioning and subscription settings require their dedicated ARM list APIs. Projecting only `properties` also hides policy-assignment identity or location changes.
+
+**Resolution:** Use one exact four-table ARG producer for supported types plus bounded subscription ARM GET envelopes for `autoProvisioningSettings` and `settings`. Bind every endpoint, API version, subscription, response ID, timestamp, and pagination state. Preserve `identity` and `location` in the ARG projection and compare the complete normalized composite before and after cleanup.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

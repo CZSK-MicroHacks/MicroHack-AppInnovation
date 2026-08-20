@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000010",
+      "name": "00000000-0000-0000-0000-000000000010",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "properties": {
+        "principalId": "00000000-0000-0000-0000-000000000002",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d"
+      }
+    }
+  ]
+}

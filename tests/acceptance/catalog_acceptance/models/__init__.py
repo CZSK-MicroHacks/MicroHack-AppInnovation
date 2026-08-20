@@ -7,6 +7,7 @@ from catalog_acceptance.models.contracts import (
     CheckResult,
     SeedManifest,
 )
+from catalog_acceptance.models.defender import DefenderEvidenceCapture
 from catalog_acceptance.models.shared_challenges import (
     ApprovalObservation,
     BuildObservation,
@@ -40,6 +41,7 @@ __all__ = [
     "CheckResult",
     "ColdStartQueryObservation",
     "DatabaseFailureQueryObservation",
+    "DefenderEvidenceCapture",
     "DiagnosticSettingObservation",
     "ErrorRateQueryObservation",
     "GitHubRunObservation",

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "request": {
+    "method": "GET",
+    "operation": "subscription-defender-pricings",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "apiVersion": "2024-01-01",
+    "queriedAt": "2025-01-01T08:55:00Z"
+  },
+  "response": {
+    "value": [
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Security/pricings/CloudPosture",
+        "name": "CloudPosture",
+        "type": "Microsoft.Security/pricings",
+        "properties": {
+          "pricingTier": "Free",
+          "enforce": "False",
+          "extensions": []
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Security/pricings/Containers",
+        "name": "Containers",
+        "type": "Microsoft.Security/pricings",
+        "properties": {
+          "pricingTier": "Free",
+          "enforce": "False",
+          "extensions": []
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Security/pricings/SqlServers",
+        "name": "SqlServers",
+        "type": "Microsoft.Security/pricings",
+        "properties": {
+          "pricingTier": "Free",
+          "enforce": "False",
+          "extensions": []
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Security/pricings/OpenSourceRelationalDatabases",
+        "name": "OpenSourceRelationalDatabases",
+        "type": "Microsoft.Security/pricings",
+        "properties": {
+          "pricingTier": "Free",
+          "enforce": "False",
+          "extensions": []
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Security/pricings/VirtualMachines",
+        "name": "VirtualMachines",
+        "type": "Microsoft.Security/pricings",
+        "properties": {
+          "pricingTier": "Free",
+          "enforce": "False",
+          "extensions": []
+        }
+      }
+    ]
+  }
+}

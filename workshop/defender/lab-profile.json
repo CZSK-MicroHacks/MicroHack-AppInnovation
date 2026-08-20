@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "profileId": "secure-modernization-baseline",
+  "activationPolicy": "do-not-weaken-secure-baseline",
+  "controls": [
+    {
+      "id": "acr-admin-authentication",
+      "baseline": "already-compliant",
+      "participantAction": "verify-or-remediate"
+    },
+    {
+      "id": "container-app-ingress",
+      "baseline": "intentional-public-https",
+      "participantAction": "tighten-or-justify"
+    },
+    {
+      "id": "database-public-network",
+      "baseline": "already-compliant",
+      "participantAction": "verify-or-document"
+    },
+    {
+      "id": "legacy-vm-management-ingress",
+      "baseline": "virtual-network-segmented",
+      "participantAction": "verify-or-document"
+    }
+  ],
+  "asynchronousFindings": {
+    "requiredToQuery": [
+      "image-vulnerability-assessment",
+      "recommendations",
+      "secure-score",
+      "mcsb-controls",
+      "attack-paths"
+    ],
+    "requiredToBeNonEmpty": [],
+    "attackPaths": "query-required-results-optional"
+  },
+  "prewarmedSnapshot": {
+    "requiredSignals": [
+      "image-vulnerability-assessment",
+      "recommendations",
+      "secure-score",
+      "mcsb-controls"
+    ],
+    "recommendationResourceCoverage": [
+      "dotnet-vm",
+      "java-vm",
+      "container-app",
+      "container-registry",
+      "database"
+    ],
+    "minimumUnhealthyRecommendations": 1
+  }
+}

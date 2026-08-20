@@ -1,0 +1,63 @@
+{
+  "vm": {
+    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "type": "Microsoft.Compute/virtualMachines",
+    "properties": {
+      "provisioningState": "Succeeded",
+      "networkProfile": {
+        "networkInterfaces": [
+          {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/networkInterfaces/nic-vm-dotnet-user001"
+          }
+        ]
+      }
+    }
+  },
+  "networkInterfaces": [
+    {
+      "resource": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/networkInterfaces/nic-vm-dotnet-user001",
+        "type": "Microsoft.Network/networkInterfaces",
+        "properties": {
+          "networkSecurityGroup": {
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/networkSecurityGroups/nsg-mh-source-example"
+          },
+          "ipConfigurations": [
+            {
+              "properties": {
+                "subnet": {
+                  "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/virtualNetworks/vnet-mh-source-example/subnets/vms"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "effectiveNetworkSecurityGroups": {
+        "value": [
+          {
+            "networkSecurityGroup": {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/networkSecurityGroups/nsg-mh-source-example"
+            },
+            "association": {
+              "networkInterface": {
+                "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Network/networkInterfaces/nic-vm-dotnet-user001"
+              }
+            },
+            "securityRules": [
+              {
+                "name": "allow-rdp-vnet",
+                "protocol": "Tcp",
+                "access": "Allow",
+                "direction": "Inbound",
+                "sourceAddressPrefix": "VirtualNetwork",
+                "destinationPortRange": "3389"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "jitPolicy": null
+}

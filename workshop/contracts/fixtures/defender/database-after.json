@@ -1,0 +1,10 @@
+{
+  "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example",
+  "name": "sql-example",
+  "type": "Microsoft.Sql/servers",
+  "properties": {
+    "minimalTlsVersion": "1.2",
+    "publicNetworkAccess": "Disabled",
+    "state": "Ready"
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/defender-seed-snapshot.schema.json",
+  "title": "Pre-warmed deterministic Defender context snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "capturedAt",
+    "subscriptionId",
+    "recommendations",
+    "secureScore",
+    "mcsb",
+    "imageAssessment"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "capturedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "subscriptionId": {
+      "$ref": "#/$defs/subscriptionId"
+    },
+    "recommendations": {
+      "$ref": "#/$defs/queryArtifact"
+    },
+    "secureScore": {
+      "$ref": "#/$defs/queryArtifact"
+    },
+    "mcsb": {
+      "$ref": "#/$defs/queryArtifact"
+    },
+    "imageAssessment": {
+      "$ref": "#/$defs/imageArtifact"
+    }
+  },
+  "$defs": {
+    "queryArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "queriedAt",
+        "scopeResourceId",
+        "apiVersion"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "queriedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "scopeResourceId": {
+          "type": "string",
+          "pattern": "^/subscriptions/"
+        },
+        "apiVersion": {
+          "type": "string",
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}(?:-preview)?$"
+        }
+      }
+    },
+    "imageArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "queriedAt",
+        "status",
+        "digest",
+        "registryResourceId",
+        "apiVersion"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "queriedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "status": {
+          "const": "completed"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "registryResourceId": {
+          "type": "string",
+          "pattern": "^/subscriptions/"
+        },
+        "apiVersion": {
+          "type": "string",
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}(?:-preview)?$"
+        }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\/$)[A-Za-z0-9._/-]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "subscriptionId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

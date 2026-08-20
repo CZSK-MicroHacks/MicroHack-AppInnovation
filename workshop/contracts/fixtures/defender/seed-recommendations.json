@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "request": {
+    "method": "GET",
+    "operation": "subscription-recommendations",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "resourcePath": "providers/Microsoft.Security/assessments",
+    "apiVersion": "2020-01-01",
+    "queriedAt": "2025-01-01T09:30:00Z"
+  },
+  "response": {
+    "value": [
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001/providers/Microsoft.Security/assessments/00000000-0000-0000-0000-000000000101",
+        "name": "00000000-0000-0000-0000-000000000101",
+        "type": "Microsoft.Security/assessments",
+        "properties": {
+          "resourceDetails": {
+            "source": "Azure",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001"
+          },
+          "displayName": "Management ports should be protected",
+          "status": {
+            "code": "Unhealthy"
+          }
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-java-user001/providers/Microsoft.Security/assessments/00000000-0000-0000-0000-000000000102",
+        "name": "00000000-0000-0000-0000-000000000102",
+        "type": "Microsoft.Security/assessments",
+        "properties": {
+          "resourceDetails": {
+            "source": "Azure",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-java-user001"
+          },
+          "displayName": "Endpoint protection should be installed",
+          "status": {
+            "code": "Healthy"
+          }
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example/providers/Microsoft.Security/assessments/00000000-0000-0000-0000-000000000103",
+        "name": "00000000-0000-0000-0000-000000000103",
+        "type": "Microsoft.Security/assessments",
+        "properties": {
+          "resourceDetails": {
+            "source": "Azure",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.App/containerApps/ca-mh-example"
+          },
+          "displayName": "Container Apps should use secure ingress",
+          "status": {
+            "code": "Healthy"
+          }
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample/providers/Microsoft.Security/assessments/00000000-0000-0000-0000-000000000104",
+        "name": "00000000-0000-0000-0000-000000000104",
+        "type": "Microsoft.Security/assessments",
+        "properties": {
+          "resourceDetails": {
+            "source": "Azure",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample"
+          },
+          "displayName": "Container registries should disable local authentication",
+          "status": {
+            "code": "Healthy"
+          }
+        }
+      },
+      {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example/providers/Microsoft.Security/assessments/00000000-0000-0000-0000-000000000105",
+        "name": "00000000-0000-0000-0000-000000000105",
+        "type": "Microsoft.Security/assessments",
+        "properties": {
+          "resourceDetails": {
+            "source": "Azure",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.Sql/servers/sql-example"
+          },
+          "displayName": "Databases should restrict public network access",
+          "status": {
+            "code": "Healthy"
+          }
+        }
+      }
+    ]
+  }
+}

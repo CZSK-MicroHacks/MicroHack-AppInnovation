@@ -1,0 +1,8 @@
+{
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "controlId": "serverless-containers",
+  "enabled": true,
+  "observedAt": "2025-01-01T09:00:00Z",
+  "operatorRole": "Owner",
+  "source": "azure-portal-owner-preflight"
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "observedAt": "2025-01-01T09:20:00Z",
+  "apiVersion": "2024-11-01",
+  "virtualMachines": [
+    {
+      "workload": "dotnet",
+      "request": {
+        "method": "GET",
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001"
+      },
+      "response": {
+        "statusCode": 200,
+        "body": {
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+          "name": "vm-dotnet-user001",
+          "type": "Microsoft.Compute/virtualMachines",
+          "location": "swedencentral",
+          "properties": {
+            "provisioningState": "Succeeded"
+          }
+        }
+      }
+    },
+    {
+      "workload": "java",
+      "request": {
+        "method": "GET",
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-java-user001"
+      },
+      "response": {
+        "statusCode": 200,
+        "body": {
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-source-example/providers/Microsoft.Compute/virtualMachines/vm-java-user001",
+          "name": "vm-java-user001",
+          "type": "Microsoft.Compute/virtualMachines",
+          "location": "swedencentral",
+          "properties": {
+            "provisioningState": "Succeeded"
+          }
+        }
+      }
+    }
+  ]
+}

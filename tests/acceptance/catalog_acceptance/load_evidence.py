@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import os
@@ -14,6 +13,12 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 
+from catalog_acceptance.artifact_io import (
+    load_digest_bound_json,
+    load_json_object as _load_json_object,
+    resolve_repository_file as _resolve_file,
+    sha256_file as _sha256_file,
+)
 from catalog_acceptance.models.shared_challenges import (
     HealthObservation,
     LoadEvidenceCapture,
@@ -48,64 +53,6 @@ _DATABASE_SIGNALS = {
     "azure-sql": ("app_cpu_billed", "Total", "count"),
     "postgresql-flexible": ("cpu_percent", "Maximum", "percent"),
 }
-
-
-def _reject_nonfinite(value: str) -> None:
-    """Reject non-standard JSON numeric constants."""
-    raise ValueError(f"non-finite JSON constant is forbidden: {value}")
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """Build one object while rejecting duplicate JSON member names."""
-    value: dict[str, Any] = {}
-    for key, child in pairs:
-        if key in value:
-            raise ValueError(f"duplicate JSON member is forbidden: {key}")
-        value[key] = child
-    return value
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    """Load one strict UTF-8 JSON object."""
-    with path.open(encoding="utf-8") as handle:
-        value = json.load(
-            handle,
-            parse_constant=_reject_nonfinite,
-            object_pairs_hook=_reject_duplicate_keys,
-        )
-    if not isinstance(value, dict):
-        raise ValueError(f"expected a JSON object: {path}")
-    return value
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the lowercase SHA-256 digest of one file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _resolve_file(repository_root: Path, value: str) -> Path:
-    """Resolve one non-empty regular file without traversal or symlinks."""
-    root = repository_root.resolve()
-    relative = Path(value)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"capture path must stay within the repository: {value}")
-    declared = root
-    for part in relative.parts:
-        declared /= part
-        if declared.is_symlink():
-            raise ValueError(f"capture path contains a symlink: {value}")
-    resolved = declared.resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as error:
-        raise ValueError(f"capture path escapes the repository: {value}") from error
-    if not resolved.is_file() or resolved.stat().st_size == 0:
-        raise ValueError(f"capture path must be a non-empty regular file: {value}")
-    return resolved
 
 
 def _require_mapping(value: Any, name: str) -> dict[str, Any]:
@@ -146,6 +93,23 @@ def _require_number(value: Any, name: str) -> float:
     return number
 
 
+def _load_captured_json(
+    repository_root: Path,
+    file: str,
+    expected_sha256: str,
+) -> dict[str, Any]:
+    """Load one digest-bound raw load capture with stable diagnostics."""
+    try:
+        return load_digest_bound_json(repository_root, file, expected_sha256)
+    except ValueError as error:
+        message = str(error).replace(
+            "artifact digest mismatch",
+            "raw capture digest mismatch",
+            1,
+        )
+        raise ValueError(message) from error
+
+
 def _parse_datetime(value: Any, name: str) -> datetime:
     """Parse one offset-aware ISO-8601 timestamp."""
     text = _require_string(value, name)
@@ -161,22 +125,6 @@ def _parse_datetime(value: Any, name: str) -> datetime:
 def _format_datetime(value: datetime) -> str:
     """Render one timestamp canonically in UTC."""
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _load_captured_json(
-    repository_root: Path,
-    file: str,
-    expected_sha256: str,
-) -> dict[str, Any]:
-    """Load one digest-bound raw capture document."""
-    path = _resolve_file(repository_root, file)
-    actual_sha256 = _sha256_file(path)
-    if actual_sha256 != expected_sha256:
-        raise ValueError(
-            f"raw capture digest mismatch for {file}: "
-            f"expected {expected_sha256}, got {actual_sha256}"
-        )
-    return _load_json_object(path)
 
 
 def _validate_artifact(

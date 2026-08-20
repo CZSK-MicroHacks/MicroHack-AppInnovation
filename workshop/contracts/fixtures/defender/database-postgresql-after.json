@@ -1,0 +1,9 @@
+{
+  "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-java-example/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-mh-java-example",
+  "name": "psql-mh-java-example",
+  "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+  "properties": {
+    "publicNetworkAccess": "Disabled",
+    "state": "Ready"
+  }
+}

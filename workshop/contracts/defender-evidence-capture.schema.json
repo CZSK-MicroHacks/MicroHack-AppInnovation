@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/contracts/defender-evidence-capture.schema.json",
+  "title": "Challenge 5 raw Defender evidence capture manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "capturedAt",
+    "identity",
+    "foundation",
+    "resources",
+    "decisions",
+    "imageAssessment",
+    "securityContext",
+    "health"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.1.0"
+    },
+    "capturedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handoff",
+        "targetOutput",
+        "labProfile",
+        "cleanupManifest"
+      ],
+      "properties": {
+        "handoff": {
+          "$ref": "#/$defs/artifact"
+        },
+        "targetOutput": {
+          "$ref": "#/$defs/artifact"
+        },
+        "labProfile": {
+          "$ref": "#/$defs/artifact"
+        },
+        "cleanupManifest": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subscriptionId",
+        "dedicatedWorkshopSubscription",
+        "facilitatorChangeApproval",
+        "pricings",
+        "budget",
+        "legacyVmCoverage",
+        "seedSnapshot",
+        "manualPreflight"
+      ],
+      "properties": {
+        "subscriptionId": {
+          "$ref": "#/$defs/subscriptionId"
+        },
+        "dedicatedWorkshopSubscription": {
+          "const": true
+        },
+        "facilitatorChangeApproval": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 200
+        },
+        "pricings": {
+          "$ref": "#/$defs/artifact"
+        },
+        "budget": {
+          "$ref": "#/$defs/queryArtifact"
+        },
+        "legacyVmCoverage": {
+          "$ref": "#/$defs/artifact"
+        },
+        "seedSnapshot": {
+          "$ref": "#/$defs/artifact"
+        },
+        "manualPreflight": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containerRegistry",
+        "containerRegistryRoleAssignments",
+        "containerApp",
+        "database",
+        "legacyVm"
+      ],
+      "properties": {
+        "containerRegistry": {
+          "$ref": "#/$defs/resourcePair"
+        },
+        "containerRegistryRoleAssignments": {
+          "$ref": "#/$defs/artifact"
+        },
+        "containerApp": {
+          "$ref": "#/$defs/resourcePair"
+        },
+        "database": {
+          "$ref": "#/$defs/resourcePair"
+        },
+        "legacyVm": {
+          "$ref": "#/$defs/resourcePair"
+        }
+      }
+    },
+    "decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containerAppIngress",
+        "databaseNetwork",
+        "legacyVmExposure"
+      ],
+      "properties": {
+        "containerAppIngress": {
+          "$ref": "#/$defs/decision"
+        },
+        "databaseNetwork": {
+          "$ref": "#/$defs/decision"
+        },
+        "legacyVmExposure": {
+          "$ref": "#/$defs/decision"
+        }
+      }
+    },
+    "imageAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "queriedAt",
+        "status",
+        "digest",
+        "registryResourceId",
+        "apiVersion"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "queriedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "pending",
+            "unavailable"
+          ]
+        },
+        "digest": {
+          "$ref": "#/$defs/imageDigest"
+        },
+        "registryResourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "apiVersion": {
+          "$ref": "#/$defs/apiVersion"
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendations",
+        "secureScore",
+        "mcsb",
+        "attackPaths"
+      ],
+      "properties": {
+        "recommendations": {
+          "$ref": "#/$defs/queryArtifact"
+        },
+        "secureScore": {
+          "$ref": "#/$defs/queryArtifact"
+        },
+        "mcsb": {
+          "$ref": "#/$defs/queryArtifact"
+        },
+        "attackPaths": {
+          "$ref": "#/$defs/queryArtifact"
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observedAt",
+        "revisionName",
+        "healthUrl",
+        "healthStatus",
+        "readinessUrl",
+        "readinessStatus"
+      ],
+      "properties": {
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "revisionName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "healthUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "healthStatus": {
+          "const": 200
+        },
+        "readinessUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "readinessStatus": {
+          "const": 200
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "queryArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256",
+        "queriedAt",
+        "scopeResourceId",
+        "apiVersion"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "queriedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "scopeResourceId": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "apiVersion": {
+          "$ref": "#/$defs/apiVersion"
+        }
+      }
+    },
+    "resourcePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before",
+        "after"
+      ],
+      "properties": {
+        "before": {
+          "$ref": "#/$defs/artifact"
+        },
+        "after": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disposition",
+        "justification",
+        "compensatingControls"
+      ],
+      "properties": {
+        "disposition": {
+          "enum": [
+            "remediated",
+            "already-compliant",
+            "justified",
+            "documented-exception"
+          ]
+        },
+        "justification": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 40
+        },
+        "compensatingControls": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\/$)[A-Za-z0-9._/-]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subscriptionId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "imageDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "resourceId": {
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-fA-F-]{36}(?:/resourceGroups/[^/]+(?:/providers/.+)?)?$"
+    },
+    "apiVersion": {
+      "type": "string",
+      "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}(?:-preview)?$"
+    }
+  }
+}

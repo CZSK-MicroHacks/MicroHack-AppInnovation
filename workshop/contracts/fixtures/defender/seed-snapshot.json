@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "capturedAt": "2025-01-01T09:34:00Z",
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "recommendations": {
+    "file": "workshop/contracts/fixtures/defender/seed-recommendations.json",
+    "sha256": "1e9008a6c77a04ec6bc95c4264ae7efd0a440df11ba150c8c4654e43c2681137",
+    "queriedAt": "2025-01-01T09:30:00Z",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "apiVersion": "2020-01-01"
+  },
+  "secureScore": {
+    "file": "workshop/contracts/fixtures/defender/seed-secure-score.json",
+    "sha256": "96a691b5f0b8ed25d71e7baed14049abd650da9d129e92d638e881eb58103f19",
+    "queriedAt": "2025-01-01T09:31:00Z",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "apiVersion": "2020-01-01"
+  },
+  "mcsb": {
+    "file": "workshop/contracts/fixtures/defender/seed-mcsb.json",
+    "sha256": "5251d15a53fb1314e19f8037253d605cd68a015623694f3411d927dda6f2def3",
+    "queriedAt": "2025-01-01T09:32:00Z",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "apiVersion": "2019-01-01-preview"
+  },
+  "imageAssessment": {
+    "file": "workshop/contracts/fixtures/defender/seed-image-assessment.json",
+    "sha256": "d6cf6a3317b3b8d15588ac8229566b5bb90a7d9f92e299730ce686ee81f3597c",
+    "queriedAt": "2025-01-01T09:33:00Z",
+    "status": "completed",
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "registryResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-mh-example/providers/Microsoft.ContainerRegistry/registries/acrexample",
+    "apiVersion": "2019-01-01-preview"
+  }
+}

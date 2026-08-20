@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "request": {
+    "method": "GET",
+    "operation": "subscription-mcsb-controls",
+    "scopeResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000",
+    "resourcePath": "providers/Microsoft.Security/regulatoryComplianceStandards/Microsoft-cloud-security-benchmark/regulatoryComplianceControls",
+    "apiVersion": "2019-01-01-preview",
+    "queriedAt": "2025-01-01T09:53:00Z"
+  },
+  "response": {
+    "value": []
+  }
+}
