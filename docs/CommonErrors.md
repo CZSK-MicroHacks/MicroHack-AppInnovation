@@ -480,6 +480,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Require staging completion, then approval, then production job start. Arm a simple shell trap before promotion, record its guard/promotion/rollback lifecycle, and validate digest-bound raw Container App revision lists for pre-promotion, promotion, and rollback so active, health, traffic, and image state cannot be hardcoded.
 
+## 69. A corrected child still pins the previous shared registry version
+**Symptom:** Cherry-picking an otherwise approved child onto a refrozen coordinator base leaves its focused test failing on the shared registry schema version.
+
+**Cause:** The child correctly avoided editing coordinator-owned contracts but its owned consumer test still asserted the exact version from its earlier base.
+
+**Resolution:** Recreate the child commit from the new exact coordinator base, import only its owned files, and update the owned consumer assertion to the new registry version while preserving the stream-specific contract version. Require one clean commit and rerun both the focused and full integrated acceptance gates before declaring the new base frozen.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
