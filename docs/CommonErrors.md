@@ -557,6 +557,13 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Use one exact four-table ARG producer for supported types plus bounded subscription ARM GET envelopes for `autoProvisioningSettings` and `settings`. Bind every endpoint, API version, subscription, response ID, timestamp, and pagination state. Preserve `identity` and `location` in the ARG projection and compare the complete normalized composite before and after cleanup.
 
+## 80. Flattened role assignments are wrapped as native ARM evidence
+**Symptom:** A Defender evidence bundle appears to contain `.value[].properties.principalId` and `.value[].properties.roleDefinitionId`, but those fields were synthesized around `az role assignment list` output rather than returned by the declared producer.
+
+**Cause:** `az role assignment list` emits a flattened CLI-specific shape. Wrapping that array with `jq '{value: .}'` does not recreate the native `Microsoft.Authorization/roleAssignments` ARM response and can hide producer/consumer divergence.
+
+**Resolution:** Capture the native list with `az rest` at `<acr-resource-id>/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&$filter=atScope() and assignedTo('<principal-id>')`. Preserve the raw `.value[].properties` objects, reject pagination, and require exactly one ACR-scoped AcrPull assignment for the workload principal.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
