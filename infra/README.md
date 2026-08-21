@@ -1,7 +1,7 @@
 # Shared Azure target
 
-`main.bicep` is a standalone subscription-scope template for the approved
-Sweden Central workshop profile. Each deployment owns one participant/team
+`main.bicep` is the authoritative standalone subscription-scope template for the
+approved Sweden Central workshop profile. Each deployment owns one participant/team
 resource group and supports:
 
 - `.NET / Azure SQL` with Entra-only administration and workload managed identity;
@@ -12,7 +12,7 @@ resource group and supports:
   data endpoints, Log Analytics, Application Insights, and direct Azure Monitor
   OpenTelemetry export for traces, metrics, and logs.
 
-The target VNet is deterministic and does not overlap the P3 participant
+The target VNet is deterministic and does not overlap the Challenge 0 participant
 `10.<participant>.0.0/22` ranges: .NET uses `172.20.0.0/16` and Java uses
 `172.21.0.0/16`.
 
@@ -53,7 +53,8 @@ AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub what-if \
   --parameters @/protected/path/scenario.json
 ```
 
-Never run `az deployment sub create` as part of P4.
+Do not run `az deployment sub create` during local template validation. Live creation
+requires the Challenge 1 deployment gate and facilitator-approved subscription context.
 
 ## Azure Files policy boundary
 
@@ -65,7 +66,10 @@ exemption or a different workshop subscription.
 
 ## Rollback boundary
 
-P4 does not add rollback orchestration. Keep the prior healthy Container Apps
+The shared target does not add rollback orchestration. Keep the prior healthy Container Apps
 revision and use the workshop's existing revision traffic procedure after
 explicit facilitator approval. Database artifacts and source data remain
 intact; this template performs no migration or deletion.
+
+Challenge-local copies of this template are intentionally absent. All six Challenge 1
+stack/path cells compile and deploy this authoritative artifact.

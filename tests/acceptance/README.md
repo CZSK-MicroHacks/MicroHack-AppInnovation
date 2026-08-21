@@ -1,8 +1,8 @@
 # Catalog acceptance harness
 
 This Python/pytest harness grades both baseline applications and every modernization
-path against contract `1.1.0`. It validates the checked-in corpus before making live
-requests.
+path against behavior contract `1.1.0` and the versioned downstream registries. It
+validates the checked-in corpus before making live requests.
 
 ## Contract tests
 
@@ -10,6 +10,13 @@ requests.
 cd tests/acceptance
 uv sync
 uv run pytest tests/test_contract_assets.py
+```
+
+The final repository/navigation boundary, including the Challenge 0 through Challenge 7
+layout and removal of stale templates, is covered by:
+
+```bash
+uv --no-config run pytest -q tests/test_p9_repository_reconciliation.py
 ```
 
 If an incompatible user-level `uv.toml` prevents `uv` from starting, preserve that file and

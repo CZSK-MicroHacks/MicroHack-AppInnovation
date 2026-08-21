@@ -5,6 +5,14 @@ Microsoft OpenJDK 21.0.12+8-LTS and PostgreSQL 18.6. It uses Spring MVC, Thymele
 validation, and the Flyway-owned `V1__contract_baseline.sql` migration. It exposes
 the same frozen routes and data behavior in local and Azure target modes.
 
+## Workshop position
+
+Challenge 0 compares the pre-warmed Java 17/PostgreSQL VM with the .NET/SQL Server
+baseline. Selecting `java-postgresql` makes this directory the application source for
+exactly one [Challenge 1 path](../challenges/ch01/README.md). Every path targets the
+same `infra/main.bicep` deployment and must publish a valid modernization handoff before
+the shared operational chapters.
+
 ## Prerequisites
 
 - Microsoft OpenJDK 21.0.12+8-LTS
@@ -158,3 +166,6 @@ recreates the exact schema and startup import restores 198 figures and 20 catego
 docker rm -f mh-java-postgres
 # Repeat the docker run command above, then restart the JAR.
 ```
+
+For cross-layer diagnosis, authorization boundaries, and evidence failures, use the
+repository [troubleshooting guide](../docs/Troubleshooting.md).

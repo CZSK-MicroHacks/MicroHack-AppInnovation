@@ -1,6 +1,6 @@
 # Shared Azure Target Deployment Plan
 
-**Status:** Approved - P8 validated; P9 repository reconciliation in progress
+**Status:** Validated - local and read-only Azure preflight gates passed; live P10 remains deferred
 
 ## Scope and classification
 
@@ -439,6 +439,135 @@ resource mutation is authorized by this plan.
 - Run `git diff --check` and verify no temporary reports, BACPACs, dumps, images, credentials,
   or generated Bicep JSON remain tracked or untracked.
 
+### All validation checks pass
+
+#### Bicep validation steps
+
+- [x] 1. Bicep compilation
+- [x] 2. Subscription template validation
+- [x] 3. Six-scenario what-if preview
+- [x] 4. Azure authentication and context
+- [x] 5. Bicep linting
+- [x] 6. Azure Policy validation
+
+#### Repository integration steps
+
+- [x] Full shared acceptance and offline dependency lock
+- [x] .NET native test/build
+- [x] Java native test/package on the pinned JDK
+- [x] Terraform format, initialization, and static validation
+- [x] GitHub Actions validation
+- [x] PowerShell guide-block parsing
+- [x] linux/amd64 image builds and vulnerability scans
+- [x] Static secret-signature and generated-artifact checks
+- [x] Static Bicep/Terraform role-assignment verification
+
+## Section 7: Validation Proof
+
+Validation completed on 2026-08-21 with read-only Azure operations against the selected
+workshop subscription. No deployment command is part of this validation.
+
+### Azure context and toolchain
+
+- `AZURE_CONFIG_DIR="$HOME/.azure-365" az account show` confirmed the enabled default
+  subscription `ME-MngEnvMCAP372348-mimarusa-1`
+  (`7bc68c68-f434-49ad-ab3e-b883ec39da86`) in tenant
+  `a7b1484c-f66a-496a-b1cf-35631a50396c`.
+- `az version --query '"azure-cli"' --output tsv` returned `2.80.0`.
+- `az bicep version` returned `0.43.8`.
+- Read-only effective-access inspection confirmed the signed-in facilitator has `Owner` at
+  the exact subscription scope.
+
+### Bicep and ARM validation
+
+All 11 files under `infra/**/*.bicep` passed both:
+
+```bash
+AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep lint --file <file>
+AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep build --file <file> --stdout
+```
+
+The commands produced zero errors. The only diagnostics were the repository-known
+experimental-assert warning, newer-CLI notice, two conservative BCP334 minimum-name
+warnings, and safe-access suggestions.
+
+Each saved sanitized scenario then passed both subscription validation and what-if:
+
+```bash
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub validate \
+  --location swedencentral \
+  --template-file infra/main.bicep \
+  --parameters @<scenario-parameter-file>
+
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub what-if \
+  --location swedencentral \
+  --template-file infra/main.bicep \
+  --parameters @<scenario-parameter-file> \
+  --result-format ResourceIdOnly \
+  --no-pretty-print
+```
+
+| Scenario | ARM validation | What-if changes | Role assignments |
+| --- | --- | ---: | ---: |
+| .NET bootstrap / Blob | `Succeeded` | 27 creates | 3 |
+| .NET application / Blob | `Succeeded` | 28 creates | 3 |
+| .NET application / Azure Files | `Succeeded` | 28 creates | 2 |
+| Java bootstrap / Blob managed identity | `Succeeded` | 26 creates | 3 |
+| Java application / Blob password secret | `Succeeded` | 27 creates | 3 |
+| Java application / Azure Files managed identity | `Succeeded` | 27 creates | 2 |
+
+The Azure Files rows prove template and ARM-policy compatibility only. They do not override
+the live SMB/shared-key limitation documented in **Subscription constraints**.
+
+### Azure Policy proof
+
+Read-only assignment inspection found five enforced tenant-root assignments and six
+subscription Defender assignments. The inherited `Block Azure RM Resource Creation`
+definition was inspected directly: it denies only the listed
+`Microsoft.ClassicCompute`, `Microsoft.ClassicStorage`, `Microsoft.ClassicNetwork`, and
+`Microsoft.MarketplaceApps/classicDevServices` resource types. The target creates none of
+those types. All six ARM validations and previews completed without a policy denial; no
+exception or policy change was requested.
+
+### Static RBAC proof
+
+The focused cross-layer role gate passed:
+
+```bash
+cd tests/acceptance
+UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
+  uv --no-config run pytest -q \
+  tests/test_p4_implementation_contract.py \
+  tests/test_p6_cicd_challenge.py \
+  tests/test_p7_defender_foundation.py \
+  tests/test_p8_sre_agent_contracts.py \
+  tests/test_p8_sre_agent_challenge.py
+```
+
+Result: `100 passed in 9.78s`. Read-only `az role definition list --name <role-id>`
+lookups also resolved every frozen identifier to the expected built-in role.
+
+- The workload identity receives `AcrPull` only at the exact registry. Blob mode additionally
+  grants it `Storage Blob Data Reader` only at the exact container; Azure Files mode uses the
+  bounded ACA volume-secret boundary and grants no workload storage role.
+- The facilitator migration principal receives `Storage Blob Data Contributor` at the exact
+  Blob container or `Storage File Data Privileged Contributor` at the exact file share.
+- The GitHub identity receives `AcrPush` at the exact registry and
+  `Container Apps Contributor` at the exact Container App, with only the two frozen
+  environment subjects.
+- Terraform grants generated participants `Owner` and `Security Reader` only at their
+  resource group and grants each source VM identity `Owner` only at that same group.
+  It creates no facilitator assignment; the facilitator's existing subscription `Owner`
+  access is a prerequisite.
+- The SRE template preserves the exact reader roles at the participant resource group,
+  the traffic custom role only at the exact Container App, human roles only at the exact
+  agent, and the single approved user-assigned-identity `Monitoring Contributor`
+  subscription exception.
+
+`Validated` means the prepared templates, policy surface, role definitions, and repository
+gates are ready for an explicitly authorized deployment. It is not evidence for live P10
+deployment, migration, paid-plan, load, incident, traffic, or cleanup exercises.
+
 ## Execution checklist
 
 - [x] Analyze existing applications, contracts, IaC, policies, and package surfaces.
@@ -453,10 +582,12 @@ resource mutation is authorized by this plan.
 - [x] Freeze and approve the P8 executable contract foundation.
 - [x] Build the coordinator-owned P8 vertical slice.
 - [x] Complete the focused P8 implementation and corrective reviews.
-- [ ] Integrate and validate the P8 vertical slice.
-- [ ] Update implementation logs and confirmed-error guidance.
-- [ ] Set this plan to `Ready for Validation`.
-- [ ] Invoke the `azure-validate` skill.
+- [x] Integrate and validate the P8 vertical slice.
+- [x] Reconcile P9 chapters, documentation, optional tracks, and stale assets.
+- [x] Complete local P10 acceptance, native, IaC, workflow, container, and safety gates.
+- [x] Update implementation logs and confirmed-error guidance.
+- [x] Set this plan to `Ready for Validation`.
+- [x] Invoke the `azure-validate` skill.
 
 ## Approval and deferred actions
 

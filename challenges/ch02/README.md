@@ -85,4 +85,4 @@ The API key must enter Azure Load Testing only through `GetSecret`. Never store
 it in YAML, JMX, commands, raw responses, the capture manifest, or rendered
 evidence.
 
-[Solution steps](/solutions/ch02/README.md)
+[Solution steps](../../solutions/ch02/README.md)

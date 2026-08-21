@@ -171,4 +171,4 @@ approval, extra Activity Log write, or changed protected resource fails closed.
 Agent deletion is facilitator-owned and required to end its fixed four-agent-unit hourly
 charge. Stopping the agent does not end that billing.
 
-[Solution steps](/solutions/ch06-sre-agent/README.md)
+[Solution steps](../../solutions/ch06-sre-agent/README.md)

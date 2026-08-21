@@ -88,4 +88,4 @@ The example JSON documents structure only and is never behavioral proof.
 
 ## Solution
 
-[Solution steps](/solutions/ch03/README.md)
+[Solution steps](../../solutions/ch03/README.md)

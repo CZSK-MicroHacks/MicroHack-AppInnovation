@@ -683,6 +683,41 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Capture each raw response, immediately record UTC observation time, and wrap it with the exact GET request. Compare only the two envelope responses after removing ingress traffic; do not fabricate request or timestamp fields during later assembly.
 
+## 98. Repository-root Markdown links pass on a website but fail locally
+**Symptom:** A challenge link such as `/solutions/ch02/README.md` opens on one hosted site but resolves to the filesystem root during local validation.
+
+**Cause:** A leading slash is URL-root-relative, not repository-relative.
+
+**Resolution:** Use the correct file-relative path from the source document and run the P9 link gate across every active challenge, solution, facilitator, and component guide.
+
+## 99. Documentation tests check words but not executable semantics
+**Symptom:** Reconciliation tests stay green after a contract assignment, deallocation target, authentication claim, or chapter row is changed unsafely.
+
+**Cause:** Presence-only assertions prove that a token exists somewhere, not that the operative command or table uses it correctly.
+
+**Resolution:** Read the authoritative contract version, parse the exact fenced command, require the complete chapter/solution target map, assert positive mode-specific statements, and reject stale assets and alternate power-state producers across the whole active-guide surface.
+
+## 100. A selected stack is not bound to its VM and source commit
+**Symptom:** Challenge 0 can select .NET while naming the Java VM, or accept a healthy marker produced from an unapproved source commit.
+
+**Cause:** Distinct VM names, valid counts, and a 40-character SHA shape do not prove stack identity or provenance.
+
+**Resolution:** Derive `vm-dotnet-userNNN` and `vm-java-userNNN` from the validated `rg-userNNN` plus selected stack. Compare both smoke markers case-exactly with the same facilitator-provided full commit, carry that commit into the selection record, and revalidate it before the only deallocation command.
+
+## 101. Maven finds a JRE, then containerized Testcontainers cannot find Docker
+**Symptom:** Maven reports that no compiler is available on macOS; after moving the build into a JDK container, the PostgreSQL integration test reports no valid Docker environment.
+
+**Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary.
+
+**Resolution:** Use the exact digest-pinned Microsoft OpenJDK build image. Mount Docker Desktop's VM `/var/run/docker.sock`, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` and `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`, and mount the checkout at the same absolute path. Do not install an unpinned JDK or skip the integration test.
+
+## 102. Markdown backticks break a PowerShell checker regex
+**Symptom:** A checker intended to parse fenced PowerShell blocks fails with `Missing ')' in method call` before reading any guide.
+
+**Cause:** PowerShell treats backticks as escape characters inside an expandable double-quoted regex.
+
+**Resolution:** Put the Markdown-fence regex in a literal single-quoted PowerShell string, where backticks are ordinary characters, then compile each extracted block with `[scriptblock]::Create`.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

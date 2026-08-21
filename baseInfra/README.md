@@ -35,7 +35,7 @@ package-manager fallback chains, or raw branch URLs.
 Both VMs receive pinned VS Code, Azure CLI, uv, uv-managed Python 3.12.10, GitHub Copilot,
 and the unified signed GitHub Copilot modernization extension. The .NET VM additionally receives
 the pinned .NET upgrade companions and the self-contained SqlPackage 170.4.83.3 Windows archive
-used by P4 BACPAC export.
+used by the Challenge 1 BACPAC export.
 Provisioning verifies the archive SHA-256, the extracted executable's Microsoft Authenticode
 publisher, and its exact version before adding its directory to machine PATH.
 The Java VM receives the pinned Java upgrade companion, Microsoft OpenJDK, and the
@@ -43,6 +43,10 @@ checksum-pinned Maven Wrapper workflow. The source archive is used directly, so 
 not introduce an unpinned Git installer that is absent from the frozen lock.
 
 ## Facilitator preflight
+
+Complete the repository-level [facilitator go/no-go matrix](../README.md#facilitator-go-no-go-matrix)
+before this component gate. The two-VM baseline is consumed by
+[Challenge 0](../challenges/ch00/README.md).
 
 Prerequisites:
 
@@ -116,16 +120,16 @@ The root outputs include:
 - `resource_group_names`, `vnet_names`, and region distribution
 - `deployment_footprint` with doubled VM, vCPU, OS-disk, and disk-GiB totals
 
-Connect through Azure Bastion; there are no VM public IP addresses. After Challenge 0, deallocate
-the unselected stack to stop its compute charges:
+Connect through Azure Bastion; there are no VM public IP addresses. After Challenge 0,
+deallocate only the VM derived from the validated
+`evidence/ch00-selection.json`. Use the executable mapping and authorization procedure
+in [Challenge 0](../challenges/ch00/README.md), not a stack-name guess or a copied
+example command. The facilitator uses the matching
+[solution verification](../solutions/ch00/README.md) before proceeding.
 
-```pwsh
-az vm deallocate --resource-group rg-user001 --name vm-java-user001
-# Or, for the Java track:
-az vm deallocate --resource-group rg-user001 --name vm-dotnet-user001
-```
-
-Use `az vm start` with the same resource group and VM name to restore a deallocated stack.
+A facilitator may restore that exact recorded VM when a stack-matched golden rejoin is
+required. Restoration is bounded to VM power state and does not authorize replacement
+or deletion.
 
 ## Provisioning status and diagnostics
 
@@ -183,3 +187,7 @@ terraform destroy -var-file local.tfvars
 
 Review the destroy plan carefully. Reducing `n`, changing assigned regions, VM size, image, or OS
 disk settings can replace resources and discard their local ephemeral data.
+
+There is no broad subscription cleanup script. Destroy only the reviewed participant
+Terraform state after paid-service cleanup, protected-resource inventory, and explicit
+facilitator authorization.

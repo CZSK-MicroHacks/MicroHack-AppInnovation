@@ -660,6 +660,16 @@ assignment required by Azure SRE Agent to ingest Azure Monitor alerts.
    quotas, paid Defender plans, SRE Agent registration, Copilot entitlement, tool
    versions, pre-warm checks, and cleanup.
 
+**Implementation status (2026-08-21):** Complete on the local integration branch.
+Required Challenges 0 through 6 now have participant and solution entry points; the
+enterprise and innovation tracks are Challenge 7 and support both stacks. Root,
+architecture, facilitator, component, troubleshooting, challenge, and solution
+navigation is reconciled and link-checked. The root duplicate variable example,
+challenge-local Bicep copies, broad subscription cleanup script, weak credential
+example, and old optional-track locations are removed. One executable P9 acceptance
+gate freezes the chapter map, authoritative assets, cross-stack content, exact
+Challenge 0 provenance/power-state protocol, authentication modes, and local links.
+
 ### P10 — End-to-end workshop validation
 
 Validate in a clean, disposable workshop subscription:
@@ -680,6 +690,23 @@ Validate in a clean, disposable workshop subscription:
 The rewrite is complete only when every required challenge has matching student
 instructions, facilitator prerequisites, solution artifacts, and machine-verifiable
 success criteria.
+
+**Local validation status (2026-08-21):** The complete acceptance suite, both native
+application test/package gates, authoritative Terraform and Bicep, GitHub workflows,
+PowerShell guide blocks, linux/amd64 container builds, high/critical vulnerability
+scans, secret-signature scan, dependency lock, and diff/cleanup gates pass. Items 1
+through 10 above still require a clean disposable Azure subscription and explicit
+authorization for live deployment, paid-plan enablement, incident execution, traffic
+change, and cleanup; local fixtures are not recorded as substitutes.
+
+**Read-only Azure preflight status (2026-08-21):** The selected subscription is enabled,
+all 11 authoritative Bicep files lint and compile, and all six sanitized stack/path
+scenarios pass subscription template validation and what-if in Sweden Central. The
+inherited resource-creation deny targets classic resource types only, so no policy
+exception is required for this target. Static source review, 100 focused acceptance
+tests, and live role-definition lookups confirm the workload, migration, CI, Terraform,
+Defender, and SRE role IDs and scopes. `.azure/deployment-plan.md` is therefore
+`Validated`; this preflight does not satisfy or authorize any live item 1 through 10.
 
 ## Expected file/component changes
 

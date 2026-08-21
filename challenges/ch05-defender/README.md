@@ -166,4 +166,4 @@ family, VM/NIC/NSG binding, mutable images, missing `AcrPull`, altered raw files
 aliased seed/current artifacts, incomplete Resource Graph responses, fabricated
 findings, or manually normalized JSON fail closed.
 
-[Solution steps](/solutions/ch05-defender/README.md)
+[Solution steps](../../solutions/ch05-defender/README.md)

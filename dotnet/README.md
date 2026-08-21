@@ -5,6 +5,14 @@ Server 2022 or Azure SQL Database. It preserves the workshop UI while implementi
 `1.1.0` for catalog browsing, search, category filtering, details, local images,
 transactional import, health, bounded performance work, and OpenTelemetry.
 
+## Workshop position
+
+Challenge 0 compares the pre-warmed .NET 8/SQL Server VM with the Java/PostgreSQL
+baseline. Selecting `dotnet-sqlserver` makes this directory the application source for
+exactly one [Challenge 1 path](../challenges/ch01/README.md). Every path targets the
+same `infra/main.bicep` deployment and must publish a valid modernization handoff before
+the shared operational chapters.
+
 ## Prerequisites
 
 - .NET SDK 10.0.400
@@ -149,3 +157,6 @@ structured logs. Resource identity is fixed to:
 - Image 404 responses require an exact lowercase `<productId>.png` key and an existing
   file beneath `CATALOG_IMAGES_PATH`.
 - The app fails startup when `PERFTEST_API_KEY` or a bounded work factor is invalid.
+
+For cross-layer diagnosis, authorization boundaries, and evidence failures, use the
+repository [troubleshooting guide](../docs/Troubleshooting.md).
