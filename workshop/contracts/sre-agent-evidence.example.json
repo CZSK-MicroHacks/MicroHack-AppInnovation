@@ -235,7 +235,7 @@
       {
         "kind": "sre-agent-cleanup",
         "path": "workshop/contracts/fixtures/sre-agent/cleanup.json",
-        "sha256": "1688f1e8abdee559981220d46e3782efd11f5d66215e011e08a1bdd8da37379c"
+        "sha256": "bfb733ef5099ce92c4c344c6835c4694563d2bfea5f76b8e9ce244e22fb0e298"
       },
       {
         "kind": "sre-agent-foundation",
@@ -245,12 +245,12 @@
       {
         "kind": "sre-agent-incident",
         "path": "workshop/contracts/fixtures/sre-agent/incident.json",
-        "sha256": "46a819e9697331841d61107efc2fa3b85a7be07dfaae3b10b6cae9b5e8b2f850"
+        "sha256": "893980549dd57d899eecc7b2f211fab2478151231e07b2173cca4c12733553dc"
       },
       {
         "kind": "sre-agent-response-plan",
         "path": "workshop/contracts/fixtures/sre-agent/response-plan-preflight.json",
-        "sha256": "8f377bc615a6abf10c007e18ce4cf9542a4e1aa327c8ace33ee54cd0ff296540"
+        "sha256": "7bc76451a49b5846d355f8ee0a228ed5fc8d77c19f8817191b14655bb838d44b"
       },
       {
         "kind": "target-output",
@@ -261,7 +261,7 @@
     "captureManifest": {
       "kind": "sre-agent-capture-manifest",
       "path": "workshop/contracts/sre-agent-evidence-capture.example.json",
-      "sha256": "0edc50369c316f7ac70744d229473f98503622d89db07bea457a3a4ba40a3ca8"
+      "sha256": "5279f0468a8237e3ef31580a9795f714e8b701b0e719cb8419581da9f04fe0a8"
     }
   },
   "schemaVersion": "1.0.0",

@@ -24,7 +24,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.2.0"
     },
     "incidentStart": {
       "$ref": "#/$defs/timestamp"
@@ -36,7 +36,19 @@
       "type": "object"
     },
     "seed": {
-      "type": "object"
+      "type": "object",
+      "required": [
+        "trafficBefore",
+        "trafficBad"
+      ],
+      "properties": {
+        "trafficBefore": {
+          "$ref": "#/$defs/trafficCapture"
+        },
+        "trafficBad": {
+          "$ref": "#/$defs/trafficCapture"
+        }
+      }
     },
     "alertFired": {
       "type": "object"
@@ -89,13 +101,14 @@
       "type": "object"
     },
     "recoveredTraffic": {
-      "type": "object"
+      "$ref": "#/$defs/trafficCapture"
     },
     "recoveryHealth": {
       "type": "array",
       "minItems": 2,
+      "maxItems": 2,
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/httpCapture"
       }
     },
     "alertResolved": {
@@ -134,6 +147,154 @@
             "tables": {
               "type": "array",
               "minItems": 1
+            }
+          }
+        }
+      }
+    },
+    "httpCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observedAt",
+        "request",
+        "response"
+      ],
+      "properties": {
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "url",
+            "redirectsAllowed"
+          ],
+          "properties": {
+            "method": {
+              "const": "GET"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://"
+            },
+            "redirectsAllowed": {
+              "const": false
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "required": [
+            "exitcode",
+            "http_code",
+            "num_redirects",
+            "url_effective"
+          ],
+          "properties": {
+            "exitcode": {
+              "const": 0
+            },
+            "http_code": {
+              "const": 200
+            },
+            "num_redirects": {
+              "const": 0
+            },
+            "url_effective": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://"
+            }
+          }
+        }
+      }
+    },
+    "trafficCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observedAt",
+        "request",
+        "response"
+      ],
+      "properties": {
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "url"
+          ],
+          "properties": {
+            "method": {
+              "const": "GET"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^/subscriptions/.+/providers/Microsoft\\.App/containerApps/.+/revisions\\?api-version=2025-01-01$"
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "nextLink"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "type",
+                  "properties"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^/subscriptions/.+/providers/Microsoft\\.App/containerApps/.+/revisions/.+$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "const": "Microsoft.App/containerApps/revisions"
+                  },
+                  "properties": {
+                    "type": "object",
+                    "required": [
+                      "active",
+                      "trafficWeight"
+                    ],
+                    "properties": {
+                      "active": {
+                        "type": "boolean"
+                      },
+                      "trafficWeight": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "nextLink": {
+              "type": "null"
             }
           }
         }

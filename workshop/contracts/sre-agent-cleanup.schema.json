@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "authorization": {
       "type": "object",
@@ -74,7 +74,7 @@
       "$ref": "#/$defs/notFound"
     },
     "costVerification": {
-      "type": "object"
+      "$ref": "#/$defs/costVerification"
     },
     "protectedResources": {
       "type": "array",
@@ -140,6 +140,201 @@
     "guid": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "costVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request",
+        "queriedAt",
+        "dataThrough",
+        "response",
+        "billingAfterDeletionObserved",
+        "costDataLagAcknowledged"
+      ],
+      "properties": {
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "url",
+            "body"
+          ],
+          "properties": {
+            "method": {
+              "const": "POST"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^/subscriptions/[0-9a-f-]+/providers/Microsoft\\.CostManagement/query\\?api-version=2023-03-01$"
+            },
+            "body": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "timeframe",
+                "timePeriod",
+                "dataset"
+              ],
+              "properties": {
+                "type": {
+                  "const": "Usage"
+                },
+                "timeframe": {
+                  "const": "Custom"
+                },
+                "timePeriod": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "from",
+                    "to"
+                  ],
+                  "properties": {
+                    "from": {
+                      "$ref": "#/$defs/timestamp"
+                    },
+                    "to": {
+                      "$ref": "#/$defs/timestamp"
+                    }
+                  }
+                },
+                "dataset": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "granularity",
+                    "aggregation",
+                    "grouping",
+                    "filter"
+                  ],
+                  "properties": {
+                    "granularity": {
+                      "const": "Daily"
+                    },
+                    "aggregation": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "agentUnits"
+                      ],
+                      "properties": {
+                        "agentUnits": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "name",
+                            "function"
+                          ],
+                          "properties": {
+                            "name": {
+                              "const": "UsageQuantity"
+                            },
+                            "function": {
+                              "const": "Sum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "grouping": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "filter": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "queriedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "dataThrough": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "type",
+            "properties"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^/subscriptions/[0-9a-f-]+/providers/Microsoft\\.CostManagement/query/.+$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "const": "Microsoft.CostManagement/query"
+            },
+            "properties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nextLink",
+                "columns",
+                "rows"
+              ],
+              "properties": {
+                "nextLink": {
+                  "type": "null"
+                },
+                "columns": {
+                  "type": "array",
+                  "minItems": 3,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "type"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "type": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "array"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "billingAfterDeletionObserved": {
+          "type": "boolean"
+        },
+        "costDataLagAcknowledged": {
+          "const": true
+        }
+      }
     },
     "notFound": {
       "type": "object",

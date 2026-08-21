@@ -119,7 +119,8 @@ def _remove_seed_activity(incident: dict[str, Any]) -> None:
 def _move_cost_before_protected_verification(cleanup: dict[str, Any]) -> None:
     """Move cost capture after deletion but before workload verification."""
     cost = cleanup["costVerification"]
-    cost["request"]["timeframeEnd"] = "2026-08-20T16:12:09Z"
+    cost["request"]["body"]["timePeriod"]["to"] = "2026-08-20T16:12:09Z"
+    cost["dataThrough"] = "2026-08-20T16:12:09Z"
     cost["queriedAt"] = "2026-08-20T16:12:10Z"
 
 
@@ -130,9 +131,77 @@ def _move_snapshot_to_first_investigation(incident: dict[str, Any]) -> None:
     snapshot[9] = snapshot[0]
 
 
+def _reparent_application_connector(foundation: dict[str, Any]) -> None:
+    """Move one connector under another agent while keeping its GET coherent."""
+    connector = foundation["connectors"][0]
+    connector_id = connector["response"]["id"].replace(
+        "/agents/sre-catalog-example/",
+        "/agents/sre-other/",
+    )
+    connector["response"]["id"] = connector_id
+    connector["request"]["url"] = f"{connector_id}?api-version=2026-01-01"
+
+
+def _point_healthy_revision_at_drill_host(incident: dict[str, Any]) -> None:
+    """Replace the retained revision's database host with the drill host."""
+    environments = incident["seed"]["healthyRevision"]["response"]["properties"][
+        "template"
+    ]["containers"][0]["env"]
+    database_host = next(
+        value for value in environments if value["name"] == "CATALOG_DATABASE_HOST"
+    )
+    database_host["value"] = incident["seed"]["badDatabaseHost"]
+
+
+def _add_post_deletion_cost_row(cleanup: dict[str, Any]) -> None:
+    """Add positive SRE Agent usage on the UTC day after deletion."""
+    cleanup["costVerification"]["response"]["properties"]["rows"].append(
+        [4, 20260821, "Azure SRE Agent"]
+    )
+
+
+def _move_drill_creation_inside_incident(incident: dict[str, Any]) -> None:
+    """Move the drill revision creation into the captured incident window."""
+    created_at = "2026-08-20T15:00:30Z"
+    incident["seed"]["createdAt"] = created_at
+    deployment_rows = incident["investigation"]["deploymentHistory"]["response"]["value"]
+    bad_revision = incident["subject"]["badRevision"]
+    bad = next(value for value in deployment_rows if value["name"] == bad_revision)
+    bad["properties"]["createdTime"] = created_at
+
+
+def _flatten_revision_capture(incident: dict[str, Any]) -> None:
+    """Replace one native ARM capture with the retired flattened shape."""
+    capture = incident["seed"]["trafficBefore"]
+    response = capture.pop("response")
+    capture.pop("request")
+    capture["source"] = "azure-container-app-revision-list"
+    capture["value"] = [
+        {
+            "name": revision["name"],
+            "active": revision["properties"]["active"],
+            "trafficWeight": revision["properties"]["trafficWeight"],
+        }
+        for revision in response["value"]
+    ]
+    capture["nextLink"] = response["nextLink"]
+
+
+def _flatten_cost_response(cleanup: dict[str, Any]) -> None:
+    """Replace the native Cost Management result with synthetic top-level rows."""
+    response = cleanup["costVerification"]["response"]
+    properties = response.pop("properties")
+    response["columns"] = properties["columns"]
+    response["rows"] = properties["rows"]
+
+
 def test_sre_agent_registry_and_examples_are_schema_valid() -> None:
     """Freeze every registry, capture, input, and output schema."""
-    _validate("sre-agent.schema.json", _load(CONTRACTS / "sre-agent.json"))
+    registry = _load(CONTRACTS / "sre-agent.json")
+    _validate("sre-agent.schema.json", registry)
+    assert registry["schemaVersion"] == "1.2.0"
+    assert registry["evidence"]["incidentSchemaVersion"] == "1.2.0"
+    assert registry["evidence"]["cleanupSchemaVersion"] == "1.1.0"
     _validate(
         "sre-agent-evidence-capture.schema.json",
         _load(CAPTURE_EXAMPLE),
@@ -182,6 +251,7 @@ def test_sre_agent_registry_freezes_the_bounded_architecture() -> None:
     ]
     assert registry["resources"]["agentApiVersion"] == "2026-01-01"
     assert registry["resources"]["connectorApiVersion"] == "2026-01-01"
+    assert registry["resources"]["applicationInsightsQueryApiVersion"] == "2018-04-20"
     assert registry["identity"] == {
         "knowledgeIdentity": "UserAssigned",
         "actionIdentity": "UserAssigned",
@@ -221,6 +291,7 @@ def test_sre_agent_registry_freezes_the_bounded_architecture() -> None:
         "Microsoft.App/containerApps/revisions/read",
     }
     assert registry["responsePlan"]["autonomyMode"] == "Review"
+    assert roles[3]["purpose"] == "azure-monitor-alert-ingestion"
     assert (
         registry["responsePlan"]["producer"]
         == "azure-portal-facilitator-export"
@@ -468,8 +539,8 @@ def test_sre_agent_rejects_path_traversal(tmp_path: Path) -> None:
                 {
                     "url": (
                         "/subscriptions/00000000-0000-0000-0000-000000000000/"
-                        "resourceGroups/rg-mh-example/providers/Microsoft.Insights/"
-                        "components/appi-mh-example/query?api-version=2021-10-01"
+                        "resourceGroups/rg-sre-example/providers/Microsoft.Insights/"
+                        "components/appi-sre-example/query?api-version=2021-10-01"
                     )
                 }
             ),
@@ -749,6 +820,11 @@ def test_investigation_rejects_false_success(
         ),
         (
             "sre-agent-foundation",
+            _reparent_application_connector,
+            "not a child of the validated agent",
+        ),
+        (
+            "sre-agent-foundation",
             lambda value: value["customRollbackRole"]["response"]["properties"][
                 "permissions"
             ][0]["actions"].append("Microsoft.App/containerApps/delete"),
@@ -797,10 +873,32 @@ def test_investigation_rejects_false_success(
         ),
         (
             "sre-agent-incident",
+            _move_drill_creation_inside_incident,
+            "drill revision must be created before the incident window",
+        ),
+        (
+            "sre-agent-incident",
+            lambda value: value["seed"]["revision"]["response"]["properties"].update(
+                {"trafficWeight": 100}
+            ),
+            "drill revision was not created at zero traffic",
+        ),
+        (
+            "sre-agent-incident",
+            _flatten_revision_capture,
+            "Additional properties are not allowed",
+        ),
+        (
+            "sre-agent-incident",
             lambda value: value["seed"]["revision"]["response"]["properties"][
                 "template"
             ]["containers"][0]["env"][1].update({"secretRef": "changed-secret"}),
             "preserve every secret reference",
+        ),
+        (
+            "sre-agent-incident",
+            _point_healthy_revision_at_drill_host,
+            "healthy revision database host differs from the handoff",
         ),
         (
             "sre-agent-incident",
@@ -847,15 +945,28 @@ def test_investigation_rejects_false_success(
         ),
         (
             "sre-agent-incident",
-            lambda value: value["recoveredTraffic"]["value"][0].update(
+            lambda value: value["recoveredTraffic"]["response"]["value"][0][
+                "properties"
+            ].update(
                 {"trafficWeight": 0}
             ),
             "traffic does not total 100",
         ),
         (
             "sre-agent-incident",
-            lambda value: value["recoveryHealth"][1].update({"status": 503}),
-            "did not return HTTP 200",
+            lambda value: value["recoveryHealth"][1]["response"].update(
+                {"http_code": 503}
+            ),
+            "200 was expected",
+        ),
+        (
+            "sre-agent-incident",
+            lambda value: value["recoveryHealth"][1]["response"].update(
+                {
+                    "url_effective": "https://redirect.example/readyz",
+                }
+            ),
+            "exact non-redirected HTTP 200",
         ),
         (
             "sre-agent-incident",
@@ -893,6 +1004,35 @@ def test_investigation_rejects_false_success(
                 {"queriedAt": "2026-08-20T15:59:00Z"}
             ),
             "cost query does not span",
+        ),
+        (
+            "sre-agent-cleanup",
+            lambda value: value["costVerification"]["request"].pop("body"),
+            "'body' is a required property",
+        ),
+        (
+            "sre-agent-cleanup",
+            lambda value: value["costVerification"]["request"]["body"]["dataset"][
+                "filter"
+            ]["dimensions"].update({"values": ["Another meter"]}),
+            "Cost Management query dataset differs",
+        ),
+        (
+            "sre-agent-cleanup",
+            lambda value: value["costVerification"]["response"]["properties"].update(
+                {"nextLink": "https://management.azure.com/next"}
+            ),
+            "is not of type 'null'",
+        ),
+        (
+            "sre-agent-cleanup",
+            _flatten_cost_response,
+            "Additional properties are not allowed",
+        ),
+        (
+            "sre-agent-cleanup",
+            _add_post_deletion_cost_row,
+            "billing-after-deletion flag differs",
         ),
     ],
 )

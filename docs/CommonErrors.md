@@ -592,6 +592,97 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Require the first investigation observation to be strictly later than `IncidentActivitySnapshot`, and retain an equality-boundary regression that moves the snapshot to the first capture time.
 
+## 85. Operational tags make a live agent differ from its evidence contract
+**Symptom:** The SRE Agent deploys successfully, but its native ARM GET cannot pass the frozen foundation validator because it contains additional workload tags.
+
+**Cause:** General resource tags were unioned into the agent even though its exact evidence shape permits only the hidden Application Insights link.
+
+**Resolution:** Keep workload, participant, and challenge tags on the dedicated resource group, identity, workspace, and Application Insights component. Set the agent's tags to exactly its hidden Application Insights link, and test the agent resource block independently from the other tagged resources.
+
+## 86. A documented audit query is never rendered
+**Symptom:** A guide enables `set -u` and then aborts at `$PREFLIGHT_QUERY` or `$AGENT_AUDIT_QUERY`, so required audit evidence is never captured.
+
+**Cause:** Prose says to render a registry query, but the executable block does not assign every input or replace every placeholder.
+
+**Resolution:** Require the captured window, agent, and thread inputs explicitly. Render the exact registry template with all placeholders into a shell variable before `az rest`, and derive the dedicated agent Application Insights ID from the validated foundation artifact rather than discovery.
+
+## 87. Azure Monitor alert ingestion conflicts with a no-subscription-role rule
+**Symptom:** The SRE Agent foundation appears least-privilege compliant, but Azure Monitor alerts never reach its incident scanner.
+
+**Cause:** Azure SRE Agent requires its managed identity to have Monitoring Contributor on the subscription for Azure Monitor alert ingestion, while the original plan prohibited every subscription-wide permission.
+
+**Resolution:** Treat this as a blocking product decision rather than silently broadening access. The approved P8 plan now permits exactly one UAMI Monitoring Contributor assignment for alert ingestion; all other reads remain participant-resource-group scoped and the only workload write remains the exact-Container-App rollback role.
+
+## 88. Application Insights ARM queries use an unsupported API version
+**Symptom:** Resource-centric KQL examples post to `Microsoft.Insights/components/<name>/query` but fail before returning telemetry.
+
+**Cause:** The examples used a control-plane-era version that is not the version in the official resource-query Swagger.
+
+**Resolution:** Freeze `2018-04-20` in the shared SRE Agent registry and render every application and agent Application Insights query endpoint from that value.
+
+## 89. Container App revision listing uses unsupported `--ids`
+**Symptom:** `az containerapp revision list` exits at argument parsing during seed or recovery capture.
+
+**Cause:** That command requires `--name` and `--resource-group`; it has no `--ids` argument.
+
+**Resolution:** Use the exact Container Apps ARM revisions list at `<container-app-id>/revisions?api-version=2025-01-01`, preserving its complete, non-paginated response.
+
+## 90. Evidence validates shape without binding the intended parent or baseline
+**Symptom:** Connectors under another agent, or a retained revision using the drill-invalid database host, can satisfy otherwise valid evidence.
+
+**Cause:** Child resources and changed fields were checked independently without comparing them to the validated agent and handoff identities.
+
+**Resolution:** Require each connector ID to be the expected child of the exact agent, and require the retained revision's `CATALOG_DATABASE_HOST` to equal the selected handoff database server before comparing the bounded drill differences.
+
+## 91. Recovery and cleanup conclusions are self-asserted
+**Symptom:** A report can claim HTTP 200 recovery or no post-deletion billing without deriving either result from captured producer output.
+
+**Cause:** Recovery used hand-written URL/status/timestamp fields, while the cleanup flag was not compared with Cost Management rows.
+
+**Resolution:** Capture machine-generated curl transfer JSON with redirects disabled and validate its exit code, status, effective URL, and timestamp envelope. Derive the billing flag from every Azure SRE Agent `UsageDate` row and reject positive usage on a UTC date after deletion.
+
+## 92. Drill revision creation adds an unaccounted incident write
+**Symptom:** The Activity Log validator permits only a facilitator traffic seed and approved rollback, but creating the bad revision during the incident necessarily emits a third Container App write.
+
+**Cause:** Revision creation and traffic seeding were treated as one logical drill action even though Azure records them as separate resource writes.
+
+**Resolution:** Create the same-digest drill revision at zero traffic before recording `incidentStart`. Capture its ARM creation time and require it to precede the incident. Keep exactly two in-window writes: facilitator traffic shift and correlation-bound UAMI rollback.
+
+## 93. Revision traffic evidence uses a synthetic flattened shape
+**Symptom:** A captured `az rest` revisions list cannot satisfy evidence fields such as top-level `trafficWeight`, or a hand-authored flattened object passes while hiding the real ARM response.
+
+**Cause:** Container Apps returns traffic under `value[].properties.trafficWeight`; the consumer modeled CLI-like flattened revisions instead.
+
+**Resolution:** Preserve an exact GET request plus native non-paginated response from `<container-app-id>/revisions?api-version=2025-01-01`. Bind every revision ID/type to the app, read nested `properties.active` and `properties.trafficWeight`, and reject flattened or paginated captures.
+
+## 94. Cost evidence omits the request body or flattens the response
+**Symptom:** Cleanup claims a meter and timeframe but cannot prove what Cost Management queried, or stores `columns` and `rows` at the top level even though the API returns them under `properties`.
+
+**Cause:** The evidence contract represented query intent as descriptive fields instead of the native `2023-03-01` POST envelope.
+
+**Resolution:** Preserve the exact custom `Usage` body with daily granularity, `UsageQuantity` sum, Meter grouping, and Azure SRE Agent Meter filter. Preserve native `properties.columns`, `properties.rows`, and `properties.nextLink`; reject pagination, map row values by returned column name, and derive post-deletion billing from those rows.
+
+## 95. Exact-resource Container App write is mistaken for field-level RBAC
+**Symptom:** A custom role is described as traffic-only even though it grants `Microsoft.App/containerApps/write`, which can update other mutable parent-resource properties.
+
+**Cause:** Azure RBAC authorizes ARM actions at resource scope; it cannot restrict a write action to `properties.configuration.ingress.traffic`.
+
+**Resolution:** State the authorization limitation explicitly. Scope the role to the exact Container App, require Review mode and facilitator inspection of the exact command, and compare native before/after state to reject every change except traffic. Do not claim the role itself is JSON-field-scoped.
+
+## 96. Activity Log URL encoding differs between guide and validator
+**Symptom:** Following the guide produces an Activity Log request with `%24filter`, encoded quotes, colons, and slashes, while the evidence validator requires a different URL representation.
+
+**Cause:** Applying `jq @uri` to the entire filter encodes more than the frozen producer contract, including the parameter name when `%24filter` is used.
+
+**Resolution:** Build one canonical relative URL with a literal `$filter`, encode only spaces as `%20`, use that same value for `az rest`, and preserve it unchanged in the request envelope.
+
+## 97. Raw Container App snapshots omit evidence-envelope metadata
+**Symptom:** Before/after rollback response JSON exists, but validation cannot establish when or how either snapshot was captured.
+
+**Cause:** The guide wrote only the ARM response while the consumer requires `observedAt`, exact request method/URL, and response.
+
+**Resolution:** Capture each raw response, immediately record UTC observation time, and wrap it with the exact GET request. Compare only the two envelope responses after removing ingress traffic; do not fabricate request or timestamp fields during later assembly.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.

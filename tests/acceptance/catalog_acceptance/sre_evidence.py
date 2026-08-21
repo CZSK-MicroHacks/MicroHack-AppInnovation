@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -102,6 +103,17 @@ def _integer(value: Any, name: str) -> int:
     return value
 
 
+def _number(value: Any, name: str) -> float:
+    """Return one finite strict JSON number."""
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+    ):
+        raise ValueError(f"{name} must be a finite number")
+    return float(value)
+
+
 def _timestamp(value: Any, name: str) -> datetime:
     """Parse one timezone-aware ISO-8601 timestamp."""
     text = _string(value, name)
@@ -112,6 +124,22 @@ def _timestamp(value: Any, name: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError(f"{name} must include a timezone")
     return parsed.astimezone(timezone.utc)
+
+
+def _usage_date(value: Any, name: str) -> date:
+    """Parse one Cost Management UTC usage date."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        text = str(value)
+    elif isinstance(value, str):
+        text = value
+    else:
+        raise ValueError(f"{name} must be YYYYMMDD")
+    if re.fullmatch(r"\d{8}", text) is None:
+        raise ValueError(f"{name} must be YYYYMMDD")
+    try:
+        return datetime.strptime(text, "%Y%m%d").date()
+    except ValueError as error:
+        raise ValueError(f"{name} must be a valid UTC usage date") from error
 
 
 def _same_resource(left: Any, right: Any) -> bool:
@@ -146,6 +174,19 @@ def _resource_group_id(resource_id: Any, name: str) -> str:
 def _subscription_scope(subscription_id: str) -> str:
     """Return the canonical subscription resource ID."""
     return f"/subscriptions/{subscription_id}"
+
+
+def _application_insights_query_endpoint(
+    resource_id: str,
+    registry: dict[str, Any],
+) -> str:
+    """Return the frozen ARM resource-query endpoint."""
+    resources = _mapping(registry["resources"], "registry.resources")
+    version = _string(
+        resources.get("applicationInsightsQueryApiVersion"),
+        "registry.resources.applicationInsightsQueryApiVersion",
+    )
+    return f"{resource_id}/query?api-version={version}"
 
 
 def _relative_file(root: Path, path: Path, name: str) -> str:
@@ -727,6 +768,13 @@ def _validate_foundation(
             f"foundation.connectors[{index}].response.id",
         )
         _require(
+            _same_resource(
+                connector_id,
+                f"{agent_id}/connectors/{name}",
+            ),
+            f"{name} connector is not a child of the validated agent",
+        )
+        _require(
             request
             == {
                 "method": "GET",
@@ -1125,9 +1173,9 @@ def _validate_response_plan(
         agentId=context["agentResourceId"],
         threadId=incident["threadId"],
     )
-    expected_endpoint = (
-        f"{context['agentApplicationInsightsResourceId']}/query"
-        "?api-version=2021-10-01"
+    expected_endpoint = _application_insights_query_endpoint(
+        context["agentApplicationInsightsResourceId"],
+        registry,
     )
     _require(
         audit_request
@@ -1198,30 +1246,58 @@ def _validate_response_plan(
     }
 
 
-def _traffic_weights(snapshot: Any, name: str) -> tuple[dict[str, int], datetime]:
-    """Validate one complete revision-list traffic snapshot."""
-    value = _mapping(snapshot, name)
-    _require(value.get("nextLink") is None, f"{name} is paginated")
+def _traffic_weights(
+    snapshot: Any,
+    name: str,
+    application_id: str,
+) -> tuple[dict[str, int], datetime]:
+    """Validate one native ARM revision-list traffic capture."""
+    capture = _mapping(snapshot, name)
+    expected_url = f"{application_id}/revisions?api-version=2025-01-01"
     _require(
-        value.get("source") == "azure-container-app-revision-list",
-        f"{name} source differs",
+        _mapping(capture.get("request"), f"{name}.request")
+        == {"method": "GET", "url": expected_url},
+        f"{name} does not use the exact Container App ARM revisions list",
+    )
+    response = _mapping(capture.get("response"), f"{name}.response")
+    _require(
+        "nextLink" in response and response.get("nextLink") is None,
+        f"{name} is paginated",
     )
     weights: dict[str, int] = {}
-    for index, raw_revision in enumerate(_array(value.get("value"), f"{name}.value")):
-        revision = _mapping(raw_revision, f"{name}.value[{index}]")
+    for index, raw_revision in enumerate(
+        _array(response.get("value"), f"{name}.response.value")
+    ):
+        revision = _mapping(raw_revision, f"{name}.response.value[{index}]")
         revision_name = _string(
             revision.get("name"),
-            f"{name}.value[{index}].name",
+            f"{name}.response.value[{index}].name",
         )
         _require(revision_name not in weights, f"{name} repeats a revision")
+        _require(
+            _same_resource(
+                revision.get("id"),
+                f"{application_id}/revisions/{revision_name}",
+            )
+            and revision.get("type") == "Microsoft.App/containerApps/revisions",
+            f"{name} contains another resource",
+        )
+        properties = _mapping(
+            revision.get("properties"),
+            f"{name}.response.value[{index}].properties",
+        )
+        _require(
+            isinstance(properties.get("active"), bool),
+            f"{name} revision active state is not native",
+        )
         weight = _integer(
-            revision.get("trafficWeight"),
-            f"{name}.value[{index}].trafficWeight",
+            properties.get("trafficWeight"),
+            f"{name}.response.value[{index}].properties.trafficWeight",
         )
         _require(0 <= weight <= 100, f"{name} has an invalid traffic weight")
         weights[revision_name] = weight
     _require(sum(weights.values()) == 100, f"{name} traffic does not total 100")
-    return weights, _timestamp(value.get("observedAt"), f"{name}.observedAt")
+    return weights, _timestamp(capture.get("observedAt"), f"{name}.observedAt")
 
 
 def _container_from_revision(revision: dict[str, Any], name: str) -> dict[str, Any]:
@@ -1373,6 +1449,10 @@ def _validate_investigation(
     fired_at: datetime,
 ) -> dict[str, Any]:
     """Validate the source-bound diagnosis that supports the rollback."""
+    incident_start_time = _timestamp(
+        incident_start,
+        "incident.investigation incidentStart",
+    )
     investigation_end = _timestamp(
         investigation["investigationEnd"],
         "incident.investigation.investigationEnd",
@@ -1385,8 +1465,9 @@ def _validate_investigation(
     application_insights_id = handoff["observability"][
         "applicationInsightsResourceId"
     ]
-    query_endpoint = (
-        f"{application_insights_id}/query?api-version=2021-10-01"
+    query_endpoint = _application_insights_query_endpoint(
+        application_insights_id,
+        registry,
     )
 
     deployment = _mapping(
@@ -1478,6 +1559,7 @@ def _validate_investigation(
     _require(
         deployment_times[healthy_revision] < deployment_times[bad_revision]
         == seed_time
+        and deployment_times[bad_revision] < incident_start_time
         and deployment_times[bad_revision] < bad_time
         and healthy_properties.get("trafficWeight") == 0
         and bad_properties.get("trafficWeight") == 100,
@@ -1827,7 +1909,10 @@ def _validate_incident(
 
     seed = _mapping(incident["seed"], "incident.seed")
     seed_time = _timestamp(seed["createdAt"], "incident.seed.createdAt")
-    _require(start <= seed_time < end, "seed creation is outside the incident")
+    _require(
+        foundation_observed_at < seed_time < start,
+        "drill revision must be created before the incident window",
+    )
     expected_digest = handoff["containerImage"]["digest"]
     _require(seed["imageDigest"] == expected_digest, "seed image digest differs")
     _require(
@@ -1896,6 +1981,18 @@ def _validate_incident(
         and bad_snapshot.get("name") == bad_revision,
         "seed revision snapshots differ from the incident subject",
     )
+    bad_revision_properties = _mapping(
+        bad_snapshot.get("properties"),
+        "incident.seed.revision.response.properties",
+    )
+    _require(
+        _integer(
+            bad_revision_properties.get("trafficWeight"),
+            "incident.seed.revision.response.properties.trafficWeight",
+        )
+        == 0,
+        "drill revision was not created at zero traffic",
+    )
     healthy_container = _container_from_revision(
         healthy_snapshot,
         "incident.seed.healthyRevision.response",
@@ -1919,6 +2016,18 @@ def _validate_incident(
         "healthy container",
     )
     bad_values, bad_secrets = _environment_maps(bad_container, "bad container")
+    expected_healthy_host = _string(
+        _mapping(handoff["database"], "handoff.database").get("server"),
+        "handoff.database.server",
+    )
+    healthy_host = _string(
+        healthy_values.get("CATALOG_DATABASE_HOST"),
+        "healthy container CATALOG_DATABASE_HOST",
+    )
+    _require(
+        healthy_host.casefold() == expected_healthy_host.casefold(),
+        "healthy revision database host differs from the handoff",
+    )
     _require(
         healthy_secrets == bad_secrets and bool(healthy_secrets),
         "seed did not preserve every secret reference",
@@ -1949,13 +2058,15 @@ def _validate_incident(
     before_weights, before_time = _traffic_weights(
         seed["trafficBefore"],
         "incident.seed.trafficBefore",
+        subject["containerAppResourceId"],
     )
     bad_weights, bad_time = _traffic_weights(
         seed["trafficBad"],
         "incident.seed.trafficBad",
+        subject["containerAppResourceId"],
     )
     _require(
-        seed_time <= before_time < bad_time,
+        start <= before_time < bad_time < end,
         "seed traffic chronology differs",
     )
     _require(
@@ -2045,9 +2156,9 @@ def _validate_incident(
         failure_request.get("method") == "POST"
         and failure_request.get("query") == expected_failure_query
         and failure_request.get("url")
-        == (
-            f"{subject['applicationInsightsResourceId']}/query"
-            "?api-version=2021-10-01"
+        == _application_insights_query_endpoint(
+            subject["applicationInsightsResourceId"],
+            registry,
         ),
         "bad-revision failure query differs from the frozen query",
     )
@@ -2113,9 +2224,9 @@ def _validate_incident(
         audit_request.get("method") == "POST"
         and audit_request.get("query") == expected_audit_query
         and audit_request.get("url")
-        == (
-            f"{context['agentApplicationInsightsResourceId']}/query"
-            "?api-version=2021-10-01"
+        == _application_insights_query_endpoint(
+            context["agentApplicationInsightsResourceId"],
+            registry,
         ),
         "agent audit query or source differs from the frozen contract",
     )
@@ -2343,7 +2454,7 @@ def _validate_incident(
     )
     _require(
         seed_activity.get("caller") == context["facilitatorPrincipalId"]
-        and seed_time <= seed_activity_time <= bad_time < fired_at
+        and start <= seed_activity_time <= bad_time < fired_at
         and activity_entry.get("caller") == context["userPrincipalId"]
         and activity_time > approval_time,
         "activity log seed or approved rollback identity differs",
@@ -2379,6 +2490,7 @@ def _validate_incident(
     recovered_weights, recovered_time = _traffic_weights(
         incident["recoveredTraffic"],
         "incident.recoveredTraffic",
+        subject["containerAppResourceId"],
     )
     _require(
         recovered_time >= after_app_time
@@ -2393,27 +2505,61 @@ def _validate_incident(
     )
     health_results = _array(incident["recoveryHealth"], "incident.recoveryHealth")
     health_by_url: dict[str, dict[str, Any]] = {}
-    for index, raw_result in enumerate(health_results):
-        result = _mapping(raw_result, f"incident.recoveryHealth[{index}]")
-        url = _string(result.get("url"), f"incident.recoveryHealth[{index}].url")
+    for index, raw_capture in enumerate(health_results):
+        capture = _mapping(raw_capture, f"incident.recoveryHealth[{index}]")
+        request = _mapping(
+            capture.get("request"),
+            f"incident.recoveryHealth[{index}].request",
+        )
+        url = _string(
+            request.get("url"),
+            f"incident.recoveryHealth[{index}].request.url",
+        )
         _require(url not in health_by_url, "recovery health repeats a URL")
         _require(
-            _integer(
-                result.get("status"),
-                f"incident.recoveryHealth[{index}].status",
-            )
-            == 200,
-            "recovery health request did not return HTTP 200",
+            request
+            == {
+                "method": "GET",
+                "url": url,
+                "redirectsAllowed": False,
+            },
+            "recovery health request permits redirects or differs",
+        )
+        response = _mapping(
+            capture.get("response"),
+            f"incident.recoveryHealth[{index}].response",
+        )
+        status = _integer(
+            response.get("http_code"),
+            f"incident.recoveryHealth[{index}].response.http_code",
         )
         _require(
-            _timestamp(
-                result.get("observedAt"),
-                f"incident.recoveryHealth[{index}].observedAt",
+            status == 200
+            and _integer(
+                response.get("exitcode"),
+                f"incident.recoveryHealth[{index}].response.exitcode",
             )
-            >= recovered_time,
+            == 0
+            and _integer(
+                response.get("num_redirects"),
+                f"incident.recoveryHealth[{index}].response.num_redirects",
+            )
+            == 0
+            and response.get("url_effective") == url,
+            "recovery health curl evidence is not an exact non-redirected HTTP 200",
+        )
+        observed_at = _timestamp(
+            capture.get("observedAt"),
+            f"incident.recoveryHealth[{index}].observedAt",
+        )
+        _require(
+            observed_at >= recovered_time,
             "recovery health request preceded traffic restoration",
         )
-        health_by_url[url] = result
+        health_by_url[url] = {
+            "status": status,
+            "observedAt": capture["observedAt"],
+        }
     _require(
         set(health_by_url)
         == {
@@ -2829,57 +2975,173 @@ def _validate_cleanup(
         "cleanup.costVerification.dataThrough",
     )
     subscription_scope = _subscription_scope(context["subscriptionId"])
-    _require(
-        cost_request.get("method") == "POST"
-        and cost_request.get("url")
-        == (
-            f"{subscription_scope}/providers/Microsoft.CostManagement/query"
-            "?api-version=2023-03-01"
-        )
-        and cost_request.get("filter") == "Azure SRE Agent",
-        "cost verification does not query the exact subscription and meter",
+    expected_query_url = (
+        f"{subscription_scope}/providers/Microsoft.CostManagement/query"
+        "?api-version=2023-03-01"
     )
     _require(
-        _timestamp(
-            cost_request.get("timeframeStart"),
-            "cleanup cost timeframeStart",
-        )
-        < agent_deleted_at
-        < _timestamp(
-            cost_request.get("timeframeEnd"),
-            "cleanup cost timeframeEnd",
-        )
-        <= queried_at,
+        cost_request.get("method") == "POST"
+        and cost_request.get("url") == expected_query_url,
+        "cost verification does not query the exact subscription",
+    )
+    cost_body = _mapping(
+        cost_request.get("body"),
+        "cleanup.costVerification.request.body",
+    )
+    _require(
+        set(cost_body) == {"type", "timeframe", "timePeriod", "dataset"}
+        and cost_body.get("type") == "Usage"
+        and cost_body.get("timeframe") == "Custom",
+        "Cost Management query definition differs",
+    )
+    time_period = _mapping(
+        cost_body.get("timePeriod"),
+        "cleanup.costVerification.request.body.timePeriod",
+    )
+    _require(
+        set(time_period) == {"from", "to"},
+        "Cost Management query time period differs",
+    )
+    timeframe_start = _timestamp(
+        time_period.get("from"),
+        "cleanup Cost Management timePeriod.from",
+    )
+    timeframe_end = _timestamp(
+        time_period.get("to"),
+        "cleanup Cost Management timePeriod.to",
+    )
+    expected_dataset = {
+        "granularity": "Daily",
+        "aggregation": {
+            "agentUnits": {
+                "name": "UsageQuantity",
+                "function": "Sum",
+            }
+        },
+        "grouping": [{"type": "Dimension", "name": "Meter"}],
+        "filter": {
+            "dimensions": {
+                "name": "Meter",
+                "operator": "In",
+                "values": ["Azure SRE Agent"],
+            }
+        },
+    }
+    _require(
+        cost_body.get("dataset") == expected_dataset,
+        "Cost Management query dataset differs",
+    )
+    _require(
+        timeframe_start < agent_deleted_at < timeframe_end <= queried_at,
         "cost query does not span the agent deletion",
     )
     _require(
         queried_at > latest_protected_verification
-        and data_through > agent_deleted_at
+        and data_through >= timeframe_end
         and data_through <= queried_at
-        and cost["costDataLagAcknowledged"] is True
-        and cost["billingAfterDeletionObserved"] is False,
+        and cost["costDataLagAcknowledged"] is True,
         "post-deletion cost verification is incomplete",
     )
     cost_response = _mapping(cost["response"], "cleanup.costVerification.response")
-    columns = [
-        _string(_mapping(value, "cost column").get("name"), "cost column name")
-        for value in _array(cost_response.get("columns"), "cost columns")
-    ]
-    _require(
-        columns == ["UsageDate", "Meter", "AgentUnits"],
-        "cost verification columns differ",
+    response_id = _string(
+        cost_response.get("id"),
+        "cleanup.costVerification.response.id",
+    ).strip("/").casefold()
+    response_name = _string(
+        cost_response.get("name"),
+        "cleanup.costVerification.response.name",
     )
-    rows = _array(cost_response.get("rows"), "cost rows")
-    _require(rows, "cost verification did not observe SRE Agent usage")
+    expected_response_prefix = (
+        f"{subscription_scope}/providers/Microsoft.CostManagement/query/"
+    ).strip("/").casefold()
     _require(
-        any(
-            isinstance(row, list)
-            and len(row) == 3
-            and row[1] == "Azure SRE Agent"
-            and row[2] >= 4
-            for row in rows
-        ),
+        response_id.startswith(expected_response_prefix)
+        and response_id.endswith(f"/{response_name.casefold()}")
+        and str(cost_response.get("type", "")).casefold()
+        == "microsoft.costmanagement/query",
+        "Cost Management response identity differs",
+    )
+    cost_properties = _mapping(
+        cost_response.get("properties"),
+        "cleanup.costVerification.response.properties",
+    )
+    _require(
+        "nextLink" in cost_properties
+        and cost_properties.get("nextLink") is None,
+        "Cost Management response is paginated",
+    )
+    raw_columns = _array(
+        cost_properties.get("columns"),
+        "cleanup.costVerification.response.properties.columns",
+    )
+    expected_column_types = {
+        "UsageQuantity": "Number",
+        "UsageDate": "Number",
+        "Meter": "String",
+    }
+    column_indexes: dict[str, int] = {}
+    for index, raw_column in enumerate(raw_columns):
+        column = _mapping(raw_column, f"cost columns[{index}]")
+        column_name = _string(
+            column.get("name"),
+            f"cost columns[{index}].name",
+        )
+        _require(
+            column_name not in column_indexes,
+            "Cost Management response repeats a column",
+        )
+        column_indexes[column_name] = index
+        if column_name in expected_column_types:
+            _require(
+                column.get("type") == expected_column_types[column_name],
+                f"Cost Management {column_name} column type differs",
+            )
+    _require(
+        set(expected_column_types).issubset(column_indexes),
+        "Cost Management response omits required columns",
+    )
+    rows = _array(cost_properties.get("rows"), "cost rows")
+    _require(rows, "cost verification did not observe SRE Agent usage")
+    usage_rows: list[tuple[date, float]] = []
+    for index, raw_row in enumerate(rows):
+        row = _array(raw_row, f"cost rows[{index}]")
+        _require(
+            len(row) == len(raw_columns),
+            f"cost rows[{index}] shape differs",
+        )
+        usage_day = _usage_date(
+            row[column_indexes["UsageDate"]],
+            f"cost rows[{index}] UsageDate",
+        )
+        _require(
+            timeframe_start.date() <= usage_day <= timeframe_end.date(),
+            f"cost rows[{index}] falls outside the requested timeframe",
+        )
+        _require(
+            row[column_indexes["Meter"]] == "Azure SRE Agent",
+            f"cost rows[{index}] meter differs",
+        )
+        units = _number(
+            row[column_indexes["UsageQuantity"]],
+            f"cost rows[{index}] UsageQuantity",
+        )
+        _require(units >= 0, f"cost rows[{index}] UsageQuantity is negative")
+        usage_rows.append((usage_day, units))
+    _require(
+        any(units >= 4 for _, units in usage_rows),
         "cost verification did not observe the four-AAU agent meter",
+    )
+    billing_after_deletion = any(
+        usage_day > agent_deleted_at.date() and units > 0
+        for usage_day, units in usage_rows
+    )
+    _require(
+        cost["billingAfterDeletionObserved"] is billing_after_deletion,
+        "billing-after-deletion flag differs from Cost Management rows",
+    )
+    _require(
+        not billing_after_deletion,
+        "cost verification observed billing after agent deletion",
     )
     completed_at = _timestamp(cleanup["completedAt"], "cleanup.completedAt")
     _require(completed_at >= queried_at, "cleanup completed before cost verification")

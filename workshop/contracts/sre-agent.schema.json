@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.2.0"
     },
     "challenge": {
       "type": "object",
@@ -57,6 +57,7 @@
       "required": [
         "agentApiVersion",
         "connectorApiVersion",
+        "applicationInsightsQueryApiVersion",
         "agentType",
         "connectorType",
         "identityMode",
@@ -72,6 +73,9 @@
         },
         "connectorApiVersion": {
           "const": "2026-01-01"
+        },
+        "applicationInsightsQueryApiVersion": {
+          "const": "2018-04-20"
         },
         "agentType": {
           "const": "Microsoft.App/agents"

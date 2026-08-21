@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "authorization": {
     "authorized": true,
     "authorizedBy": "facilitator@example.invalid",
@@ -103,34 +103,69 @@
     "request": {
       "method": "POST",
       "url": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.CostManagement/query?api-version=2023-03-01",
-      "timeframeStart": "2026-08-20T00:00:00Z",
-      "timeframeEnd": "2026-08-22T00:00:00Z",
-      "filter": "Azure SRE Agent"
+      "body": {
+        "type": "Usage",
+        "timeframe": "Custom",
+        "timePeriod": {
+          "from": "2026-08-20T00:00:00Z",
+          "to": "2026-08-21T23:59:59Z"
+        },
+        "dataset": {
+          "granularity": "Daily",
+          "aggregation": {
+            "agentUnits": {
+              "name": "UsageQuantity",
+              "function": "Sum"
+            }
+          },
+          "grouping": [
+            {
+              "type": "Dimension",
+              "name": "Meter"
+            }
+          ],
+          "filter": {
+            "dimensions": {
+              "name": "Meter",
+              "operator": "In",
+              "values": [
+                "Azure SRE Agent"
+              ]
+            }
+          }
+        }
+      }
     },
     "queriedAt": "2026-08-22T12:00:00Z",
     "dataThrough": "2026-08-21T23:59:59Z",
     "response": {
-      "columns": [
-        {
-          "name": "UsageDate",
-          "type": "Number"
-        },
-        {
-          "name": "Meter",
-          "type": "String"
-        },
-        {
-          "name": "AgentUnits",
-          "type": "Number"
-        }
-      ],
-      "rows": [
-        [
-          20260820,
-          "Azure SRE Agent",
-          4
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.CostManagement/query/00000000-0000-0000-0000-000000000301",
+      "name": "00000000-0000-0000-0000-000000000301",
+      "type": "Microsoft.CostManagement/query",
+      "properties": {
+        "nextLink": null,
+        "columns": [
+          {
+            "name": "UsageQuantity",
+            "type": "Number"
+          },
+          {
+            "name": "UsageDate",
+            "type": "Number"
+          },
+          {
+            "name": "Meter",
+            "type": "String"
+          }
+        ],
+        "rows": [
+          [
+            4,
+            20260820,
+            "Azure SRE Agent"
+          ]
         ]
-      ]
+      }
     },
     "billingAfterDeletionObserved": false,
     "costDataLagAcknowledged": true

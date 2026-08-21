@@ -31,7 +31,7 @@
   "audit": {
     "request": {
       "method": "POST",
-      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.Insights/components/appi-sre-example/query?api-version=2021-10-01",
+      "url": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.Insights/components/appi-sre-example/query?api-version=2018-04-20",
       "query": "customEvents\n| where timestamp between (datetime(2026-08-20T14:39:00Z) .. datetime(2026-08-20T14:43:00Z))\n| where name in (\"IncidentActivitySnapshot\", \"AgentResponse\", \"ApprovalDecision\")\n| extend AgentId = tostring(customDimensions[\"gen_ai.agent.id\"]), AgentName = tostring(customDimensions[\"gen_ai.agent.name\"]), TraceId = tostring(customDimensions[\"TraceId\"]), SpanId = tostring(customDimensions[\"SpanId\"]), ParentSpanId = tostring(customDimensions[\"ParentSpanId\"]), ThreadId = tostring(customDimensions[\"ThreadId\"]), CorrelationId = tostring(customDimensions[\"CorrelationId\"]), LogTimestamp = tostring(customDimensions[\"LogTimestamp\"])\n| where AgentId == \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sre-example/providers/Microsoft.App/agents/sre-catalog-example\" and ThreadId == \"thread-sre-preflight-0001\"\n| project timestamp, name, AgentId, AgentName, TraceId, SpanId, ParentSpanId, ThreadId, CorrelationId, LogTimestamp, Properties = customDimensions\n| order by timestamp asc"
     },
     "response": {

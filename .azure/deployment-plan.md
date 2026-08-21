@@ -1,6 +1,6 @@
 # Shared Azure Target Deployment Plan
 
-**Status:** Approved - P4 ready; P5 contract freeze in progress
+**Status:** Approved - P8 validated; P9 repository reconciliation in progress
 
 ## Scope and classification
 
@@ -316,6 +316,47 @@ After the coordinator contract commit passes:
 No additional child is justified because database auth, storage provider selection, runtime
 configuration, migration evidence, and Bicep outputs are one producer/consumer protocol.
 
+## P8 Azure SRE Agent extension
+
+P8 remains a standalone Bicep preparation against the selected modernization handoff. It
+creates one dedicated agent resource group, one user-assigned action/knowledge identity,
+one Log Analytics workspace, one workspace-based Application Insights component, one
+`Microsoft.App/agents@2026-01-01` resource, and exactly two telemetry connectors. It also
+creates the frozen custom Container App traffic role and the ten exact role assignments
+needed by the two agent identities, facilitator, and participant.
+
+The Bicep consumes `workshop/contracts/sre-agent.json` version `1.2.0`. Review/Low mode,
+the user-assigned action identity, participant-resource-group knowledge scope, Stable
+upgrade channel, Azure Monitor incident type, connector names/types, and all role IDs and
+actions are contract-owned. The only subscription-wide role is the user-assigned
+identity's Monitoring Contributor assignment required by the Azure Monitor alert scanner
+and explicitly approved for this plan. The Azure Monitor response plan remains a separate
+facilitator portal operation because the frozen contract prohibits an undocumented IaC
+payload. The exact-resource `containerApps/write` action is not JSON-field-scoped; Review
+approval and before/after state validation enforce that only traffic changes. No autonomous
+mode, OBO, broad role, secret/image mutation, DCR, policy, deployment script, or generalized
+rollback is introduced.
+
+Preparation uses the already confirmed workshop context:
+
+- subscription `ME-MngEnvMCAP372348-mimarusa-1`
+  (`7bc68c68-f434-49ad-ab3e-b883ec39da86`);
+- Sweden Central, where `Microsoft.App/agents` availability was preflighted;
+- one isolated P8 foundation per participant/team;
+- four fixed agent units per deployed agent; stopping does not end billing, deletion does;
+- local Bicep build and acceptance tests only in this phase. No resource deployment,
+  incident execution, role mutation, or deletion is authorized.
+
+| Resource type | Number prepared per team | Capacity result |
+| --- | ---: | --- |
+| `Microsoft.App/agents` | 1 | Provider and region availability confirmed; live creation deferred to P10 |
+| `Microsoft.App/agents/connectors` | 2 | Child resources of the one agent |
+| `Microsoft.ManagedIdentity/userAssignedIdentities` | 1 | No regional compute quota |
+| `Microsoft.OperationalInsights/workspaces` | 1 | Existing workshop service limit is sufficient for one isolated workspace |
+| `Microsoft.Insights/components` | 1 | Existing workshop service limit is sufficient for one isolated component |
+| `Microsoft.Authorization/roleDefinitions` | 1 | Deterministic subscription role definition, assignable only at the participant resource group |
+| `Microsoft.Authorization/roleAssignments` | 10 | Exact frozen scopes; no Owner, Contributor, or User Access Administrator assignment |
+
 ## Validation
 
 ### Contract and runtime gates
@@ -408,8 +449,11 @@ resource mutation is authorized by this plan.
 - [x] Obtain approval for this plan.
 - [x] Freeze and commit the executable contract foundation.
 - [x] Review the contract/decomposition gate.
-- [ ] Start the single P4 implementation child from the exact contract commit.
-- [ ] Integrate and run cross-layer validation.
+- [x] Integrate and validate P4 through P7.
+- [x] Freeze and approve the P8 executable contract foundation.
+- [x] Build the coordinator-owned P8 vertical slice.
+- [x] Complete the focused P8 implementation and corrective reviews.
+- [ ] Integrate and validate the P8 vertical slice.
 - [ ] Update implementation logs and confirmed-error guidance.
 - [ ] Set this plan to `Ready for Validation`.
 - [ ] Invoke the `azure-validate` skill.

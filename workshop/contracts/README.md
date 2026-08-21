@@ -22,6 +22,10 @@ Java/PostgreSQL baselines and by all three modernization paths.
 - Load-test evidence: `1.1.0`
 - CI/CD evidence: `1.1.0`
 - Observability workbook evidence: `1.1.0`
+- SRE Agent registry: `1.2.0`
+- SRE Agent incident capture: `1.2.0`
+- SRE Agent cleanup capture: `1.1.0`
+- SRE Agent foundation, response-plan, capture-manifest, and report contracts: `1.0.0`
 
 Breaking changes require a schema-version change and coordinator approval. Runtime
 implementations consume these files; they must not copy or reinterpret the rules.
@@ -85,7 +89,7 @@ and candidate suffix derive only from that source SHA. The selected stack workfl
 `workflow_dispatch`-driven. GitHub production approval occurs after staging completes and before
 the protected production job starts. A shell trap is armed before promotion so any subsequent
 failure attempts rollback, and the successful exercise still proves promotion then rollback.
-Digest-bound raw `az containerapp revision list` captures for pre-promotion, promotion, and
+Digest-bound raw Container Apps revision-list captures for pre-promotion, promotion, and
 rollback are compared with normalized active, health, traffic, and candidate-image fields, so
 hardcoded revision state cannot pass. The candidate endpoint is derived using the official
 `<APP_NAME>---<LABEL>` FQDN, and candidate plus post-transition observations record separate
@@ -121,6 +125,21 @@ contract library. Normalized numeric and boolean observations are strict, so JSO
 cannot satisfy counts and JSON integers cannot satisfy flags. Load, CI/CD, and observability
 normalized observations use version `1.1.0` in
 `catalog_acceptance.models.shared_challenges`.
+
+The SRE Agent registry `1.2.0` binds the dual-identity agent and connectors, the exact
+Application Insights resource-query API `2018-04-20`, and one explicit subscription
+Monitoring Contributor exception for the user-assigned identity. That exception exists
+only because Azure SRE Agent's Azure Monitor scanner requires it; all knowledge and
+connector read roles remain at the participant resource group, and the only workload write
+role remains at the exact Container App. Incident capture `1.2.0` requires drill creation
+before the incident and preserves native ARM revision-list envelopes with nested
+`properties.trafficWeight`; recovery checks remain machine-generated curl transfer evidence
+with redirects disabled. Cleanup capture `1.1.0` preserves the exact Cost Management query
+body and native `properties.columns`, `properties.rows`, and null `properties.nextLink`.
+The validator also binds connectors to the exact agent parent, the retained revision to the
+handoff database host, and post-deletion billing status to returned usage dates. The custom
+role's exact-resource `containerApps/write` action is explicitly not field-scoped; Review
+approval and native before/after evidence enforce the traffic-only behavior.
 
 ## Canonical identity and image digest
 

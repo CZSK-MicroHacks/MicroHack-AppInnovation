@@ -609,15 +609,18 @@ Grading must not wait for a new live recommendation or attack alert.
 1. Provision an agent in a supported subscription/region for every isolated participant
    or team environment.
 2. Scope its managed identity to the participant/team resource group using Reader,
-   Log Analytics Reader, Monitoring Reader, and only the narrow write permission needed
-   for the approved rollback.
+   Log Analytics Reader, Monitoring Reader, and the exact-Container-App ARM write action
+   needed for the approved rollback. Azure RBAC cannot field-constrain that parent-resource
+   action, so Review-mode command inspection, facilitator approval, and before/after state
+   evidence must enforce traffic-only behavior.
 3. Keep facilitators as SRE Agent Administrators/approvers.
 4. Connect the app's Log Analytics and Application Insights resources.
 5. Configure an Azure Monitor incident response plan explicitly in Review mode.
 6. Retain a known-good ACA revision.
-7. Seed a bad revision with a harmless non-secret selected-database endpoint/configuration
-   error and a deliberately incorrect readiness routing setup so traffic produces
-   observable failures while rollback remains immediate.
+7. Pre-create a bad revision at zero traffic before the incident window, using a harmless
+   non-secret selected-database endpoint/configuration error and a deliberately incorrect
+   readiness routing setup; then shift traffic during the incident so failures are
+   observable while rollback remains immediate.
 8. Create and preflight an alert that reaches the response plan.
 9. Add a short knowledge/runbook document stating topology, safe rollback, forbidden
    actions, and verification steps.
@@ -636,7 +639,8 @@ Grading must not wait for a new live recommendation or attack alert.
 7. Produce a concise incident summary and prevention action.
 
 Autonomous mode, destructive actions, secret changes, and subscription-wide permissions
-are prohibited.
+are prohibited, except for the agent user-assigned identity's exact Monitoring Contributor
+assignment required by Azure SRE Agent to ingest Azure Monitor alerts.
 
 ### P9 — Reconcile optional tracks, documentation, and repository cleanup
 

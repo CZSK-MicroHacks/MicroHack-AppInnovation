@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.2.0",
   "challenge": {
     "id": "ch06-sre-agent",
     "title": "Azure SRE Agent reviewed rollback",
@@ -9,6 +9,7 @@
   "resources": {
     "agentApiVersion": "2026-01-01",
     "connectorApiVersion": "2026-01-01",
+    "applicationInsightsQueryApiVersion": "2018-04-20",
     "agentType": "Microsoft.App/agents",
     "connectorType": "Microsoft.App/agents/connectors",
     "identityMode": "SystemAssigned,UserAssigned",
@@ -89,6 +90,7 @@
         "name": "Monitoring Contributor",
         "roleDefinitionId": "749f88d5-cbae-40b8-bcfc-e573ddc772fa",
         "scope": "subscription-exception",
+        "purpose": "azure-monitor-alert-ingestion",
         "principals": [
           "user-assigned"
         ]
@@ -122,6 +124,12 @@
         "Microsoft.App/containerApps/read",
         "Microsoft.App/containerApps/write",
         "Microsoft.App/containerApps/revisions/read"
+      ],
+      "armWriteIsFieldScoped": false,
+      "trafficOnlyEnforcement": [
+        "review-mode-exact-command",
+        "facilitator-approval",
+        "before-after-state-evidence"
       ],
       "notActions": [],
       "dataActions": [],
@@ -246,7 +254,9 @@
     "reportSchema": "workshop/contracts/sre-agent-evidence.schema.json",
     "foundationSchema": "workshop/contracts/sre-agent-foundation.schema.json",
     "incidentSchema": "workshop/contracts/sre-agent-incident.schema.json",
+    "incidentSchemaVersion": "1.2.0",
     "cleanupSchema": "workshop/contracts/sre-agent-cleanup.schema.json",
+    "cleanupSchemaVersion": "1.1.0",
     "responsePlanSchema": "workshop/contracts/sre-agent-response-plan.schema.json",
     "rendererCommand": "uv --no-config run catalog-render-sre-agent-evidence --capture <capture.json> --handoff <handoff.json> --output <report.json>",
     "validatorCommand": "uv --no-config run catalog-validate-sre-agent-evidence --capture <capture.json> --handoff <handoff.json> --report <report.json> --contracts workshop/contracts",
