@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import gzip
+import io
 import json
+import re
+import shutil
+import subprocess
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -67,7 +74,7 @@ def test_handoff_example_matches_schema(repo_root: Path) -> None:
 
 
 def test_challenge_path_registry_is_complete(repo_root: Path) -> None:
-    """Freeze all six P5 slices on one target and exact path protocol."""
+    """Freeze all six Challenge 1 slices on one target and exact path protocol."""
     contracts = repo_root / "workshop" / "contracts"
     registry = load_json(contracts / "challenge-paths.json")
     schema = load_json(contracts / "challenge-paths.schema.json")
@@ -125,8 +132,17 @@ def test_challenge_path_registry_is_complete(repo_root: Path) -> None:
     provisioner = (repo_root / "baseInfra/scripts/provision-vm.ps1").read_text(
         encoding="utf-8"
     )
-    common_extensions = provisioner.split("if ($Stack -eq 'dotnet')", maxsplit=1)[0]
-    assert "'vscjava.migrate-java-to-azure'" in common_extensions
+    # The registry above requires the app-modernization extension on BOTH
+    # copilot-modernization slices, so the provisioner has to install it whatever
+    # $Stack it was handed. Assert it sits in the unconditional $Extensions literal
+    # rather than in either arm of the per-stack branch that follows it. Anchoring on
+    # the literal keeps this honest even as unrelated $Stack branches come and go
+    # elsewhere in the script.
+    unconditional, per_stack = provisioner.split("$Extensions = @{", maxsplit=1)[
+        1
+    ].split("}", maxsplit=1)
+    assert "'vscjava.migrate-java-to-azure'" in unconditional
+    assert "'vscjava.migrate-java-to-azure'" not in per_stack.split("\n\n", maxsplit=1)[0]
 
 
 @pytest.mark.parametrize(
@@ -900,6 +916,19 @@ def test_toolchain_matrix_is_exact(repo_root: Path) -> None:
         "indexDigest"
     ].startswith("sha256:")
     assert toolchain["tools"]["sqlPackage"]["version"] == "170.4.83"
+    assert toolchain["tools"]["git"] == {
+        "version": "2.55.0.windows.5",
+        "architecture": "x64",
+        "url": (
+            "https://github.com/git-for-windows/git/releases/download/"
+            "v2.55.0.windows.5/Git-2.55.0.5-64-bit.exe"
+        ),
+        "sha256": (
+            "d065a4e23c3d9a6b5073d609b5be0830"
+            "227ec3ca053c083ba385061ddfaf94c6"
+        ),
+        "signaturePublisher": "Johannes Schindelin",
+    }
     assert toolchain["schemaVersion"] == "1.2.0"
     assert toolchain["tools"]["sqlPackage"]["windowsStandalone"] == {
         "version": "170.4.83.3",
@@ -1435,3 +1464,1799 @@ def test_handoff_bundle_cross_file_consistency(
     )
     with pytest.raises(ValueError, match="full passing"):
         validate_handoff(handoff_path, contracts, tmp_path)
+
+
+def test_provisioner_installs_git_exactly_as_the_lock_pins_it(
+    repo_root: Path,
+) -> None:
+    """Bind the VM provisioner to the frozen Git pin so the two cannot drift apart.
+
+    Both GitHub Copilot Challenge 1 paths commit their work and read it back with
+    `git rev-parse HEAD`, so Git is a load-bearing part of the toolchain rather than a
+    convenience. A pin that the provisioner does not actually install would reintroduce
+    exactly the unpinned-dependency drift the lock exists to prevent.
+    """
+    git = load_json(repo_root / "workshop" / "toolchain.lock.json")["tools"]["git"]
+    script = (repo_root / "baseInfra" / "scripts" / "provision-vm.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for pinned in (git["version"], git["url"], git["sha256"],
+                   git["signaturePublisher"]):
+        assert pinned in script
+
+    # The archive is not a clone, so the provisioner must seed a working tree itself.
+    assert "Initialize-SourceRepository" in script
+    assert "init --initial-branch=workshop" in script
+    # Upstream provenance stays distinct from the participant's own commit.
+    assert ".source-commit" in script
+
+
+def test_provisioner_powershell_parses(repo_root: Path) -> None:
+    """Parse the provisioner so a syntax error cannot reach a delivery.
+
+    The provisioning script only ever executes on a freshly created Azure VM, where a
+    parse error surfaces as an opaque extension failure after several minutes. Parsing it
+    here turns that into an immediate, local failure.
+    """
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        pytest.skip("pwsh is not installed on this machine")
+
+    script = repo_root / "baseInfra" / "scripts" / "provision-vm.ps1"
+    command = (
+        "$errors = $null; "
+        "$null = [System.Management.Automation.Language.Parser]::ParseFile("
+        f"'{script}', [ref]$null, [ref]$errors); "
+        "if ($errors) { $errors | ForEach-Object { $_.Message }; exit 1 }"
+    )
+    completed = subprocess.run(
+        [pwsh, "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def _provisioner(repo_root: Path) -> str:
+    return (repo_root / "baseInfra" / "scripts" / "provision-vm.ps1").read_text(
+        encoding="utf-8"
+    )
+
+
+def _lock(repo_root: Path) -> dict:
+    return load_json(repo_root / "workshop" / "toolchain.lock.json")
+
+
+def test_legacy_dotnet_tree_stays_on_the_locked_source_sdk(repo_root: Path) -> None:
+    """Fail if `dotnet/` drifts off the legacy baseline participants must start from.
+
+    The workshop's premise is that only legacy code ships in the participant-facing
+    tree and participants modernize it themselves. A silent upgrade of `dotnet/` breaks
+    that premise *and* the VM, which pins the source SDK with `rollForward: disable`.
+    The expected framework is derived from the lock rather than hard-coded so the two
+    can never disagree.
+    """
+    source_sdk = _lock(repo_root)["runtimes"]["dotnet"]["sourceSdk"]
+    expected = f"net{source_sdk.split('.')[0]}.0"
+
+    projects = sorted((repo_root / "dotnet").rglob("*.csproj"))
+    assert projects, "the legacy .NET tree has no projects"
+    for project in projects:
+        text = project.read_text(encoding="utf-8")
+        assert f"<TargetFramework>{expected}</TargetFramework>" in text, (
+            f"{project.relative_to(repo_root)} is not on the locked source SDK "
+            f"{expected}; the legacy baseline has drifted"
+        )
+
+
+def test_legacy_java_tree_stays_on_the_locked_source_spring_boot(
+    repo_root: Path,
+) -> None:
+    """Fail if `java/` drifts off the legacy Spring Boot and JDK baseline."""
+    java = _lock(repo_root)["runtimes"]["java"]
+    boot = java["sourceSpringBoot"]
+    jdk_major = java["sourceRuntime"].split(".")[0]
+
+    pom = (repo_root / "java" / "pom.xml").read_text(encoding="utf-8")
+    assert f"<version>{boot}</version>" in pom, (
+        f"java/pom.xml is not on the locked source Spring Boot {boot}"
+    )
+    assert f"<java.version>{jdk_major}</java.version>" in pom
+    assert f"<maven.compiler.release>{jdk_major}</maven.compiler.release>" in pom
+
+
+def test_provisioner_installs_jq_exactly_as_the_lock_pins_it(repo_root: Path) -> None:
+    """Bind the provisioner to the frozen jq pin.
+
+    The evidence blocks in Challenges 2, 3, 5 and 6 are written in `jq`, so it has to be
+    on the VM. Upstream ships it unsigned, which is why it is pinned by hash alone.
+    """
+    jq = _lock(repo_root)["tools"]["jq"]
+    assert "signaturePublisher" not in jq, (
+        "jq ships unsigned upstream; pinning a publisher would fail on the VM"
+    )
+    script = _provisioner(repo_root)
+    for pinned in (jq["version"], jq["url"], jq["sha256"]):
+        assert pinned in script
+    assert "jq version verification failed" in script
+
+
+def test_provisioner_puts_git_bash_utilities_on_path(repo_root: Path) -> None:
+    """`usr\\bin` carries bash, curl and the coreutils the later chapters call.
+
+    Git for Windows installs them but only adds `cmd` to PATH, so without this the
+    documented `sha256sum` and `bash` blocks fail on the mandated host.
+    """
+    script = _provisioner(repo_root)
+    assert "Add-MachinePath -Path (Join-Path $GitRoot 'usr\\bin')" in script
+
+
+def test_source_archive_guard_rejects_a_stale_commit(repo_root: Path) -> None:
+    """A stale pin must fail loudly during provisioning, not silently succeed.
+
+    The historical pin still contains `data`, `dotnet` and `java`, so a content guard
+    naming only those would install the wrong tree without complaint.
+    """
+    script = _provisioner(repo_root)
+    assert "infra\\main.bicep" in script
+    assert "catalog-migrate" in script
+
+
+def test_reprovisioning_preserves_participant_git_history(repo_root: Path) -> None:
+    """Re-running provisioning is the facilitator's first repair step.
+
+    After the Git pin, the participant's Challenge 1 commits live only on that VM, and
+    the image tags and handoff bind to them. Replacing the tree would destroy them.
+    """
+    script = _provisioner(repo_root)
+    assert "leaving participant work untouched" in script
+    assert "$Previous is deliberately kept" in script
+
+
+def test_terraform_requires_an_explicit_source_commit(repo_root: Path) -> None:
+    """No default, and the known-stale pin is rejected outright."""
+    stale = "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
+    variables = (repo_root / "baseInfra" / "terraform" / "variables.tf").read_text(
+        encoding="utf-8"
+    )
+    block = variables.split('variable "source_commit"', 1)[1].split("\nvariable ", 1)[0]
+    assignments = [
+        line.strip()
+        for line in block.splitlines()
+        if re.match(r"\s*default\s*=", line)
+    ]
+    assert not assignments, f"source_commit must not ship a default: {assignments}"
+    assert f'var.source_commit != "{stale}"' in block
+
+    example = (
+        repo_root / "baseInfra" / "terraform" / "config.tfvars.example"
+    ).read_text(encoding="utf-8")
+    assert stale not in example, "the example tfvars still pre-fills the stale pin"
+
+
+CH01_SOLUTION_RUNBOOKS = (
+    "ch01-manual/dotnet",
+    "ch01-manual/java",
+    "ch01-copilot-modernization/dotnet",
+    "ch01-copilot-modernization/java",
+    "ch01-copilot-rewrite/dotnet",
+    "ch01-copilot-rewrite/java",
+)
+
+
+def test_every_challenge_one_path_publishes_its_work_to_github(
+    repo_root: Path,
+) -> None:
+    """Challenge 3 builds the participant's own Dockerfile out of their repository.
+
+    `.github/workflows/catalog-*.yml` checks the application source out of GitHub at
+    the handoff's `sourceCommit` and builds `application-source/<stack>/Dockerfile`.
+    Both are things the participant creates on the VM, so unless every path pushes its
+    work and records the pushed commit, Challenge 3 cannot build for anyone: the
+    checkout either fails outright or lands on a tree with no Dockerfile.
+    """
+    for path in CH01_SOLUTION_RUNBOOKS:
+        text = (repo_root / "solutions" / path / "README.md").read_text(
+            encoding="utf-8"
+        )
+        assert "git push" in text, f"{path} never publishes the participant's work"
+        assert "git remote" in text, f"{path} never points the tree at a remote"
+        assert "git rev-parse HEAD" in text, (
+            f"{path} must bind the handoff to the commit it pushed"
+        )
+        # The archive marker names an upstream commit GitHub has never seen.
+        assert ".source-commit' -Raw" not in text, (
+            f"{path} still derives the source identity from the archive marker, "
+            "which Challenge 3 cannot check out"
+        )
+
+
+def test_challenge_one_tells_participants_to_publish(repo_root: Path) -> None:
+    """The participant-facing chapter must own the handoff to Challenge 3."""
+    text = (repo_root / "challenges" / "ch01" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    assert "git push" in text
+
+
+def test_every_markdown_local_link_resolves(repo_root: Path) -> None:
+    """Catch dangling cross-references anywhere, not just in the navigation set.
+
+    The narrower navigation link check does not cover ``docs/`` or ``workshop/``, which
+    is how a reference to a directory that had never been created reached the facilitator
+    day-of checklist.
+    """
+    skipped_roots = {".git", "node_modules", ".venv", "__pycache__"}
+    broken: list[str] = []
+
+    for document in sorted(repo_root.rglob("*.md")):
+        if any(part in skipped_roots for part in document.parts):
+            continue
+        relative = document.relative_to(repo_root).as_posix()
+        for match in re.finditer(r"\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
+            target = match.group(1).split("#")[0].strip()
+            if not target or target.startswith(("http://", "https://", "mailto:")):
+                continue
+            # Placeholders such as ``<stack>`` are instructions, not paths.
+            if "<" in target or "{" in target or "$" in target:
+                continue
+            if not (document.parent / target).resolve().exists():
+                broken.append(f"{relative} -> {target}")
+
+    assert not broken, "unresolved local links:\n" + "\n".join(broken)
+
+
+def test_golden_handoff_location_exists_and_is_not_committed(repo_root: Path) -> None:
+    """The rejoin path must name a real place and must not ship a stale contract."""
+    golden = repo_root / "workshop" / "golden"
+    assert (golden / "README.md").is_file()
+    for stack in ("dotnet-sqlserver", "java-postgresql"):
+        assert (golden / stack).is_dir(), stack
+        contract = golden / stack / "evidence" / "modernization-contract.json"
+        assert not contract.exists(), (
+            f"{stack} ships a golden handoff; its Azure resource IDs and image digest "
+            "are dead the moment that environment is torn down"
+        )
+
+    ignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
+    # A bundle is its own validation root, so the whole evidence directory is ignored,
+    # not just the contract that names it.
+    assert "workshop/golden/*/evidence/" in ignore
+
+
+def test_participant_template_is_resource_group_scoped(repo_root: Path) -> None:
+    """Participants hold Owner on one resource group and nothing above it.
+
+    A subscription-scoped participant deployment fails with ``AuthorizationFailed`` for
+    the whole room at once, so the scope is asserted here rather than discovered live.
+    """
+    template = (repo_root / "infra" / "main.bicep").read_text(encoding="utf-8")
+    assert "targetScope = 'resourceGroup'" in template
+    assert "resource resourceGroup 'Microsoft.Resources/resourceGroups" not in template
+    assert "resourceGroup().name" in template, (
+        "the template must assert that resourceGroupName matches the group it is "
+        "deployed into, or a stale parameter file deploys into the wrong place"
+    )
+
+    offenders: list[str] = []
+    for document in sorted(repo_root.rglob("*.md")):
+        if any(part in {".git", "node_modules", ".venv"} for part in document.parts):
+            continue
+        text = document.read_text(encoding="utf-8")
+        for match in re.finditer(r"az deployment sub ", text):
+            window = text[match.start():match.start() + 400]
+            if "main.bicep" in window:
+                offenders.append(document.relative_to(repo_root).as_posix())
+
+    assert not offenders, (
+        "subscription-scope deployment of the participant template:\n"
+        + "\n".join(sorted(set(offenders)))
+    )
+
+
+def test_facilitator_owns_the_repository_url_participants_are_told_to_use(
+    repo_root: Path,
+) -> None:
+    """Every runbook asks for a facilitator-provided URL, so a facilitator must own it.
+
+    The workshop's recurring failure mode is a prerequisite that participant text depends
+    on and no facilitator document supplies.
+    """
+    runbooks = [
+        repo_root / "solutions" / stack / language / "README.md"
+        for stack in (
+            "ch01-manual",
+            "ch01-copilot-rewrite",
+            "ch01-copilot-modernization",
+        )
+        for language in ("dotnet", "java")
+    ]
+    for runbook in runbooks:
+        text = runbook.read_text(encoding="utf-8")
+        assert "git push" in text, runbook
+        assert "facilitator-provided" in text, runbook
+
+    facilitator = (repo_root / "docs" / "Facilitator.md").read_text(encoding="utf-8")
+    assert "repository HTTPS URL" in facilitator
+    assert "A test push succeeds from one VM" in facilitator
+    assert "not from the VM" not in facilitator, (
+        "participants now push from the VM; the old guidance is false"
+    )
+
+
+CH01_RUNBOOKS = (
+    "solutions/ch01-manual/dotnet/README.md",
+    "solutions/ch01-manual/java/README.md",
+    "solutions/ch01-copilot-rewrite/dotnet/README.md",
+    "solutions/ch01-copilot-rewrite/java/README.md",
+    "solutions/ch01-copilot-modernization/dotnet/README.md",
+    "solutions/ch01-copilot-modernization/java/README.md",
+)
+
+PROTECTED_PATH = re.compile(r"C:\\protected\\[^\s'\"`]+", re.IGNORECASE)
+
+
+def test_protected_parameter_paths_contain_no_unresolved_placeholder(
+    repo_root: Path,
+) -> None:
+    """Reject a runbook that prints a template placeholder as a real filename.
+
+    Two runbooks shipped ``C:\\protected\\<path>-<stage>.json`` verbatim, which
+    throws the moment a participant runs it.
+    """
+    offenders: list[str] = []
+    for relative in CH01_RUNBOOKS:
+        for match in PROTECTED_PATH.findall((repo_root / relative).read_text()):
+            if "<" in match or ">" in match:
+                offenders.append(f"{relative}: {match}")
+    assert not offenders, (
+        "protected parameter paths must be literal, not placeholders: "
+        + "; ".join(offenders)
+    )
+
+
+def test_protected_parameter_files_have_a_producer(repo_root: Path) -> None:
+    """Bind the runbooks' protected parameter files to the script that writes them.
+
+    Every runbook deploys with ``--parameters '@C:\\protected\\...json'``. If nothing
+    creates those files, Challenge 1 cannot start on any path.
+    """
+    referenced = {
+        match
+        for relative in CH01_RUNBOOKS
+        for match in PROTECTED_PATH.findall((repo_root / relative).read_text())
+        if match.lower().endswith(".json")
+    }
+    assert referenced, "expected the runbooks to reference protected parameter files"
+
+    provisioner = (repo_root / "baseInfra/scripts/provision-vm.ps1").read_text()
+    assert "protected" in provisioner.lower()
+    for token in ("resourceGroupName", "performanceApiKey", "facilitatorPrincipalObjectId"):
+        assert token in provisioner, (
+            f"the provisioner must write {token} into the protected parameter file; "
+            "the template requires it and no participant can supply it"
+        )
+
+
+def test_performance_api_key_is_documented_somewhere(repo_root: Path) -> None:
+    """Require the hard-asserted application secret to be explained in prose.
+
+    ``infra/main.bicep`` fails the application stage outright when
+    ``performanceApiKey`` is empty, so a parameter nobody documents is a stop.
+    """
+    documented = [
+        path.relative_to(repo_root).as_posix()
+        for path in repo_root.rglob("*.md")
+        if ".git" not in path.parts and "performanceApiKey" in path.read_text()
+    ]
+    assert documented, (
+        "infra/main.bicep asserts performanceApiKey is present for the application "
+        "stage, but no Markdown document mentions it"
+    )
+
+
+def test_recovery_time_lands_in_an_evidence_file(repo_root: Path) -> None:
+    """Require the workshop's headline MTTR figure to persist, not just print.
+
+    Challenge 6 calls it "the most persuasive single number this workshop
+    produces"; a number that only reaches stdout cannot be aggregated.
+    """
+    for relative in (
+        "challenges/ch06-sre-agent/README.md",
+        "solutions/ch06-sre-agent/README.md",
+    ):
+        content = (repo_root / relative).read_text()
+        assert "minutesToRecovery" in content
+        assert "ch06-mttr.json" in content, (
+            f"{relative} must write the recovery figure to evidence/ch06-mttr.json"
+        )
+
+
+def test_recovery_clock_endpoints_are_both_derived(repo_root: Path) -> None:
+    """Reject a recovery block that computes one endpoint and abandons the other."""
+    solution = (repo_root / "solutions/ch06-sre-agent/README.md").read_text()
+    assert "RECOVERED_AT=" in solution, (
+        "solutions/ch06-sre-agent guards RECOVERED_AT but never assigns it, so the "
+        "block aborts as printed"
+    )
+
+
+def test_lead_time_label_names_what_it_measures(repo_root: Path) -> None:
+    """Reject the DORA label on a clock that starts after the trigger.
+
+    Challenge 3 binds the timer to a job start under ``workflow_dispatch``. Calling
+    that "commit to live" misstates a term with a specific definition.
+    """
+    content = (repo_root / "challenges/ch03/README.md").read_text()
+    assert "commit to live" not in content, (
+        "the pipeline clock starts at dispatch, not at a commit; label it accordingly"
+    )
+
+
+def test_demo_asset_exists_and_is_reachable(repo_root: Path) -> None:
+    """Require a runnable demo script, and require the day-of card to point at it."""
+    demo = repo_root / "docs" / "Demo.md"
+    assert demo.is_file(), "docs/Demo.md must exist for anyone showing this workshop"
+    content = demo.read_text()
+    assert "## One slide" in content, "the demo must end with pasteable slide bullets"
+    day_of = (repo_root / "docs" / "DayOfCard.md").read_text()
+    assert "Demo.md" in day_of, "docs/DayOfCard.md schedules a demo and must link to it"
+
+
+BANNED_CHAPTER_MAP_PHRASES = (
+    "prove five frozen queries",
+    "without creating attack traffic",
+    "verify cleanup billing",
+)
+
+
+def test_chapter_map_describes_participant_outcomes(repo_root: Path) -> None:
+    """Keep the most-read table in the participant's voice and free of contradictions.
+
+    "verify cleanup billing" contradicts Challenge 6, which assigns teardown to the
+    facilitator.
+    """
+    readme = (repo_root / "README.md").read_text().lower()
+    for phrase in BANNED_CHAPTER_MAP_PHRASES:
+        assert phrase not in readme, (
+            f"the chapter map still reads as validator language: {phrase!r}"
+        )
+
+
+SCOPE_PROSE = re.compile(r"subscription[- ]scope", re.IGNORECASE)
+
+
+def test_no_document_describes_the_participant_template_as_subscription_scoped(
+    repo_root: Path,
+) -> None:
+    """Catch normative prose left behind by the resource-group conversion.
+
+    Converted commands are not enough: a paragraph that still defines the old model
+    is the design contract, and anyone who trusts it reinstates the blocker.
+    """
+    offenders: list[str] = []
+    for relative in (
+        ".azure/deployment-plan.md",
+        "infra/README.md",
+        "README.md",
+        "challenges/ch01-manual/README.md",
+        "challenges/ch01-copilot-rewrite/README.md",
+        "challenges/ch01-copilot-modernization/README.md",
+        "challenges/ch01/README.md",
+    ):
+        path = repo_root / relative
+        if not path.is_file():
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), start=1):
+            if SCOPE_PROSE.search(line) and "sre-agent" not in line.lower():
+                offenders.append(f"{relative}:{number}: {line.strip()}")
+    assert not offenders, (
+        "main.bicep is resource-group scoped; only the sre-agent custom role is a "
+        "subscription-scope exception:\n" + "\n".join(offenders)
+    )
+
+
+def test_participant_chapters_name_the_resource_group_parameter(repo_root: Path) -> None:
+    """Require the chapters to mention the parameter the template asserts on."""
+    mentions = [
+        path.relative_to(repo_root).as_posix()
+        for path in (repo_root / "challenges").rglob("*.md")
+        if "resourceGroupName" in path.read_text()
+    ]
+    assert mentions, (
+        "infra/main.bicep requires and asserts resourceGroupName, but no participant "
+        "chapter mentions it"
+    )
+
+
+def test_template_binds_migration_source_to_the_participant_group(
+    repo_root: Path,
+) -> None:
+    """Require peering to be provably confined to the participant's own group."""
+    template = (repo_root / "infra" / "main.bicep").read_text()
+    assert "migratesFromTheParticipantResourceGroup" in template, (
+        "without this assert a copied resource id would peer into another "
+        "participant's environment"
+    )
+
+
+def _chapter_readmes(repo_root: Path) -> list[Path]:
+    """Return every participant-facing chapter README, in stable order."""
+    return sorted((repo_root / "challenges").rglob("README.md"))
+
+
+def test_chapters_using_bash_state_which_shell_to_use(repo_root: Path) -> None:
+    """Require any chapter with a bash block to say where that bash runs.
+
+    Challenge 1 puts the participant in PowerShell on the Windows VM. Nothing
+    implicitly moves them to Git Bash, and in PowerShell ``curl`` is an alias for
+    Invoke-WebRequest, so an unlabelled bash block fails as a broken application
+    rather than as a wrong shell.
+    """
+    silent = []
+    for path in _chapter_readmes(repo_root):
+        content = path.read_text()
+        if "```bash" not in content:
+            continue
+        if "where you work" not in content.lower():
+            silent.append(path.relative_to(repo_root).as_posix())
+    assert not silent, (
+        "these chapters give bash commands without telling the participant which "
+        f"shell to run them in: {silent}"
+    )
+
+
+def test_powershell_chapters_carry_no_bash_line_continuations(
+    repo_root: Path,
+) -> None:
+    """Reject bash ``\\`` continuations in chapters that mandate PowerShell.
+
+    PowerShell continues a line with a backtick. A bash continuation pasted into
+    the shell the chapter told the reader to open silently splits into several
+    commands, and the first one runs with no arguments.
+    """
+    offenders = []
+    for path in _chapter_readmes(repo_root):
+        content = path.read_text()
+        mandates_powershell = "```powershell" in content
+        if not mandates_powershell:
+            continue
+        for block in re.findall(r"```bash\n(.*?)```", content, re.DOTALL):
+            if any(line.rstrip().endswith("\\") for line in block.splitlines()):
+                offenders.append(path.relative_to(repo_root).as_posix())
+                break
+    assert not offenders, (
+        "these chapters instruct the participant to use PowerShell but contain a "
+        f"bash-continuation block that breaks when pasted there: {offenders}"
+    )
+
+
+def test_ci_declares_an_sdk_for_every_framework_a_participant_can_ship(
+    repo_root: Path,
+) -> None:
+    """Require CI to declare an SDK for both legitimate handoff frameworks.
+
+    The handoff contract does not pin a target framework, so the manual and
+    copilot-rewrite paths ship the source framework while copilot-modernization
+    retargets. ``dotnet test`` cannot run a target framework whose runtime is
+    absent, so declaring only one major leaves the job depending on whatever the
+    hosted runner happens to preinstall.
+    """
+    workflow = (repo_root / ".github" / "workflows" / "catalog-dotnet.yml").read_text()
+    declared = set(re.findall(r"(\d+)\.\d+\.\d+", _dotnet_version_block(workflow)))
+
+    source_tfms = {
+        match.group(1)
+        for path in (repo_root / "dotnet").rglob("*.csproj")
+        for match in [re.search(r"<TargetFramework>net(\d+)\.0<", path.read_text())]
+        if match
+    }
+    target_tfms = {
+        match.group(1)
+        for path in (repo_root / "solutions" / "reference" / "dotnet").rglob("*.csproj")
+        for match in [re.search(r"<TargetFramework>net(\d+)\.0<", path.read_text())]
+        if match
+    }
+    required = source_tfms | target_tfms
+    assert required, "no .NET project declares a TargetFramework"
+    missing = required - declared
+    assert not missing, (
+        f"catalog-dotnet.yml declares .NET {sorted(declared)} but a participant can "
+        f"legitimately hand off net{sorted(missing)}; dotnet test would abort unless "
+        "the runner image happens to preinstall it"
+    )
+
+
+def _dotnet_version_block(workflow: str) -> str:
+    """Return the dotnet-version value, whether scalar or a multi-line block."""
+    match = re.search(r"dotnet-version:\s*(\|?)([^\n]*)\n((?:\s{10,}\S+\n)*)", workflow)
+    return "" if not match else match.group(2) + match.group(3)
+
+
+def test_participants_can_read_the_protected_parameter_files_unelevated(repo_root):
+    """The deployment parameter files must be readable without elevation.
+
+    C:\\protected is written with inheritance disabled and explicit ACEs. The VM's admin
+    account is a *custom* local administrator (the terraform variable forbids reserved
+    names), so UAC hands an ordinary PowerShell a filtered token. With a
+    SYSTEM/Administrators-only ACL the very first `az deployment group create` of
+    Challenge 1 fails with `Access is denied` in a session nobody suspects is
+    under-privileged, and no participant document tells them to elevate. So the
+    provisioner must also grant the admin account Read on that folder and its files.
+
+    This is not a loosening: the account can already elevate and read them. The database
+    passwords under the secrets root must NOT get the same grant, which is what pins the
+    grant to an opt-in parameter rather than a change to the shared helper's defaults.
+    """
+    provisioner = (repo_root / "baseInfra/scripts/provision-vm.ps1").read_text(
+        encoding="utf-8"
+    )
+    # The account name has to travel from terraform, so it must be a validated payload
+    # field rather than a guess such as $env:USERNAME (the provisioner runs as SYSTEM).
+    assert "'adminUsername'," in provisioner
+    assert "$AdminUsername = [string]$ProvisioningSecrets.adminUsername" in provisioner
+
+    protected_dir_acl = re.search(
+        r"Set-ProtectedAcl -Path \$ProtectedRoot -Directory[^\n]*", provisioner
+    )
+    assert protected_dir_acl, "C:\\protected must have its ACL set explicitly"
+    assert "-ReadPrincipal $AdminUsername" in protected_dir_acl.group(0)
+
+    # Save-ProtectedConfiguration re-ACLs every file it writes, so the nine parameter
+    # files need the grant too or the directory ACE is undone file by file.
+    params_write = re.search(
+        r"\$File = Join-Path \$ProtectedRoot[^\n]*\n[^\n]*", provisioner
+    )
+    assert params_write and "-ReadPrincipal $AdminUsername" in params_write.group(0)
+
+    # The secrets root holds database passwords and must stay administrators-only.
+    secret_acl = re.search(r"Set-ProtectedAcl -Path \$SecretRoot[^\n]*", provisioner)
+    assert secret_acl and "-ReadPrincipal" not in secret_acl.group(0)
+
+    payload = (
+        repo_root / "baseInfra/terraform/modules/user_environment/locals.tf"
+    ).read_text(encoding="utf-8")
+    assert "adminUsername" in payload and "var.admin_username" in payload
+
+    # A facilitator who verifies this from an elevated shell proves nothing about the
+    # session Challenge 1 actually runs in.
+    facilitator = (repo_root / "docs/Facilitator.md").read_text(encoding="utf-8")
+    assert "non-elevated" in facilitator
+    assert "participants read them from an elevated session" not in facilitator
+
+
+def test_protected_folder_is_read_only_for_participants(repo_root):
+    """No runbook may write into C:\\protected, and every file it reads must have a producer.
+
+    C:\\protected is facilitator-supplied: the provisioner writes it as SYSTEM before anyone
+    logs in, and participants get Read. Two failure modes follow, and the repository had
+    both.
+
+    Writing there cannot work. `catalog-migrate ... export --artifact <path>` writes the
+    database artifact, so pointing --artifact at C:\\protected fails on the participant's
+    own environment -- and one path also named a subdirectory nothing ever created.
+
+    Reading a file nobody writes cannot work either. This is the same defect class as the
+    missing deployment parameter files: a runbook copied the bootstrap deployment output
+    from C:\\protected\\azure-target-output.json, which no code path has ever produced. That
+    file is written by the participant's own step-5 deployment, into evidence/.
+
+    So: the only C:\\protected paths any runbook may name are the nine-per-stack parameter
+    files the provisioner actually writes.
+    """
+    runbooks = sorted((repo_root / "solutions").glob("ch01-*/*/README.md"))
+    assert len(runbooks) == 6
+
+    produced = {
+        f"{path}-{stack}-{stage}.json"
+        for path in ("manual", "copilot-rewrite", "copilot-modernization")
+        for stack in ("dotnet", "java")
+        for stage in ("bootstrap", "baseline", "release")
+    }
+    for runbook in runbooks:
+        text = runbook.read_text(encoding="utf-8")
+        rel = runbook.relative_to(repo_root)
+
+        referenced = {
+            name
+            for name in re.findall(r"C:\\protected\\([^'\"`\s\\]+)", text)
+            # A glob is prose about the folder as a whole, not a concrete file.
+            if "*" not in name
+        }
+        orphans = referenced - produced
+        assert not orphans, (
+            f"{rel} names C:\\protected files nothing produces: {sorted(orphans)}"
+        )
+
+        # The export destination must be somewhere the participant can write.
+        for match in re.finditer(
+            r"\$(?:Database)?Artifact\s*=\s*'([^']+)'", text
+        ):
+            destination = match.group(1)
+            assert not destination.startswith("C:\\protected"), (
+                f"{rel} exports the database artifact into read-only {destination}"
+            )
+            # A path whose parent is never created fails just as hard as a read-only one.
+            parent_created = (
+                "New-Item -ItemType Directory -Force (Split-Path $Artifact)" in text
+                or "New-Item -ItemType Directory -Force (Split-Path $DatabaseArtifact)"
+                in text
+            )
+            assert parent_created, f"{rel} never creates the parent of {destination}"
+
+CH01_CHAPTERS = (
+    "ch01",
+    "ch01-manual",
+    "ch01-copilot-rewrite",
+    "ch01-copilot-modernization",
+)
+
+
+def _fenced_blocks(text: str) -> list[tuple[str, str]]:
+    """Return (language, body) for every fenced block in a Markdown document."""
+    return re.findall(r"```([A-Za-z0-9_-]*)\n(.*?)```", text, re.S)
+
+
+def _prose(text: str) -> str:
+    """The document with every fenced block removed, so prose claims can be read."""
+    return re.sub(r"```.*?```", "", text, flags=re.S)
+
+
+def test_ch01_chapters_document_the_source_commit_override(repo_root):
+    """The two parameters the protected files deliberately omit must be documented.
+
+    `sourceCommit` and `imageDigest` are not knowable when the provisioner writes
+    the protected parameter files at T-1, and a placeholder would satisfy the
+    template's 40-hex format assert while silently deploying the wrong source. So
+    the files omit them and every runbook supplies them as `--parameters`
+    overrides on the command line.
+
+    A chapter that instead tells the participant the files *record* `sourceCommit`
+    sends them to the facilitator's desk for an edit that cannot be made, on the
+    workshop's centrepiece challenge.
+    """
+    for slug in CH01_CHAPTERS:
+        chapter = repo_root / "challenges" / slug / "README.md"
+        assert chapter.is_file(), f"missing chapter {slug}"
+        normalized = chapter.read_text(encoding="utf-8").lower()
+        rel = chapter.relative_to(repo_root)
+
+        assert "sourcecommit" in normalized, (
+            f"{rel} never mentions sourceCommit, so a participant meets the "
+            "override for the first time as an ARM rejection"
+        )
+        assert "--parameters sourcecommit=" in normalized, (
+            f"{rel} never shows the --parameters sourceCommit= override form"
+        )
+
+        # The only true statement about `protected` and `sourceCommit` together is
+        # that the field is absent on purpose. Any sentence pairing them must say so.
+        for sentence in re.findall(r"[^.\n]*sourcecommit[^.\n]*", normalized):
+            if "protected" not in sentence:
+                continue
+            assert re.search(
+                r"\b(not|no|never|omit|absent|without|missing|deliberately)\b", sentence
+            ), f"{rel} implies the protected files carry sourceCommit: {sentence.strip()!r}"
+
+
+def test_source_commit_override_has_a_symptom_route(repo_root):
+    """A participant who forgets the override must be able to self-serve the fix."""
+    troubleshooting = (repo_root / "docs" / "Troubleshooting.md").read_text(
+        encoding="utf-8"
+    ).lower()
+    assert "sourcecommit" in troubleshooting, (
+        "docs/Troubleshooting.md has no entry for the most likely Challenge 1 failure"
+    )
+
+    for slug in CH01_CHAPTERS:
+        normalized = (
+            (repo_root / "challenges" / slug / "README.md")
+            .read_text(encoding="utf-8")
+            .lower()
+        )
+        # The symptom belongs in the chapter's own failure table, not only in prose.
+        rows = [line for line in normalized.splitlines() if line.startswith("|")]
+        assert any("sourcecommit" in row for row in rows), (
+            f"challenges/{slug}/README.md documents the override but its "
+            "'If it goes wrong' table has no row for forgetting it"
+        )
+
+
+def test_acceptance_suite_blocks_are_self_contained(repo_root):
+    """A block that runs the acceptance suite must establish its own working directory.
+
+    Stating the directory in the surrounding prose is not enough: participants copy the
+    block, not the paragraph. The repository has three separate uv projects, so a suite
+    command run from the repo root does not merely fail — `uv` resolves a *different*
+    project, and the error names a missing script rather than a wrong `cd`.
+
+    The suite is invoked far more often through its console scripts than through pytest,
+    so the entry points are read from the packaging metadata rather than hardcoded here.
+    """
+    scripts = re.findall(
+        r"^([a-z-]+) = \"",
+        (repo_root / "tests/acceptance/pyproject.toml")
+        .read_text(encoding="utf-8")
+        .split("[project.scripts]", maxsplit=1)[1]
+        .split("\n[", maxsplit=1)[0],
+        re.M,
+    )
+    assert len(scripts) >= 7, "acceptance console scripts not found"
+    invocation = re.compile(r"\bpytest\b|\b(?:" + "|".join(scripts) + r")\b")
+    # PowerShell runbooks write `cd tests\acceptance` or the idiomatic
+    # `Push-Location tests\acceptance`; bash ones use `cd` and a forward slash.
+    establishes_cwd = re.compile(
+        r"^\s*(?:cd|Push-Location)\s+\S*tests[\\/]acceptance", re.M | re.I
+    )
+    # Only fences that a participant can actually execute.
+    executable = {"bash", "sh", "shell", "console", "powershell", "pwsh", ""}
+
+    offenders: list[str] = []
+    for markdown in sorted(repo_root.rglob("*.md")):
+        parts = markdown.relative_to(repo_root).parts
+        if set(parts) & {".git", "node_modules", ".venv", "bin", "obj", "target"}:
+            continue
+        # Documents inside the suite are already there.
+        if parts[0] == "tests":
+            continue
+
+        for language, body in _fenced_blocks(markdown.read_text(encoding="utf-8")):
+            if language.lower() not in executable:
+                continue
+            if not invocation.search(body):
+                continue
+            if establishes_cwd.search(body):
+                continue
+            offenders.append(f"{'/'.join(parts)} ({language or 'plain'})")
+
+    assert not offenders, (
+        "these blocks invoke the acceptance suite without a cd inside the block: "
+        + ", ".join(offenders)
+    )
+
+
+def test_facilitator_and_demo_name_their_host_shell(repo_root):
+    """Both facilitator-facing documents must say which shell they are written for.
+
+    `docs/Demo.md` is the first ten minutes of day one on a projector, and
+    `docs/Facilitator.md` is consulted under time pressure with a room waiting.
+    Neither can afford the reader guessing between Git Bash and PowerShell.
+    """
+    for rel in ("docs/Facilitator.md", "docs/Demo.md"):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        opening = _prose(text)[:4000].lower()
+        assert re.search(r"git bash|powershell|pwsh|\bbash\b", opening), (
+            f"{rel} never names the shell its blocks are written for"
+        )
+
+
+def test_shell_specific_blocks_declare_their_language(repo_root):
+    """Mixed-host documents are fine; undeclared mixed-host documents are not.
+
+    A `\\`-continuation is a parse error in PowerShell and `ConvertFrom-Json` does
+    not exist in bash, so a document carrying both forms must label each block.
+    """
+    powershell_only = re.compile(
+        r"\b(ConvertFrom-Json|ConvertTo-Json|Invoke-WebRequest|Invoke-RestMethod"
+        r"|New-Item|Test-Path|Resolve-Path|Get-Content|Set-Content|Write-Host)\b"
+    )
+    for rel in ("docs/Facilitator.md", "docs/Demo.md"):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        for index, (language, body) in enumerate(_fenced_blocks(text)):
+            lowered = language.lower()
+            if powershell_only.search(body):
+                assert lowered in {"powershell", "pwsh"}, (
+                    f"{rel} block {index} uses PowerShell cmdlets but is fenced "
+                    f"as {language or 'plain'!r}"
+                )
+            # A continuation is a backslash preceded by whitespace. A backslash
+            # that ends a Windows path (`evidence\\runtime-tests\\`) is not one.
+            if re.search(r"(?<=\s)\\\r?\n", body) and lowered in {"powershell", "pwsh"}:
+                raise AssertionError(
+                    f"{rel} block {index} is fenced as {language} but uses "
+                    "backslash line continuations, which PowerShell cannot parse"
+                )
+
+
+def test_lead_time_is_labelled_as_the_interval_it_measures(repo_root):
+    """The workshop measures from workflow dispatch, so it must not claim commit.
+
+    `docs/Demo.md` already says "dispatch to live" in four places. The front door
+    and the glossary — the two most-read statements of the metric — must agree,
+    or the workshop is quoting an interval it never timed.
+    """
+    for rel in ("README.md", "docs/Glossary.md"):
+        normalized = (repo_root / rel).read_text(encoding="utf-8").lower()
+        assert "from commit to running revision" not in normalized, (
+            f"{rel} still labels deployment lead time as starting at the commit"
+        )
+        assert "committed change to reach production" not in normalized, (
+            f"{rel} still defines deployment lead time as starting at the commit"
+        )
+
+
+def test_modernization_chapter_makes_no_unsourced_productivity_multiple(repo_root):
+    """A claim shown to customers must be sourced, reproducible, or qualitative."""
+    chapter = repo_root / "challenges" / "ch01-copilot-modernization" / "README.md"
+    normalized = chapter.read_text(encoding="utf-8").lower()
+    assert "a week per application" not in normalized, (
+        "the ~40x productivity multiple is still asserted with no citation"
+    )
+
+
+def test_modernization_chapter_names_its_differentiator(repo_root):
+    """The chapter that performs the flagship upgrade must say that it does.
+
+    The README sells path 1C on the framework upgrade; the chapter that performs
+    it never mentions the target framework, so the one capability that separates
+    it from the other two paths goes unnamed where it is demonstrated.
+    """
+    normalized = (
+        (repo_root / "challenges" / "ch01-copilot-modernization" / "README.md")
+        .read_text(encoding="utf-8")
+        .lower()
+    )
+    assert ".net 10" in normalized or "net10.0" in normalized, (
+        "the modernization chapter never names the .NET 10 target it upgrades to"
+    )
+
+
+def test_demo_shows_the_upgrade_running_forwards(repo_root):
+    """.NET 8 is the legacy source; the modernization path targets .NET 10."""
+    normalized = (repo_root / "docs" / "Demo.md").read_text(encoding="utf-8").lower()
+    assert "retarget the runtime to .net 8" not in normalized, (
+        "the demo script shows the framework upgrade going backwards, to the "
+        "version the workshop starts from"
+    )
+
+
+def test_demo_is_reachable_from_the_agenda(repo_root):
+    """The sales asset must be linked from the document facilitators plan against."""
+    agenda = (repo_root / "docs" / "Agenda.md").read_text(encoding="utf-8")
+    assert "Demo.md" in agenda, (
+        "docs/Agenda.md names the opening demo but never links docs/Demo.md"
+    )
+
+
+def test_workflows_pin_their_runner_image(repo_root):
+    """A workshop about pinned, reproducible toolchains cannot float its own runner."""
+    workflows = sorted((repo_root / ".github" / "workflows").glob("*.y*ml"))
+    assert workflows, "no workflows found"
+    floating = [
+        wf.relative_to(repo_root).as_posix()
+        for wf in workflows
+        if re.search(r"runs-on:\s*ubuntu-latest", wf.read_text(encoding="utf-8"))
+    ]
+    assert not floating, f"these workflows float their runner image: {floating}"
+
+
+def test_manual_deploy_steps_is_captured_as_a_field(repo_root):
+    """Every scorecard cell must name a file and a field, including this one.
+
+    The wrap-up table promises "the file, field, or step each value comes from,
+    so no cell needs a guess". The manual-deploy baseline was the last value a
+    participant had to remember rather than read back.
+    """
+    ch00 = (repo_root / "challenges" / "ch00" / "README.md").read_text(encoding="utf-8")
+    assert "manualDeploySteps" in ch00, (
+        "challenges/ch00 asks participants to count manual deploy steps but "
+        "never captures the number in the measurement object"
+    )
+
+
+def test_every_deployable_template_has_a_runnable_command(repo_root: Path) -> None:
+    """Each infra template the docs deploy must ship a command supplying every required parameter.
+
+    A template described only in prose leaves the reader to invent the invocation, and
+    these templates assert the shape of the resource IDs they receive, so an invented
+    command fails at deploy time rather than at review time.
+    """
+    templates = sorted(repo_root.glob("infra/*.bicep"))
+    assert templates, "no infra templates found"
+
+    required: dict[str, set[str]] = {}
+    for template in templates:
+        body = template.read_text(encoding="utf-8")
+        required[template.name] = {
+            match.group(1)
+            for match in re.finditer(r"^param\s+(\w+)\s+[\w\[\]]+(.*)$", body, re.M)
+            # A parameter carrying `= <default>` need not be supplied by the caller.
+            if "=" not in match.group(2)
+        }
+
+    # A parameter file supplies whatever it declares, so credit its contents to the block.
+    parameter_files = {
+        path.name: set(re.findall(r'"(\w+)"\s*:\s*\{\s*"value"', path.read_text(encoding="utf-8")))
+        | set(re.findall(r"^param\s+(\w+)\s*=", path.read_text(encoding="utf-8"), re.M))
+        for path in list(repo_root.rglob("*.bicepparam"))
+        + list(repo_root.rglob("workshop/**/*.example.json"))
+    }
+
+    invoked: set[str] = set()
+    gaps: list[str] = []
+    for markdown in sorted(repo_root.rglob("*.md")):
+        if set(markdown.relative_to(repo_root).parts) & {".git", "node_modules", ".venv"}:
+            continue
+        for _, block in _fenced_blocks(markdown.read_text(encoding="utf-8")):
+            for match in re.finditer(r"--template-file\s+\S*?([\w.-]+\.bicep)", block):
+                name = match.group(1)
+                if name not in required:
+                    continue
+                invoked.add(name)
+                # `--parameters a=1 b=2` groups several assignments onto one line, so
+                # match every `name=` token rather than only line-leading ones.
+                supplied = set(re.findall(r"(?:^|\s)(\w+)=", block, re.M))
+                if "<parameter file>" in block or re.search(r"@?<[\w\s-]+>", block):
+                    # A schematic showing the shape of the command, not a runnable one.
+                    continue
+                for referenced in re.findall(r"--parameters\s+'?@?\S*?([\w.-]+\.json)", block):
+                    supplied |= parameter_files.get(referenced, set())
+                    # The provisioner writes protected parameter files at T-1, so their
+                    # contents cannot be read here; credit them with everything but the
+                    # overrides the runbooks deliberately pass on the command line.
+                    if referenced not in parameter_files:
+                        supplied |= required[name] - {"sourceCommit", "imageDigest"}
+                missing = sorted(required[name] - supplied)
+                if missing:
+                    rel = markdown.relative_to(repo_root)
+                    gaps.append(f"{rel} deploys {name} without {missing}")
+
+    assert not gaps, "incomplete deployment commands: " + "; ".join(gaps)
+
+    described = {
+        name
+        for name in required
+        if any(
+            name in path.read_text(encoding="utf-8")
+            for path in list(repo_root.rglob("challenges/**/*.md"))
+            + list(repo_root.rglob("solutions/**/*.md"))
+            + list(repo_root.rglob("workshop/**/*.md"))
+        )
+    }
+    prose_only = sorted(described - invoked)
+    assert not prose_only, (
+        "these templates are described to participants but never shown as a runnable "
+        f"command: {prose_only}"
+    )
+
+
+def test_the_three_path_debrief_is_on_the_day_one_clock(repo_root: Path) -> None:
+    """The comparison of the three paths must be scheduled while all three are live.
+
+    The debrief is the only place the workshop harvests its own premise. A day-2 slot
+    makes the comparison a day cold, so both facilitator clocks must carry a day-1 hit
+    that links the questions themselves.
+    """
+    anchor = "challenges/ch01/README.md#debrief-compare-the-three-paths"
+    heading = (repo_root / "challenges" / "ch01" / "README.md").read_text(encoding="utf-8")
+    assert re.search(r"^#+\s*Debrief: compare the three paths", heading, re.M | re.I), (
+        "the debrief heading the schedules link to no longer exists"
+    )
+
+    for relative in ("docs/Agenda.md", "docs/DayOfCard.md"):
+        content = (repo_root / relative).read_text(encoding="utf-8")
+        rows = [
+            line
+            for line in content.splitlines()
+            if "debrief" in line.lower() and anchor in line
+        ]
+        assert rows, f"{relative} does not schedule the Challenge 1 debrief against {anchor}"
+        assert any("15:15" in row for row in rows), (
+            f"{relative} schedules the debrief, but not in the day-1 15:15 slot"
+        )
+        assert any("never cut" in row.lower() for row in rows), (
+            f"{relative} does not mark the debrief as unskippable"
+        )
+
+
+def test_ci_explains_why_it_builds_with_a_daemon(repo_root: Path) -> None:
+    """Challenge 3 must reconcile its `docker build` with Challenge 1's `az acr build`.
+
+    Challenge 1 teaches the no-daemon rule seven times and tells participants to reject a
+    proposed local Docker build. Challenge 3 then runs one, so it has to say why.
+    """
+    content = (repo_root / "challenges" / "ch03" / "README.md").read_text(encoding="utf-8")
+    normalized = content.lower()
+    assert "docker build" in normalized, "challenge 3 no longer mentions the docker build"
+    assert "daemon" in normalized, (
+        "challenge 3 runs `docker build` after challenge 1 forbade it, without explaining "
+        "that the rule is 'build where a daemon exists'"
+    )
+    assert "az acr build" in normalized, (
+        "challenge 3's explanation does not name the challenge 1 command it differs from"
+    )
+    assert "ubuntu-24.04" in normalized, (
+        "challenge 3 does not name the runner that supplies the daemon"
+    )
+
+
+def test_reference_runbooks_contain_no_unresolved_placeholders(repo_root: Path) -> None:
+    """Solution runbooks must be executable as printed, not templates to fill in.
+
+    A `<placeholder>` inside a solution's code fence fails at the point a facilitator is
+    least able to recover — mid-migration, after the deployment and image build. Every
+    value these blocks need is already reachable from the provisioned environment or the
+    validated target output, so a placeholder is a gap rather than a necessity.
+    """
+    # Two placeholders are legitimate: a value only the facilitator can know, and a
+    # secret the reader must choose. Printing a literal secret would be the worse bug.
+    permitted = re.compile(
+        r"<(?:facilitator|your|owner)[\w-]*>|<[\w-]*(?:key|password|secret|token|user)>",
+        re.I,
+    )
+    placeholder = re.compile(r"<[a-z][a-z0-9-]*>")
+
+    offenders: list[str] = []
+    for markdown in sorted(repo_root.glob("solutions/**/README.md")):
+        for language, block in _fenced_blocks(markdown.read_text(encoding="utf-8")):
+            if language.lower() not in {"bash", "sh", "shell", "powershell", "pwsh"}:
+                continue
+            for line in block.splitlines():
+                # Redirections and comparisons are not placeholders.
+                if "<<" in line or "-lt" in line or "->" in line:
+                    continue
+                for found in placeholder.findall(permitted.sub("", line)):
+                    rel = markdown.relative_to(repo_root)
+                    offenders.append(f"{rel}: {found} in `{line.strip()[:70]}`")
+
+    assert not offenders, (
+        "solution runbooks must run as printed; unresolved placeholders: "
+        + "; ".join(sorted(set(offenders)))
+    )
+
+
+def test_demo_steps_claimed_cold_runnable_have_a_checked_in_fixture(repo_root: Path) -> None:
+    """Every evidence path the demo reads must exist, or have a named substitute.
+
+    `docs/Demo.md` sells the workshop to someone who has never delivered it, and its
+    honesty table promises which steps run from checked-in data. A step that reads the
+    empty `evidence/` directory dies on its first line in front of a prospect.
+    """
+    demo = (repo_root / "docs" / "Demo.md").read_text(encoding="utf-8")
+
+    referenced: set[str] = set()
+    for _, block in _fenced_blocks(demo):
+        referenced |= set(re.findall(r"(evidence/[\w./-]+\.json)", block))
+    assert referenced, "the demo no longer reads any evidence file"
+
+    missing = sorted(path for path in referenced if not (repo_root / path).exists())
+    named_fixtures = sorted(
+        set(re.findall(r"workshop/contracts/fixtures/[\w./-]+\.json", demo))
+    )
+    absent = [name for name in named_fixtures if not (repo_root / name).exists()]
+    assert not absent, f"the demo names substitute fixtures that do not exist: {absent}"
+    # Counting fixtures against gaps lets five unrelated fixtures "cover" five unrelated
+    # gaps, so each missing path must be matched by name. One fixture is deliberately
+    # renamed on the way into the SRE Agent bundle; that alias is declared, not inferred.
+    fixture_aliases = {"cicd-report.json": "cicd-evidence.json"}
+    substitutes = {name.rsplit("/", 1)[-1] for name in named_fixtures}
+    unsubstituted = [
+        path
+        for path in missing
+        if fixture_aliases.get(path.rsplit("/", 1)[-1], path.rsplit("/", 1)[-1])
+        not in substitutes
+    ]
+    assert not unsubstituted, (
+        "demo steps read evidence files that do not exist and name no substitute: "
+        + ", ".join(unsubstituted)
+    )
+
+    for name in ("ch00-pain-dotnet.json", "ch06-mttr.json"):
+        fixture = repo_root / "workshop" / "contracts" / "fixtures" / "wrapup" / name
+        assert fixture.exists(), f"the scorecard fixture {name} is missing"
+        payload = json.loads(fixture.read_text(encoding="utf-8"))
+        assert payload, f"{name} is empty"
+
+    pain = json.loads(
+        (repo_root / "workshop/contracts/fixtures/wrapup/ch00-pain-dotnet.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    mttr = json.loads(
+        (repo_root / "workshop/contracts/fixtures/wrapup/ch06-mttr.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    # The documented sample output must stay true of the fixtures that produce it.
+    assert f"{pain['catalogMedianMs']} ms" in demo, (
+        "the demo's printed catalog median no longer matches its fixture"
+    )
+    assert f"{mttr['minutesToRecovery']} min" in demo, (
+        "the demo's printed minutes-to-recovery no longer matches its fixture"
+    )
+    assert mttr["minutesToRecovery"] == int(
+        (
+            datetime.fromisoformat(mttr["recoveredAt"].replace("Z", "+00:00"))
+            - datetime.fromisoformat(mttr["detectedAt"].replace("Z", "+00:00"))
+        ).total_seconds()
+        // 60
+    ), "the mttr fixture's minutesToRecovery disagrees with its own timestamps"
+
+
+# Every PowerShell command the provisioner invokes must resolve. These are the external
+# cmdlets it is allowed to rely on; anything else must be a function defined in the file.
+# A typo in an internal helper name is not a parse error, so the pwsh parse gate cannot
+# see it -- the script fails at run time, on the VM, during provisioning.
+PROVISIONER_EXTERNAL_CMDLETS = frozenset(
+    {
+        "Add-Content", "Add-Type", "Copy-Item", "Disable-ScheduledTask",
+        "Enable-ScheduledTask", "Expand-Archive", "Get-AuthenticodeSignature",
+        "Get-ChildItem", "Get-CimInstance", "Get-Content", "Get-Date", "Get-FileHash",
+        "Get-Item", "Get-ItemProperty", "Get-ScheduledTask", "Get-Service",
+        "Invoke-WebRequest", "Join-Path", "Move-Item", "New-Item", "New-Object",
+        "New-ScheduledTaskAction", "New-ScheduledTaskPrincipal",
+        "New-ScheduledTaskSettingsSet", "New-ScheduledTaskTrigger", "New-TimeSpan",
+        "Out-Null", "Pop-Location", "Push-Location", "Register-ScheduledTask",
+        "Remove-Item", "Restart-Service", "Select-Object", "Select-String", "Set-Acl",
+        "Set-Content", "Set-ItemProperty", "Set-Service", "Set-StrictMode",
+        "Sort-Object", "Split-Path", "Start-Process", "Start-ScheduledTask",
+        "Start-Service", "Start-Sleep", "Stop-Process", "Stop-ScheduledTask",
+        "Test-Path", "Where-Object", "Write-Host",
+    }
+)
+
+
+def test_provisioner_invokes_only_commands_that_resolve(repo_root: Path) -> None:
+    """Every Verb-Noun the provisioner calls is defined in-file or a known cmdlet."""
+    script = repo_root / "baseInfra" / "scripts" / "provision-vm.ps1"
+    source = script.read_text(encoding="utf-8")
+
+    defined = set(re.findall(r"(?m)^\s*function\s+([A-Za-z]+-[A-Za-z]+)", source))
+    assert "Write-ProvisionLog" in defined, (
+        "the provisioner's own logging helper is missing -- this guard is "
+        "reading the wrong file or the naming convention changed"
+    )
+
+    invoked = {
+        match.group(1)
+        for match in re.finditer(
+            r"(?m)(?:^|[|(){}&]|\s)\s*([A-Z][a-z]+-[A-Z][A-Za-z]+)\b", source
+        )
+    }
+    unresolved = sorted(invoked - defined - PROVISIONER_EXTERNAL_CMDLETS)
+
+    assert not unresolved, (
+        "provision-vm.ps1 invokes commands that are neither defined in the file nor "
+        f"known cmdlets: {unresolved}. If one is a real cmdlet, add it to "
+        "PROVISIONER_EXTERNAL_CMDLETS; otherwise it is a typo that would only surface "
+        "on the VM, mid-provisioning."
+    )
+
+
+def _persisted_catalog_variables(repo_root: Path) -> set[str]:
+    """Names the provisioner persists at Machine scope, read live from the script."""
+    source = (repo_root / "baseInfra" / "scripts" / "provision-vm.ps1").read_text(
+        encoding="utf-8"
+    )
+    persisted: set[str] = set()
+    for block in re.finditer(
+        r"Set-CatalogEnvironmentForParticipants\s+-Settings\s+@\{(.*?)\n\s*\}",
+        source,
+        re.DOTALL,
+    ):
+        persisted.update(re.findall(r"(CATALOG_[A-Z_]+)\s*=", block.group(1)))
+    return persisted
+
+
+def test_ch01_runbooks_read_only_catalog_variables_that_exist(repo_root: Path) -> None:
+    """Every $env:CATALOG_* a ch01 runbook reads is set locally or by the provisioner."""
+    persisted = _persisted_catalog_variables(repo_root)
+    assert persisted, (
+        "no Machine-scope CATALOG_* persistence found in provision-vm.ps1 -- "
+        "participant shells would see none of these variables"
+    )
+
+    offenders: list[str] = []
+    runbooks = sorted(repo_root.glob("solutions/ch01-*/*/README.md"))
+    assert runbooks, "no ch01 runbooks found"
+
+    for runbook in runbooks:
+        content = runbook.read_text(encoding="utf-8")
+        assigned_at: dict[str, int] = {}
+        for match in re.finditer(r"(?m)^\s*\$env:(CATALOG_[A-Z_]+)\s*=", content):
+            assigned_at.setdefault(match.group(1), match.start())
+
+        for match in re.finditer(r"\$env:(CATALOG_[A-Z_]+)", content):
+            name = match.group(1)
+            if name in persisted:
+                continue
+            first_assignment = assigned_at.get(name)
+            if first_assignment is not None and first_assignment <= match.start():
+                continue
+            line = content[: match.start()].count("\n") + 1
+            offenders.append(
+                f"{runbook.relative_to(repo_root)}:{line} reads $env:{name}"
+            )
+
+    assert not offenders, (
+        "ch01 runbooks read catalog variables that are neither assigned earlier in the "
+        "same file nor persisted at Machine scope by provision-vm.ps1, so they expand "
+        "to empty in a participant's shell:\n  " + "\n  ".join(offenders)
+    )
+
+
+# Variables the shell or the Azure CLI session provides; a deployment block may read
+# these without binding them itself.
+AMBIENT_SHELL_VARIABLES = frozenset(
+    {"HOME", "PATH", "PWD", "USER", "SHELL", "TMPDIR", "RANDOM", "HOSTNAME"}
+)
+
+
+def test_deployment_blocks_bind_every_variable_they_expand(repo_root: Path) -> None:
+    """An `az deployment` block never expands a variable nothing in it defines."""
+    offenders: list[str] = []
+    checked = 0
+
+    for runbook in sorted(repo_root.glob("solutions/**/README.md")):
+        content = runbook.read_text(encoding="utf-8")
+        for block in re.finditer(r"```bash\n(.*?)```", content, re.DOTALL):
+            body = block.group(1)
+            if "az deployment" not in body:
+                continue
+            checked += 1
+
+            bound: set[str] = set()
+            # Plain assignments, grouped `--parameters name=value` forms, and the
+            # `: "${VAR:?explanation}"` guard idiom all count as binding.
+            bound.update(re.findall(r"(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=", body))
+            bound.update(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):[?-]", body))
+            bound.update(re.findall(r"(?m)^\s*(?:export|read)\s+([A-Za-z_][A-Za-z0-9_]*)", body))
+
+            expanded = set(
+                re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", body)
+            )
+            unbound = sorted(expanded - bound - AMBIENT_SHELL_VARIABLES)
+            for name in unbound:
+                line = content[: block.start()].count("\n") + 1
+                offenders.append(
+                    f"{runbook.relative_to(repo_root)} (block at line {line}) "
+                    f"expands ${name} without binding it"
+                )
+
+    assert checked, "no `az deployment` bash blocks found in solutions/**"
+    assert not offenders, (
+        "deployment blocks expand variables nothing binds, so they submit empty values "
+        "and fail inside Azure instead of failing with a sentence:\n  "
+        + "\n  ".join(offenders)
+        + "\n\nBind it from the handoff, or guard it with the house idiom: "
+        ': "${VAR:?what the reader should supply}"'
+    )
+
+
+def test_pain_fixture_counts_match_the_real_corpus(repo_root: Path) -> None:
+    """The wrap-up pain fixture reports the corpus that actually ships."""
+    actual_images = len(list((repo_root / "data" / "images").glob("*.png")))
+    assert actual_images, "no catalog images found on disk"
+
+    fixture_path = (
+        repo_root / "workshop" / "contracts" / "fixtures" / "wrapup" / "ch00-pain-dotnet.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert fixture["imageFilesOnDisk"] == actual_images, (
+        f"{fixture_path.relative_to(repo_root)} claims "
+        f"{fixture['imageFilesOnDisk']} images but {actual_images} ship in data/images. "
+        "The demo narrates this number as a fact about the real application."
+    )
+
+    # The same count is asserted in prose; a fixture that drifts from the chapters
+    # makes the facilitator contradict the participant's own screen.
+    for doc in ("challenges/ch00/README.md", "solutions/ch00/README.md"):
+        content = (repo_root / doc).read_text(encoding="utf-8")
+        assert str(actual_images) in content, (
+            f"{doc} no longer states the real corpus size of {actual_images}"
+        )
+
+
+# Azure decodes osProfile.customData into a binary array of at most 65,535 bytes.
+AZURE_CUSTOM_DATA_LIMIT_BYTES = 65_535
+
+
+def test_provisioner_custom_data_fits_azure_limit(repo_root: Path) -> None:
+    """The gzipped provisioner still fits in Azure's customData budget.
+
+    This repository has already shipped a payload of 65,584 bytes -- 49 over -- and the
+    only symptom was a failed deployment at T-1. Terraform cannot catch it, because the
+    limit is enforced by the Azure API, not by the provider.
+    """
+    module = repo_root / "baseInfra" / "terraform" / "modules" / "user_environment"
+    locals_tf = (module / "locals.tf").read_text(encoding="utf-8")
+
+    script = (repo_root / "baseInfra" / "scripts" / "provision-vm.ps1").read_bytes()
+    # mtime=0 so the digest is reproducible; terraform's base64gzip is the same
+    # deflate stream, and the header is a fixed 10 bytes either way.
+    buffer = io.BytesIO()
+    with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as handle:
+        handle.write(script)
+    script_gzip_base64 = base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    # Rebuild the wrapper from locals.tf itself, so the guard tracks edits to it.
+    wrapper_lines = re.search(
+        r"provisioner_wrapper\s*=\s*join\(\"\\n\",\s*\[(.*?)\n\s*\]\)",
+        locals_tf,
+        re.DOTALL,
+    )
+    assert wrapper_lines, "could not locate provisioner_wrapper in locals.tf"
+    wrapper = wrapper_lines.group(1)
+    wrapper = wrapper.replace("${base64gzip(file(local.provisioner_path))}", script_gzip_base64)
+    wrapper_bytes = len(wrapper.encode("utf-8"))
+
+    # Nine fields of bounded length; model them at their realistic maximum so the guard
+    # errs toward failing early rather than passing a payload that Azure will reject.
+    worst_case_payload = json.dumps(
+        {
+            "databasePassword": "x" * 64,
+            "performanceApiKey": "x" * 64,
+            "facilitatorPrincipalName": "x" * 128,
+            "facilitatorPrincipalObjectId": "0" * 36,
+            "resourceGroupName": "x" * 90,
+            "teamName": "x" * 64,
+            "adminUsername": "x" * 64,
+            "migrationSourceVirtualNetworkResourceId": "/subscriptions/" + "x" * 200,
+            "migrationSourceVmResourceId": "/subscriptions/" + "x" * 200,
+        }
+    )
+    payload_bytes = len(base64.b64encode(worst_case_payload.encode("utf-8")))
+
+    markers = len("MICROHACK_CUSTOM_DATA_V2\n") + len("\nMICROHACK_PROVISIONER_START\n")
+    total = wrapper_bytes + payload_bytes + markers
+    headroom = AZURE_CUSTOM_DATA_LIMIT_BYTES - total
+
+    assert total < AZURE_CUSTOM_DATA_LIMIT_BYTES, (
+        f"customData would be {total:,} bytes, {-headroom:,} over Azure's "
+        f"{AZURE_CUSTOM_DATA_LIMIT_BYTES:,}-byte limit. provision-vm.ps1 is "
+        f"{len(script):,} bytes raw and {len(script_gzip_base64):,} gzipped+base64. "
+        "Move work out of the provisioner and into the source archive it downloads."
+    )
+    print(f"customData: {total:,} bytes, {headroom:,} bytes of headroom")
+
+
+def _source_tree_writes(script: str) -> list[tuple[int, str]]:
+    """(offset, repo-relative path) for every file the provisioner writes into $SourceRoot."""
+    # Splice out backtick line continuations so a single cmdlet call is one line, keeping
+    # byte offsets identical so the caller can still resolve them to line numbers.
+    script = re.sub(
+        r"`\n(\s*)", lambda match: " " * (2 + len(match.group(1))), script
+    )
+
+    # $Var = Join-Path $SourceRoot 'a\b'   and one level of indirection through those vars.
+    variables: dict[str, str] = {}
+    for match in re.finditer(
+        r"\$(\w+)\s*=\s*Join-Path\s+\$SourceRoot\s+'([^']+)'", script
+    ):
+        variables[match.group(1)] = match.group(2).replace("\\", "/")
+
+    writes: list[tuple[int, str]] = []
+
+    def record(offset: int, path: str) -> None:
+        writes.append((offset, path.replace("\\", "/").lstrip("/")))
+
+    # -Path (Join-Path $Var 'name') on a writing cmdlet
+    for match in re.finditer(
+        r"(Set-Content|Out-File|Copy-Item)\b[^\n]*?\s-(?:Path|Destination|LiteralPath)\s+"
+        r"\(Join-Path\s+\$(\w+)\s+'([^']+)'\)",
+        script,
+        re.DOTALL,
+    ):
+        base = match.group(2)
+        if base == "SourceRoot":
+            record(match.start(), match.group(3))
+        elif base in variables:
+            record(match.start(), f"{variables[base]}/{match.group(3)}")
+
+    # -Path $Var, where $Var was itself built from $SourceRoot
+    for match in re.finditer(
+        r"(?:Set-Content|Out-File|Copy-Item)\b[^\n]*?\s-(?:Path|Destination|LiteralPath)\s+\$(\w+)\b",
+        script,
+    ):
+        name = match.group(1)
+        target = re.search(
+            rf"\${name}\s*=\s*Join-Path\s+\$SourceRoot\s+'([^']+)'", script
+        )
+        if target:
+            record(match.start(), target.group(1))
+
+    return writes
+
+
+def test_provisioner_written_files_cannot_dirty_the_participant_worktree(
+    repo_root: Path,
+) -> None:
+    """Anything written into the source tree after the baseline commit must be ignored.
+
+    Challenge 1's first executable gate on both Copilot paths asserts a clean worktree.
+    `Initialize-SourceRepository` runs `git add --all`, so files written *before* it are
+    inside the baseline commit and harmless. Files written *after* it are untracked, and
+    every one of them fails that gate before the participant has done anything.
+    """
+    script = _provisioner(repo_root)
+
+    baseline = script.find("Initialize-SourceRepository -SourceCommit")
+    assert baseline > 0, "the baseline commit call site moved or was removed"
+
+    writes = _source_tree_writes(script)
+    assert writes, "no source-tree writes detected -- this guard has stopped working"
+    assert any(path.endswith("global.json") for _, path in writes), (
+        "the provisioner no longer writes global.json; if that is intentional, this "
+        "guard's known-offender check needs updating"
+    )
+
+    offenders: list[str] = []
+    for offset, path in writes:
+        if offset < baseline:
+            continue
+        ignored = subprocess.run(
+            ["git", "check-ignore", "-q", path],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+        )
+        if ignored.returncode != 0:
+            line = script[:offset].count("\n") + 1
+            offenders.append(f"provision-vm.ps1:{line} writes {path}")
+
+    assert not offenders, (
+        "the provisioner writes these into the source tree after the baseline commit, "
+        "so `git status --porcelain` is non-empty and Challenge 1's cleanliness gate "
+        "fails on a freshly provisioned VM:\n  " + "\n  ".join(offenders)
+        + "\n\nAdd each to .gitignore, or write it outside the source tree."
+    )
+
+
+def test_bash_fences_in_powershell_chapters_name_their_shell(repo_root: Path) -> None:
+    """A bash block on a PowerShell-mandated VM says which shell it needs.
+
+    The workshop VM runs PowerShell by default and gets `bash` only from the pinned Git
+    for Windows install. A bare ```bash fence in a chapter whose "Where you work" section
+    mandates the VM reads as "paste this into the terminal you already have open", which
+    fails with a syntax error that has nothing to do with the participant's real problem.
+    """
+    offenders: list[str] = []
+    checked = 0
+
+    documents = sorted(
+        {
+            *repo_root.glob("challenges/**/README.md"),
+            *repo_root.glob("solutions/**/README.md"),
+        }
+    )
+    for document in documents:
+        content = document.read_text(encoding="utf-8")
+        if "Where you work" not in content:
+            continue
+        # Only chapters that actually mandate PowerShell somewhere.
+        if "```powershell" not in content:
+            continue
+        checked += 1
+
+        lines = content.splitlines()
+        for index, line in enumerate(lines):
+            if line.strip() != "```bash":
+                continue
+            # The ten lines above must tell the reader this needs a different shell.
+            window = "\n".join(lines[max(0, index - 10) : index]).lower()
+            if "bash" in window:
+                continue
+            offenders.append(f"{document.relative_to(repo_root)}:{index + 1}")
+
+    assert checked, "no PowerShell-mandating chapters found -- guard is not running"
+    assert not offenders, (
+        "these ```bash fences sit in chapters that mandate PowerShell on the VM, with "
+        "no mention of Git Bash in the ten lines above them, so a participant pastes "
+        "bash into a PowerShell prompt:\n  " + "\n  ".join(offenders)
+    )
+
+
+# Steps that cannot run until the participant's commit exists on their own remote.
+PUBLISHED_COMMIT_CONSUMERS = ("--source-commit", "az acr build", "imageDigest=")
+
+
+def _fenced_regions(content: str) -> list[tuple[int, int]]:
+    """(start, end) offsets of every fenced code block, so prose can be ignored."""
+    fences = [match.start() for match in re.finditer(r"(?m)^```", content)]
+    return list(zip(fences[::2], fences[1::2]))
+
+
+def test_publish_gate_precedes_every_published_commit_consumer(repo_root: Path) -> None:
+    """The push that publishes the commit comes before anything that consumes it.
+
+    `az acr build`, `--source-commit` and `imageDigest=` all identify an image by a
+    commit that must already exist on the participant's remote. A chapter that reorders
+    the push below them reads fine and fails on the day, so the ordering is asserted
+    rather than trusted.
+    """
+    checked = 0
+    offenders: list[str] = []
+
+    for runbook in sorted(repo_root.glob("solutions/ch01-*/*/README.md")):
+        content = runbook.read_text(encoding="utf-8")
+        regions = _fenced_regions(content)
+
+        def first_in_code(needle: str) -> int | None:
+            for start, end in regions:
+                index = content.find(needle, start, end)
+                if index != -1:
+                    return index
+            return None
+
+        publish = first_in_code("git push")
+        if publish is None:
+            continue
+        checked += 1
+
+        for consumer in PUBLISHED_COMMIT_CONSUMERS:
+            found = first_in_code(consumer)
+            if found is not None and found < publish:
+                offenders.append(
+                    f"{runbook.relative_to(repo_root)}: `{consumer}` at line "
+                    f"{content[:found].count(chr(10)) + 1} runs before the publish gate "
+                    f"at line {content[:publish].count(chr(10)) + 1}"
+                )
+
+    assert checked, "no ch01 runbook with a publish gate found -- guard is not running"
+    assert not offenders, (
+        "these runbooks consume a published commit before publishing it:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+# Build-phase codes are internal planning vocabulary. `docs/RewritePlan.md` and
+# `docs/ImplementationLog.md` are the historical record and keep them by design.
+PHASE_CODE_HISTORY = (
+    "docs/RewritePlan.md",
+    "docs/ImplementationLog.md",
+    ".azure/deployment-plan.md",
+)
+
+# Azure ships real product identifiers shaped exactly like phase codes: Defender for
+# Servers Plan 2, and the Premium SSD disk tiers. They are allowed per file and per
+# token, so a genuine phase code in one of these same files still fails the guard.
+AZURE_P_IDENTIFIERS = {
+    "challenges/ch05-defender/README.md": {"P2"},
+    "docs/CommonErrors.md": {"P2", "P10"},
+    "docs/CostEstimate.md": {"P1", "P2", "P10"},
+    "tests/acceptance/catalog_acceptance/defender_evidence.py": {"P2"},
+    "tests/acceptance/tests/test_ch05_defender_contracts.py": {"P2"},
+    "solutions/ch05-defender/README.md": {"P2"},
+}
+
+
+def test_no_build_phase_codes_reach_a_reader(repo_root: Path) -> None:
+    """Nothing a participant or facilitator reads refers to a build phase by number.
+
+    Phase codes name the order this repository was built in, not anything a reader can
+    see. They had leaked into runbooks, contract guides, test filenames and even the
+    error strings the evidence validators print, where they explain nothing.
+
+    Untracked-but-not-ignored files are scanned too. Listing only the index would make
+    this guard pass merely because work had not been committed yet, which is exactly
+    when a leak is most likely.
+    """
+    tracked = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "*.md",
+            "*.py",
+            "*.json",
+            "*.ps1",
+            "*.bicep",
+            "*.tf",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+
+    offenders: list[str] = []
+    for relative in tracked:
+        if relative in PHASE_CODE_HISTORY:
+            continue
+        try:
+            content = (repo_root / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in re.finditer(r"\bP\d+\b", content):
+            before = content[max(0, match.start() - 24) : match.start()]
+            after = content[match.end() : match.end() + 1]
+            quoted = before.endswith(("'", '"')) and after in ("'", '"')
+            if quoted or match.group(0) in AZURE_P_IDENTIFIERS.get(relative, ()):
+                continue  # Quoted disk SKU tiers and the real Defender plan name.
+            offenders.append(
+                f"{relative}:{content[: match.start()].count(chr(10)) + 1}: "
+                f"{match.group(0)}"
+            )
+
+    assert not offenders, (
+        "build-phase codes are reader-visible; name the challenge or the component "
+        "instead:\n  " + "\n  ".join(offenders[:20])
+    )
+
+
+def test_participant_catalog_variables_match_the_application_values(repo_root: Path) -> None:
+    """What a participant's shell reports must be what the application actually uses.
+
+    The values are stated twice: once inside the here-string that becomes the scheduled
+    task's start script, and once in the Machine-scope set that participant shells read.
+    Nothing binds the two copies, so a change to one silently makes every runbook that
+    echoes a variable print a value the running application does not have.
+    """
+    script = (repo_root / "baseInfra/scripts/provision-vm.ps1").read_text(encoding="utf-8")
+    marker = "Set-CatalogEnvironmentForParticipants -Settings @{"
+    assert script.count(marker) == 2, "expected one persisted set per stack"
+
+    mismatches: list[str] = []
+    for index, chunk in enumerate(script.split(marker)[1:], start=1):
+        persisted = dict(
+            re.findall(r"(CATALOG_\w+)\s*=\s*'([^']*)'", chunk.split("}", 1)[0])
+        )
+        assert persisted, f"stack {index} persists nothing"
+        assert "CATALOG_DATABASE_PASSWORD" not in persisted, (
+            "the database password must not be persisted to Machine scope"
+        )
+        # The start script is the text immediately above, back to its own function.
+        preceding = script.split(marker)[index - 1]
+        start_script = preceding[preceding.rfind("\nfunction ") :]
+        applied = dict(re.findall(r"\$env:(CATALOG_\w+)\s*=\s*'([^']*)'", start_script))
+        for name, value in sorted(persisted.items()):
+            if name not in applied:
+                continue  # Participant-only conveniences are checked below.
+            if applied[name] != value:
+                mismatches.append(
+                    f"stack {index}: {name} is {value!r} for participants but "
+                    f"{applied[name]!r} for the application"
+                )
+
+    # CATALOG_BASE_URL is not in either start script; the provisioner derives the same
+    # URL for its own smoke test, and that is the one the application actually answers on.
+    ports = re.search(
+        r"\$Port\s*=\s*if\s*\(\$Stack -eq 'dotnet'\)\s*\{\s*(\d+)\s*\}\s*else\s*\{\s*(\d+)\s*\}",
+        script,
+    )
+    assert ports, "the provisioner no longer derives a smoke-test port"
+    for index, expected in enumerate(ports.groups(), start=1):
+        chunk = script.split(marker)[index].split("}", 1)[0]
+        found = re.search(r"CATALOG_BASE_URL\s*=\s*'([^']*)'", chunk)
+        assert found, f"stack {index} persists no base URL"
+        if not found.group(1).endswith(f":{expected}"):
+            mismatches.append(
+                f"stack {index}: participants are told {found.group(1)} but the smoke "
+                f"test uses port {expected}"
+            )
+
+    assert not mismatches, "participant and application values disagree:\n  " + "\n  ".join(
+        mismatches
+    )
+
+
+def test_no_generated_python_metadata_is_tracked(repo_root):
+    """Generated packaging metadata must not be committed.
+
+    ``*.egg-info`` is rewritten by every ``uv run`` that touches an editable
+    install, so tracking it hands each facilitator a dirty working tree they did
+    not cause and a merge conflict they cannot resolve meaningfully.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+
+    generated = sorted(
+        path
+        for path in tracked
+        if "/__pycache__/" in path
+        or path.endswith(".pyc")
+        or re.search(r"(^|/)[^/]+\.egg-info/", path)
+    )
+    assert not generated, "generated metadata is tracked in git:\n  " + "\n  ".join(
+        generated
+    )

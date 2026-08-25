@@ -19,6 +19,7 @@ catalog-render-defender-evidence = "catalog_acceptance.defender_evidence_cli:ren
 catalog-validate-defender-evidence = "catalog_acceptance.defender_evidence_cli:validate_main"
 catalog-render-sre-agent-evidence = "catalog_acceptance.sre_evidence_cli:render_main"
 catalog-validate-sre-agent-evidence = "catalog_acceptance.sre_evidence_cli:validate_main"
+golden-dryrun = "catalog_acceptance.golden_dryrun:main"
 
 [dependency-groups]
 dev = [

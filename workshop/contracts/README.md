@@ -30,9 +30,9 @@ Java/PostgreSQL baselines and by all three modernization paths.
 Breaking changes require a schema-version change and coordinator approval. Runtime
 implementations consume these files; they must not copy or reinterpret the rules.
 
-`challenge-paths.json` is the complete P5 registry: two source stacks across manual,
+`challenge-paths.json` is the complete Challenge 1 registry: two source stacks across manual,
 bounded Copilot rewrite, and GitHub Copilot modernization. Every slice consumes the
-same P4 Bicep, native migration command, full acceptance harness, and modernization
+same Azure Bicep, native migration command, full acceptance harness, and modernization
 handoff. Manual slices use the required Azure Files compatibility reference; the
 other reference slices use policy-compatible Blob storage. Path-specific evidence
 supplements rather than replaces the shared handoff bundle. Modernization handoff
@@ -40,12 +40,12 @@ supplements rather than replaces the shared handoff bundle. Modernization handof
 rollback runbook, and path-specific evidence executable. Migration CLI `1.4.0` binds
 every transfer command to the exact source commit recorded by the protected target.
 
-`shared-challenges.json` is the P6 producer/consumer boundary. It requires the P5
+`shared-challenges.json` is the shared-challenge producer/consumer boundary. It requires the Challenge 1
 handoff `1.4.0`, assigns nonoverlapping artifacts to load/autoscaling, CI/CD/revisions,
 and observability, including each stream's focused acceptance file, and freezes their
 evidence schemas, examples, output paths, CLI subcommands, and focused commands as one
-non-cross-wirable per-stream tuple. The CLI validates the complete P5 handoff
-before consuming any P6 evidence, checks every direct and nested handoff reference before
+non-cross-wirable per-stream tuple. The CLI validates the complete Challenge 1 handoff
+before consuming any shared-challenge evidence, checks every direct and nested handoff reference before
 resolution, recursively audits every consumed directory tree, resolves every referenced file
 inside the repository, and rejects symlinks in any path component or discovered child, empty
 files, unrelated Azure resources, and invalid observation ordering. Schema and query loading is
@@ -158,16 +158,18 @@ record, category, filename, and image before testing an application.
 
 ## Validate
 
-From `tests/acceptance/`:
+From the repository root:
 
 ```bash
-uv sync
-uv run pytest tests/test_contract_assets.py tests/test_p6_contracts.py
+cd tests/acceptance
+uv --no-config sync
+uv --no-config run pytest tests/test_contract_assets.py tests/test_challenge_contracts.py
 ```
 
 Render one load bundle from its digest-bound capture manifest:
 
 ```bash
+cd tests/acceptance
 uv --no-config run catalog-render-load-evidence \
   --capture evidence/load/capture.json \
   --handoff evidence/modernization-contract.json \
@@ -175,9 +177,10 @@ uv --no-config run catalog-render-load-evidence \
   --repository-root ../..
 ```
 
-Validate one generated P6 evidence bundle only after its complete handoff exists:
+Validate one generated shared-challenge evidence bundle only after its complete handoff exists:
 
 ```bash
+cd tests/acceptance
 uv --no-config run catalog-validate-challenge-evidence load \
   evidence/load-test-report.json \
   --handoff evidence/modernization-contract.json \
@@ -205,14 +208,14 @@ uv run python -m catalog_acceptance.handoff_cli \
 `workshop/toolchain.lock.json` is schema-validated and pins host compatibility,
 runtimes, databases, clients, containers, CLIs, IDE extensions, and installer integrity
 sources. It includes the exact Windows Server image, Windows installer URLs and hashes,
-per-platform container digests, P4 Azure SDK packages, the self-contained signed Windows
+per-platform container digests, Azure SDK packages, the self-contained signed Windows
 SqlPackage archive, and digest-pinned application build/runtime images. Accepted
 provisioning and container builds consume this lock, verify downloads, and use immutable
 source and image references.
 
 `azure-target-output.schema.json` defines both clean bootstrap output, where application,
 image, and revision-role values are null, and complete baseline/release application output.
-It freezes Sweden Central, typed target resources, the exact P3 source VM/VNet migration
+It freezes Sweden Central, typed target resources, the exact source VM/VNet migration
 runner, database principals, the ACA default-domain relationship, and role/commit-derived
 revision identity. `migration-report.schema.json` binds a verified database artifact,
 external image corpus, and exact source-VM/private-network execution path to the same target.

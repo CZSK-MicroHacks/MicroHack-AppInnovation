@@ -83,8 +83,8 @@
         "tests/acceptance/catalog_acceptance/load_evidence_cli.py",
         "tests/acceptance/catalog_acceptance/shared_challenges.py",
         "tests/acceptance/catalog_acceptance/shared_challenges_cli.py",
-        "tests/acceptance/tests/test_p6_contracts.py",
-        "tests/acceptance/tests/test_p6_load_renderer.py"
+        "tests/acceptance/tests/test_challenge_contracts.py",
+        "tests/acceptance/tests/test_ch02_load_renderer.py"
       ]
     },
     "challenges": {
@@ -97,7 +97,7 @@
           "artifacts": [
             "tests/load/catalog-load.jmx",
             "tests/load/load-test.yaml",
-            "tests/acceptance/tests/test_p6_load_challenge.py"
+            "tests/acceptance/tests/test_ch02_load_challenge.py"
           ],
           "captureSchema": "workshop/contracts/load-evidence-capture.schema.json",
           "captureExample": "workshop/contracts/load-evidence-capture.example.json",
@@ -106,7 +106,7 @@
           "evidenceOutput": "evidence/load-test-report.json",
           "evidenceRenderCommand": "uv --no-config run catalog-render-load-evidence --capture evidence/load/capture.json --handoff evidence/modernization-contract.json --output evidence/load-test-report.json --repository-root ../..",
           "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence load evidence/load-test-report.json --handoff evidence/modernization-contract.json --contracts workshop/contracts --repository-root ../..",
-          "validationCommand": "uv --no-config run pytest -q tests/test_p6_load_challenge.py"
+          "validationCommand": "uv --no-config run pytest -q tests/test_ch02_load_challenge.py"
         },
         {
           "id": "cicd-revisions",
@@ -117,13 +117,13 @@
             ".github/workflows/catalog-dotnet.yml",
             ".github/workflows/catalog-java.yml",
             "infra/github-cicd.bicep",
-            "tests/acceptance/tests/test_p6_cicd_challenge.py"
+            "tests/acceptance/tests/test_ch03_cicd_challenge.py"
           ],
           "evidenceSchema": "workshop/contracts/cicd-evidence.schema.json",
           "evidenceExample": "workshop/contracts/cicd-evidence.example.json",
           "evidenceOutput": "evidence/cicd-report.json",
           "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence cicd evidence/cicd-report.json --handoff evidence/modernization-contract.json --contracts workshop/contracts --repository-root ../..",
-          "validationCommand": "uv --no-config run pytest -q tests/test_p6_cicd_challenge.py"
+          "validationCommand": "uv --no-config run pytest -q tests/test_ch03_cicd_challenge.py"
         },
         {
           "id": "observability",
@@ -134,13 +134,13 @@
             "workshop/observability/queries.kql",
             "workshop/observability/workbook.json",
             "infra/observability-workbook.bicep",
-            "tests/acceptance/tests/test_p6_observability_challenge.py"
+            "tests/acceptance/tests/test_ch04_observability_challenge.py"
           ],
           "evidenceSchema": "workshop/contracts/observability-evidence.schema.json",
           "evidenceExample": "workshop/contracts/observability-evidence.example.json",
           "evidenceOutput": "evidence/observability-report.json",
           "evidenceValidationCommand": "uv --no-config run catalog-validate-challenge-evidence observability evidence/observability-report.json --handoff evidence/modernization-contract.json --contracts workshop/contracts --repository-root ../..",
-          "validationCommand": "uv --no-config run pytest -q tests/test_p6_observability_challenge.py"
+          "validationCommand": "uv --no-config run pytest -q tests/test_ch04_observability_challenge.py"
         }
       ]
     },

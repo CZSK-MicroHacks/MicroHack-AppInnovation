@@ -1,5 +1,16 @@
 # Challenge 6 solution: source-bound reviewed rollback
 
+**What this is for.** Every command, prompt, and capture behind
+[Challenge 6](../../challenges/ch06-sre-agent/README.md) — the exact investigation
+producers the agent's answers must be checkable against, the assembly of the incident
+evidence, the recovery-clock calculation, and the facilitator-owned teardown.
+
+**When to open it.** Open it if the agent keeps answering from the runbook and you cannot
+tell what to demand instead, if a capture fails the validator, or if you are facilitating
+and need the approval and cleanup sequence in one place. If you have not yet tried to
+make the agent reject a hypothesis on your own, close this and go back — that argument is
+the chapter.
+
 Run commands from the repository root in Bash unless a section says otherwise. Use the
 exact participant scope selected by the handoff. Participants investigate and review;
 only the facilitator approves the write and performs cleanup.
@@ -48,8 +59,9 @@ test "$(jq -er '.containerImage.digest' "$TARGET_OUTPUT")" = "$IMAGE_DIGEST"
 [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
 ```
 
-Require the exact P6 CI/CD and observability reports referenced by the P8 capture. The
-independent P8 validator replays both shared validators; a copied summary is insufficient.
+Require the exact Challenge 3 CI/CD and Challenge 4 observability reports referenced by
+this chapter's capture. The independent Challenge 6 validator replays both shared
+validators; a copied summary is insufficient.
 
 Read the facilitator-provided `foundation.json` and `response-plan-preflight.json`. Confirm
 that the agent is Review/Low, the two managed identities have only the frozen roles, the
@@ -284,8 +296,7 @@ capture_recovery readiness "$READINESS_URL"
 
 The two Container App envelope responses must be identical after removing only
 `response.properties.configuration.ingress.traffic`. Preserve both generated observation
-times and exact requests. Capture the alert by exact alert ID at `2019-05-05`; its monitor
-condition must be `Resolved`.
+times and exact requests.
 
 Use the generated `health-http.json` and `readiness-http.json` objects as
 `recoveryHealth`; do not type status or timestamps by hand. The validator requires native
@@ -337,7 +348,117 @@ Require exactly two successful `Microsoft.App/containerApps/write` events at the
 app: the earlier facilitator seed and the later correlation-bound user-assigned-identity
 rollback. Extra writes fail.
 
-## 7. Assemble, render, and validate
+Finally capture the alert itself, by the exact alert ID the agent thread was opened with,
+at `2019-05-05`. The `IncidentActivitySnapshot` row carries that ID in its
+`Properties.alertId`, so nothing here is typed by hand. Read the audit rows as named
+columns rather than by position — the KQL result is a table, and column order is a
+property of the query, not of the contract:
+
+```bash
+ALERT_API_VERSION=2019-05-05
+
+audit_snapshot() {
+  jq -er '
+    [ .tables[]
+      | [.columns[].name] as $names
+      | .rows[]
+      | [$names, .] | transpose | map({key: .[0], value: .[1]}) | from_entries
+    ]
+    | map(select(.name == "IncidentActivitySnapshot"))
+    | first
+  ' "$RAW/agent-audit.json"
+}
+
+ALERT_ID=$(audit_snapshot | jq -er '.Properties.alertId')
+
+capture_alert() {
+  local name=$1
+
+  az rest --method get \
+    --url "https://management.azure.com${ALERT_ID}?api-version=${ALERT_API_VERSION}" \
+    > "$RAW/${name}-response.json"
+  jq -n \
+    --arg url "${ALERT_ID}?api-version=${ALERT_API_VERSION}" \
+    --slurpfile response "$RAW/${name}-response.json" '{
+      request: {method: "GET", url: $url},
+      response: $response[0]
+    }' > "$RAW/${name}.json"
+}
+
+capture_alert alert-resolved
+jq -e '
+  .response.properties.essentials.monitorCondition == "Resolved"
+  and (.response.properties.essentials.resolvedDateTime | type) == "string"
+' "$RAW/alert-resolved.json" >/dev/null
+```
+
+Azure Monitor can take several minutes to re-evaluate after the rollback. If the assertion
+fails because the condition still reads `Fired`, wait and re-run `capture_alert
+alert-resolved`; never edit the captured response. The matching `alertFired` envelope is
+the same `capture_alert` call made earlier in the window, before the rollback.
+
+## 7. Read the recovery clock
+
+The chapter's headline number comes out of evidence you already have — no extra query.
+Detection is the timestamp of the alert-bound `IncidentActivitySnapshot` in
+`$RAW/agent-audit.json`; recovery is `resolvedDateTime` on the resolved alert envelope you
+just captured. Both are derived, not typed:
+
+```bash
+DETECTED_AT=$(audit_snapshot | jq -er '.timestamp | sub("\\.[0-9]+Z$"; "Z")')
+RECOVERED_AT=$(jq -er '
+  .response.properties.essentials.resolvedDateTime | sub("\\.[0-9]+Z$"; "Z")
+' "$RAW/alert-resolved.json")
+
+jq -en \
+  --arg detected "$DETECTED_AT" \
+  --arg recovered "$RECOVERED_AT" \
+  '($recovered | fromdateiso8601) >= ($detected | fromdateiso8601)' >/dev/null
+
+mkdir -p evidence
+jq -n \
+  --arg detected "$DETECTED_AT" \
+  --arg recovered "$RECOVERED_AT" \
+  '{
+    detectedAt: $detected,
+    recoveredAt: $recovered,
+    minutesToRecovery: ((($recovered | fromdateiso8601)
+      - ($detected | fromdateiso8601)) / 60 | floor)
+  }' > evidence/ch06-mttr.json
+
+cat evidence/ch06-mttr.json
+```
+
+`fromdateiso8601` parses whole seconds only, which is why both values pass through
+`sub("\\.[0-9]+Z$"; "Z")` — Application Insights and Azure Monitor both return
+sub-second precision, and without that the block would abort on a timestamp that is
+otherwise perfectly good.
+
+Against the sanitized shape example in `workshop/contracts/fixtures/sre-agent/incident.json`
+the block prints:
+
+```json
+{
+  "detectedAt": "2026-08-20T15:06:05Z",
+  "recoveredAt": "2026-08-20T15:09:00Z",
+  "minutesToRecovery": 2
+}
+```
+
+`evidence/ch06-mttr.json` is the chapter's headline number, and it is the only place it
+persists: the frozen `1.2.0` evidence contract has no field for it, so do not invent one
+in `capture.json`. Repeat the figure in the written assessment and carry it to the
+[wrap-up scorecard](../../challenges/wrapup/README.md) as mean time to recovery.
+
+Facilitators: collect `minutesToRecovery` from every team and read out the room's median
+in the debrief. One team's figure is an anecdote; the room's median is the number people
+take back to their own on-call rotation.
+
+If a participant asks what a fair comparison looks like, the honest legacy answer is that
+there is no equivalent measurement — on the VM the incident lasts until a human notices,
+so detection time is unbounded rather than long.
+
+## 8. Assemble, render, and validate
 
 Create `evidence/sre-agent/incident.json` against the `1.2.0`
 `workshop/contracts/sre-agent-incident.schema.json`. Preserve every raw request URL/body,
@@ -364,6 +485,7 @@ sha256sum \
 From `tests/acceptance`, run the frozen renderer and independent validator:
 
 ```bash
+cd tests/acceptance
 uv --no-config run catalog-render-sre-agent-evidence \
   --capture evidence/sre-agent/capture.json \
   --handoff evidence/modernization-contract.json \
@@ -378,5 +500,32 @@ uv --no-config run catalog-validate-sre-agent-evidence \
   --repository-root ../..
 ```
 
-Do not edit `evidence/sre-agent-report.json`. Stopping the agent does not end its fixed
-four-agent-unit charge; only facilitator-authorized deletion does.
+Do not edit `evidence/sre-agent-report.json`.
+
+## 9. Facilitator-owned teardown and billing
+
+Participants stop after validation. Everything below is the facilitator's, and it is the
+part most easily forgotten because nothing fails when you skip it — the meter simply keeps
+running.
+
+- The agent bills a **fixed four-agent-unit hourly charge for as long as the resource
+  exists**, independent of how much it was used during the drill. Stopping the agent does
+  not end its fixed four-agent-unit charge; only facilitator-authorized deletion does.
+- Delete the agent and prove its ARM `GET` returns `404`, delete only the dedicated agent
+  resource group, then re-check every protected handoff resource still answers. The exact
+  ordered sequence, the protected-resource checks, and the Cost Management query live in
+  [the SRE Agent facilitator guide](../../workshop/sre-agent/README.md).
+- Cleanup is a separate authorization gate, not a continuation of the drill. Never run a
+  broad resource-group deletion against a participant resource group.
+- Cost data lags. Query Cost Management last, and expect the final figure hours after the
+  workshop ends.
+
+Do this at the end of the day, not at the end of the chapter — and keep it out of the
+participant narrative. The last thing a participant should take from Challenge 6 is their
+recovery time, not a billing caveat.
+
+---
+
+**Back to** [Challenge 6](../../challenges/ch06-sre-agent/README.md) ·
+[Solution 5](../ch05-defender/README.md) ·
+[workshop overview](../../README.md)

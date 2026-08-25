@@ -1,7 +1,7 @@
 # Azure SRE Agent facilitator foundation
 
 This component prepares and operates the facilitator-owned foundation for Challenge 6.
-It consumes the frozen P8 contract and one validated modernization handoff. Commands are
+It consumes the frozen SRE Agent contract and one validated modernization handoff. Commands are
 examples for an authorized facilitator; repository validation does not execute them.
 
 ## Build and inspect the Bicep
@@ -279,7 +279,7 @@ The authorized sequence is fixed:
    resource-group/exact-app assignments for both managed identities;
 3. prove Resource Graph and inherited effective-access outputs are both empty;
 4. delete only the dedicated agent resource group and prove its ARM GET returns `404`;
-5. ARM GET every protected P5/P6 handoff resource and require HTTP `200`; and
+5. ARM GET every protected modernization and shared-challenge handoff resource and require HTTP `200`; and
 6. query Cost Management last, acknowledging ingestion lag, and derive
    `billingAfterDeletionObserved` from returned `UsageDate` rows rather than typing it
    independently. Any positive Azure SRE Agent usage on a later UTC date fails cleanup.

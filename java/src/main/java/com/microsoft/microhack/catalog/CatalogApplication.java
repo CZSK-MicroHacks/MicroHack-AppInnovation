@@ -1,13 +1,8 @@
 package com.microsoft.microhack.catalog;
 
-import com.azure.monitor.opentelemetry.autoconfigure.AzureMonitorAutoConfigure;
 import com.microsoft.microhack.catalog.config.CatalogRuntimeOptions;
 import com.microsoft.microhack.catalog.config.CatalogResourceIdentity;
-import com.microsoft.microhack.catalog.service.AzureBlobImageStore;
-import com.microsoft.microhack.catalog.service.ImageStore;
-import com.microsoft.microhack.catalog.service.LocalImageStore;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
-import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender;
 import java.net.InetAddress;
@@ -31,29 +26,16 @@ public class CatalogApplication {
         return CatalogRuntimeOptions.from(environment, instanceId());
     }
 
-    /** Selects the local/Azure Files-compatible or Blob-backed image provider. */
-    @Bean
-    ImageStore imageStore(CatalogRuntimeOptions options) {
-        return switch (options.imageProvider()) {
-            case LOCAL -> new LocalImageStore(options);
-            case AZURE_BLOB -> new AzureBlobImageStore(options);
-        };
-    }
-
-    /** Initializes one direct Azure Monitor or local OTLP telemetry pipeline. */
+    /** Initializes the OpenTelemetry SDK using standard OTEL environment variables. */
     @Bean(destroyMethod = "close")
     OpenTelemetrySdk openTelemetry(CatalogRuntimeOptions options) {
+        System.setProperty("otel.exporter.otlp.endpoint", options.otlpEndpoint());
         System.setProperty(
                 "otel.resource.attributes",
                 CatalogResourceIdentity.asOtelProperty(options));
-        AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
-                AutoConfiguredOpenTelemetrySdk.builder();
-        if (options.azureMonitorEnabled()) {
-            AzureMonitorAutoConfigure.customize(sdkBuilder);
-        } else {
-            System.setProperty("otel.exporter.otlp.endpoint", options.otlpEndpoint());
-        }
-        OpenTelemetrySdk sdk = sdkBuilder.build().getOpenTelemetrySdk();
+        OpenTelemetrySdk sdk = AutoConfiguredOpenTelemetrySdk.builder()
+                .build()
+                .getOpenTelemetrySdk();
         OpenTelemetryAppender.install(sdk);
         return sdk;
     }

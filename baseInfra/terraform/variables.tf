@@ -101,16 +101,24 @@ EOT
 
 variable "source_commit" {
   type        = string
-  default     = "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
   description = <<EOT
 Immutable Git commit used to download the application, canonical manifest, catalog, and images.
-The frozen P3 baseline is the exact default. Overrides must remain full lowercase 40-hex commit IDs;
-branches, tags, main, and other mutable references are rejected.
+There is deliberately no default: a stale pin provisions a tree that has none of the chapters the
+room is following, and that failure only surfaces once the VMs are built. Re-pin this for every
+delivery to the published workshop commit, then verify the downloaded archive contains infra/ and
+every challenge folder before provisioning. See "Re-pin the VM source commit" in docs/Facilitator.md.
+Values must be full lowercase 40-hex commit IDs; branches, tags, main, and other mutable
+references are rejected.
 EOT
 
   validation {
     condition     = can(regex("^[0-9a-f]{40}$", var.source_commit))
     error_message = "source_commit must be a full lowercase 40-hex Git commit ID."
+  }
+
+  validation {
+    condition     = var.source_commit != "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
+    error_message = "source_commit is the historical fd298de6 pin, whose tree has no infra/ and no current challenges. Re-pin it - see docs/Facilitator.md."
   }
 }
 
@@ -157,14 +165,19 @@ Leave empty to disable user creation implicitly or set manage_entra_users=false.
 EOT
 }
 
-variable "entra_user_password" {
-  type        = string
-  sensitive   = true
-  default     = ""
+variable "entra_user_password_length" {
+  type        = number
+  default     = 24
   description = <<EOT
-Password to assign to all provisioned Entra ID users (lab scenario). Provide via TF_VAR_entra_user_password env var.
-If empty while manage_entra_users=true Terraform apply will fail in user module preconditions.
+Character length of the distinct password Terraform generates for each provisioned Entra ID user.
+There is no shared workshop password: every user gets its own random value, must change it at
+first sign-in, and receives it only through the `entra_user_credentials` sensitive output.
 EOT
+
+  validation {
+    condition     = var.entra_user_password_length >= 16 && var.entra_user_password_length <= 64
+    error_message = "entra_user_password_length must be between 16 and 64 characters."
+  }
 }
 
 variable "subscription_id" {
@@ -316,5 +329,34 @@ EOT
       alltrue([for address in var.defender_budget_notification_emails : length(trimspace(address)) >= 3])
     )
     error_message = "enable_defender_foundation=true requires at least one non-empty facilitator notification email."
+  }
+}
+
+variable "facilitator_principal_name" {
+  type        = string
+  description = <<EOT
+User principal name of the facilitator identity that `infra/main.bicep` records as
+`facilitatorPrincipalName`. Every Challenge 1 deployment requires it, so provisioning writes it
+into the protected deployment parameter files on each participant VM. Use the signed-in
+facilitator UPN, or the display name of the facilitator group when you delegate through a group.
+EOT
+
+  validation {
+    condition     = length(trimspace(var.facilitator_principal_name)) > 0
+    error_message = "facilitator_principal_name must not be empty."
+  }
+}
+
+variable "facilitator_principal_object_id" {
+  type        = string
+  description = <<EOT
+Entra ID object ID of the same facilitator principal, passed to `infra/main.bicep` as
+`facilitatorPrincipalObjectId`. Read it with `az ad signed-in-user show --query id -o tsv`, or
+`az ad group show --group '<group>' --query id -o tsv` when you delegate through a group.
+EOT
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.facilitator_principal_object_id))
+    error_message = "facilitator_principal_object_id must be a GUID, for example 00000000-0000-0000-0000-000000000000."
   }
 }

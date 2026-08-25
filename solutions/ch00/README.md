@@ -1,7 +1,15 @@
 # Challenge 0 solution: one verified stack selection
 
+**Open this if a baseline check is throwing and you cannot see why, if you are
+facilitating and need to confirm a participant's selection, or if someone has run out of
+time and needs to rejoin.**
+
 Challenge 0 is an inventory and power-state decision, not a repair or migration task.
-Both pre-warmed VMs must already pass before a participant chooses one.
+Both pre-warmed VMs must already pass before a participant chooses one. If they do not,
+the fix is facilitator-side reprovisioning — never a weakened check.
+
+**Who this is for:** facilitators, and participants stuck on the marker or selection
+validation blocks in [Challenge 0](../../challenges/ch00/README.md).
 
 ## Expected baseline records
 
@@ -26,6 +34,31 @@ provisioning time and must not be replaced with a sample value.
 If a marker or HTTP check fails, stop the participant task. The facilitator diagnoses
 the affected VM from `C:\MicroHack\logs`, the startup task, and the Terraform extension
 state. Do not let the participant reseed a database or weaken the check.
+
+## Reading the legacy baseline measurement
+
+Step 2 of the challenge writes `evidence/ch00-pain-dotnet.json` and
+`evidence/ch00-pain-java.json`. These are teaching artifacts, not graded evidence — no
+validator reads them — but they carry the *before* column of the wrap-up scorecard, so
+treat a missing or obviously wrong value as worth fixing.
+
+What good output looks like, and what to say about it on the floor:
+
+| Field | Expected shape | The point to make |
+| --- | --- | --- |
+| `catalogMedianMs` | Tens to low hundreds of milliseconds | This is the only performance number they own today, and it comes from one instance |
+| `applicationHosts` | `dotnet` or `java` | The web tier |
+| `databaseServices` | `MSSQL$SQLEXPRESS=Running` or `postgresql-x64-18=Running` | The database is on the same machine as the web tier — same CPU, same memory, same outage |
+| `startupTasks` | `MicroHack-dotnet=Running` or `MicroHack-java=Running` | The whole release mechanism is a scheduled task and a file copy |
+| `imageFilesOnDisk` | `198` | Rebuild the VM and the product photography is gone |
+| `runningInstances` / `autoscale` | `1` / `False` | There is no horizontal story at all |
+| `distributedTraces` | `False` | Challenge 4 exists because of this line |
+
+Common causes of a surprising result: the first request after VM start is slow because
+of JIT or connection warm-up (the block issues one warm-up request precisely for that,
+but a cold VM can still skew the slowest sample); and a Bastion session competing for CPU
+inflates the median. Neither invalidates the exercise — both are worth saying out loud,
+because they are the same measurement problems participants will have at home.
 
 ## Selection interpretation
 
@@ -131,3 +164,12 @@ When a participant cannot complete Challenge 1 in the allotted time:
 
 Never convert a .NET selection into a Java golden handoff, or the reverse, without
 rerunning Challenge 0 and recording the new choice.
+
+Say out loud what the rejoin costs and what it does not: the participant keeps every
+number they measured themselves, and marks the rest of the scorecard *not measured*. A
+golden handoff is a way to stay with the group, not a completed path.
+
+---
+
+**Challenge:** [Challenge 0: meet the application you are about to move](../../challenges/ch00/README.md) ·
+**Next solution:** [Challenge 1: select the matching stack and path](../ch01/README.md)

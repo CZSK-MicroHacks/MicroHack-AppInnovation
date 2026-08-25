@@ -131,7 +131,7 @@
       "participantApproved": false,
       "performedByPrincipalId": "00000000-0000-0000-0000-000000000014",
       "preventionAction": "Validate the selected-database endpoint and readiness path before assigning production traffic.",
-      "recommendedAction": "Restore 100 percent traffic to the retained P6-proven healthy handoff revision.",
+      "recommendedAction": "Restore 100 percent traffic to the retained CI/CD-proven healthy handoff revision.",
       "rootCause": "Revision ca-mh-example--sre-bad-000000000000 used invalid selected-database host catalog.sre-drill.invalid while the selected Azure SQL database remained Online; the retained image digest matched the healthy revision.",
       "rootCauseCode": "bad-revision-selected-database-endpoint",
       "supportingEvidence": {
@@ -245,7 +245,7 @@
       {
         "kind": "sre-agent-incident",
         "path": "workshop/contracts/fixtures/sre-agent/incident.json",
-        "sha256": "893980549dd57d899eecc7b2f211fab2478151231e07b2173cca4c12733553dc"
+        "sha256": "fb9d97c88a240a6687978de2f935223186aeb3b5487be876cbbbc897cb356292"
       },
       {
         "kind": "sre-agent-response-plan",
@@ -261,7 +261,7 @@
     "captureManifest": {
       "kind": "sre-agent-capture-manifest",
       "path": "workshop/contracts/sre-agent-evidence-capture.example.json",
-      "sha256": "5279f0468a8237e3ef31580a9795f714e8b701b0e719cb8419581da9f04fe0a8"
+      "sha256": "3197fd22b9b634f2847bb7515aac97b6f3bc1e7892862d08db8dbce9c311b606"
     }
   },
   "schemaVersion": "1.0.0",

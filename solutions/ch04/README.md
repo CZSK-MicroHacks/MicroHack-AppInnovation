@@ -1,20 +1,24 @@
 # Challenge 4 solution: one handoff-bound workbook
 
-This solution preserves the P4/P5 direct Azure Monitor exporter and adds only two Azure
+**Open this when** you have attempted [Challenge 4](../../challenges/ch04/README.md) and
+need the exact deployment, capture, and normalization commands — or when you are
+facilitating and need the per-query row contract at hand.
+
+This solution preserves the target's direct Azure Monitor exporter and adds only two Azure
 resources: one workbook and one `AllMetrics` diagnostic setting on the existing Container
 App. Azure diagnostic-settings metric export flattens dimensions, so the replica panel
 uses app-total `AzureMetrics` data. It does not claim revision-level scale evidence;
 Challenge 2 owns that proof.
 
-## 1. Confirm the P5 evidence chain
+## 1. Confirm the modernization evidence chain
 
-Validate `evidence/modernization-contract.json` before proceeding. Copy values from the
+Everything here is identified by the Challenge 1 handoff. Validate
+`evidence/modernization-contract.json` before proceeding. Copy values from the
 validated document, not from portal search results:
 
 ```bash
 cd tests/acceptance
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run python -m catalog_acceptance.handoff_cli \
+uv --no-config run python -m catalog_acceptance.handoff_cli \
   ../../evidence/modernization-contract.json \
   --contracts ../../workshop/contracts \
   --repository-root ../..
@@ -37,6 +41,10 @@ Stop if they do not. Do not work around a cross-resource-group handoff.
 
 ## 2. Select one immutable window
 
+The window is the single most common cause of a failed capture: every panel must return a
+real row inside it. The Challenge 2 load run is usually the best choice, because it
+contains request volume, replica movement, and new instances in one bounded period.
+
 Choose explicit UTC `QUERY_START_TIME` and `QUERY_END_TIME` values that enclose exercised
 HTTP failures, database dependency failures, Container App replica activity, and at least
 one first request for an exact revision instance. Do not use `ago()` or a moving workbook
@@ -51,6 +59,19 @@ subscription and resource group. Deploy the resource-group template to the hando
 exact `application.resourceGroup`:
 
 ```bash
+HANDOFF=evidence/modernization-contract.json
+HANDOFF_APPLICATION_RESOURCE_GROUP=$(jq -er '.application.resourceGroup' "$HANDOFF")
+CONTAINER_APP_RESOURCE_ID=$(jq -er '.application.resourceId' "$HANDOFF")
+APPLICATION_INSIGHTS_RESOURCE_ID=$(jq -er '.observability.applicationInsightsResourceId' "$HANDOFF")
+LOG_ANALYTICS_WORKSPACE_RESOURCE_ID=$(jq -er '.observability.logAnalyticsWorkspaceResourceId' "$HANDOFF")
+SERVICE_NAME=$(jq -er '.observability.serviceName' "$HANDOFF")
+SOURCE_COMMIT=$(jq -er '.observability.serviceVersion' "$HANDOFF")
+REVISION_NAME=$(jq -er '.observability.revision' "$HANDOFF")
+
+# The window you fixed in step 2. Nothing can derive these for you.
+: "${QUERY_START_TIME:?export the inclusive UTC window start, e.g. 2025-01-01T10:00:00Z}"
+: "${QUERY_END_TIME:?export the inclusive UTC window end, e.g. 2025-01-01T10:30:00Z}"
+
 az deployment group create \
   --resource-group "$HANDOFF_APPLICATION_RESOURCE_GROUP" \
   --template-file infra/observability-workbook.bicep \
@@ -64,6 +85,12 @@ az deployment group create \
     queryStartTime="$QUERY_START_TIME" \
     queryEndTime="$QUERY_END_TIME"
 ```
+
+Every identity above comes from the validated handoff, so a stale portal copy cannot
+enter the deployment. `jq -er` fails on a missing or null field rather than passing an
+empty string that Bicep would reject with a less obvious message. The
+`.observability.serviceVersion` field is the same 40-hex commit as `.source.commitSha`;
+the handoff validator asserts they agree.
 
 The deployment creates only the workbook and `all-metrics-to-workspace` diagnostic
 setting. It does not create a DCR, alternate pipeline, Application Insights component,
@@ -133,18 +160,31 @@ it filters the exact Container App in `AzureMetrics`, selects `Replicas` at `PT1
 reduces `Total` to the peak one-minute value, and contains no revision filter.
 
 Each result file includes the common identity/window fields required by the shared model
-and exactly one typed row:
+and exactly one typed row, and each row is an answer to a question the legacy VM could
+not answer at all:
 
-| Query | Required row |
-| --- | --- |
-| `error-rate` | `timestamp`, float `value`, integer `totalRequests`, integer `failedRequests` |
-| `latency` | `timestamp`, positive float `value` |
-| `database-dependency-failures` | `timestamp`, positive integer `value` |
-| `replica-count` | `timestamp`, positive integer app-total peak `value` |
-| `cold-starts` | `timestamp`, positive integer `value` |
+| Query | Required row | What the row tells you |
+| --- | --- | --- |
+| `error-rate` | `timestamp`, float `value`, integer `totalRequests`, integer `failedRequests` | The failure percentage for one build on one revision |
+| `latency` | `timestamp`, positive float `value` | p95 response time — the tail, not the average |
+| `database-dependency-failures` | `timestamp`, positive integer `value` | Whether the fault was downstream of the app |
+| `replica-count` | `timestamp`, positive integer app-total peak `value` | How much capacity was actually running |
+| `cold-starts` | `timestamp`, positive integer `value` | How many instances began serving inside the window |
 
 An empty result is a failed evidence capture. Exercise the exact app/revision as
 appropriate and choose a valid immutable window; never fabricate or coerce a zero result.
+
+Before assembling the bundle, look at the same data in the portal — the participants get
+far more out of the chapter if they see it rather than only serialize it. **Application
+Insights → Application map** shows the catalog and its database as separate nodes with
+the call count and dependency latency on the edge:
+
+![Application Insights application map showing the catalog Container App node with two instances connected to a separate MSSQL database node, annotated with call counts and average dependency duration](../../images/ch04-map.png)
+
+**Application Insights → Performance** shows the same requests as 50th/95th/99th
+percentiles, an operation-level duration table, and individual sample traces:
+
+![Application Insights performance view showing percentile selectors, a per-operation average duration and count table, a duration distribution histogram, and a list of sample requests](../../images/ch04-perf.png)
 
 ## 6. Assemble and validate the live report
 
@@ -165,17 +205,45 @@ diagnostic observedAt
 From `tests/acceptance`, run the common failure-closed validator:
 
 ```bash
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run catalog-validate-challenge-evidence observability \
+cd tests/acceptance
+uv --no-config run catalog-validate-challenge-evidence observability \
   evidence/observability-report.json \
   --handoff evidence/modernization-contract.json \
   --contracts workshop/contracts \
   --repository-root ../..
+cd ../..
 ```
 
 Then run the focused repository check:
 
 ```bash
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run pytest -q tests/test_p6_observability_challenge.py
+cd tests/acceptance
+uv --no-config run pytest -q tests/test_ch04_observability_challenge.py
 ```
+
+## If it goes wrong
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `replica-count` returns nothing | Platform metrics were not yet flowing, or the window starts before the diagnostic setting existed | Wait a few minutes after deployment and choose a window that begins after the setting was created |
+| An Application Insights panel returns nothing | The window contains no failure, or no instance first served inside it | Re-select the window around the Challenge 2 load run; never coerce an empty result into a row |
+| `serializedDataSha256` does not match | The ARM string was pretty-printed, re-serialized, trimmed, or newline-terminated before hashing | Hash the exact returned string with `printf '%s'` |
+| Deployment fails a resource-ID assertion | The template was deployed outside `application.resourceGroup` | Deploy to the handoff resource group; do not work around a cross-resource-group handoff |
+| The validator rejects timestamp ordering | Times were back-filled or copied from the example | Re-record the real observation times in the documented order |
+
+The broader diagnostic workflow is in
+[the troubleshooting guide](../../docs/Troubleshooting.md).
+
+## What a completed capture shows
+
+Five panels, five answers, all bound to one service, one source commit, and one revision:
+failure percentage, p95 latency, database dependency failures, peak replicas, and cold
+starts. The legacy baseline for every one of those is a single text file on a Windows
+server. This is also the telemetry Challenge 6's agent correlates during the incident
+drill — without it, there is nothing to diagnose from.
+
+---
+
+**Back to** [Challenge 4: find out why it broke](../../challenges/ch04/README.md)
+**Previous solution:** [Challenge 3 solution](../ch03/README.md) ·
+**Next solution:** [Challenge 5 solution](../ch05-defender/README.md)

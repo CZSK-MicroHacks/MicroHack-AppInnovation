@@ -1,12 +1,23 @@
 <#
 .SYNOPSIS
-Checks the doubled facilitator VM quota and estimates its monthly compute and OS-disk cost.
+Checks the doubled facilitator VM quota plus the per-participant network footprint, and
+estimates the monthly compute, OS-disk, and network cost.
 
 .DESCRIPTION
-Reads the selected VM SKU and current regional Azure compute usage, then fails when the
-requested two-VM-per-participant footprint exceeds regional or VM-family vCPU quota.
-It queries the public Azure Retail Prices API for a Windows consumption rate and Premium
-SSD managed-disk rate, prints the exact footprint, and can enforce a facilitator cost ceiling.
+Reads the selected VM SKU and current regional Azure compute and network usage, then fails
+when the requested footprint exceeds regional or VM-family vCPU quota, VM count, Premium
+managed-disk, public-IP, or NAT-gateway quota. Every participant receives one Azure Bastion
+host, one NAT gateway, and two Standard static public IP addresses in addition to two VMs,
+so all of those are counted here rather than treated as shared foundation.
+
+Azure does not expose a Bastion quota through `az network list-usages`; the script counts
+Bastion hosts already deployed in the region and compares the total against
+-BastionHostsPerRegionLimit, which defaults to the published Azure default of 50.
+
+It queries the public Azure Retail Prices API for Windows consumption, Premium SSD
+managed-disk, Bastion gateway, and public-IP rates, prints the exact footprint, and can
+enforce a facilitator cost ceiling. Meters or quota metrics that Azure does not return are
+reported as unavailable instead of being silently dropped.
 #>
 
 [CmdletBinding()]
@@ -27,6 +38,9 @@ param(
 
     [ValidateRange(127, 32768)]
     [int]$OsDiskSizeGiB = 127,
+
+    [ValidateRange(1, 1000)]
+    [int]$BastionHostsPerRegionLimit = 50,
 
     [ValidateRange(0.01, 1000000)]
     [decimal]$MaximumEstimatedMonthlyCostUsd
@@ -55,6 +69,19 @@ function Get-RetailPrice {
         [string]$Filter
     )
 
+    $Price = Get-OptionalRetailPrice -Filter $Filter
+    if ($null -eq $Price) {
+        throw "Azure Retail Prices returned no consumption price for filter: $Filter"
+    }
+    return $Price
+}
+
+function Get-OptionalRetailPrice {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Filter
+    )
+
     $EncodedFilter = [uri]::EscapeDataString($Filter)
     $Uri = "https://prices.azure.com/api/retail/prices?currencyCode=USD&`$filter=$EncodedFilter"
     $Response = Invoke-RestMethod -Uri $Uri
@@ -62,9 +89,34 @@ function Get-RetailPrice {
             $_.type -eq 'Consumption' -and $_.retailPrice -gt 0
         } | Sort-Object retailPrice | Select-Object -First 1)
     if ($Price.Count -ne 1) {
-        throw "Azure Retail Prices returned no consumption price for filter: $Filter"
+        return $null
     }
     return $Price[0]
+}
+
+function Get-UsageEntry {
+    <#
+    Azure returns different usage metric names per subscription and region, so match a
+    caller-supplied list of candidates and let the caller decide whether absence is fatal.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Usage,
+
+        [Parameter(Mandatory)]
+        [string[]]$Names
+    )
+
+    foreach ($Name in $Names) {
+        $Entry = $Usage |
+            Where-Object { $_.name.value -eq $Name } |
+            Select-Object -First 1
+        if ($null -ne $Entry) {
+            return $Entry
+        }
+    }
+    return $null
 }
 
 function Get-PremiumDiskSku {
@@ -99,13 +151,34 @@ $null = Invoke-AzureCliJson -Arguments @(
     $SubscriptionId
 )
 
+# Per participant: one Bastion host, one NAT gateway, one Bastion public IP, one NAT public IP.
+$PublicIpsPerParticipant = 2
+$NatGatewaysPerParticipant = 1
+$BastionHostsPerParticipant = 1
+
+$ExistingBastionHosts = @(
+    Invoke-AzureCliJson -Arguments @(
+        'network',
+        'bastion',
+        'list',
+        '--subscription',
+        $SubscriptionId
+    )
+)
+
 $TotalVmCount = $ParticipantCount * 2
 $TotalDiskCount = $ParticipantCount * 2
 $TotalDiskGiB = $TotalDiskCount * $OsDiskSizeGiB
+$TotalPublicIpCount = $ParticipantCount * $PublicIpsPerParticipant
+$TotalNatGatewayCount = $ParticipantCount * $NatGatewaysPerParticipant
+$TotalBastionHostCount = $ParticipantCount * $BastionHostsPerParticipant
 $MonthlyHours = 730
 $RegionalResults = @()
+$QuotaMetricsUnavailable = @()
+$PricesUnavailable = @()
 $TotalMonthlyCompute = [decimal]0
 $TotalMonthlyDisks = [decimal]0
+$TotalMonthlyNetwork = [decimal]0
 $PremiumDiskSku = Get-PremiumDiskSku -SizeGiB $OsDiskSizeGiB
 
 foreach ($Location in @($Locations | Select-Object -Unique)) {
@@ -191,6 +264,62 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
         throw "$Location requires $RegionVmCount Premium OS disks but only $PremiumDisksAvailable are available."
     }
 
+    $RequiredPublicIps = $ParticipantsInRegion * $PublicIpsPerParticipant
+    $RequiredNatGateways = $ParticipantsInRegion * $NatGatewaysPerParticipant
+    $RequiredBastionHosts = $ParticipantsInRegion * $BastionHostsPerParticipant
+
+    $NetworkUsage = @(
+        Invoke-AzureCliJson -Arguments @(
+            'network',
+            'list-usages',
+            '--subscription',
+            $SubscriptionId,
+            '--location',
+            $Location
+        )
+    )
+    $PublicIpQuota = Get-UsageEntry -Usage $NetworkUsage -Names @(
+        'StandardSkuPublicIpAddresses',
+        'PublicIPAddresses',
+        'StaticPublicIPAddresses'
+    )
+    $NatGatewayQuota = Get-UsageEntry -Usage $NetworkUsage -Names @(
+        'NatGateways',
+        'natGateways'
+    )
+
+    $PublicIpsAvailable = $null
+    if ($null -eq $PublicIpQuota) {
+        $QuotaMetricsUnavailable += "$Location`: Standard public IP addresses"
+    }
+    else {
+        $PublicIpsAvailable = [int]$PublicIpQuota.limit - [int]$PublicIpQuota.currentValue
+        if ($RequiredPublicIps -gt $PublicIpsAvailable) {
+            throw "$Location requires $RequiredPublicIps Standard public IP addresses (one Bastion plus one NAT gateway address per participant) but only $PublicIpsAvailable are available."
+        }
+    }
+
+    $NatGatewaysAvailable = $null
+    if ($null -eq $NatGatewayQuota) {
+        $QuotaMetricsUnavailable += "$Location`: NAT gateways"
+    }
+    else {
+        $NatGatewaysAvailable = [int]$NatGatewayQuota.limit - [int]$NatGatewayQuota.currentValue
+        if ($RequiredNatGateways -gt $NatGatewaysAvailable) {
+            throw "$Location requires $RequiredNatGateways NAT gateways but only $NatGatewaysAvailable are available."
+        }
+    }
+
+    # Azure exposes no Bastion usage metric, so compare deployed hosts against the configured
+    # regional ceiling instead.
+    $ExistingBastionHostsInRegion = @(
+        $ExistingBastionHosts | Where-Object { $_.location -eq $Location }
+    ).Count
+    $BastionHostsAvailable = $BastionHostsPerRegionLimit - $ExistingBastionHostsInRegion
+    if ($RequiredBastionHosts -gt $BastionHostsAvailable) {
+        throw "$Location requires $RequiredBastionHosts Azure Bastion hosts but only $BastionHostsAvailable of the $BastionHostsPerRegionLimit regional limit remain ($ExistingBastionHostsInRegion already deployed)."
+    }
+
     $ArmLocation = [string]$Sku[0].locations[0]
     $VmPrice = Get-RetailPrice -Filter (
         "serviceName eq 'Virtual Machines' and armRegionName eq '$ArmLocation' " +
@@ -202,46 +331,123 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
         "and armSkuName eq 'Premium_SSD_Managed_Disk_$PremiumDiskSku' " +
         "and meterName eq '$PremiumDiskSku LRS Disk' and priceType eq 'Consumption'"
     )
+    $BastionPrice = Get-OptionalRetailPrice -Filter (
+        "serviceName eq 'Azure Bastion' and armRegionName eq '$ArmLocation' " +
+        "and meterName eq 'Basic Gateway' and priceType eq 'Consumption'"
+    )
+    $PublicIpPrice = Get-OptionalRetailPrice -Filter (
+        "serviceName eq 'Virtual Network' and armRegionName eq '$ArmLocation' " +
+        "and meterName eq 'Standard IPv4 Static Public IP' and priceType eq 'Consumption'"
+    )
+    # NAT Gateway is billed from a single global meter rather than a regional one.
+    $NatGatewayPrice = Get-OptionalRetailPrice -Filter (
+        "serviceName eq 'NAT Gateway' and armRegionName eq 'Global' " +
+        "and skuName eq 'Standard' and meterName eq 'Standard Gateway' " +
+        "and priceType eq 'Consumption'"
+    )
+
     $MonthlyCompute = [decimal]$VmPrice.retailPrice * $MonthlyHours * $RegionVmCount
     $MonthlyDisks = [decimal]$DiskPrice.retailPrice * $RegionVmCount
+
+    $MonthlyBastion = [decimal]0
+    if ($null -eq $BastionPrice) {
+        $PricesUnavailable += "$Location`: Azure Bastion Basic gateway hour"
+    }
+    else {
+        $MonthlyBastion = [decimal]$BastionPrice.retailPrice * $MonthlyHours * $RequiredBastionHosts
+    }
+
+    $MonthlyPublicIps = [decimal]0
+    if ($null -eq $PublicIpPrice) {
+        $PricesUnavailable += "$Location`: Standard IPv4 static public IP hour"
+    }
+    else {
+        $MonthlyPublicIps = [decimal]$PublicIpPrice.retailPrice * $MonthlyHours * $RequiredPublicIps
+    }
+
+    $MonthlyNatGateways = [decimal]0
+    if ($null -eq $NatGatewayPrice) {
+        $PricesUnavailable += "$Location`: NAT gateway hour"
+    }
+    else {
+        $MonthlyNatGateways = [decimal]$NatGatewayPrice.retailPrice * $MonthlyHours * $RequiredNatGateways
+    }
+
+    $MonthlyNetwork = $MonthlyBastion + $MonthlyPublicIps + $MonthlyNatGateways
     $TotalMonthlyCompute += $MonthlyCompute
     $TotalMonthlyDisks += $MonthlyDisks
+    $TotalMonthlyNetwork += $MonthlyNetwork
 
     $RegionalResults += [pscustomobject]@{
-        location                = $Location
-        participants           = $ParticipantsInRegion
-        virtualMachines        = $RegionVmCount
-        vmFamily               = $Family
-        vcpusPerVm             = $VcpusPerVm
-        requiredVcpus          = $RequiredVcpus
-        regionalVcpusAvailable = $RegionalAvailable
-        familyVcpusAvailable   = $FamilyAvailable
+        location                 = $Location
+        participants             = $ParticipantsInRegion
+        virtualMachines          = $RegionVmCount
+        vmFamily                 = $Family
+        vcpusPerVm               = $VcpusPerVm
+        requiredVcpus            = $RequiredVcpus
+        regionalVcpusAvailable   = $RegionalAvailable
+        familyVcpusAvailable     = $FamilyAvailable
         virtualMachinesAvailable = $VirtualMachinesAvailable
-        premiumDisksAvailable  = $PremiumDisksAvailable
-        premiumDiskSku         = $PremiumDiskSku
-        monthlyComputeUsd      = [math]::Round($MonthlyCompute, 2)
-        monthlyOsDiskUsd       = [math]::Round($MonthlyDisks, 2)
+        premiumDisksAvailable    = $PremiumDisksAvailable
+        premiumDiskSku           = $PremiumDiskSku
+        requiredPublicIps        = $RequiredPublicIps
+        publicIpsAvailable       = $PublicIpsAvailable
+        requiredNatGateways      = $RequiredNatGateways
+        natGatewaysAvailable     = $NatGatewaysAvailable
+        requiredBastionHosts     = $RequiredBastionHosts
+        bastionHostsDeployed     = $ExistingBastionHostsInRegion
+        bastionHostsAvailable    = $BastionHostsAvailable
+        monthlyComputeUsd        = [math]::Round($MonthlyCompute, 2)
+        monthlyOsDiskUsd         = [math]::Round($MonthlyDisks, 2)
+        monthlyBastionUsd        = [math]::Round($MonthlyBastion, 2)
+        monthlyPublicIpUsd       = [math]::Round($MonthlyPublicIps, 2)
+        monthlyNatGatewayUsd     = [math]::Round($MonthlyNatGateways, 2)
+        monthlyNetworkUsd        = [math]::Round($MonthlyNetwork, 2)
     }
 }
 
-$TotalMonthly = $TotalMonthlyCompute + $TotalMonthlyDisks
+$TotalMonthly = $TotalMonthlyCompute + $TotalMonthlyDisks + $TotalMonthlyNetwork
 $Result = [pscustomobject]@{
-    subscriptionId           = $SubscriptionId
-    participants             = $ParticipantCount
-    virtualMachines          = $TotalVmCount
-    vmSize                   = $VmSize
-    vcpusPerVm               = $RegionalResults[0].vcpusPerVm
-    osDisks                  = $TotalDiskCount
-    osDiskGiB                = $TotalDiskGiB
-    estimatedMonthlyComputeUsd = [math]::Round($TotalMonthlyCompute, 2)
-    estimatedMonthlyOsDiskUsd  = [math]::Round($TotalMonthlyDisks, 2)
-    estimatedMonthlyTotalUsd   = [math]::Round($TotalMonthly, 2)
-    sharedFoundationExcluded = @('Azure Bastion', 'NAT Gateway', 'public IP addresses')
-    regions                  = $RegionalResults
+    subscriptionId               = $SubscriptionId
+    participants                 = $ParticipantCount
+    virtualMachines              = $TotalVmCount
+    vmSize                       = $VmSize
+    vcpusPerVm                   = $RegionalResults[0].vcpusPerVm
+    osDisks                      = $TotalDiskCount
+    osDiskGiB                    = $TotalDiskGiB
+    bastionHosts                 = $TotalBastionHostCount
+    natGateways                  = $TotalNatGatewayCount
+    publicIpAddresses            = $TotalPublicIpCount
+    perParticipantFootprint      = [pscustomobject]@{
+        virtualMachines   = 2
+        osDisks           = 2
+        bastionHosts      = $BastionHostsPerParticipant
+        natGateways       = $NatGatewaysPerParticipant
+        publicIpAddresses = $PublicIpsPerParticipant
+    }
+    bastionHostsPerRegionLimit   = $BastionHostsPerRegionLimit
+    estimatedMonthlyComputeUsd   = [math]::Round($TotalMonthlyCompute, 2)
+    estimatedMonthlyOsDiskUsd    = [math]::Round($TotalMonthlyDisks, 2)
+    estimatedMonthlyNetworkUsd   = [math]::Round($TotalMonthlyNetwork, 2)
+    estimatedMonthlyTotalUsd     = [math]::Round($TotalMonthly, 2)
+    quotaMetricsUnavailable      = @($QuotaMetricsUnavailable)
+    pricesUnavailable            = @($PricesUnavailable)
+    excludedFromEstimate         = @(
+        'Container Apps, managed databases, and container registries created during the workshop',
+        'Bastion, NAT gateway, and VM outbound data transfer',
+        'Microsoft Defender for Cloud plans'
+    )
+    regions                      = $RegionalResults
 }
 
 $Result | ConvertTo-Json -Depth 5
+if ($QuotaMetricsUnavailable.Count -gt 0) {
+    Write-Warning ("Azure did not expose these quota metrics; confirm them in the portal under Subscription > Usage + quotas: " + ($QuotaMetricsUnavailable -join '; '))
+}
+if ($PricesUnavailable.Count -gt 0) {
+    Write-Warning ("Azure Retail Prices returned no rate for these meters, so they are missing from the estimate; confirm them with the Azure Pricing Calculator: " + ($PricesUnavailable -join '; '))
+}
 if ($PSBoundParameters.ContainsKey('MaximumEstimatedMonthlyCostUsd') -and
     $TotalMonthly -gt $MaximumEstimatedMonthlyCostUsd) {
-    throw "Estimated monthly VM and OS-disk cost $TotalMonthly USD exceeds the configured ceiling $MaximumEstimatedMonthlyCostUsd USD."
+    throw "Estimated monthly VM, OS-disk, and network cost $TotalMonthly USD exceeds the configured ceiling $MaximumEstimatedMonthlyCostUsd USD."
 }

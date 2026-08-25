@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('Frozen P8 registry loaded by the subscription entry point.')
+@description('Frozen SRE Agent registry loaded by the subscription entry point.')
 param sreContract object
 
 @description('Azure SRE Agent resource name.')
@@ -38,7 +38,7 @@ param initialSponsorGroupId string
 @description('Supported agent deployment region.')
 param location string
 
-@description('Tags applied to dedicated P8 resources.')
+@description('Tags applied to dedicated SRE Agent resources.')
 param tags object
 
 var userAssignedIdentityName = 'id-${agentName}'

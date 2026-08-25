@@ -71,8 +71,9 @@ The selected stack follows exactly one path:
 3. **Copilot modernization** uses the pinned modernization/upgrade tooling and records
    assessment, tasks, and results.
 
-All paths target the checked-in implementations under `dotnet/` or `java/`. They differ
-in method and path evidence, not in target architecture or acceptance thresholds.
+All paths start from the legacy baselines under `dotnet/` or `java/` and converge on the
+modernized reference implementation under `solutions/reference/`. They differ in method
+and path evidence, not in target architecture or acceptance thresholds.
 
 ## Shared Azure target
 

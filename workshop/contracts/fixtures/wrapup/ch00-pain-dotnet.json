@@ -1,0 +1,26 @@
+{
+  "stack": "dotnet",
+  "measuredAtUtc": "2025-03-11T08:42:17.4210000Z",
+  "catalogMedianMs": 412.7,
+  "catalogSlowestMs": 1836.2,
+  "hostCpuCount": 4,
+  "hostMemoryGb": 16.0,
+  "applicationHosts": [
+    "dotnet"
+  ],
+  "databaseServices": [
+    "MSSQLSERVER=Running"
+  ],
+  "startupTasks": [
+    "MicroHack-CatalogApp=Ready"
+  ],
+  "imageFilesOnDisk": 198,
+  "configurationFile": "C:\\MicroHack\\secrets\\dotnet.json",
+  "onlyDiagnostics": "C:\\MicroHack\\logs\\dotnet-app.log",
+  "runningInstances": 1,
+  "autoscale": false,
+  "distributedTraces": false,
+  "manualDeploySteps": 14,
+  "manualRollbackSteps": 6,
+  "manualDeployWindow": "Saturday 22:00-02:00, change board approval required"
+}

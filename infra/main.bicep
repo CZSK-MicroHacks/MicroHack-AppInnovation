@@ -1,4 +1,4 @@
-targetScope = 'subscription'
+targetScope = 'resourceGroup'
 
 @description('Deployment stage. Bootstrap never creates a Container App.')
 @allowed([
@@ -39,10 +39,10 @@ param teamName string
 @description('Exact lowercase 40-hex source commit represented by this target.')
 param sourceCommit string
 
-@description('Exact P3 source VNet resource ID used by the migration runner.')
+@description('Exact source VNet resource ID used by the migration runner.')
 param migrationSourceVirtualNetworkResourceId string
 
-@description('Exact stack-specific P3 source VM resource ID used by catalog-migrate.')
+@description('Exact stack-specific source VM resource ID used by catalog-migrate.')
 param migrationSourceVmResourceId string
 
 @description('Application revision role. Bootstrap requires an empty value.')
@@ -114,19 +114,18 @@ assert migrationResourcesShareSubscription = toLower(sourceVirtualNetworkSegment
 assert migrationResourcesShareSourceScope = toLower(sourceVmSegments[4]) == toLower(sourceResourceGroupName)
 assert migrationVmMatchesStack = startsWith(toLower(last(sourceVmSegments)), isJava ? 'vm-java-' : 'vm-dotnet-')
 
-resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' = {
-  name: resourceGroupName
-  location: location
-  tags: {
-    workload: 'microhack-appinnovation'
-    participant: teamName
-    stack: stack
-  }
-}
+// The participant's resource group is created before the workshop, together with the two
+// legacy VMs, and the participant holds Owner on it. Creating it here would require
+// subscription-level rights nobody in the room has, so this template only fills it.
+assert deploysIntoTheParticipantResourceGroup = toLower(resourceGroupName) == toLower(resourceGroup().name)
+
+// The legacy VMs being migrated from live in that same group, so peering can only ever
+// reach the participant's own network. Without this, a mistyped or copied resource id
+// would aim the peering at somebody else's environment.
+assert migratesFromTheParticipantResourceGroup = toLower(sourceResourceGroupName) == toLower(resourceGroupName)
 
 module environment 'modules/environment.bicep' = {
-  name: 'environment-${uniqueString(resourceGroup.id, stack, imageProvider)}'
-  scope: resourceGroup
+  name: 'environment-${uniqueString(resourceGroup().id, stack, imageProvider)}'
   params: {
     deploymentStage: deploymentStage
     stack: stack

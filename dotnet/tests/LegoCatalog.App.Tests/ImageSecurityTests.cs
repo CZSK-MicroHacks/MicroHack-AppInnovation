@@ -1,6 +1,4 @@
 using LegoCatalog.App.Services;
-using Azure;
-using Azure.Storage.Blobs;
 
 namespace LegoCatalog.App.Tests;
 
@@ -23,17 +21,5 @@ public sealed class ImageSecurityTests
         Assert.True(
             LocalImageStore.IsCanonicalImageKey(
                 "10000000-0000-4000-8000-000000000001.png"));
-    }
-
-    [Fact]
-    public async Task BlobProviderRejectsNonCanonicalKeysWithoutNetworkAccess()
-    {
-        var client = new BlobContainerClient(
-            new Uri("https://example.blob.core.windows.net/catalog-images"),
-            new AzureSasCredential("sig=test"));
-        var store = new AzureBlobImageStore(client);
-
-        Assert.Null(
-            await store.ReadAsync("../catalog.json", CancellationToken.None));
     }
 }

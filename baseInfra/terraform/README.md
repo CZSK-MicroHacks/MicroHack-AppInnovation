@@ -30,7 +30,7 @@ module.
 | `capacity_preflight_confirmed` | `false` | Blocks resource creation until preflight succeeds |
 | `manage_entra_users` | `true` | Creates participant Entra users when enabled |
 | `entra_user_domain` | empty | Required when Entra user creation is enabled |
-| `entra_user_password` | empty, sensitive | Set with `TF_VAR_entra_user_password` |
+| `entra_user_password_length` | `24` | Length of the per-user initial password Terraform generates |
 | `manage_azure_resources` | `true` | Enables participant infrastructure |
 | `manage_sub_providers` | `true` | Enables explicit provider registration |
 | `enable_defender_foundation` | `false` | Opts in to the frozen paid Defender plans and subscription budget |
@@ -47,13 +47,53 @@ data is restricted to SYSTEM/Administrators after Windows provisioning but is no
 secret store, so use an encrypted, access-controlled remote backend and tightly restrict VM
 administrator access.
 
+## Participant sign-in credentials
+
+Terraform generates one `random_password` per participant and sets `force_password_change = true`,
+so every participant receives a different initial password and must change it at first sign-in.
+There is no shared workshop password to leak or reuse.
+
+Read the credentials only when you are ready to hand them out:
+
+```pwsh
+terraform output -json entra_user_credentials | ConvertFrom-Json
+```
+
+Distribute one row per participant over a private channel. Do not paste the whole map into a chat
+room: the participant user principal names are predictable (`userNNN@<domain>`), so one leaked
+password is enough to sign in as somebody else.
+
+## Remote state
+
+State holds every generated secret in clear text — participant passwords, database passwords, and
+performance keys — so a local `terraform.tfstate` file is not acceptable for a real cohort. This
+module declares a partial `azurerm` backend; you supply the storage account at init time.
+
+Bootstrap the state container once per subscription, then:
+
+```pwsh
+Copy-Item backend.hcl.example backend.hcl   # backend.hcl is git-ignored
+# edit backend.hcl with your storage account name
+terraform init -backend-config=backend.hcl
+```
+
+The full bootstrap procedure, including the storage-account settings that make the container safe
+to hold secrets, is in [`../../docs/Facilitator.md`](../../docs/Facilitator.md).
+
+Validation and formatting do not need a backend:
+
+```pwsh
+terraform init -backend=false
+terraform validate
+```
+
 ## Commands
 
 Run the exact preflight and source digest procedure in [`../README.md`](../README.md), then:
 
 ```pwsh
 Set-Location baseInfra/terraform
-terraform init
+terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan -var-file local.tfvars -out tfplan
 terraform apply tfplan

@@ -21,6 +21,15 @@ resource "terraform_data" "provisioner" {
   input = local.provisioner_sha256
 }
 
+# osProfile.customData cannot be updated after a VM is created, so a changed facilitator
+# identity has to replace the VM instead of producing a PUT that Azure rejects.
+resource "terraform_data" "facilitator_principal" {
+  input = sha256(join(":", [
+    var.facilitator_principal_name,
+    var.facilitator_principal_object_id
+  ]))
+}
+
 resource "azapi_resource" "vm" {
   for_each = local.stacks
 
@@ -70,8 +79,16 @@ resource "azapi_resource" "vm" {
   }
 
   lifecycle {
+    precondition {
+      # 87,380 base-64 characters is exactly 65,535 bytes, the documented maximum length of
+      # the binary array Azure decodes osProfile.customData into.
+      condition     = length(local.provisioner_custom_data[each.key]) <= 87380
+      error_message = "The rendered VM custom data exceeds the 65,535-byte Azure osProfile.customData limit. Shrink baseInfra/scripts/provision-vm.ps1 or compress it inside the bundle."
+    }
+
     replace_triggered_by = [
       terraform_data.provisioner,
+      terraform_data.facilitator_principal,
       random_password.database[each.key],
       random_password.performance_api_key[each.key]
     ]

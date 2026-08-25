@@ -1,21 +1,15 @@
-# Lego Catalog (.NET/SQL Server target)
+# Lego Catalog (.NET/SQL Server baseline)
 
-The modernized target is a .NET 10.0.11 Blazor Server monolith backed by local SQL
-Server 2022 or Azure SQL Database. It preserves the workshop UI while implementing shared contract
+The supported legacy baseline is a .NET 8 Blazor Server monolith backed by SQL
+Server 2022 Express. It preserves the workshop UI while implementing shared contract
 `1.1.0` for catalog browsing, search, category filtering, details, local images,
 transactional import, health, bounded performance work, and OpenTelemetry.
 
-## Workshop position
-
-Challenge 0 compares the pre-warmed .NET 8/SQL Server VM with the Java/PostgreSQL
-baseline. Selecting `dotnet-sqlserver` makes this directory the application source for
-exactly one [Challenge 1 path](../challenges/ch01/README.md). Every path targets the
-same `infra/main.bicep` deployment and must publish a valid modernization handoff before
-the shared operational chapters.
+The baseline intentionally contains no Dockerfile or student-facing cloud IaC.
 
 ## Prerequisites
 
-- .NET SDK 10.0.400
+- .NET SDK 8.0.424
 - SQL Server 2022 Express or another SQL Server 2022 instance
 - Canonical `data/catalog.json` and `data/images/`
 
@@ -30,28 +24,24 @@ Environment variables override the non-secret local defaults in `appsettings.jso
 | `CATALOG_DATABASE_NAME` | No | Database name; defaults to `LegoCatalog` |
 | `CATALOG_DATABASE_USERNAME` | Together with password | SQL login; omit both username and password for Windows integrated security |
 | `CATALOG_DATABASE_PASSWORD` | Together with username | SQL login secret supplied outside source control |
-| `CATALOG_DATABASE_AUTHENTICATION` | No | `local` (default) or `managed-identity`; Azure SQL managed identity forbids username/password |
-| `AZURE_CLIENT_ID` | Azure target | User-assigned workload identity client ID |
 | `CATALOG_IMAGES_PATH` | No | Canonical image directory |
-| `CATALOG_IMAGE_PROVIDER` | No | `local` (default) or `azure-blob` |
-| `CATALOG_BLOB_SERVICE_ENDPOINT` | Blob provider | HTTPS storage service endpoint |
-| `CATALOG_BLOB_CONTAINER` | Blob provider | Canonical image container |
 | `CATALOG_SEED_PATH` | No | Canonical `catalog.json` path |
 | `CATALOG_STARTUP_IMPORT_ENABLED` | No | `true` by default; applies the idempotent seed import |
 | `PERFTEST_API_KEY` | Yes | Non-default key for `GET /perftest/catalog` |
 | `PERFTEST_WORK_FACTOR` | No | Integer from 1 through 25; defaults to 10 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | Standard OTLP endpoint |
-| `OTEL_SERVICE_VERSION` | No | Deployed commit or immutable image version |
-| `DEPLOYMENT_ENVIRONMENT` | No | Must be `lab`; defaults to `lab` |
-| `CONTAINER_APP_REVISION` | No | Revision resource attribute; defaults to `local` |
+| `OTEL_SERVICE_VERSION` | Yes | Deployed commit or immutable image version; no fallback |
+| `DEPLOYMENT_ENVIRONMENT` | Yes | Must be `lab`; no fallback |
+| `CONTAINER_APP_REVISION` | Yes | Revision resource attribute; no fallback |
 
-No database password or performance API key is committed. Azure SQL managed identity uses
+No database password or performance API key is committed. Azure SQL hosts use
 encrypted certificate-validated connections; local SQL Server uses the local
 development trust mode.
 
-The Blob provider authenticates with the user-assigned managed identity and reads only
-canonical lowercase UUID PNG keys. Azure Files remains compatible with the unchanged
-local provider by mounting the share at `CATALOG_IMAGES_PATH`.
+Telemetry identity has no defaults. `OTEL_SERVICE_VERSION`, `CONTAINER_APP_REVISION`, and
+`DEPLOYMENT_ENVIRONMENT` must be supplied, otherwise startup fails. Later challenges assert
+that the running revision reports its true source commit, so a placeholder identity would
+silently break that evidence chain.
 
 ## Run on the workshop VM
 
@@ -62,6 +52,9 @@ then run from `dotnet/`:
 $env:PERFTEST_API_KEY = '<non-default-local-key>'
 $env:CATALOG_SEED_PATH = (Resolve-Path ..\data\catalog.json)
 $env:CATALOG_IMAGES_PATH = (Resolve-Path ..\data\images)
+$env:DEPLOYMENT_ENVIRONMENT = 'lab'
+$env:OTEL_SERVICE_VERSION = (git rev-parse HEAD)
+$env:CONTAINER_APP_REVISION = 'local-vm'
 dotnet run --project src\LegoCatalog.App\LegoCatalog.App.csproj
 ```
 
@@ -82,19 +75,6 @@ empty database, and let the contract migration reseed it from `data/catalog.json
 dotnet restore LegoCatalog.sln
 dotnet test LegoCatalog.sln --logger trx --results-directory evidence
 ```
-
-## Build the target container
-
-From the repository root:
-
-```bash
-docker buildx build --platform linux/amd64 --load \
-  -f dotnet/Dockerfile -t mh-dotnet:p4 .
-```
-
-The image is non-root, listens on port `8080`, contains the canonical seed JSON
-read-only, and expects database secrets and external image configuration at runtime.
-Set `CATALOG_STARTUP_IMPORT_ENABLED=false` after the migration report has passed.
 
 The native suite includes all fourteen degraded-state, conformance, and telemetry tests
 under the exact class-qualified identities consumed by the shared handoff validator. To
@@ -157,6 +137,3 @@ structured logs. Resource identity is fixed to:
 - Image 404 responses require an exact lowercase `<productId>.png` key and an existing
   file beneath `CATALOG_IMAGES_PATH`.
 - The app fails startup when `PERFTEST_API_KEY` or a bounded work factor is invalid.
-
-For cross-layer diagnosis, authorization boundaries, and evidence failures, use the
-repository [troubleshooting guide](../docs/Troubleshooting.md).

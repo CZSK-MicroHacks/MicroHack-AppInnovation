@@ -11,7 +11,7 @@ from catalog_acceptance.shared_challenges import validate_shared_challenge_evide
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Validate one P6 evidence bundle and print a machine-readable result."""
+    """Validate one shared-challenge evidence bundle and print a machine-readable result."""
     parser = argparse.ArgumentParser(
         description="Validate shared challenge evidence against a modernization handoff."
     )

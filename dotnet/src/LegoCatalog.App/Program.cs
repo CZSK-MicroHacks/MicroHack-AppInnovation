@@ -3,7 +3,6 @@ using LegoCatalog.App.Data;
 using LegoCatalog.App.Endpoints;
 using LegoCatalog.App.Middleware;
 using LegoCatalog.App.Services;
-using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
@@ -33,13 +32,7 @@ builder.Services.AddSingleton<StartupState>();
 builder.Services.AddSingleton<CatalogDocumentParser>();
 builder.Services.AddScoped<IFigureRepository, FigureRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-builder.Services.AddScoped<IImageStore>(
-    _ => runtime.ImageProvider switch
-    {
-        CatalogImageProvider.Local => new LocalImageStore(runtime),
-        CatalogImageProvider.AzureBlob => new AzureBlobImageStore(runtime),
-        _ => throw new InvalidOperationException("Unsupported catalog image provider."),
-    });
+builder.Services.AddScoped<IImageStore, LocalImageStore>();
 builder.Services.AddScoped<ICatalogDatabaseHealth, CatalogDatabaseHealth>();
 builder.Services.AddScoped<FigureCatalogService>();
 builder.Services.AddScoped<ImportService>();
@@ -53,15 +46,6 @@ var hasOtlpExporter = new[]
     "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
 }.Any(key => !string.IsNullOrWhiteSpace(builder.Configuration[key]));
-var azureMonitorConnectionString =
-    builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
-var hasAzureMonitorExporter =
-    !string.IsNullOrWhiteSpace(azureMonitorConnectionString);
-if (hasOtlpExporter && hasAzureMonitorExporter)
-{
-    throw new InvalidOperationException(
-        "OTLP and Azure Monitor exporters cannot both be configured.");
-}
 
 builder.Services
     .AddOpenTelemetry()
@@ -91,11 +75,6 @@ builder.Services
             {
                 metrics.AddOtlpExporter();
             }
-            if (hasAzureMonitorExporter)
-            {
-                metrics.AddAzureMonitorMetricExporter(
-                    options => options.ConnectionString = azureMonitorConnectionString);
-            }
         })
     .WithTracing(
         tracing =>
@@ -110,11 +89,6 @@ builder.Services
             {
                 tracing.AddOtlpExporter();
             }
-            if (hasAzureMonitorExporter)
-            {
-                tracing.AddAzureMonitorTraceExporter(
-                    options => options.ConnectionString = azureMonitorConnectionString);
-            }
         });
 
 builder.Logging.AddOpenTelemetry(
@@ -125,11 +99,6 @@ builder.Logging.AddOpenTelemetry(
         if (hasOtlpExporter)
         {
             logging.AddOtlpExporter();
-        }
-        if (hasAzureMonitorExporter)
-        {
-            logging.AddAzureMonitorLogExporter(
-                options => options.ConnectionString = azureMonitorConnectionString);
         }
     });
 

@@ -30,7 +30,7 @@
     {
       "kind": "sre-agent-incident",
       "path": "workshop/contracts/fixtures/sre-agent/incident.json",
-      "sha256": "893980549dd57d899eecc7b2f211fab2478151231e07b2173cca4c12733553dc"
+      "sha256": "fb9d97c88a240a6687978de2f935223186aeb3b5487be876cbbbc897cb356292"
     },
     {
       "kind": "sre-agent-cleanup",

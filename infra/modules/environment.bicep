@@ -31,7 +31,11 @@ var isBlob = imageProvider == 'azure-blob'
 var stackName = isJava ? 'java' : 'dotnet'
 var suffix = take(uniqueString(resourceGroup().id, stackName), 8)
 var baseName = 'mh-${teamName}-${stackName}'
-var compactName = take(replace('${teamName}${stackName}${suffix}', '-', ''), 20)
+// Truncate only the caller-controlled half so the 8-character uniqueness suffix always
+// survives: teamName (max 20) + stackName (max 6) would otherwise push the suffix past
+// the 20-character budget and produce colliding registry/storage account names.
+var compactPrefix = take(replace('${teamName}${stackName}', '-', ''), 12)
+var compactName = '${compactPrefix}${suffix}'
 var virtualNetworkName = 'vnet-${baseName}'
 var registryName = take('acr${compactName}', 50)
 var identityName = 'id-${baseName}'
@@ -484,8 +488,8 @@ var databaseOutput = isJava ? {
   server: sql!.outputs.serverHost
   database: sql!.outputs.databaseName
   authentication: sql!.outputs.authentication
-  localAdministratorPrincipal: sql!.outputs.localAdministratorPrincipal
-  entraAdministratorPrincipal: sql!.outputs.entraAdministratorPrincipal
+  localAdministratorPrincipal: sql!.outputs.?localAdministratorPrincipal
+  entraAdministratorPrincipal: sql!.outputs.?entraAdministratorPrincipal
   applicationPrincipal: sql!.outputs.applicationPrincipal
 }
 

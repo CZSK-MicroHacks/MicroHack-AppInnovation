@@ -16,7 +16,7 @@ The final repository/navigation boundary, including the Challenge 0 through Chal
 layout and removal of stale templates, is covered by:
 
 ```bash
-uv --no-config run pytest -q tests/test_p9_repository_reconciliation.py
+uv --no-config run pytest -q tests/test_repository_reconciliation.py
 ```
 
 If an incompatible user-level `uv.toml` prevents `uv` from starting, preserve that file and
@@ -69,7 +69,7 @@ export CATALOG_ACCEPTANCE_PROFILE="full"
 uv run pytest tests/test_live_application.py
 ```
 
-The P4 Azure SQL target is Entra-only. Run acceptance on the approved Windows
+The Azure SQL target is Entra-only. Run acceptance on the approved Windows
 source VM with the isolated facilitator profile and no SQL username/password
 values:
 
@@ -131,6 +131,60 @@ uv run python -m catalog_acceptance.handoff_cli \
 The command fails if the acceptance report is not a full passing run or if the source
 stack, database family, corpus counts, image verification, application URL, service
 identity, environment, version, or revision differs across the bundle.
+
+## Golden handoff rehearsal
+
+`golden-dryrun` rehearses the T-4 procedure in
+[`workshop/golden/README.md`](../../workshop/golden/README.md) against one stack bundle.
+Run it while there is still time to rebuild the bundle, not on the workshop morning:
+
+```bash
+uv --no-config run golden-dryrun ../../workshop/golden/dotnet-sqlserver
+```
+
+It walks seven steps — `locate-bundle`, `locate-contract`, `parse-contract`,
+`contract-fields`, `stack-match`, `declared-evidence`, `cross-field-checks` — printing
+elapsed wall-clock time for each, and stops at the **first** missing or malformed
+contract field rather than emitting every violation at once:
+
+```text
+  ok    locate-bundle             0.0ms  dotnet-sqlserver
+  ok    locate-contract           0.0ms  evidence/modernization-contract.json
+  ok    parse-contract            0.6ms  15 top-level members
+  FAIL  contract-fields           4.1ms
+
+FAIL  contract-fields: contract field /database/applicationPrincipal/principalId is missing
+```
+
+Exit `0` means the bundle is a usable rejoin path; the summary then prints the resource
+group, container app revision, and database the handoff points at, so you can confirm
+they are the facilitator-owned resources you intend to keep alive. Exit `1` means it is
+not. The last line of stdout is always a machine-readable verdict object.
+
+A bundle is its own validation root, because every slice in
+`workshop/contracts/challenge-paths.json` declares `evidence/modernization-contract.json`
+as required evidence. A complete bundle therefore looks like this:
+
+```text
+workshop/golden/dotnet-sqlserver/
+  data/manifest.json                   # copy of the canonical seed manifest
+  infra/                               # the IaC referenced by /deployment/iacPath
+  evidence/modernization-contract.json
+  evidence/acceptance-report.json
+  evidence/azure-target-output.json
+  evidence/migration-report.json
+  evidence/runtime-test-report.json
+  evidence/telemetry-report.json
+  evidence/rollback-runbook.md
+  evidence/<four path-evidence artifacts for the slice>
+```
+
+Use `--repository-root` to validate a handoff whose evidence lives elsewhere, and
+`--contracts` to point at a contracts directory other than the checked-in one.
+
+Nothing here is committed: `workshop/golden/*/modernization-contract.json` and
+`workshop/golden/*/evidence/` are ignored by Git, so a fresh clone always fails this
+command until a facilitator builds a bundle.
 
 ## Shared challenge evidence
 
@@ -199,7 +253,7 @@ uv --no-config run catalog-validate-sre-agent-evidence \
   --repository-root ../..
 ```
 
-The renderer binds the accepted P5 handoff and P6 CI/CD and observability reports
+The renderer binds the accepted Challenge 1 handoff and CI/CD and observability reports
 to the 2026 agent and connector resources, complete Resource Graph plus inherited
 RBAC inventories, a separate facilitator portal Review-plan export, the
 seed-and-rollback activity timeline, and the source-bound investigation. That
@@ -208,7 +262,7 @@ exceptions, database dependencies, and selected-database availability before
 the agent records its hypothesis, rejected alternatives, blast radius, and
 verification plan. Cleanup must verify every protected handoff resource with ARM
 before the post-deletion cost query. The independent validator also replays both
-shared P6 validators against their referenced raw evidence. Checked-in examples
+shared-challenge validators against their referenced raw evidence. Checked-in examples
 are sanitized contract fixtures, never live evidence.
 
 Run the focused shared-contract gate with:
@@ -216,20 +270,20 @@ Run the focused shared-contract gate with:
 ```bash
 uv --no-config run pytest -q \
   tests/test_contract_assets.py \
-  tests/test_p6_contracts.py \
-  tests/test_p6_load_renderer.py
+  tests/test_challenge_contracts.py \
+  tests/test_ch02_load_renderer.py
 ```
 
 Run the focused Defender contract gate with:
 
 ```bash
-uv --no-config run pytest -q tests/test_p7_defender_contracts.py
+uv --no-config run pytest -q tests/test_ch05_defender_contracts.py
 ```
 
 Run the focused SRE Agent contract gate with:
 
 ```bash
-uv --no-config run pytest -q tests/test_p8_sre_agent_contracts.py
+uv --no-config run pytest -q tests/test_ch06_sre_agent_contracts.py
 ```
 
 All paths declared by a handoff are repository-root-relative. Runtime evidence must be

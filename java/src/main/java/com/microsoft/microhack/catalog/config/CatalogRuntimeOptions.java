@@ -19,54 +19,12 @@ public record CatalogRuntimeOptions(
         String deploymentEnvironment,
         String revisionName,
         String serviceInstanceId,
-        String otlpEndpoint,
-        boolean azureMonitorEnabled,
-        DatabaseAuthentication databaseAuthentication,
-        ImageProvider imageProvider,
-        URI blobServiceEndpoint,
-        String blobContainerName,
-        String workloadIdentityClientId) {
+        String otlpEndpoint) {
 
     public static final String SERVICE_NAME = "mh-catalog-java";
     public static final String SERVICE_NAMESPACE = "app-innovation";
     public static final int DEFAULT_WORK_FACTOR = 10;
     public static final int MAXIMUM_WORK_FACTOR = 25;
-    public static final String POSTGRESQL_AUTHENTICATION_PLUGIN =
-            "com.azure.identity.extensions.jdbc.postgresql.AzurePostgresqlAuthenticationPlugin";
-
-    public CatalogRuntimeOptions(
-            String databaseHost,
-            String databaseName,
-            Path imagesPath,
-            Path seedPath,
-            boolean startupImportEnabled,
-            String performanceApiKey,
-            int performanceWorkFactor,
-            String serviceVersion,
-            String deploymentEnvironment,
-            String revisionName,
-            String serviceInstanceId,
-            String otlpEndpoint) {
-        this(
-                databaseHost,
-                databaseName,
-                imagesPath,
-                seedPath,
-                startupImportEnabled,
-                performanceApiKey,
-                performanceWorkFactor,
-                serviceVersion,
-                deploymentEnvironment,
-                revisionName,
-                serviceInstanceId,
-                otlpEndpoint,
-                false,
-                DatabaseAuthentication.PASSWORD_SECRET,
-                ImageProvider.LOCAL,
-                null,
-                null,
-                null);
-    }
 
     /** Reads and validates every application and resource variable. */
     public static CatalogRuntimeOptions from(Environment environment, String instanceId) {
@@ -74,41 +32,7 @@ public record CatalogRuntimeOptions(
         parsePort(environment.getProperty("CATALOG_DATABASE_PORT"));
         String databaseName = require(environment, "CATALOG_DATABASE_NAME");
         require(environment, "CATALOG_DATABASE_USERNAME");
-        DatabaseAuthentication databaseAuthentication =
-                parseDatabaseAuthentication(environment.getProperty(
-                        "CATALOG_DATABASE_AUTHENTICATION"));
-        String databasePassword = optional(environment, "CATALOG_DATABASE_PASSWORD");
-        String workloadIdentityClientId = optional(environment, "AZURE_CLIENT_ID");
-        if (databaseAuthentication == DatabaseAuthentication.PASSWORD_SECRET
-                && databasePassword == null) {
-            throw new IllegalStateException(
-                    "CATALOG_DATABASE_PASSWORD is required for password-secret authentication.");
-        }
-        if (databaseAuthentication == DatabaseAuthentication.MANAGED_IDENTITY) {
-            if (databasePassword != null) {
-                throw new IllegalStateException(
-                        "Managed identity database authentication forbids CATALOG_DATABASE_PASSWORD.");
-            }
-            if (workloadIdentityClientId == null) {
-                throw new IllegalStateException(
-                        "AZURE_CLIENT_ID is required for managed identity database authentication.");
-            }
-        }
-
-        ImageProvider imageProvider = parseImageProvider(
-                environment.getProperty("CATALOG_IMAGE_PROVIDER"));
-        URI blobServiceEndpoint = null;
-        String blobContainerName = null;
-        if (imageProvider == ImageProvider.AZURE_BLOB) {
-            blobServiceEndpoint = parseHttpsEndpoint(
-                    require(environment, "CATALOG_BLOB_SERVICE_ENDPOINT"),
-                    "CATALOG_BLOB_SERVICE_ENDPOINT");
-            blobContainerName = require(environment, "CATALOG_BLOB_CONTAINER");
-            if (workloadIdentityClientId == null) {
-                throw new IllegalStateException(
-                        "AZURE_CLIENT_ID is required for the Azure Blob image provider.");
-            }
-        }
+        require(environment, "CATALOG_DATABASE_PASSWORD");
 
         String deploymentEnvironment = require(environment, "DEPLOYMENT_ENVIRONMENT");
         if (!"lab".equals(deploymentEnvironment)) {
@@ -117,18 +41,6 @@ public record CatalogRuntimeOptions(
         String apiKey = require(environment, "PERFTEST_API_KEY");
         if (apiKey.length() > 1024) {
             throw new IllegalStateException("PERFTEST_API_KEY must not exceed 1024 characters.");
-        }
-        String otlpEndpoint = optional(environment, "OTEL_EXPORTER_OTLP_ENDPOINT");
-        String applicationInsightsConnectionString =
-                optional(environment, "APPLICATIONINSIGHTS_CONNECTION_STRING");
-        if (otlpEndpoint != null && applicationInsightsConnectionString != null) {
-            throw new IllegalStateException(
-                    "OTLP and Azure Monitor exporters cannot both be configured.");
-        }
-        if (otlpEndpoint == null && applicationInsightsConnectionString == null) {
-            throw new IllegalStateException(
-                    "OTEL_EXPORTER_OTLP_ENDPOINT or APPLICATIONINSIGHTS_CONNECTION_STRING "
-                            + "is required.");
         }
         return new CatalogRuntimeOptions(
                 databaseHost,
@@ -144,13 +56,7 @@ public record CatalogRuntimeOptions(
                 deploymentEnvironment,
                 bounded(require(environment, "CONTAINER_APP_REVISION"), "CONTAINER_APP_REVISION", 128),
                 bounded(Objects.requireNonNull(instanceId), "service.instance.id", 128),
-                otlpEndpoint == null ? null : parseEndpoint(otlpEndpoint),
-                applicationInsightsConnectionString != null,
-                databaseAuthentication,
-                imageProvider,
-                blobServiceEndpoint,
-                blobContainerName,
-                workloadIdentityClientId);
+                parseEndpoint(require(environment, "OTEL_EXPORTER_OTLP_ENDPOINT")));
     }
 
     /** Parses the bounded performance work factor. */
@@ -206,33 +112,6 @@ public record CatalogRuntimeOptions(
         return bounded(environment.getProperty(name), name, 4096);
     }
 
-    private static String optional(Environment environment, String name) {
-        String value = environment.getProperty(name);
-        return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private static DatabaseAuthentication parseDatabaseAuthentication(String value) {
-        if (value == null || value.isBlank() || "password-secret".equals(value)) {
-            return DatabaseAuthentication.PASSWORD_SECRET;
-        }
-        if ("managed-identity".equals(value)) {
-            return DatabaseAuthentication.MANAGED_IDENTITY;
-        }
-        throw new IllegalStateException(
-                "CATALOG_DATABASE_AUTHENTICATION must be password-secret or managed-identity.");
-    }
-
-    private static ImageProvider parseImageProvider(String value) {
-        if (value == null || value.isBlank() || "local".equals(value)) {
-            return ImageProvider.LOCAL;
-        }
-        if ("azure-blob".equals(value)) {
-            return ImageProvider.AZURE_BLOB;
-        }
-        throw new IllegalStateException(
-                "CATALOG_IMAGE_PROVIDER must be local or azure-blob.");
-    }
-
     private static String bounded(String value, String name, int maximumLength) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(name + " is required.");
@@ -245,40 +124,18 @@ public record CatalogRuntimeOptions(
     }
 
     private static String parseEndpoint(String value) {
-        return parseHttpsOrHttpEndpoint(value, "OTEL_EXPORTER_OTLP_ENDPOINT").toString();
-    }
-
-    private static URI parseHttpsEndpoint(String value, String name) {
-        URI uri = parseHttpsOrHttpEndpoint(value, name);
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IllegalStateException(name + " must use HTTPS.");
-        }
-        return uri;
-    }
-
-    private static URI parseHttpsOrHttpEndpoint(String value, String name) {
         try {
             URI uri = new URI(value);
             if (!uri.isAbsolute()
                     || (!"http".equalsIgnoreCase(uri.getScheme())
                     && !"https".equalsIgnoreCase(uri.getScheme()))) {
                 throw new IllegalStateException(
-                        name + " must be an absolute HTTP(S) URI.");
+                        "OTEL_EXPORTER_OTLP_ENDPOINT must be an absolute HTTP(S) URI.");
             }
-            return uri;
+            return uri.toString();
         } catch (URISyntaxException exception) {
             throw new IllegalStateException(
-                    name + " must be an absolute HTTP(S) URI.", exception);
+                    "OTEL_EXPORTER_OTLP_ENDPOINT must be an absolute HTTP(S) URI.", exception);
         }
-    }
-
-    public enum DatabaseAuthentication {
-        PASSWORD_SECRET,
-        MANAGED_IDENTITY
-    }
-
-    public enum ImageProvider {
-        LOCAL,
-        AZURE_BLOB
     }
 }

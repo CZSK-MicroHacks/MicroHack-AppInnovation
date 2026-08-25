@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('Frozen P8 registry loaded by the subscription entry point.')
+@description('Frozen SRE Agent registry loaded by the subscription entry point.')
 param sreContract object
 
 @description('Existing handoff Container App name.')

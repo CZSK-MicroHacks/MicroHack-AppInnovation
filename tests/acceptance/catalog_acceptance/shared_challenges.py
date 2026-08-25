@@ -436,7 +436,7 @@ def render_observability_queries(
     handoff: dict[str, Any],
     contracts_directory: Path,
 ) -> dict[str, dict[str, str]]:
-    """Render exact P6 KQL and hashes from frozen templates.
+    """Render exact shared-challenge KQL and hashes from frozen templates.
 
     Args:
         evidence: Schema-valid observability evidence containing the query window.
@@ -2020,7 +2020,7 @@ def validate_shared_challenge_evidence(
     contracts_directory: Path,
     repository_root: Path,
 ) -> dict[str, Any]:
-    """Validate one P6 evidence bundle and all referenced observations.
+    """Validate one shared-challenge evidence bundle and all referenced observations.
 
     Args:
         kind: Shared challenge evidence kind.

@@ -158,6 +158,19 @@
       "sha256": "ab9d66e7d8537401d5bd734086daf80f60a9b7fe1ace9cb78470741e7bbaccf5",
       "signaturePublisher": "Microsoft Corporation"
     },
+    "git": {
+      "version": "2.55.0.windows.5",
+      "architecture": "x64",
+      "url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.5/Git-2.55.0.5-64-bit.exe",
+      "sha256": "d065a4e23c3d9a6b5073d609b5be0830227ec3ca053c083ba385061ddfaf94c6",
+      "signaturePublisher": "Johannes Schindelin"
+    },
+    "jq": {
+      "version": "1.7.1",
+      "architecture": "x64",
+      "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",
+      "sha256": "7451fbbf37feffb9bf262bd97c54f0da558c63f0748e64152dd87b0a07b6d6ab"
+    },
     "bicep": {
       "version": "0.43.8"
     },

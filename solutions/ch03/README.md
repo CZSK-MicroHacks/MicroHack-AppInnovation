@@ -1,7 +1,17 @@
 # Challenge 3 solution: OIDC, immutable revisions, and evidence
 
+**Open this when** you have attempted [Challenge 3](../../challenges/ch03/README.md) and
+need the exact provisioning, capture, and normalization commands — or when you are
+facilitating and need to run the RBAC capture yourself.
+
 The checked-in workflows implement the bounded lifecycle. Do not turn them into a
 general deployment platform and do not use the example JSON as behavioral proof.
+
+**Facilitator prerequisite.** The approval gate depends on a protected `production`
+environment with required reviewers. GitHub does not offer deployment protection rules on
+**private repositories on the Free plan** — the workshop repository must be public, or on
+GitHub Team or GitHub Enterprise Cloud. Confirm this before the session; see
+[the facilitator guide](../../docs/Facilitator.md).
 
 ## 1. Provision the bounded identity
 
@@ -15,6 +25,31 @@ The template creates only:
 - `AcrPush` on the exact ACR; and
 - `Container Apps Contributor` on the exact Container App.
 
+Read the three required values straight out of the validated handoff rather than retyping
+them — the template asserts each ID's shape, subscription, and resource group, so a
+hand-copied value fails the deployment instead of producing a subtly wrong identity:
+
+```bash
+HANDOFF=evidence/modernization-contract.json
+APPLICATION_RESOURCE_GROUP=$(jq -r '.application.resourceGroup' "$HANDOFF")
+CONTAINER_APP_RESOURCE_ID=$(jq -r '.application.resourceId' "$HANDOFF")
+CONTAINER_REGISTRY_RESOURCE_ID=$(jq -r '.containerImage.registryResourceId' "$HANDOFF")
+: "${GITHUB_REPOSITORY:?set this to your fork in owner/repository form, e.g. contoso/MicroHack-AppInnovation}"
+
+az deployment group create \
+  --resource-group "$APPLICATION_RESOURCE_GROUP" \
+  --template-file infra/github-cicd.bicep \
+  --parameters \
+    githubRepository="$GITHUB_REPOSITORY" \
+    containerRegistryResourceId="$CONTAINER_REGISTRY_RESOURCE_ID" \
+    containerAppResourceId="$CONTAINER_APP_RESOURCE_ID"
+```
+
+`GITHUB_REPOSITORY` is the fork in exact `owner/repository` form — the same string that
+appears in the fork's URL. It is not the upstream workshop repository: the federated
+credential subjects are built from it, so pointing it at upstream produces an identity
+that no run of yours can ever assume.
+
 Create GitHub environments named `staging` and `production`, with required reviewers
 only on `production`, and set these variables in both environments:
 
@@ -23,6 +58,11 @@ only on `production`, and set these variables in both environments:
 | `AZURE_CLIENT_ID` | `identityClientId` |
 | `AZURE_TENANT_ID` | tenant containing the UAMI |
 | `AZURE_SUBSCRIPTION_ID` | subscription shared by the UAMI, ACR, and app |
+
+Required reviewers live under **Settings → Environments → production → Deployment
+protection rules**:
+
+![GitHub repository settings showing the production environment's deployment protection rules, with Required reviewers enabled and one reviewer listed](../../images/ch03-env-approval.png)
 
 Retain `identityResourceId` for the facilitator capture.
 
@@ -43,6 +83,10 @@ The protected production environment establishes this order:
 
 `staging complete -> approval recorded -> production starts -> promotion -> rollback`
 
+The reviewer approves from the run page, through **Review deployments**:
+
+![GitHub Actions run paused with the Review pending deployments dialog open, production selected, and Approve and deploy ready to click](../../images/ch03-approval.png)
+
 The production shell trap is armed before promotion. Both the normal success path and
 failure path attempt rollback; successful evidence additionally proves promotion and
 rollback while both revisions remain active and healthy.
@@ -55,10 +99,10 @@ running.
 
 ```bash
 set -Eeuo pipefail
-REPO="<owner>/<repository>"
-RUN_ID="<run-id>"
-RUN_ATTEMPT="<run-attempt>"
-STACK="<dotnet|java>"
+: "${REPO:?Your fork in owner/repository form}"
+: "${RUN_ID:?The run ID of the successful production run}"
+: "${RUN_ATTEMPT:?The attempt number of that run}"
+: "${STACK:?Either dotnet or java}"
 WORKFLOW=".github/workflows/catalog-${STACK}.yml"
 ARTIFACT="catalog-${STACK}-cicd-${RUN_ID}-${RUN_ATTEMPT}-production"
 
@@ -400,3 +444,46 @@ uv --no-config run catalog-validate-challenge-evidence cicd \
 The common CLI validates the control-commit handoff hash, immutable run/job identities,
 external RBAC capture, raw revision hashes, source-tag/digest/candidate binding, and the
 full staging-approval-production-promotion-rollback timestamp order.
+
+## 6. Read the two headline numbers out of the report
+
+The report already contains every timestamp needed for the chapter's business case. This
+is read-only — it changes no evidence:
+
+```bash
+jq -r '
+  (.workflow.jobs.staging.startedAt | fromdateiso8601) as $commit
+  | (.workflow.jobs.staging.completedAt | fromdateiso8601) as $ready
+  | (.approval.approvedAt | fromdateiso8601) as $approved
+  | (.traffic.promotion.observedAt | fromdateiso8601) as $live
+  | (.traffic.safety.rollbackAttemptedAt | fromdateiso8601) as $undoStart
+  | (.traffic.safety.rollbackCompletedAt | fromdateiso8601) as $undoEnd
+  | "deployment lead time (commit to live): \(((($live - $commit) / 60) * 10 | round) / 10) min",
+    "  of which pipeline work:              \((((($ready - $commit) + ($live - $approved)) / 60) * 10 | round) / 10) min",
+    "  of which waiting for a human:        \(((($approved - $ready) / 60) * 10 | round) / 10) min",
+    "rollback duration:                     \(((($undoEnd - $undoStart) / 60) * 10 | round) / 10) min"
+' evidence/cicd-report.json
+```
+
+Facilitators: collect these two figures from each team. Deployment lead time and rollback
+duration against a manual weekend release are the numbers participants take back to their
+own organizations.
+
+## If it goes wrong
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Production runs without pausing for approval | No required reviewers on the `production` environment — commonly because the repository is private on GitHub Free, where deployment protection rules are unavailable | Make the repository public, or move it to GitHub Team / Enterprise Cloud, then re-add reviewers. See [the facilitator guide](../../docs/Facilitator.md) |
+| OIDC login fails with no matching federated identity record | The subject does not match `repo:<owner>/<repository>:environment:<name>` for the job's declared environment | Compare `az identity federated-credential list` output to the job's `environment:` value exactly |
+| ACR push or Container App update is denied | Role assignments landed at the wrong scope, or RBAC has not propagated | Verify `AcrPush` on the exact registry and `Container Apps Contributor` on the exact Container App, then retry |
+| The role-assignment capture returns more or fewer than two entries | A broader role exists at resource-group or subscription scope, or the assignee object ID is wrong | Remove the extra assignment and re-capture; the `length == 2` assertion is the point of the exercise |
+| Normalization produces a null approval | Approvals were captured before the reviewer acted, or from the wrong run attempt | Re-run the `gh api .../approvals` capture against the completed attempt |
+
+The broader diagnostic workflow is in
+[the troubleshooting guide](../../docs/Troubleshooting.md).
+
+---
+
+**Back to** [Challenge 3: deploy without a weekend](../../challenges/ch03/README.md)
+**Previous solution:** [Challenge 2 solution](../ch02/README.md) ·
+**Next solution:** [Challenge 4 solution](../ch04/README.md)

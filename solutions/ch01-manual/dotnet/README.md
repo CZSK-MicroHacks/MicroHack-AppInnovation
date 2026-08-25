@@ -1,32 +1,137 @@
 # Manual .NET to Azure SQL modernization
 
+**Open this if** you chose [Path 1A: modernize it by hand](../../../challenges/ch01-manual/README.md)
+with the .NET/SQL Server baseline and want the complete executable form of a step, you
+are stuck, or you are out of time. Working through it end to end takes 5–8 hours — the
+same as the challenge, because this *is* the challenge with every command filled in.
+
+Read the challenge first if you have not. This runbook gives you the answers; the
+challenge is where the learning is.
+
 This runbook implements registry slice `manual-dotnet`. Run repository commands from the
 repository root unless a step explicitly changes directory. Azure and migration commands
-run on the existing .NET P3 source VM so the frozen topology guard can verify the host.
+run on the existing .NET legacy source VM from Challenge 0 so the frozen topology guard
+can verify the host.
+
+## Where you work
+
+Every command here runs on the selected VM from Challenge 0, reached over Azure Bastion.
+The source tree is at `C:\MicroHack\source`, extracted from a verified archive by the
+provisioner. **That directory is what "the repository root" means in this and every other
+workshop document.** Start each terminal with:
+
+```powershell
+cd C:\MicroHack\source
+```
+
+The VM ships a deliberately small, fully pinned toolchain. Pinned Git for Windows is part
+of it, so `C:\MicroHack\source` is a real working tree: because the source arrives as a
+verified archive rather than a clone, the provisioner initializes a repository there and
+makes one baseline commit. There is **no Docker daemon**. Three things this runbook needs,
+and where each comes from:
+
+| You need | Use this on the VM |
+| --- | --- |
+| the commit that identifies your work | `git rev-parse HEAD`, taken after [Publish your work to GitHub](#publish-your-work-to-github) below. Every `--source-commit` argument, image tag, and revision suffix here carries it, and Challenge 3 checks the application source out of your repository at exactly this SHA. |
+| the upstream archive this VM was built from | the marker file `C:\MicroHack\source\.source-commit`, written by the provisioner when it extracts the source archive. It is provenance only: GitHub has never seen that commit, so nothing here builds, deploys, or reports with it. |
+| a container image build | the remote `az acr` build used in step 5 — it uploads the build context and builds inside Azure Container Registry, so no local daemon is required |
 
 ## Preconditions and protected inputs
 
 The source VM must contain the exact repository commit, the provisioned locked tools, and
-an authenticated isolated facilitator profile. A facilitator must prepare these protected
-files outside the repository:
+an authenticated isolated facilitator profile. It must also already contain the three
+protected parameter files this slice deploys with, under `C:\protected\`:
 
-- a bootstrap parameter file for `infra/main.bicep` with `deploymentStage=bootstrap`,
-  `stack=dotnet-sqlserver`, `imageProvider=azure-files`, the exact source VM/VNet IDs,
-  `applicationRevisionRole=""`, and the exact source commit;
-- baseline and release application parameter files with the same values, the same
-  immutable image digest, `applicationRevisionRole=baseline` or `release`, and secure
-  application inputs.
+| File | What it selects |
+| --- | --- |
+| `manual-dotnet-bootstrap.json` | `deploymentStage=bootstrap`, `applicationRevisionRole=""` |
+| `manual-dotnet-baseline.json` | `deploymentStage=application`, `applicationRevisionRole=baseline` |
+| `manual-dotnet-release.json` | `deploymentStage=application`, `applicationRevisionRole=release` |
+
+You do not write these. The facilitator's provisioning wrote them on this VM before the
+workshop started, because they carry the only values that were knowable then: your
+`resourceGroupName` and `teamName`, the exact `migrationSourceVmResourceId` and
+`migrationSourceVirtualNetworkResourceId`, `facilitatorPrincipalName` and
+`facilitatorPrincipalObjectId`, the `performanceApiKey` the application stage asserts on,
+and this slice's fixed `stack=dotnet-sqlserver`/`imageProvider=azure-files` selection.
+Each is a standard ARM parameter document. They are inputs; never copy one into the
+repository.
+
+Two parameters are deliberately **absent** from them: `sourceCommit` and `imageDigest`.
+Neither exists until you publish and build, and a placeholder that satisfied the
+template's format assert would silently deploy the wrong source. You pass both on the
+command line instead, and every deployment below does — a later `--parameters` overrides
+the file.
+
+Every one of the three files sets `resourceGroupName` to your own resource group.
+`infra/main.bicep` asserts that `resourceGroupName` equals the group it is deployed into,
+so a file naming anywhere else is refused before a single resource is touched.
 
 The facilitator makes `PERFTEST_API_KEY` available only in the process that needs it.
 Acquire migration passwords through the protected prompt immediately before their one
 permitted command. Do not continue if a secret appears in command history or a checked-in
 file.
 
+### Publish your work to GitHub
+
+Challenge 3 checks the application source out of **your own** GitHub repository at the
+commit the handoff records, and builds `dotnet/Dockerfile` from that checkout. A commit
+that exists only on this VM satisfies neither, so publish before you record any identity.
+Author `dotnet/Dockerfile` first — step 5 states exactly what it must contain — then run
+this from `C:\MicroHack\source`:
+
+```powershell
+git add --all
+git commit -m 'Complete manual modernization slice manual-dotnet'
+if (git status --porcelain) {
+  throw 'commit everything before recording the source commit'
+}
+$ParticipantRepositoryUrl = '<facilitator-provided-https-url-of-your-repository>'
+if ((git remote) -contains 'origin') {
+  git remote set-url origin $ParticipantRepositoryUrl
+}
+else {
+  git remote add origin $ParticipantRepositoryUrl
+}
+git push --set-upstream origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'publishing the workshop branch failed' }
+$SourceCommit = (git rev-parse HEAD).Trim()
+if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+  throw 'the published source commit must be an exact lowercase 40-hex SHA'
+}
+```
+
+The first push opens a browser sign-in through Git Credential Manager. Sign in as the
+account that owns the repository; the credential is reused by every later push. Re-running
+the block is safe — `git remote set-url` replaces an existing `origin` rather than failing.
+
+`$SourceCommit` is now the pushed commit. It is what the handoff records as
+`source.commitSha`, what Challenge 3 checks out, and what every `--source-commit`
+argument, image tag, and revision suffix below carries. Every deployment below adds it as
+`--parameters sourceCommit=$SourceCommit`, because the protected files cannot carry a
+commit that did not exist when they were written, and step 3 fails closed if the deployed
+target reports anything else.
+
+The block below also reads `$ResourceGroup` out of the protected bootstrap parameters,
+which already carry `resourceGroupName`. You deploy into the resource group you already
+own — the one the facilitator created before the workshop, holding your two legacy VMs.
+`infra\main.bicep` is resource-group scoped, does not create a resource group, and asserts
+that its `resourceGroupName` matches the group it is deployed into. Nothing on this path
+deploys at subscription scope, which is what keeps your rights to Owner on that one group.
+
 ```powershell
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
-$SourceCommit = (git rev-parse HEAD).Trim()
+$ResourceGroup = (Get-Content 'C:\protected\manual-dotnet-bootstrap.json' -Raw |
+  ConvertFrom-Json).parameters.resourceGroupName.value
+if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
+  throw 'the protected parameters must name your participant resource group'
+}
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$DatabaseArtifact = 'C:\protected\manual-dotnet\catalog.bacpac'
+# The export writes this file, so it cannot live under C:\protected: that folder holds the
+# facilitator-supplied parameters and grants you read only. This is the same
+# participant-writable location every path uses.
+$DatabaseArtifact = 'C:\ProgramData\MicroHack\migration\catalog.bacpac'
+New-Item -ItemType Directory -Force (Split-Path $DatabaseArtifact) | Out-Null
 function Read-ProtectedValue {
   param([string]$Prompt)
 
@@ -43,7 +148,10 @@ function Read-ProtectedValue {
   return $Value
 }
 if ($SourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'immutable source commit required' }
-if (git status --porcelain) { throw 'source worktree must be clean' }
+$Smoke = Get-Content 'C:\MicroHack\status\dotnet-smoke.json' -Raw | ConvertFrom-Json
+if ($Smoke.stack -cne 'dotnet' -or $Smoke.figures -ne 198 -or $Smoke.categories -ne 20) {
+  throw 'the provisioned application did not pass its baseline smoke checks'
+}
 New-Item -ItemType Directory -Force evidence, evidence\transient, evidence\telemetry |
   Out-Null
 cd tests\acceptance
@@ -87,8 +195,8 @@ success. Resolve it before creating or mutating a target.
 
 ## 2. Review and bootstrap Azure SQL
 
-Build and review the shared P4 IaC. The protected files are inputs; never copy them into
-the repository.
+Build and review the shared target IaC. The protected files are inputs; never copy them
+into the repository.
 
 ```powershell
 az bicep version
@@ -96,10 +204,11 @@ az bicep build --file infra\main.bicep
 Get-ChildItem infra\modules\*.bicep | ForEach-Object {
   az bicep build --file $_.FullName
 }
-az deployment sub what-if `
-  --location swedencentral `
+az deployment group what-if `
+  --resource-group $ResourceGroup `
   --template-file infra\main.bicep `
-  --parameters '@C:\protected\manual-dotnet-bootstrap.json'
+  --parameters '@C:\protected\manual-dotnet-bootstrap.json' `
+  --parameters sourceCommit=$SourceCommit
 ```
 
 Record the reviewed what-if, private endpoints, source/target peering, private DNS links,
@@ -107,11 +216,12 @@ Entra-only Azure SQL, Azure Files share, ACR, observability, and absent bootstra
 Container App in `evidence/iac-review.md`. After explicit approval:
 
 ```powershell
-$TargetJson = az deployment sub create `
+$TargetJson = az deployment group create `
   --name "manual-dotnet-bootstrap-$($SourceCommit.Substring(0,12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra\main.bicep `
   --parameters '@C:\protected\manual-dotnet-bootstrap.json' `
+  --parameters sourceCommit=$SourceCommit `
   --query properties.outputs.targetOutput.value `
   --output json
 if ($LASTEXITCODE -ne 0) { throw 'bootstrap deployment failed' }
@@ -238,6 +348,12 @@ In a second source-VM terminal, obtain the short-lived SQL access token and prom
 the canonical performance key without echoing it. Process-scoped variables from the
 application terminal are deliberately not reused:
 
+> Both terminals must name the same source commit. This one reads it back with
+> `git rev-parse HEAD`, which returns the commit you published in *Publish your work to
+> GitHub*. This runbook changes no code after that point, so the two terminals agree by
+> construction. Do not substitute the `.source-commit` marker here: that is archive
+> provenance, and Challenge 3 cannot check it out.
+
 ```powershell
 function Read-ProtectedValue {
   param([string]$Prompt)
@@ -304,7 +420,7 @@ acceptance against Azure SQL.
 
 ## 5. Build and resolve the immutable ACR digest
 
-The checked-in `dotnet/Dockerfile` uses digest-pinned build/runtime images and numeric
+The `dotnet/Dockerfile` you author uses digest-pinned build/runtime images and numeric
 non-root user `1654`. Build from the repository root and tag only with the full commit.
 
 ```powershell
@@ -340,17 +456,20 @@ check, read-only seed, and `/app/images` Azure Files mount expectation in
 
 ## 6. Deploy baseline and release by the same digest
 
-The facilitator places `$ImageDigest` in both protected application parameter files.
-Run what-if for each and verify the image is
+Both protected application files already carry everything except the two values that did
+not exist when they were written, so each deployment below adds
+`sourceCommit=$SourceCommit` and `imageDigest=$ImageDigest`. Run what-if for each and
+verify the image is
 `$Target.containerRegistry.loginServer/catalog-dotnet@$ImageDigest`.
 After approval, deploy baseline and then release:
 
 ```powershell
-$BaselineTargetJson = az deployment sub create `
+$BaselineTargetJson = az deployment group create `
   --name "manual-dotnet-baseline-$($SourceCommit.Substring(0,12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra\main.bicep `
   --parameters '@C:\protected\manual-dotnet-baseline.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
   --query properties.outputs.targetOutput.value `
   --output json
 if ($LASTEXITCODE -ne 0) { throw 'baseline deployment failed' }
@@ -385,11 +504,12 @@ if ($BaselineHealth.StatusCode -ne 200 -or $BaselineReadiness.StatusCode -ne 200
   throw 'baseline health or readiness failed'
 }
 
-$ReleaseTargetJson = az deployment sub create `
+$ReleaseTargetJson = az deployment group create `
   --name "manual-dotnet-release-$($SourceCommit.Substring(0,12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra\main.bicep `
   --parameters '@C:\protected\manual-dotnet-release.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
   --query properties.outputs.targetOutput.value `
   --output json
 if ($LASTEXITCODE -ne 0) { throw 'release deployment failed' }
@@ -634,7 +754,35 @@ Remove-Item Env:PERFTEST_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:SQLCMDACCESS_TOKEN -ErrorAction SilentlyContinue
 ```
 
+The handoff itself is not yet on GitHub. Challenge 3 reads
+`evidence/modernization-contract.json` from the commit it dispatches, and that commit must
+be a **later** commit than the source commit it builds. Publish the validated evidence as
+one follow-up commit, after the transient directory is gone so nothing transient ships:
+
+```powershell
+git add --all
+git commit -m 'Record the validated modernization handoff'
+if (git status --porcelain) {
+  throw 'the handoff evidence must be committed before Challenge 3 runs'
+}
+git push origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'publishing the handoff evidence failed' }
+if ((git rev-parse HEAD).Trim() -ceq $SourceCommit) {
+  throw 'the handoff commit must be later than the published source commit'
+}
+```
+
+Challenge 3 dispatches its workflow from this evidence commit, reads the handoff there,
+and checks the application source out separately at `$SourceCommit`.
+
 Keep every registry evidence path, referenced raw test artifact, and the protected
 database archive/sidecar until the facilitator's retention boundary. Rejoin the common
 workshop only when handoff validation exits `0`, the release is healthy/ready, and the
 retained baseline remains a valid rollback target.
+
+---
+
+**Challenge:** [Path 1A: modernize it by hand](../../../challenges/ch01-manual/README.md) ·
+**Other stack:** [Manual Java](../java/README.md) ·
+**Modernized target:** [Reference implementation](../../reference/README.md) ·
+**Next:** [Challenge 2: load and autoscaling](../../../challenges/ch02/README.md)

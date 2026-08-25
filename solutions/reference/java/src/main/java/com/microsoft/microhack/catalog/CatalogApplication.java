@@ -1,0 +1,68 @@
+package com.microsoft.microhack.catalog;
+
+import com.azure.monitor.opentelemetry.autoconfigure.AzureMonitorAutoConfigure;
+import com.microsoft.microhack.catalog.config.CatalogRuntimeOptions;
+import com.microsoft.microhack.catalog.config.CatalogResourceIdentity;
+import com.microsoft.microhack.catalog.service.AzureBlobImageStore;
+import com.microsoft.microhack.catalog.service.ImageStore;
+import com.microsoft.microhack.catalog.service.LocalImageStore;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+
+/** Starts the intentionally monolithic catalog application. */
+@SpringBootApplication
+public class CatalogApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(CatalogApplication.class, args);
+    }
+
+    /** Loads and validates the complete frozen runtime configuration. */
+    @Bean
+    CatalogRuntimeOptions catalogRuntimeOptions(Environment environment) {
+        return CatalogRuntimeOptions.from(environment, instanceId());
+    }
+
+    /** Selects the local/Azure Files-compatible or Blob-backed image provider. */
+    @Bean
+    ImageStore imageStore(CatalogRuntimeOptions options) {
+        return switch (options.imageProvider()) {
+            case LOCAL -> new LocalImageStore(options);
+            case AZURE_BLOB -> new AzureBlobImageStore(options);
+        };
+    }
+
+    /** Initializes one direct Azure Monitor or local OTLP telemetry pipeline. */
+    @Bean(destroyMethod = "close")
+    OpenTelemetrySdk openTelemetry(CatalogRuntimeOptions options) {
+        System.setProperty(
+                "otel.resource.attributes",
+                CatalogResourceIdentity.asOtelProperty(options));
+        AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
+                AutoConfiguredOpenTelemetrySdk.builder();
+        if (options.azureMonitorEnabled()) {
+            AzureMonitorAutoConfigure.customize(sdkBuilder);
+        } else {
+            System.setProperty("otel.exporter.otlp.endpoint", options.otlpEndpoint());
+        }
+        OpenTelemetrySdk sdk = sdkBuilder.build().getOpenTelemetrySdk();
+        OpenTelemetryAppender.install(sdk);
+        return sdk;
+    }
+
+    private static String instanceId() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException exception) {
+            throw new IllegalStateException("service.instance.id could not be determined", exception);
+        }
+    }
+}

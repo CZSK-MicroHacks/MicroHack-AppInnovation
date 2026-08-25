@@ -278,7 +278,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Resolution:** Read the password only from the declared migration environment, write `/SourcePassword:<value>` to a newly created ACL-restricted response file, pass only `@<path>` in argv, register the value separately for error redaction without forwarding it to the child environment, and overwrite/remove the file in `finally`.
 
 ## 40. The SqlPackage global tool requires a newer .NET runtime
-**Symptom:** The pinned SqlPackage NuGet tool installs but cannot start on the P3 .NET VM because its required .NET runtime is newer than the source VM runtime.
+**Symptom:** The pinned SqlPackage NuGet tool installs but cannot start on the .NET VM because its required .NET runtime is newer than the source VM runtime.
 
 **Cause:** The global-tool package is framework-dependent; installing the locked .NET 8 SDK alone does not satisfy the newer tool runtime.
 
@@ -292,7 +292,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Resolution:** Add both options to every Files list, upload, and download command. Do not add the Files-only option to Blob commands.
 
 ## 42. A fixed target VNet overlaps a participant source VNet
-**Symptom:** Peering creation fails or private routes are ambiguous for the participant whose P3 VNet falls inside the target range.
+**Symptom:** Peering creation fails or private routes are ambiguous for the participant whose source VNet falls inside the target range.
 
 **Cause:** The former target `10.42.0.0/16` contains participant `user042`'s deterministic `10.42.0.0/22` source range.
 
@@ -320,7 +320,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Resolution:** Prepend `/opt/homebrew/opt/libpq/bin` to `PATH` for the acceptance process. The verifier carries the resulting `PATH` into its minimal child environment without forwarding unrelated host secrets.
 
 ## 46. The .NET VM is missing the unified modernization extension
-**Symptom:** The P5 .NET modernization path requires the frozen GitHub Copilot modernization extension, but only the Java VM reports it as installed.
+**Symptom:** The Challenge 1 .NET modernization path requires the frozen GitHub Copilot modernization extension, but only the Java VM reports it as installed.
 
 **Cause:** The extension retained its historical `vscjava.migrate-java-to-azure` identifier after adding supported .NET workflows, so stack-gated provisioning incorrectly treated it as Java-only.
 
@@ -378,7 +378,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 ## 54. A downstream load contract renames an existing scale rule
 **Symptom:** The challenge contract requires a scale rule that is not present in the handoff revision, so compliant evidence would require an unowned infrastructure change.
 
-**Cause:** The consumer inferred a descriptive rule name instead of reading the authoritative P4 Bicep producer.
+**Cause:** The consumer inferred a descriptive rule name instead of reading the authoritative Azure Bicep producer.
 
 **Resolution:** Consume the existing `http` rule with min 1, max 3, and `concurrentRequests` 50. Add an executable cross-file assertion tying the registry and evidence example to `infra/modules/environment.bicep`; do not create a replacement revision.
 
@@ -488,11 +488,11 @@ Documenting issues encountered while implementing the data generator (Azure Open
 **Resolution:** Recreate the child commit from the new exact coordinator base, import only its owned files, and update the owned consumer assertion to the new registry version while preserving the stream-specific contract version. Require one clean commit and rerun both the focused and full integrated acceptance gates before declaring the new base frozen.
 
 ## 70. Repository-relative evidence arguments are written as working-directory paths
-**Symptom:** A published P6 renderer or validator command fails even when run from the documented `tests/acceptance` directory.
+**Symptom:** A published shared-challenge renderer or validator command fails even when run from the documented `tests/acceptance` directory.
 
 **Cause:** The command uses `../../evidence` while the CLI also prepends `--repository-root`, or a second CLI preserves lexical `..` components during containment checks. The two tools silently implement different path conventions.
 
-**Resolution:** Freeze all P6 CLI inputs as repository-root-relative (`evidence/...` and `workshop/contracts`) and resolve them exactly once against `--repository-root`. Keep `--repository-root ../..` as the only working-directory-relative argument. Execute the exact registry command strings from a synthetic `tests/acceptance` directory in acceptance tests.
+**Resolution:** Freeze all shared-challenge CLI inputs as repository-root-relative (`evidence/...` and `workshop/contracts`) and resolve them exactly once against `--repository-root`. Keep `--repository-root ../..` as the only working-directory-relative argument. Execute the exact registry command strings from a synthetic `tests/acceptance` directory in acceptance tests.
 
 ## 71. A PostgreSQL database child is used as the server metric scope
 **Symptom:** `az monitor metrics list` or raw normalization cannot obtain `cpu_percent` for the PostgreSQL resource ID from the modernization handoff.
@@ -611,7 +611,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Cause:** Azure SRE Agent requires its managed identity to have Monitoring Contributor on the subscription for Azure Monitor alert ingestion, while the original plan prohibited every subscription-wide permission.
 
-**Resolution:** Treat this as a blocking product decision rather than silently broadening access. The approved P8 plan now permits exactly one UAMI Monitoring Contributor assignment for alert ingestion; all other reads remain participant-resource-group scoped and the only workload write remains the exact-Container-App rollback role.
+**Resolution:** Treat this as a blocking product decision rather than silently broadening access. The approved SRE Agent plan now permits exactly one UAMI Monitoring Contributor assignment for alert ingestion; all other reads remain participant-resource-group scoped and the only workload write remains the exact-Container-App rollback role.
 
 ## 88. Application Insights ARM queries use an unsupported API version
 **Symptom:** Resource-centric KQL examples post to `Microsoft.Insights/components/<name>/query` but fail before returning telemetry.
@@ -688,7 +688,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Cause:** A leading slash is URL-root-relative, not repository-relative.
 
-**Resolution:** Use the correct file-relative path from the source document and run the P9 link gate across every active challenge, solution, facilitator, and component guide.
+**Resolution:** Use the correct file-relative path from the source document and run the repository-wide link gate across every active challenge, solution, facilitator, and component guide.
 
 ## 99. Documentation tests check words but not executable semantics
 **Symptom:** Reconciliation tests stay green after a contract assignment, deallocation target, authentication claim, or chapter row is changed unsafely.
@@ -723,3 +723,133 @@ Documenting issues encountered while implementing the data generator (Azure Open
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
 - Persist structured error diagnostics for image failures.
 - Add lightweight tests to cover pruning and schema validation.
+
+## `AuthorizationFailed` on the first Challenge 1 deployment
+
+**Symptom:** `az deployment ... create` fails immediately with
+`AuthorizationFailed`, for every participant at once, before any resource is created.
+
+**Cause:** The deployment was run at subscription scope. Participants hold Owner on their
+own resource group only — the one the facilitator created at T-1 with their two legacy
+VMs — and hold nothing at subscription scope.
+
+**Fix:** Deploy into the resource group you already own:
+`az deployment group create --resource-group <your-rg> --template-file infra\main.bicep ...`.
+`infra/main.bicep` is resource-group-scoped and asserts that its `resourceGroupName`
+parameter matches the group it is deployed into, so a parameter file pointing somewhere
+else fails at compile time rather than deploying into the wrong place. Do not add
+`--location`; a resource-group deployment inherits the group's location.
+
+`infra/sre-agent.bicep` is the one template that is still subscription-scoped, because it
+defines a custom role. It is facilitator-only and no participant runs it.
+
+## Challenge 3's workflow cannot find the source it is told to build
+
+**Symptom:** The catalog workflow fails at checkout or at `docker build`, reporting that
+`handoff.source.commitSha` does not exist, or that
+`application-source/<stack>/Dockerfile` is missing.
+
+**Cause:** The workflow checks the application source out **from GitHub** at the commit
+recorded in the handoff. Work that was committed only on the VM does not exist on GitHub,
+and a local `git init` commit can never reproduce an upstream commit SHA.
+
+**Fix:** Every Challenge 1 path must push its work to the participant's own GitHub
+repository before Challenge 3, and record `git rev-parse HEAD` after the push as the
+handoff's source commit. This applies to the manual path too — it authors a Dockerfile,
+so it has work to publish. Keep `evidence/` tracked: the workflow reads `HANDOFF_FILE`
+from the committed control commit, so gitignoring evidence breaks the same chain from the
+other end.
+
+## Re-provisioning a VM wipes a participant's commits
+
+**Symptom:** A facilitator re-runs provisioning to repair one VM, and participants on
+other VMs lose a morning of work.
+
+**Cause:** `Install-SourceArchive` used to replace `C:\MicroHack\source` unconditionally.
+
+**Fix:** Provisioning now returns early when the tree is already a Git repository at the
+requested source commit, and the previous tree is preserved rather than deleted. If you
+genuinely need a clean tree, move the existing one aside yourself so the loss is a
+deliberate act rather than a side effect.
+
+## `bash`, `curl`, `sha256sum`, or `jq` not recognized on the VM
+
+**Symptom:** A documented command fails with "not recognized as the name of a cmdlet".
+
+**Cause:** Provisioning used to add only `Git\cmd` to PATH, leaving the Unix tools that
+ship with Git for Windows unreachable, and `jq` was not installed at all.
+
+**Fix:** Both are provisioned now — `Git\usr\bin` is on the machine PATH and jq 1.7.1 is
+pinned in `workshop/toolchain.lock.json`. If a VM predates this, re-provision it. Note
+that jq ships unsigned upstream, so it is pinned by SHA-256 alone; do not "fix" the lock
+by adding a `signaturePublisher`, because the binary has no certificate table to check
+it against.
+
+## The first `git status --porcelain` gate fails on a fresh .NET VM
+
+**Symptom:** A .NET Copilot path reports a dirty worktree before the participant has
+changed anything.
+
+**Cause:** `global.json` is written into the source tree by provisioning, after the
+baseline commit.
+
+**Fix:** It is ignored in `.gitignore`. Do not commit it, and do not delete it — the
+pinned SDK selection depends on it.
+
+## `dotnet test` aborts with "You must install or update .NET to run this application"
+
+**Symptom:** The .NET test run never starts. The host prints
+`Framework: 'Microsoft.AspNetCore.App', version '8.0.0'`, lists only a newer framework as
+found, and ends with `Test Run Aborted.`
+
+**Cause:** The projects target `net8.0`, and running their tests needs the ASP.NET Core
+**8** runtime specifically. An SDK of a later major can *build* them but cannot *run*
+them. This bites when the SDK major and the target framework drift apart.
+
+**Fix:** Install the runtime matching the target framework rather than a newer one. The
+participant VM pins .NET SDK 8.0.424 for exactly this reason, and
+`.github/workflows/catalog-dotnet.yml` now pins the same 8.0.424 instead of a later major.
+It previously requested 10.0.400 and passed only because the hosted runner happened to
+preinstall 8.0.424 as well — an undeclared dependency that would have broken every
+participant's Challenge 3 pipeline the day that image dropped .NET 8.
+`test_ci_builds_on_the_same_toolchain_the_vm_pins` now fails if the two ever diverge again.
+
+## `PipeWriter 'ResponseBodyPipeWriter' does not implement PipeWriter.UnflushedBytes`
+
+**Symptom:** Several `Contract.Health.*` and `Contract.Performance.*` tests fail with this
+`InvalidOperationException` thrown from `System.Text.Json`. No assertion actually fails.
+
+**Cause:** The `net8.0` test host was forced onto a newer runtime — for example with
+`DOTNET_ROLL_FORWARD=LatestMajor` — so ASP.NET Core 8's `TestHost` is paired with a
+`System.Text.Json` from a later major that requires an API it does not implement.
+
+**Fix:** Do not force roll-forward to work around a missing runtime; install the ASP.NET
+Core 8 runtime instead. The symptom is a version pairing artifact, not a defect in the
+application: on the pinned runtime the same suite passes. Use it as a diagnostic — if you
+see this exception, your runtime does not match `<TargetFramework>`.
+
+## `Access is denied` reading `C:\protected\*.json` on the workshop VM
+
+**Symptom.** In Challenge 1, `az deployment group create --parameters '@C:\protected\manual-dotnet-bootstrap.json'`
+fails immediately with `Access is denied`, or `Get-Content` on the same path throws
+`UnauthorizedAccessException` — even though `whoami /groups` shows the account in
+`BUILTIN\Administrators`.
+
+**Cause.** `C:\protected` is written with inheritance disabled and explicit ACEs. Being *a
+member of* Administrators is not the same as *running elevated*: because the VM's admin
+account is a custom one (`azureuser`, not the built-in RID-500 `Administrator` that Windows
+Server exempts), UAC Admin Approval Mode gives an ordinary shell a filtered token whose
+Administrators SID is deny-only. The ACL check fails before any Azure call is made, so the
+error looks like an `az` or credentials problem and sends you to `az login`.
+
+**Fix.** The provisioner grants the admin account Read on `C:\protected` and on each file it
+writes there (`Set-ProtectedAcl -ReadPrincipal`). If you see this error the grant did not
+land — most often because the VM was provisioned before that change, or `adminUsername` was
+missing from the custom-data payload, which the provisioner rejects at startup. Re-provision,
+or as a one-off unblock open PowerShell with **Run as administrator** and re-run the
+deployment. Verify the fix the way a participant experiences it, from a *non-elevated*
+prompt: `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` must return `9`.
+
+**Do not** work around this by relaxing `Set-ProtectedAcl` globally. `C:\MicroHack\secrets`
+holds the database passwords and must stay administrators-only; an acceptance guard fails if
+that call ever acquires a `-ReadPrincipal`.

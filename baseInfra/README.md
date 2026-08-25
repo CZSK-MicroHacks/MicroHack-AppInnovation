@@ -16,9 +16,12 @@ Either VM can be stopped or deallocated without changing the other.
 ## Frozen provisioning
 
 The Windows image is exactly `MicrosoftWindowsServer:WindowsServer:2025-datacenter-azure-edition:26100.7456.251206`.
-Application content defaults to immutable commit
-`fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9`. Terraform rejects branch, tag, short-SHA,
-and other mutable source values.
+Application content comes from an immutable commit that **you must set for every delivery**:
+`source_commit` has no default, and the historical `fd298de6…` pin is rejected outright
+because its tree carries none of the current chapters. Terraform also rejects branch, tag,
+short-SHA, and other mutable source values, and provisioning fails loudly if the downloaded
+archive does not contain `infra/main.bicep` and the migration CLI. See "Re-pin the VM source
+commit" in [the facilitator guide](../docs/Facilitator.md).
 
 `baseInfra/scripts/provision-vm.ps1` and a generated per-stack secret payload are embedded as a VM
 custom-data bundle. Azure stores the decoded bundle under the SYSTEM/Administrators-only
@@ -39,8 +42,20 @@ used by the Challenge 1 BACPAC export.
 Provisioning verifies the archive SHA-256, the extracted executable's Microsoft Authenticode
 publisher, and its exact version before adding its directory to machine PATH.
 The Java VM receives the pinned Java upgrade companion, Microsoft OpenJDK, and the
-checksum-pinned Maven Wrapper workflow. The source archive is used directly, so provisioning does
-not introduce an unpinned Git installer that is absent from the frozen lock.
+checksum-pinned Maven Wrapper workflow.
+
+Both VMs also receive pinned Git for Windows 2.55.0.windows.5, verified by SHA-256 and by its
+`Johannes Schindelin` Authenticode publisher exactly like every other pinned tool. Git is present
+because both GitHub Copilot Challenge 1 paths record their work as a commit and read it back with
+`git rev-parse HEAD`. Because the source arrives as a signed archive rather than a clone, it has no
+history of its own, so provisioning initializes a repository in `C:\MicroHack\source` holding a
+single baseline commit. A participant's first commit is therefore their own modernization work.
+That local commit is intentionally unrelated to the published commit SHA: upstream provenance stays
+in `C:\MicroHack\source\.source-commit`, which is the only value that may be quoted as archive
+provenance.
+
+Container images are never built on the VM. Every image build in the workshop runs server-side
+through `az acr build`, so no Docker daemon is installed or required.
 
 ## Facilitator preflight
 
@@ -68,15 +83,24 @@ VM size, and disk size:
   -MaximumEstimatedMonthlyCostUsd 3000
 ```
 
-The command fails when the SKU is restricted or regional, VM-family, VM-count, or Premium managed
-disk quota cannot cover two VMs per participant. Its estimate includes both Windows VMs and both
-Premium OS disks and explicitly excludes the already-shared Bastion, NAT Gateway, and public IP
-costs.
+The command fails when the SKU is restricted or regional, VM-family, VM-count, Premium managed
+disk, Standard public IP, or NAT gateway quota cannot cover the per-participant footprint. Every
+participant gets two Windows VMs, two Premium OS disks, one Bastion host, one NAT gateway, and two
+Standard public IP addresses, and all of those are counted. Azure exposes no Bastion usage metric,
+so the script counts Bastion hosts already deployed in each region and compares the total against
+`-BastionHostsPerRegionLimit` (default 50). Quota metrics or retail meters that Azure does not
+return are reported in `quotaMetricsUnavailable` and `pricesUnavailable` instead of being dropped
+silently.
 
-Download the immutable archive once to record the digest that every VM will enforce:
+Download the immutable archive once to record the digest that every VM will enforce. Set `$commit`
+to the exact 40-hex SHA you pushed for this delivery — take it from `git rev-parse HEAD` after the
+push and confirm the published archive really contains `infra/`, `workshop/contracts/`, and every
+`challenges/` folder, following "Re-pin the VM source commit" in
+[the facilitator guide](../docs/Facilitator.md). The placeholder below is not a commit and the
+snippet does nothing until you replace it:
 
 ```pwsh
-$commit = 'fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9'
+$commit = '<PASTE-THE-40-HEX-SOURCE-COMMIT>'   # placeholder: see docs/Facilitator.md
 $archive = Join-Path $env:TEMP "$commit.zip"
 Invoke-WebRequest `
   -Uri "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/$commit.zip" `
@@ -85,7 +109,8 @@ $env:TF_VAR_source_archive_sha256 = (Get-FileHash $archive -Algorithm SHA256).Ha
 Remove-Item $archive
 ```
 
-The commit must exist in the public repository before this command or VM provisioning can succeed.
+The commit must exist in the public repository before this command or VM provisioning can succeed,
+and Terraform rejects the historical `fd298de6…` pin, so it is never a valid substitute here.
 
 ## Initialize, plan, and apply
 
@@ -95,14 +120,18 @@ deployment values. Supply secrets and preflight acknowledgement through the faci
 ```pwsh
 Set-Location baseInfra/terraform
 $env:TF_VAR_admin_password = '<strong-facilitator-secret>'
-$env:TF_VAR_entra_user_password = '<strong-temporary-user-secret>'
 $env:TF_VAR_capacity_preflight_confirmed = 'true'
 
-terraform init
+Copy-Item backend.hcl.example backend.hcl   # then edit it; see docs/Facilitator.md
+terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan -var-file local.tfvars -out tfplan
 terraform apply tfplan
 ```
+
+Terraform generates a separate initial password for every participant Entra user and forces a
+change at first sign-in, so there is no shared user password to set. Read the credentials with
+`terraform output -json entra_user_credentials` and hand out one row per participant privately.
 
 Do not commit `.tfvars`, plan, or state files. Terraform state contains the Windows administrator
 password, generated per-environment database passwords, generated performance API keys, VM custom

@@ -259,7 +259,7 @@ def _validate_upstream(
     cicd: dict[str, Any],
     observability: dict[str, Any],
 ) -> None:
-    """Bind P8 to the exact accepted P5 and P6 workload identity."""
+    """Bind SRE Agent evidence to the exact accepted modernization and shared-challenge workload identity."""
     application = _mapping(handoff["application"], "handoff.application")
     source = _mapping(handoff["source"], "handoff.source")
     handoff_observability = _mapping(
@@ -281,11 +281,11 @@ def _validate_upstream(
 
     _require(
         cicd["workflow"]["handoffSha256"] == handoff_sha256,
-        "P6 CI/CD evidence does not bind the supplied P5 handoff digest",
+        "CI/CD evidence does not bind the supplied modernization handoff digest",
     )
     _require(
         handoff["sliceId"] == cicd_subject["sliceId"] == obs_subject["sliceId"],
-        "P5/P6 slice identities differ",
+        "modernization and CI/CD slice identities differ",
     )
     _require(
         source["stack"] == target["stack"],
@@ -296,7 +296,7 @@ def _validate_upstream(
         == target["sourceCommit"]
         == cicd_subject["sourceCommit"]
         == obs_subject["sourceCommit"],
-        "P5/P6 source commits differ",
+        "modernization and CI/CD source commits differ",
     )
     app_id = application["resourceId"]
     _require(
@@ -308,7 +308,7 @@ def _validate_upstream(
                 obs_subject["containerAppResourceId"],
             ]
         ),
-        "P5/P6 Container App identities differ",
+        "modernization and CI/CD Container App identities differ",
     )
     revision = application["revisionName"]
     _require(
@@ -317,24 +317,24 @@ def _validate_upstream(
         == cicd_subject["revisionName"]
         == obs_subject["revisionName"]
         == cicd_revisions["previous"],
-        "P6 does not prove the handoff revision remained healthy",
+        "CI/CD evidence does not prove the handoff revision remained healthy",
     )
     _require(
         cicd_rollback["previous"] == 100
         and cicd_rollback["candidate"] == 0,
-        "P6 rollback did not restore all traffic to the healthy revision",
+        "CI/CD rollback did not restore all traffic to the healthy revision",
     )
     _require(
         handoff["containerImage"]["digest"]
         == target["containerImage"]["digest"]
         == cicd_subject["imageDigest"]
         == cicd_image["digest"],
-        "P5/P6 image digests differ",
+        "modernization and CI/CD image digests differ",
     )
     _require(
         cicd["assertions"]["rollbackVerified"]
         and cicd["assertions"]["previousRevisionRetained"],
-        "P6 CI/CD evidence did not retain and verify the healthy revision",
+        "CI/CD evidence did not retain and verify the healthy revision",
     )
     _require(
         _same_resource(
@@ -345,7 +345,7 @@ def _validate_upstream(
             handoff_observability["applicationInsightsResourceId"],
             obs_source["applicationInsightsResourceId"],
         ),
-        "P5/P6 Application Insights identities differ",
+        "modernization and observability Application Insights identities differ",
     )
     _require(
         _same_resource(
@@ -356,14 +356,14 @@ def _validate_upstream(
             handoff_observability["logAnalyticsWorkspaceResourceId"],
             obs_source["logAnalyticsWorkspaceResourceId"],
         ),
-        "P5/P6 Log Analytics identities differ",
+        "modernization and observability Log Analytics identities differ",
     )
     _require(
         observability["assertions"]["telemetryIdentityBound"]
         and observability["assertions"][
             "applicationTelemetryRevisionFilterApplied"
         ],
-        "P6 observability evidence is not workload and revision bound",
+        "observability evidence is not workload and revision bound",
     )
 
 
@@ -1833,7 +1833,7 @@ def _validate_investigation(
             "evidenceReferences": evidence_references,
             "alternativesConsidered": registry["investigation"]["alternativeCodes"],
             "recommendedAction": (
-                "Restore 100 percent traffic to the retained P6-proven "
+                "Restore 100 percent traffic to the retained CI/CD-proven "
                 "healthy handoff revision."
             ),
             "preventionAction": (
@@ -1900,7 +1900,7 @@ def _validate_incident(
     )
     _require(
         healthy_revision == handoff["application"]["revisionName"],
-        "incident healthy revision is not the P6-proven handoff revision",
+        "incident healthy revision is not the CI/CD-proven handoff revision",
     )
     _require(
         bad_revision != healthy_revision,
@@ -2702,7 +2702,7 @@ def _validate_incident(
 
 
 def _protected_resources(target: dict[str, Any]) -> set[str]:
-    """Return every upstream resource that P8 cleanup must preserve."""
+    """Return every upstream resource that SRE Agent cleanup must preserve."""
     network = _mapping(target["network"], "target.network")
     protected = {
         target["resourceGroup"]["resourceId"],
@@ -3164,7 +3164,7 @@ def build_sre_agent_evidence(
     handoff_path: Path,
     repository_root: Path,
 ) -> dict[str, Any]:
-    """Build the canonical P8 report from immutable checked captures."""
+    """Build the canonical SRE Agent report from immutable checked captures."""
     root = repository_root.resolve()
     contracts = _contracts_directory(root, root / "workshop/contracts")
     capture_resolved = resolve_repository_file(
@@ -3329,7 +3329,7 @@ def render_sre_agent_evidence(
     output_path: Path,
     repository_root: Path,
 ) -> dict[str, Any]:
-    """Atomically write the canonical P8 evidence report."""
+    """Atomically write the canonical SRE Agent evidence report."""
     root = repository_root.resolve()
     report = build_sre_agent_evidence(capture_path, handoff_path, root)
     output_relative = _relative_file(root, output_path, "report output")
@@ -3361,7 +3361,7 @@ def validate_sre_agent_evidence(
     contracts_directory: Path,
     repository_root: Path,
 ) -> dict[str, Any]:
-    """Validate upstream handoff evidence and independently reproduce P8."""
+    """Validate upstream handoff evidence and independently reproduce the SRE Agent evidence."""
     root = repository_root.resolve()
     contracts = _contracts_directory(root, contracts_directory)
     capture_resolved = resolve_repository_file(

@@ -93,3 +93,19 @@ Set true only when an assigned_user_object_id is also provided.
 Decoupling the boolean avoids unknown value propagation issues in count.
 EOT
 }
+
+variable "facilitator_principal_name" {
+  type        = string
+  description = <<EOT
+Facilitator user principal name written into this environment's protected deployment
+parameter files as `facilitatorPrincipalName`. Validated by the root module.
+EOT
+}
+
+variable "facilitator_principal_object_id" {
+  type        = string
+  description = <<EOT
+Facilitator Entra ID object ID written into this environment's protected deployment
+parameter files as `facilitatorPrincipalObjectId`. Validated by the root module.
+EOT
+}

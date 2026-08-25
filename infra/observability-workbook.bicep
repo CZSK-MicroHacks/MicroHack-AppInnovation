@@ -1,10 +1,10 @@
-@description('Existing P4 Application Insights component resource ID from the validated handoff.')
+@description('Existing Application Insights component resource ID from the validated handoff.')
 param applicationInsightsResourceId string
 
-@description('Existing P4 Log Analytics workspace resource ID from the validated handoff.')
+@description('Existing Log Analytics workspace resource ID from the validated handoff.')
 param logAnalyticsWorkspaceResourceId string
 
-@description('Existing P4 Container App resource ID from the validated handoff.')
+@description('Existing Container App resource ID from the validated handoff.')
 param containerAppResourceId string
 
 @description('Frozen telemetry service.name from the validated handoff.')

@@ -1,8 +1,9 @@
 # Shared Azure target
 
-`main.bicep` is the authoritative standalone subscription-scope template for the
-approved Sweden Central workshop profile. Each deployment owns one participant/team
-resource group and supports:
+`main.bicep` is the authoritative standalone resource-group-scope template for the
+approved Sweden Central workshop profile. Each deployment fills one participant/team
+resource group that already exists — the one the facilitator created at T-1 — and
+supports:
 
 - `.NET / Azure SQL` with Entra-only administration and workload managed identity;
 - `Java / PostgreSQL` with a local restore administrator plus facilitator Entra
@@ -23,9 +24,11 @@ whose `containerImage` and `application` fields are null. It does not create a
 placeholder Container App.
 
 `application` requires a lowercase 40-hex source commit, a full sha256 image
-digest, and secure application inputs. The Container App revision suffix is the
-first 12 commit characters and the URL uses the environment's actual
-`defaultDomain`.
+digest, and secure application inputs: `performanceApiKey` is asserted non-empty for
+this stage, and the Java password-secret path additionally requires
+`postgresqlApplicationPassword`. Both are stored as Container Apps secrets. The
+Container App revision suffix is the first 12 commit characters and the URL uses the
+environment's actual `defaultDomain`.
 
 ## Build
 
@@ -42,19 +45,124 @@ for file in infra/parameters/*.bicepparam; do
 done
 ```
 
-The checked-in parameter files contain conspicuous sanitized values and are for
-template compilation only. For what-if, create a protected parameter file
-outside the repository and replace every secure value:
+### The experimental-feature banner is expected, not breakage
 
-```bash
-AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub what-if \
-  --location swedencentral \
-  --template-file infra/main.bicep \
-  --parameters @/protected/path/scenario.json
+Every Bicep command run against this directory prints:
+
+```text
+WARNING: The following experimental Bicep features have been enabled: Asserts.
+Experimental features should be enabled for testing purposes only...
 ```
 
-Do not run `az deployment sub create` during local template validation. Live creation
+That banner is correct and expected. It is produced by `"assertions": true` in
+`infra/bicepconfig.json`, which is enabled **on purpose**: these templates carry 48
+`assert` statements that fail the deployment at submission time rather than halfway
+through it. They are the guard rails behind the workshop's frozen contract — that the
+location really is `swedencentral` (`main.bicep:99`), that `sourceCommit` really is a
+lowercase 40-hex commit and `imageDigest` a full `sha256:` digest (`main.bicep:101-102`),
+that application-stage secrets are non-empty (`main.bicep:103-105`), and that the
+migration source VNet and VM resource IDs are well-formed and in the same subscription
+(`main.bicep:111-113`).
+
+Removing the flag to silence the banner would silently disable all 48 checks and let a
+mistyped commit deploy the wrong source. So the banner stays, and this is the trade:
+**an advisory line of output in exchange for 48 fail-fast contract checks.**
+
+Participants and facilitators will see this banner on `az bicep build`,
+`az deployment group what-if`, and `az deployment group create`. It is not an error, it
+does not affect the deployment, and nothing needs to be done about it. `az bicep build`
+should otherwise report **zero warnings and zero errors** on every template here — if you
+see anything besides this banner, that is a real finding.
+
+The checked-in parameter files contain conspicuous sanitized values and are for
+template compilation only. For what-if, create a protected parameter file
+outside the repository, replace every secure value, and set `resourceGroupName` to the
+resource group you are deploying into — the template asserts the two agree:
+
+```bash
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
+  --resource-group "$RESOURCE_GROUP" \
+  --template-file infra/main.bicep \
+  --parameters @/protected/path/scenario.json \
+  --parameters sourceCommit="$(git rev-parse HEAD)"
+```
+
+`sourceCommit` is required and is deliberately absent from every parameter file, so it
+must be supplied on the command line. A placeholder in the file would satisfy the
+template's format assertion while silently deploying the wrong source.
+
+`infra/main.bicep` targets a **resource group**, and participants deploy it with
+`az deployment group create` into the resource group they already own — the one the
+facilitator created at T-1 alongside their two legacy VMs. Nothing in the participant
+path creates a resource group or writes outside that one group, which is what keeps
+"Owner on your own resource group, and nothing else" true.
+
+`infra/sre-agent.bicep` is the exception and is deliberately subscription-scoped: it
+defines a custom role, which cannot be scoped lower. It is facilitator-only work — see
+[the SRE agent foundation](../workshop/sre-agent/README.md) — and no participant runs it.
+
+That template provisions everything about the agent that the Azure control plane exposes:
+the dedicated resource group, dual identities, telemetry connectors, the Azure Monitor
+incident-management connection, Review mode with Low action access, and the bounded
+traffic-only rollback role. It stops at the incident response plan, and the
+`responsePlanConfiguredInIaC: false` output says so on purpose. As of 2026-08-25, at
+api-version `2026-01-01`, the `Microsoft.App` provider exposes only `agentSpaces`,
+`agentSpaces/connectors`, `agents` and `agents/connectors` as deployable resource types,
+and `AgentProperties` has no response-plan property — so the plan is not expressible in
+ARM or Bicep at all. Microsoft documents creation through the portal Builder wizard
+([incident response plans](https://learn.microsoft.com/azure/sre-agent/incident-response-plans),
+[create a plan](https://learn.microsoft.com/azure/sre-agent/response-plan)); the only
+programmatic path is the agent data plane via `azmcp sreagent incidents plans create`.
+The template carries the full citation trail above its output, the facilitator procedure
+is in [the SRE agent foundation](../workshop/sre-agent/README.md), and the flag should
+flip only when `Microsoft.App` ships a response-plan resource type.
+
+Do not run either template live during local validation. Live creation
 requires the Challenge 1 deployment gate and facilitator-approved subscription context.
+
+## Challenge 2 performance-test prerequisites
+
+`perf-testing.bicep` is a separate resource-group-scope template that creates the two
+resources Challenge 2 consumes but `main.bicep` deliberately does not own: an Azure
+Load Testing resource and a Key Vault holding the performance-test API key. It is kept
+out of `github-cicd.bicep`, which is frozen to exactly one workflow identity, two
+federated credentials, and two role assignments.
+
+Deploy it after `github-cicd.bicep`, passing that template's `identityPrincipalId`
+output:
+
+```bash
+az deployment group create \
+  --resource-group "$RESOURCE_GROUP" \
+  --template-file infra/perf-testing.bicep \
+  --parameters workflowIdentityPrincipalId="$WORKFLOW_IDENTITY_PRINCIPAL_ID" \
+  --output json
+```
+
+It grants the workflow identity `Load Test Contributor` on the load test and
+`Key Vault Secrets User` on the vault, and grants the load test's own system-assigned
+identity `Key Vault Secrets User` so it can resolve the secret reference passed to
+`az load test create`.
+
+The template creates the vault but **not** the secret, because the secret value is
+environment-specific. The facilitator sets it once, using an identity that holds
+`Key Vault Secrets Officer`:
+
+```bash
+az keyvault secret set \
+  --vault-name "$KEY_VAULT_NAME" \
+  --name PERFTEST_API_KEY \
+  --value "$PERFTEST_API_KEY" \
+  --output none
+```
+
+Challenge 2 reads two values from this deployment: `loadTestResourceId` becomes
+`LOAD_TEST_RESOURCE_ID`, and the secret identifier
+`<keyVaultUri>secrets/PERFTEST_API_KEY` becomes `PERFTEST_API_KEY_SECRET_URI`.
+
+The vault uses RBAC authorization with soft delete enabled and a seven-day retention
+window. Because soft delete is on, a redeployment after a delete requires either a
+purge or a different vault name.
 
 ## Azure Files policy boundary
 

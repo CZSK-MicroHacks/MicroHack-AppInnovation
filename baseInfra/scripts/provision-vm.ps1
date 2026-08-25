@@ -38,6 +38,7 @@ $SourceRoot = Join-Path $Root 'source'
 $ApplicationRoot = Join-Path $Root 'app'
 $StatusRoot = Join-Path $Root 'status'
 $SecretRoot = Join-Path $Root 'secrets'
+$ProtectedRoot = 'C:\protected'
 $LogRoot = Join-Path $Root 'logs'
 $LogFile = Join-Path $LogRoot "provision-$Stack.log"
 
@@ -190,7 +191,16 @@ function Set-ProtectedAcl {
         [Parameter(Mandatory)]
         [string]$Path,
 
-        [switch]$Directory
+        [switch]$Directory,
+
+        # Optional account granted read-only access. Used for C:\protected, whose
+        # deployment parameter files the participant has to read from the ordinary,
+        # non-elevated session they run az from. The account is already a local
+        # administrator, so this grants no capability it could not obtain by elevating —
+        # it only removes a UAC filtered-token failure from the middle of Challenge 1.
+        # The database passwords under $SecretRoot are never given this parameter.
+        [AllowEmptyString()]
+        [string]$ReadPrincipal = ''
     )
 
     $Acl = if ($Directory) {
@@ -200,11 +210,18 @@ function Set-ProtectedAcl {
         New-Object Security.AccessControl.FileSecurity
     }
     $Acl.SetAccessRuleProtection($true, $false)
-    foreach ($Identity in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators')) {
+    $Grants = [ordered]@{
+        'NT AUTHORITY\SYSTEM'    = 'FullControl'
+        'BUILTIN\Administrators' = 'FullControl'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ReadPrincipal) -and -not $Grants.Contains($ReadPrincipal)) {
+        $Grants[$ReadPrincipal] = 'Read'
+    }
+    foreach ($Grant in $Grants.GetEnumerator()) {
         if ($Directory) {
             $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
-                $Identity,
-                'FullControl',
+                $Grant.Key,
+                $Grant.Value,
                 'ContainerInherit,ObjectInherit',
                 'None',
                 'Allow'
@@ -212,8 +229,8 @@ function Set-ProtectedAcl {
         }
         else {
             $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
-                $Identity,
-                'FullControl',
+                $Grant.Key,
+                $Grant.Value,
                 'Allow'
             )
         }
@@ -229,7 +246,10 @@ function Save-ProtectedText {
 
         [Parameter(Mandatory)]
         [AllowEmptyString()]
-        [string]$Value
+        [string]$Value,
+
+        [AllowEmptyString()]
+        [string]$ReadPrincipal = ''
     )
 
     [IO.File]::WriteAllText(
@@ -237,7 +257,7 @@ function Save-ProtectedText {
         $Value,
         (New-Object Text.UTF8Encoding($false))
     )
-    Set-ProtectedAcl -Path $Path
+    Set-ProtectedAcl -Path $Path -ReadPrincipal $ReadPrincipal
 }
 
 function Save-ProtectedConfiguration {
@@ -246,10 +266,19 @@ function Save-ProtectedConfiguration {
         [string]$Path,
 
         [Parameter(Mandatory)]
-        [hashtable]$Values
+        [Collections.IDictionary]$Values,
+
+        # Nested documents such as ARM parameter files need more than ConvertTo-Json's
+        # default of two levels; anything deeper is silently replaced by a type name.
+        [ValidateRange(1, 20)]
+        [int]$Depth = 2,
+
+        [AllowEmptyString()]
+        [string]$ReadPrincipal = ''
     )
 
-    Save-ProtectedText -Path $Path -Value ($Values | ConvertTo-Json)
+    Save-ProtectedText -Path $Path -ReadPrincipal $ReadPrincipal `
+        -Value (ConvertTo-Json -InputObject $Values -Depth $Depth)
 }
 
 function Remove-ProtectedFile {
@@ -275,9 +304,21 @@ function Get-ProvisioningSecrets {
     }
     Set-ProtectedAcl -Path $PayloadPath
     $Payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json
-    if ([string]::IsNullOrWhiteSpace([string]$Payload.databasePassword) -or
-        [string]::IsNullOrWhiteSpace([string]$Payload.performanceApiKey)) {
-        throw 'The protected provisioning payload is incomplete.'
+    foreach ($Field in @(
+            'databasePassword',
+            'performanceApiKey',
+            'facilitatorPrincipalName',
+            'facilitatorPrincipalObjectId',
+            'resourceGroupName',
+            'teamName',
+            'adminUsername',
+            'migrationSourceVirtualNetworkResourceId',
+            'migrationSourceVmResourceId'
+        )) {
+        $Property = $Payload.PSObject.Properties[$Field]
+        if ($null -eq $Property -or [string]::IsNullOrWhiteSpace([string]$Property.Value)) {
+            throw "The protected provisioning payload is missing $Field."
+        }
     }
     return $Payload
 }
@@ -287,7 +328,79 @@ Set-ProtectedAcl -Path $PSCommandPath
 $ProvisioningSecrets = Get-ProvisioningSecrets
 $DatabasePassword = [string]$ProvisioningSecrets.databasePassword
 $PerformanceApiKey = [string]$ProvisioningSecrets.performanceApiKey
+$FacilitatorPrincipalName = [string]$ProvisioningSecrets.facilitatorPrincipalName
+$FacilitatorPrincipalObjectId = [string]$ProvisioningSecrets.facilitatorPrincipalObjectId
+$ParticipantResourceGroup = [string]$ProvisioningSecrets.resourceGroupName
+$TeamName = [string]$ProvisioningSecrets.teamName
+$AdminUsername = [string]$ProvisioningSecrets.adminUsername
+$SourceVirtualNetworkResourceId = [string]$ProvisioningSecrets.migrationSourceVirtualNetworkResourceId
+$SourceVmResourceId = [string]$ProvisioningSecrets.migrationSourceVmResourceId
 $ProvisioningSecrets = $null
+
+function Save-ProtectedDeploymentParameters {
+    <#
+    .SYNOPSIS
+    Writes this stack's nine Challenge 1 deployment parameter files to C:\protected.
+
+    .DESCRIPTION
+    Every Challenge 1 runbook deploys infra/main.bicep with
+    --parameters '@C:\protected\<path>-<stack>-<stage>.json'. The files carry every value
+    that is already known at provisioning time. sourceCommit and imageDigest are
+    deliberately absent: they are not knowable now, and a placeholder would satisfy the
+    template's format asserts while silently deploying the wrong source, so a forgotten
+    command-line override must fail instead. The Java database passwords stay on the
+    interactive protected prompt. The files hold no participant work and are rewritten on
+    every provisioning run.
+    #>
+
+    # imageProvider and the Java authentication mode are frozen per path by the runbooks.
+    $DeploymentPaths = [ordered]@{
+        'manual'                = @{ ImageProvider = 'azure-files'; JavaAuthentication = 'password-secret' }
+        'copilot-rewrite'       = @{ ImageProvider = 'azure-blob'; JavaAuthentication = 'managed-identity' }
+        'copilot-modernization' = @{ ImageProvider = 'azure-blob'; JavaAuthentication = 'managed-identity' }
+    }
+    $DeploymentStages = [ordered]@{
+        'bootstrap' = @{ DeploymentStage = 'bootstrap'; RevisionRole = '' }
+        'baseline'  = @{ DeploymentStage = 'application'; RevisionRole = 'baseline' }
+        'release'   = @{ DeploymentStage = 'application'; RevisionRole = 'release' }
+    }
+    $TargetStack = if ($Stack -eq 'dotnet') { 'dotnet-sqlserver' } else { 'java-postgresql' }
+
+    New-Item -ItemType Directory -Path $ProtectedRoot -Force | Out-Null
+    Set-ProtectedAcl -Path $ProtectedRoot -Directory -ReadPrincipal $AdminUsername
+
+    foreach ($PathName in $DeploymentPaths.Keys) {
+        # main.bicep pins the .NET stack to managed identity, so only Java varies by path.
+        $Authentication = if ($Stack -eq 'dotnet') {
+            'managed-identity'
+        }
+        else {
+            $DeploymentPaths[$PathName].JavaAuthentication
+        }
+        foreach ($StageName in $DeploymentStages.Keys) {
+            $File = Join-Path $ProtectedRoot "$PathName-$Stack-$StageName.json"
+            Save-ProtectedConfiguration -Path $File -Depth 4 -ReadPrincipal $AdminUsername -Values ([ordered]@{
+                    '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+                    contentVersion = '1.0.0.0'
+                    parameters     = [ordered]@{
+                        deploymentStage                         = @{ value = $DeploymentStages[$StageName].DeploymentStage }
+                        stack                                   = @{ value = $TargetStack }
+                        imageProvider                           = @{ value = $DeploymentPaths[$PathName].ImageProvider }
+                        postgresqlAuthentication                = @{ value = $Authentication }
+                        resourceGroupName                       = @{ value = $ParticipantResourceGroup }
+                        teamName                                = @{ value = $TeamName }
+                        migrationSourceVirtualNetworkResourceId = @{ value = $SourceVirtualNetworkResourceId }
+                        migrationSourceVmResourceId             = @{ value = $SourceVmResourceId }
+                        applicationRevisionRole                 = @{ value = $DeploymentStages[$StageName].RevisionRole }
+                        facilitatorPrincipalName                = @{ value = $FacilitatorPrincipalName }
+                        facilitatorPrincipalObjectId            = @{ value = $FacilitatorPrincipalObjectId }
+                        performanceApiKey                       = @{ value = $PerformanceApiKey }
+                    }
+                })
+            Write-ProvisionLog "Wrote protected deployment parameters $PathName-$Stack-$StageName.json."
+        }
+    }
+}
 
 function Install-CommonTools {
     $Artifacts = @{
@@ -308,6 +421,19 @@ function Install-CommonTools {
             Uri       = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'
             Hash      = '5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12'
             Publisher = 'Astral Software Inc.'
+        }
+        Git = @{
+            Version   = '2.55.0.windows.5'
+            Uri       = 'https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.5/Git-2.55.0.5-64-bit.exe'
+            Hash      = 'd065a4e23c3d9a6b5073d609b5be0830227ec3ca053c083ba385061ddfaf94c6'
+            Publisher = 'Johannes Schindelin'
+        }
+        # jq ships unsigned from upstream, so it is pinned by SHA-256 alone. The hash below
+        # is the one published in the release's own sha256sum.txt.
+        Jq = @{
+            Version = '1.7.1'
+            Uri     = 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe'
+            Hash    = '7451fbbf37feffb9bf262bd97c54f0da558c63f0748e64152dd87b0a07b6d6ab'
         }
     }
 
@@ -395,6 +521,61 @@ function Install-CommonTools {
     Add-MachinePath -Path $UvRoot
     if (((& $UvCommand --version) -replace '^uv\s+', '').Trim() -ne $Artifacts.Uv.Version) {
         throw 'uv version verification failed.'
+    }
+
+    # Git backs the commit provenance both GitHub Copilot Challenge 1 paths record.
+    $GitRoot = 'C:\Program Files\Git'
+    $GitCommand = Join-Path $GitRoot 'cmd\git.exe'
+    $InstalledGitVersion = if (Test-Path $GitCommand) {
+        ((& $GitCommand --version) -replace '^git version\s+', '').Trim()
+    }
+    else {
+        $null
+    }
+    if ($InstalledGitVersion -ne $Artifacts.Git.Version) {
+        $Installer = Join-Path $DownloadRoot 'Git-2.55.0.5-64-bit.exe'
+        Invoke-VerifiedDownload -Uri $Artifacts.Git.Uri -Destination $Installer `
+            -Algorithm SHA256 -ExpectedHash $Artifacts.Git.Hash
+        Assert-AuthenticodePublisher -Path $Installer -Publisher $Artifacts.Git.Publisher
+        Invoke-LockedInstaller -Path $Installer -Arguments @(
+            '/VERYSILENT',
+            '/NORESTART',
+            '/NOCANCEL',
+            '/SP-',
+            '/COMPONENTS="gitlfs,gcm"',
+            "/DIR=`"$GitRoot`""
+        )
+    }
+    if (-not (Test-Path $GitCommand)) {
+        throw 'The pinned Git for Windows installer did not create git.exe.'
+    }
+    Add-MachinePath -Path (Join-Path $GitRoot 'cmd')
+    # Challenges 2 through 6 render evidence with Bash-era tools. Git for Windows already
+    # ships bash, curl and the coreutils, but only under usr\bin, which the installer does
+    # not add to PATH.
+    Add-MachinePath -Path (Join-Path $GitRoot 'usr\bin')
+    if (((& $GitCommand --version) -replace '^git version\s+', '').Trim() -ne $Artifacts.Git.Version) {
+        throw 'Git version verification failed.'
+    }
+
+    # jq backs every evidence-rendering block in the later chapters. It is a single
+    # executable, so "installing" it is a verified download into a directory on PATH.
+    $JqRoot = 'C:\Program Files\jq'
+    $JqCommand = Join-Path $JqRoot 'jq.exe'
+    $InstalledJqVersion = if (Test-Path $JqCommand) {
+        ((& $JqCommand --version) -replace '^jq-', '').Trim()
+    }
+    else {
+        $null
+    }
+    if ($InstalledJqVersion -ne $Artifacts.Jq.Version) {
+        New-Item -ItemType Directory -Path $JqRoot -Force | Out-Null
+        Invoke-VerifiedDownload -Uri $Artifacts.Jq.Uri -Destination $JqCommand `
+            -Algorithm SHA256 -ExpectedHash $Artifacts.Jq.Hash
+    }
+    Add-MachinePath -Path $JqRoot
+    if (((& $JqCommand --version) -replace '^jq-', '').Trim() -ne $Artifacts.Jq.Version) {
+        throw 'jq version verification failed.'
     }
 
     $UvPythonRoot = 'C:\ProgramData\uv\python'
@@ -816,6 +997,17 @@ superpassword=$DatabasePassword
 }
 
 function Install-SourceArchive {
+    # Re-provisioning is the facilitator's first response to a broken stack, and by that
+    # point the participant's Challenge 1 commits live only in $SourceRoot\.git. Replacing
+    # the directory would destroy the very commit their image tags and handoff bind to, so
+    # an already-correct tree is left exactly as it is.
+    $ExistingMarker = Join-Path $SourceRoot '.source-commit'
+    if ((Test-Path (Join-Path $SourceRoot '.git')) -and (Test-Path $ExistingMarker) -and
+        ((Get-Content -Path $ExistingMarker -Raw).Trim() -eq $SourceCommit)) {
+        Write-ProvisionLog ("Source tree already at {0} and carries Git history; leaving participant work untouched." -f $SourceCommit)
+        return
+    }
+
     $Archive = Join-Path $DownloadRoot "source-$SourceCommit.zip"
     Invoke-VerifiedDownload -Uri $SourceArchiveUrl -Destination $Archive `
         -Algorithm SHA256 -ExpectedHash $SourceArchiveSha256
@@ -825,11 +1017,18 @@ function Install-SourceArchive {
     New-Item -ItemType Directory -Path $Staging -Force | Out-Null
     Expand-Archive -Path $Archive -DestinationPath $Staging -Force
     $ArchiveRoot = Get-ChildItem -Path $Staging -Directory | Select-Object -First 1
+    # The pinned commit must carry the chapters, templates and migration CLI the guides
+    # drive. An older commit still has data/dotnet/java and would install silently, so the
+    # guard also names content that only the current tree has.
     if ($null -eq $ArchiveRoot -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'data\manifest.json')) -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'dotnet')) -or
-        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'java'))) {
-        throw 'The verified source archive is missing required frozen application content.'
+        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'java')) -or
+        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'infra\main.bicep')) -or
+        -not (Select-String -Path (Join-Path $ArchiveRoot.FullName 'tests\acceptance\pyproject.toml') `
+                -Pattern 'catalog-migrate' -Quiet -ErrorAction SilentlyContinue)) {
+        throw ("The verified source archive does not carry the workshop content this " +
+            "provisioner expects. Re-pin source_commit - see docs/Facilitator.md.")
     }
 
     $Previous = Join-Path $Root 'source.previous'
@@ -841,7 +1040,9 @@ function Install-SourceArchive {
         Move-Item -Path $ArchiveRoot.FullName -Destination $SourceRoot
         $CommitMarker = Join-Path $SourceRoot '.source-commit'
         Set-Content -Path $CommitMarker -Value $SourceCommit -Encoding ASCII
-        Remove-Item -Path $Previous -Recurse -Force -ErrorAction SilentlyContinue
+        Initialize-SourceRepository -SourceCommit $SourceCommit
+        # $Previous is deliberately kept. If this replaced a tree that held participant
+        # work, it is the only copy left.
     }
     catch {
         Remove-Item -Path $SourceRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -852,6 +1053,52 @@ function Install-SourceArchive {
     }
     finally {
         Remove-Item -Path $Staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Initialize-SourceRepository {
+    <#
+        .SYNOPSIS
+        Turn the extracted archive into a Git working tree holding one baseline commit.
+
+        .DESCRIPTION
+        The workshop source arrives as a signed zip archive rather than a clone, so it
+        carries no history. Both GitHub Copilot Challenge 1 paths record their own work
+        as a commit and read it back with `git rev-parse HEAD`, which requires a
+        repository. This creates one whose single commit is the frozen baseline, so a
+        participant's first commit is their own modernization and nothing else.
+
+        The upstream provenance stays in `.source-commit`; this local commit is
+        deliberately unrelated to the published commit SHA and must not be used as
+        archive provenance.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$SourceCommit
+    )
+
+    $GitCommand = 'C:\Program Files\Git\cmd\git.exe'
+    if (-not (Test-Path $GitCommand)) {
+        throw 'The pinned Git client is required to initialize the source repository.'
+    }
+    if (Test-Path (Join-Path $SourceRoot '.git')) {
+        return
+    }
+
+    Push-Location $SourceRoot
+    try {
+        & $GitCommand init --initial-branch=workshop --quiet
+        if ($LASTEXITCODE -ne 0) { throw 'git init failed for the source tree.' }
+        & $GitCommand config user.name 'MicroHack Participant'
+        & $GitCommand config user.email 'participant@microhack.invalid'
+        & $GitCommand config core.autocrlf false
+        & $GitCommand add --all
+        if ($LASTEXITCODE -ne 0) { throw 'git add failed for the source tree.' }
+        & $GitCommand commit --quiet --message "Workshop baseline $SourceCommit"
+        if ($LASTEXITCODE -ne 0) { throw 'git commit failed for the source tree.' }
+    }
+    finally {
+        Pop-Location
     }
 }
 
@@ -1072,6 +1319,30 @@ function Register-ApplicationTask {
     Start-ScheduledTask -TaskName $TaskName
 }
 
+function Set-CatalogEnvironmentForParticipants {
+    <#
+    .SYNOPSIS
+        Persists the non-secret catalog settings at Machine scope.
+    .DESCRIPTION
+        The application receives these through the scheduled-task start script, whose
+        variables live only in that task's process. Participants read the same names in
+        their own shells, because the acceptance runbooks reference $env:CATALOG_*
+        directly. Without Machine-scope persistence those reads expand to empty.
+
+        CATALOG_DATABASE_PASSWORD is deliberately excluded: it stays in
+        C:\MicroHack\secrets and is passed explicitly where it is needed.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Settings
+    )
+
+    foreach ($Name in ($Settings.Keys | Sort-Object)) {
+        [Environment]::SetEnvironmentVariable($Name, $Settings[$Name], 'Machine')
+        Write-ProvisionLog -Message ('Persisted {0} for participant shells.' -f $Name)
+    }
+}
+
 function Publish-DotNetApplication {
     param(
         [Parameter(Mandatory)]
@@ -1235,6 +1506,15 @@ $env:ASPNETCORE_URLS = 'http://0.0.0.0:5000'
 exit $LASTEXITCODE
 '@.Replace('__SOURCE_COMMIT__', $SourceCommit).Replace('__SQLCMD_COMMAND__', $SqlCmdCommand) |
         Set-Content -Path $StartScript -Encoding UTF8
+    Set-CatalogEnvironmentForParticipants -Settings @{
+        CATALOG_DATABASE_HOST     = 'localhost'
+        CATALOG_DATABASE_PORT     = '1433'
+        CATALOG_DATABASE_NAME     = 'LegoCatalog'
+        CATALOG_DATABASE_USERNAME = 'catalog'
+        CATALOG_IMAGES_PATH       = 'C:\MicroHack\source\data\images'
+        CATALOG_SEED_PATH         = 'C:\MicroHack\source\data\catalog.json'
+        CATALOG_BASE_URL          = 'http://localhost:5000'
+    }
     Register-ApplicationTask -ScriptPath $StartScript
 }
 
@@ -1433,6 +1713,16 @@ $env:OTEL_SDK_DISABLED = 'true'
 exit $LASTEXITCODE
 '@.Replace('__SOURCE_COMMIT__', $SourceCommit).Replace('__JAVA_COMMAND__', $JavaTools.JavaCommand) |
         Set-Content -Path $StartScript -Encoding UTF8
+    Set-CatalogEnvironmentForParticipants -Settings @{
+        CATALOG_DATABASE_HOST     = 'localhost'
+        CATALOG_DATABASE_PORT     = '5432'
+        CATALOG_DATABASE_NAME     = 'catalog'
+        CATALOG_DATABASE_USERNAME = 'catalog'
+        CATALOG_DATABASE_SSL_MODE = 'disable'
+        CATALOG_IMAGES_PATH       = 'C:\MicroHack\source\data\images'
+        CATALOG_SEED_PATH         = 'C:\MicroHack\source\data\catalog.json'
+        CATALOG_BASE_URL          = 'http://localhost:8080'
+    }
     Register-ApplicationTask -ScriptPath $StartScript
 }
 
@@ -1518,6 +1808,7 @@ function Invoke-StackSmokeCheck {
 
 try {
     Write-ProvisionLog "Starting idempotent provisioning for source commit $SourceCommit."
+    Save-ProtectedDeploymentParameters
     Stop-ApplicationTask
     Install-CommonTools
     Install-SourceArchive

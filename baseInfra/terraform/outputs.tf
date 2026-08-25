@@ -44,6 +44,36 @@ output "entra_user_object_ids" {
   value       = var.manage_entra_users ? [for k, u in module.entra_users : u.object_id] : []
 }
 
+output "entra_user_credentials" {
+  description = <<EOT
+Per-participant sign-in credentials keyed by user index. Each participant has a distinct
+password that must be changed at first sign-in. Read one entry at a time
+(`terraform output -json entra_user_credentials`) and hand each entry to exactly one person.
+EOT
+  sensitive   = true
+  value = var.manage_entra_users ? {
+    for index, user in module.entra_users : index => {
+      user_principal_name = user.user_principal_name
+      initial_password    = user.password
+    }
+  } : {}
+}
+
+output "performance_api_keys" {
+  description = <<EOT
+Per-participant, per-stack performance-test API key, keyed by user index. Terraform generates
+it, the provisioner writes it into `C:\protected\*.json`, and `infra/main.bicep` surfaces it to
+the container app as `PERFTEST_API_KEY`. Challenge 2's load test reads the key from a Key Vault
+secret in a separate deployment, so that secret must carry this same value for the run to
+authenticate.
+EOT
+  sensitive   = true
+  value = {
+    for index, environment in module.user_environment :
+    index => environment.performance_api_keys
+  }
+}
+
 output "region_assignment" {
   description = "Map of user index -> region (round-robin assignment)."
   value       = { for i in local.user_indices : i => local.user_location_map[i] }

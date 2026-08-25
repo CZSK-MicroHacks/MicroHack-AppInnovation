@@ -1,6 +1,13 @@
 terraform {
   required_version = "= 1.13.3"
 
+  # Partial configuration: the storage account holding this state is created once by the
+  # facilitator bootstrap in docs/Facilitator.md and supplied with
+  # `terraform init -backend-config=backend.hcl`. State contains the Windows administrator
+  # password, every generated database password, every generated performance API key, and
+  # every per-user Entra password, so it must never sit in a local file.
+  backend "azurerm" {}
+
   required_providers {
     azapi = {
       source  = "azure/azapi"

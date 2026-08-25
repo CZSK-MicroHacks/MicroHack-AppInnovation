@@ -685,3 +685,449 @@ Deferred (documented for future): blob image store, telemetry.
 - Inspected applicable policy assignments and the inherited `Block Azure RM Resource Creation` definition. That deny targets only classic resource types, the prepared target contains none, and every ARM validation/preview completed without a policy denial or exemption.
 - Verified the exact RBAC surface through source review, 100 focused acceptance tests, built-in role-definition resolution, and the facilitator's existing subscription `Owner` prerequisite. Workload, migration, CI, participant, Defender, and SRE identities remain bound to the frozen scopes; the one subscription-wide SRE Monitoring Contributor assignment is the previously approved exception.
 - Only Azure account, policy, role-definition/effective-access, template-validation, and what-if reads occurred. No deployment, VM power change, role assignment, paid-plan mutation, load run, GitHub workflow, SRE incident, traffic change, resource deletion, push, or other live mutation occurred. The disposable-subscription P10 matrix remains an explicit authorization gate.
+
+### 2026-08-22 (Workshop experience pass - legacy baseline restored, participant narrative rebuilt)
+
+- A five-dimension review of the delivered workshop (quality, didactics, selling power, delivery operability, and plan conformance) scored the repository 3-4 out of 10 on every dimension. All five reviews converged independently on the same root cause, so the corrective work began there rather than with the individual findings.
+- **Root cause: the repository contained no legacy baseline.** The root guide promised participants start on .NET 8 and JDK 17, but `dotnet/` and `java/` at HEAD were already .NET 10, Spring Boot 4.0.7, and JDK 21 — the modernized target. The legacy code existed only at the pinned VM source commit, which was 37 commits stale and whose tree contains no `infra/`, no `catalog-migrate`, and only four of the twelve challenge folders. No single tree held both the legacy application and the workshop assets, so the central exercise could not be performed as written.
+- The provisioned VMs confirmed the defect independently. `workshop/toolchain.lock.json` freezes `sourceSdk` 8.0.424 with `rollForward: disable` and `sourceRuntime` 17.0.20+8, so a participant VM could not build the tree that HEAD shipped. The lock was correct throughout; the application code had drifted away from it.
+- **Architecture decision.** The workshop premise is that only legacy applications exist and participants perform the modernization themselves. New or finished code therefore belongs exclusively under `solutions/`. The modernized tree moved to `solutions/reference/`, and `dotnet/` and `java/` were restored to the legacy baseline from the pinned commit. Five contract-test path references were repointed to `solutions/reference/`, and the two moved stack guides had their relative links corrected for the added directory depth.
+- The restoration made several previously false documents true without editing them: the architecture document's ".NET 8 + SQL Server 2022 VM" and "Java 17 + PostgreSQL 18" rows, and both Challenge 1 solution headers, now match the code they describe. No toolchain lock change was required.
+- Because the modernized tree no longer sits at the paths participants build in, the Dockerfiles left with it. That is intentional: authoring the container image is the Challenge 1 exercise, not a file to copy.
+- **Narrative rebuild.** The root guide previously opened with a facilitator go/no-go matrix and never stated what the workshop was for. It now opens with the business situation, the before/after target, and four measurable outcomes, followed by the path decision aid and chapter map; the go/no-go matrix is retained in full under a facilitator heading, because the repository gate asserts its presence. A wrap-up chapter was added to collect every chapter's measurement into one before/after scorecard, which no chapter previously did.
+- The troubleshooting guide was reorganized around a symptom index, since it was previously navigable only by someone who already knew which layer had failed. It now also records that the participant VMs deliberately have neither `git` nor `docker`, and that the commit identity comes from `C:\MicroHack\source\.source-commit`.
+- A stale package-proxy prefix on the shared gate command was removed from the root guide; the endpoint returns HTTP 401 and the suite resolves correctly without it.
+
+### 2026-08-22 (Toolchain pass - Git pinned onto the VMs, image builds standardized on ACR)
+
+- The experience review left one unresolved blocker: both GitHub Copilot Challenge 1 paths are built on a commit-per-accepted-change method, and acceptance assertions freeze `git add`, `git commit`, `git status --porcelain`, and `git rev-parse HEAD` — but the VM had no Git. Every affected guide papered over this by telling participants to "confirm with your facilitator how your table gets a Git-capable working copy", which named a prerequisite nobody owned and which no facilitator document explained how to provide. Two of the twelve chapters were therefore not runnable as written.
+- **Decision: pin Git rather than remove the Git-based method.** The original objection to Git was never that participants do not need it; it was that adding it would introduce an unpinned installer outside the frozen lock. That argues for pinning it, exactly as VS Code, Azure CLI, uv, SqlPackage, and PostgreSQL already are. Git for Windows 2.55.0.windows.5 was added to `workshop/toolchain.lock.json`, with its SHA-256 verified by downloading the published installer and its Authenticode subject read out of the binary's certificate table rather than assumed — the signer is `Johannes Schindelin`, not Microsoft, so asserting the usual publisher would have failed on the VM.
+- The provisioner installs it through the same verified-download, publisher-assertion, locked-installer, PATH, and verify-or-throw sequence as every other pinned tool.
+- **A signed archive is not a repository, so installing Git alone would not have been enough.** The source arrives as a zip, so it carries no history and `git rev-parse HEAD` would still have failed. Provisioning now calls `Initialize-SourceRepository`, which runs `git init` in `C:\MicroHack\source` and makes one baseline commit.
+- **This creates two distinct SHAs, and conflating them is the most likely support question of a delivery.** `git rev-parse HEAD` identifies the participant's own work and is what image tags, revisions, and handoffs bind to. `.source-commit` records which upstream archive was provisioned and is provenance only. A local commit cannot reproduce an upstream commit SHA, so these are unrelated values by construction. Every Challenge 1 guide now states the distinction where a participant will meet it, and the facilitator guide leads with it.
+- That distinction exposed a real inconsistency in the manual path: its first terminal derived the identity from `.source-commit` while its second re-derived it with `git rev-parse HEAD`. While the tree had no history this was invisible; with a baseline commit the two terminals would have disagreed about which source was deployed. The first correction — making both terminals read the archive marker — was wrong and was reversed in the next pass; see the publish-bridge entry below for why.
+- **Image builds standardized on `az acr build`.** The bounded-rewrite guides still used `docker buildx build`, `docker tag`, and `docker push`, which cannot run on a VM with no Docker daemon. They now build server-side in the registry. Because the registry does not exist until bootstrap, the build moved after it, and the container checkpoint that preceded it became a daemon-free check of the authored Dockerfile's non-root `USER` and `EXPOSE 8080` — failing before any Azure resource is created rather than after a remote build. The `docker build`/`docker push` steps in the two GitHub Actions workflows were deliberately left alone: those run on `ubuntu-latest`, where a daemon is present and the local build is correct.
+- Two guards were added so this cannot silently regress: one binds the provisioner to the frozen Git pin, requiring the locked version, URL, hash, and publisher to appear in the script and requiring the repository initialization; the other parses the provisioner with the PowerShell parser, turning a syntax error from an opaque VM extension failure into a local test failure.
+- A broken internal package-proxy prefix was removed from thirteen participant-facing command blocks across six files. The endpoint returns HTTP 401, so every one of those commands would have failed as printed.
+
+### 2026-08-23 (Second review pass - least privilege, re-provisioning safety, and the publish bridge)
+
+A second round of independent reviews scored the workshop 5-7 out of 10 across quality,
+didactics, delivery, selling, and plan conformance. Four of the blockers they found were
+regressions introduced by the previous pass, which is the strongest argument for keeping
+the review adversarial rather than confirmatory.
+
+- **Participants were being asked to deploy at subscription scope, which they cannot do.**
+  `infra/main.bicep` was `targetScope = 'subscription'` and created the participant's
+  resource group. The confirmed topology is the opposite: the facilitator provisions
+  everything at T-1, each participant receives one resource group containing their two
+  legacy VMs, and the participant is granted Owner on that resource group and nothing
+  above it. The first Azure command of Challenge 1 would therefore have returned
+  `AuthorizationFailed` for every participant simultaneously. The template is now
+  `targetScope = 'resourceGroup'`, creates no resource group, and asserts that the
+  `resourceGroupName` parameter matches the group it is deployed into, so a mismatched
+  parameter file fails at compile time instead of producing resources in the wrong place.
+  `baseInfra/terraform` already built exactly this topology, so the template was the only
+  thing out of step. `infra/sre-agent.bicep` remains subscription-scoped on purpose: it
+  defines a custom role, which cannot be scoped lower, and it is facilitator-only work.
+- **The reversed manual-path decision.** The previous pass concluded that the manual path
+  "changes no code and commits nothing". That was wrong: the manual path authors a
+  Dockerfile, and Challenge 3's workflow checks the source out *from GitHub* at
+  `handoff.source.commitSha` and builds `application-source/<stack>/Dockerfile`. A commit
+  that exists only on the VM cannot satisfy that, and a local `git init` commit can never
+  reproduce an upstream SHA. Every Challenge 1 path must therefore commit **and push** its
+  work to the participant's own GitHub repository, and record `git rev-parse HEAD`. The
+  acceptance assertion was inverted accordingly.
+- **Nothing in the repository pushed anything to GitHub.** Searching `challenges/`,
+  `solutions/`, and `docs/` for `git push` or `git remote` returned zero hits, so the chain
+  from Challenge 1 to Challenge 3 was severed for all three paths, not just the manual one.
+  The evidence file matters here too: the workflow reads `HANDOFF_FILE` from the committed
+  control commit, so `evidence/` must stay tracked. Gitignoring it was proposed as a fix
+  and rejected for that reason.
+- **Re-provisioning silently destroyed participant work.** `Install-SourceArchive`
+  unconditionally replaced `C:\MicroHack\source`. A facilitator re-running provisioning to
+  fix one broken VM would have deleted the morning's commits on every other VM in the
+  room. It now returns early when the tree is already a repository at the requested source
+  commit, and the previous tree is kept rather than removed.
+- **The provisioner installed a shell the guides depend on but never put it on PATH.** Only
+  `Git\cmd` was added, so `bash`, `curl`, and the coreutils shipped with Git for Windows
+  were unreachable; `jq` appeared nowhere in the lock at all despite being used in
+  participant-facing commands. `Git\usr\bin` is now on the machine PATH and jq 1.7.1 is
+  pinned. jq ships **unsigned** — established by parsing the PE security directory and
+  finding an empty certificate table, not by assumption — so the lock schema gained a
+  `windowsBinary` definition that pins by hash alone, rather than forcing a
+  `signaturePublisher` that does not exist.
+- `global.json` is written into the source tree after the baseline commit, so every
+  participant on a .NET Copilot path began with a dirty worktree and failed the first
+  `git status --porcelain` gate. It is now ignored.
+- `baseInfra/terraform` defaulted `source_commit` to a stale pin whose tree lacks `infra/`
+  and the workshop tooling. A facilitator who forgot the variable would have provisioned a
+  room full of quietly wrong VMs. The default is removed and that specific commit is
+  rejected by a validation rule, so the failure is loud and immediate.
+- `infra/perf-testing.bicep` required a workflow identity principal that does not exist
+  until Challenge 3, while Challenge 2 needs the template — a dependency cycle introduced
+  by the previous pass. The parameter now defaults to empty and the two workflow role
+  assignments are conditional.
+- Git Credential Manager is now installed with Git, so the first `git push` authenticates
+  through a browser sign-in instead of stranding participants at a credential prompt.
+- **Guards, so these cannot regress quietly.** New assertions bind the legacy trees to the
+  frozen lock (derived from `toolchain.lock.json` rather than hard-coded, so the guard
+  cannot drift from the pin it protects), require jq and Git Bash on PATH, require
+  `global.json` to be ignored, require the stale-archive and re-provisioning guards, and
+  require terraform to demand an explicit `source_commit`. The legacy-tree guard was
+  negative-tested by flipping the target framework and confirming the failure before
+  reverting.
+- **The rejoin path named a directory that did not exist.** The day-of checklist pointed
+  facilitators at `workshop/golden/<stack>/modernization-contract.json`, and
+  `workshop/golden/` was nowhere in the repository. `workshop/golden/` now exists with a
+  guide that states plainly why a working golden handoff cannot be checked in — every
+  field is a live Azure resource ID, an image digest, or a commit SHA, so a committed one
+  is either a fabrication that fails validation or a pointer at deleted resources — and
+  gives the T-4 budget, the build procedure, the exact `handoff_cli` command that must
+  exit `0`, and the requirement to keep the facilitator environment alive until the
+  workshop ends. The rendered contracts are gitignored because they are delivery-specific.
+- **A repository-wide link guard now exists.** The previous check covered `challenges/`,
+  `solutions/`, and nine navigation documents, but not `docs/` or `workshop/` — which is
+  precisely how the dangling `workshop/golden/` reference reached a facilitator checklist.
+  Every relative Markdown link in the repository is now resolved, and the guard was
+  negative-tested by introducing a broken link and confirming the failure.
+- A companion guard asserts the participant template stays resource-group-scoped and that
+  no document deploys `infra/main.bicep` at subscription scope, so the
+  `AuthorizationFailed` failure mode cannot return quietly.
+- **Challenge 6's recovery clock could not be computed.** The chapter handed participants
+  a jq expression over `$DETECTED_AT` and `$RECOVERED_AT` without ever assigning either,
+  so the workshop's headline MTTR number was unobtainable in the one chapter that claims
+  to measure it. Task 6 now names the exact source of each timestamp — the
+  `IncidentActivitySnapshot` audit row and the alert's
+  `properties.essentials.resolvedDateTime` — and Task 7 assigns them behind `:?` guards.
+  Verified by execution: filled it prints `minutesToRecovery: 13`, blank it names the
+  missing value instead of printing a number nobody could defend.
+- **The facilitator guide was 649 lines with no usable surface during delivery.** A
+  108-line `docs/DayOfCard.md` now carries the pre-09:00 go/no-go, the clock with its two
+  poll points, a checkpoint-to-artifact ladder built only from files shared by all three
+  Challenge 1 paths, and the cut levers. It also records that the manual path writes no
+  shared evidence between steps 4 and 9, so at 14:45 the facilitator asks which step
+  someone is on rather than reading a directory that cannot have changed.
+- The guide now opens with who holds which rights and when: the facilitator is subscription
+  Owner from T-15 through T-1 and teardown, participants hold Owner on one resource group
+  and nothing above it, and every subscription-scope action completes before anyone
+  arrives. That section exists because the previous text implied participants needed the
+  same rights the facilitator does, which is how a room of twenty ends up with twenty
+  subscription Owners.
+- **The publish bridge.** All six runbooks and all four Challenge 1 chapters now commit,
+  set `origin` idempotently, and `git push --set-upstream origin workshop` before any
+  identity is recorded, and `$SourceCommit` is read *after* the push so it is provably a
+  commit that exists on GitHub. The `workshop` branch is not invented by the guides: the
+  provisioner already creates it with `git init --initial-branch=workshop`, so the push
+  target and the local branch agree by construction.
+- The handoff needs a **second** commit, and this is a constraint rather than a
+  preference: the workflow asserts `GITHUB_SHA != SOURCE_COMMIT` and requires the source
+  commit to be an ancestor of the control commit. Each runbook therefore pushes the source,
+  then records the handoff and pushes that as a later commit, after transient cleanup so
+  nothing temporary ships.
+- Publishing exposed a latent defect worth recording: `evidence\*.trx` is matched by
+  `*.trx` in `.gitignore`, so the single `git add --` in the modernization runbooks errored
+  and staged nothing. It is now a plain add plus an explicit `git add --force` for the
+  test-results file that the clean-tree gate depends on.
+- **A prerequisite that no facilitator document owned.** Every runbook asks for a
+  "facilitator-provided HTTPS URL", and nothing in the facilitator guide or the day-of card
+  said to provide one. Both now carry it, together with a T-1 instruction to perform a real
+  test push from a provisioned VM — which is the only way to discover before the room
+  arrives that Git Credential Manager's browser sign-in is reachable and that organization
+  SSO or device policy does not block it. A guard asserts the participant text and the
+  facilitator text stay in agreement, and specifically rejects the previous claim that work
+  reaches GitHub "not from the VM", which the bridge made false.
+
+### Round 4 — protected parameters, and the CI runtime the pipeline never declared
+
+- **The protected parameter files had no producer.** All six Challenge 1 runbooks deploy
+  with `--parameters '@C:\protected\<path>-<stack>-<stage>.json'`, and nothing anywhere
+  created that file — Challenge 1 could not start on any path. The provisioner now writes
+  the nine files at T-1, because the three values the template hard-asserts
+  (`resourceGroupName`, `performanceApiKey`, `facilitatorPrincipalObjectId`) are all
+  facilitator-time facts that no participant can supply.
+- **`sourceCommit` and `imageDigest` are deliberately absent from those files.** They are
+  passed by the participant as `--parameters key=value` overrides after the file. Writing a
+  placeholder that satisfied the template's format assert would let a forgotten override
+  deploy the wrong source *silently*; omitting them makes the same mistake fail loudly at
+  deploy time. This is not a workaround — `az deployment group create --help` states that
+  "parameters are evaluated in order" and explicitly recommends supplying the parameters
+  file first and then overriding selectively with `KEY=VALUE`. Note the same help warns
+  that a `.bicepparam` file permits `--parameters` only once; the runbooks use ARM JSON, so
+  the pattern is available to them. `infra/parameters/*.bicepparam` remain
+  facilitator-facing examples and are not used by any participant command.
+- **CI declared one .NET runtime but has to serve two.** `catalog-dotnet.yml` requested
+  only SDK `10.0.400`, the modernized target. But the handoff contract's `runtimeVersion`
+  and `frameworkVersion` are free-form strings describing the *source*, and no contract
+  field pins a target framework — so only the copilot-modernization path retargets to
+  `net10.0`, while the manual and copilot-rewrite paths legitimately hand off `net8.0`.
+  The job passed only because the hosted runner happens to preinstall `8.0.424` too. It now
+  declares both SDKs, each still exactly pinned.
+- This was verified by reproducing the failure rather than reasoning about it: running the
+  `net8.0` suite with only a newer ASP.NET Core runtime present aborts with "You must
+  install or update .NET to run this application", and forcing roll-forward instead
+  produces seven `PipeWriter … does not implement PipeWriter.UnflushedBytes` errors with
+  **zero** assertion failures — a version-pairing artifact, not an application defect. Both
+  symptoms are recorded in `docs/CommonErrors.md`.
+- A first attempt at this fix was wrong and was reverted: pinning CI *down* to the VM's
+  `8.0.424` looked like consistency but would have broken the modernization path, whose
+  runbook states an accepted target of .NET `10.0.11`/SDK `10.0.400` and builds from
+  `mcr.microsoft.com/dotnet/sdk:10.0.400`. The lock file distinguishes `sourceSdk` from
+  `targetSdk` precisely because both are real. Java needs no equivalent change: Maven
+  builds with `maven.compiler.release=17` run correctly on the pinned JDK 21.
+- **The shell changes at Challenge 2 and nothing said so.** Challenge 1 puts the
+  participant in PowerShell; Challenges 2–6 are bash. Unstated, that is expensive rather
+  than cosmetic, because PowerShell aliases `curl` to `Invoke-WebRequest`, so a block
+  ending in `curl -s … | jq` fails as if the *application* were broken. Every chapter with
+  a bash block now states where it runs, and a guard rejects a bash-continuation block in
+  any chapter that mandates PowerShell — the handoff validation command in Challenge 1,
+  which all three paths must run, was exactly that.
+
+- **`C:\protected` was unreadable by the participant who has to read it.** Introducing the
+  parameter-file producer created a second-order defect the producing agent flagged but did
+  not own. The folder reuses `Set-ProtectedAcl`, which disables inheritance and grants only
+  SYSTEM and Administrators. The VM's admin account is *custom* — `admin_username` defaults
+  to `azureuser` and the variable explicitly forbids reserved names — so it is not the
+  RID-500 Administrator that Windows Server exempts from Admin Approval Mode. UAC therefore
+  hands an ordinary PowerShell a filtered token, and the first
+  `az deployment group create --parameters '@C:\protected\…json'` of Challenge 1 dies on
+  `Access is denied`. Only `docs/Facilitator.md` mentioned elevation; no participant
+  document did, and the participant works in VS Code's integrated terminal, which is not
+  elevated.
+
+  Fixed by granting the admin account **Read** on `C:\protected` and its nine files, via a
+  new opt-in `-ReadPrincipal` parameter threaded through `Set-ProtectedAcl`,
+  `Save-ProtectedText` and `Save-ProtectedConfiguration`. The account name travels from
+  terraform as a validated `adminUsername` payload field rather than being guessed from
+  `$env:USERNAME`, which would resolve to SYSTEM at provisioning time. This grants no
+  capability the participant lacked — a local administrator can elevate and read the folder
+  anyway — it only removes a UAC papercut from the middle of the first challenge.
+
+  Two deliberate boundaries. The grant is opt-in, so the database passwords under
+  `C:\MicroHack\secrets` keep the administrators-only ACL; a guard asserts that
+  `Set-ProtectedAcl -Path $SecretRoot` is called *without* `-ReadPrincipal`, so widening
+  the helper's default would fail. And the ACE is skipped when the principal already has a
+  grant, so a name colliding with a built-in cannot silently *downgrade* Administrators
+  from FullControl to Read. The T-1 check in `docs/Facilitator.md` now runs **non-elevated**
+  on purpose: verifying it from an elevated shell proves nothing about the session
+  Challenge 1 actually deploys from.
+
+- **A guard of mine broke for the right reason and was rewritten, not relaxed.**
+  `test_challenge_path_registry_is_complete` asserted the app-modernization VS Code
+  extension was installed for both stacks by splitting the provisioner on the *first*
+  `if ($Stack -eq 'dotnet')` and searching the prefix. The parameter-file producer added an
+  earlier, unrelated `$TargetStack = if ($Stack -eq 'dotnet')`, moving the split boundary
+  and failing a test whose invariant still held. The marker was a fragile proxy for "the
+  unconditional extension list", so the guard now anchors on the `$Extensions = @{ … }`
+  literal itself and additionally asserts the extension is *not* re-declared inside either
+  arm of the branch. Both forms were mutation-tested: demoting the extension into the
+  dotnet-only arm now fails the guard, which the old form would not have caught.
+
+### Round 5 — closing the plateau
+
+Round 4 scored 8/8/9/8/8, with three dimensions flat against round 3. A flat score is a
+different signal from a low one: the remaining findings were not hard, they were simply
+never picked up, so this round was about clearing the backlog rather than redesigning
+anything.
+
+- **The `sourceCommit` override finally reached the participant-facing chapters.** Round 4
+  raised this as blocking, and it was: `--parameters sourceCommit=` appeared 8 times in
+  `solutions/` and **0 times** in `challenges/`. The runbook a participant follows silently
+  omitted the flag that pins a deployment to the commit it was built from, and
+  `challenges/ch01-manual/README.md` actively claimed the opposite. All four Challenge 1
+  chapters now pass the override, carry a symptom-table row for the mismatch, and route to
+  a new entry in `docs/Troubleshooting.md`.
+
+- **Bicep now compiles with zero warnings, and the one banner that remains is documented.**
+  `infra/bicepconfig.json` enables the `assertions` experimental feature, which prints a
+  banner on every build. The tempting fix — deleting the flag — would have broken three
+  real `assert` statements in `infra/github-cicd.bicep` that validate resource-ID shapes.
+  The flag is load-bearing, so it stays and `infra/README.md` now tells the reader the
+  banner is expected rather than leaving them to wonder whether the build is broken.
+
+- **`runs-on: ubuntu-latest` became `ubuntu-24.04`.** This had been open for four rounds. A
+  workshop whose entire premise is that a pinned toolchain makes upgrades boring cannot
+  itself float its CI runner.
+
+- **A guard of mine was too narrow, and mutation testing is the only reason I know.**
+  `test_acceptance_suite_blocks_are_self_contained` was written to catch code blocks that
+  invoke the acceptance suite without first `cd`-ing into it. It matched on the literal
+  `pytest` — but the suite is invoked through its seven console scripts far more often than
+  through pytest, so deleting a `cd` from a `catalog-validate-challenge-evidence` block
+  sailed straight past it.
+
+  Widening it exposed two further wrong assumptions. The repo has **three** separate uv
+  projects (`tests/acceptance`, `dataGenerator`, `baseInfra/github`), so "any block running
+  `uv` must be in the suite" is false and produced 36 phantom offenders. And the guard only
+  recognised `cd tests/acceptance`, while the PowerShell runbooks correctly use
+  `cd tests\acceptance` or `Push-Location tests\acceptance`. The final guard reads the
+  script names from `[project.scripts]` at test time so it cannot drift, accepts both path
+  separators and both cwd idioms, and ignores non-executable fences such as `mermaid`.
+  It then caught a genuine eleventh offender at `challenges/ch02/README.md`.
+
+  The failure mode this protects against is worse than a confusing error message: because
+  there are three uv projects, running a suite command from the repository root does not
+  fail cleanly — uv resolves a *different* project and reports a missing script, which
+  points the reader away from the actual mistake.
+
+- **Six selling claims were corrected rather than defended.** The largest was an unsourced
+  "a week per application" figure that implied a ~40x productivity multiple and had
+  survived four rounds. `docs/Demo.md` was also showing the upgrade running *backwards*, to
+  .NET 8, in a demo whose entire point is the move to .NET 10.
+
+### Round 5b — the findings the critics could not have made
+
+Round 5 came back 9/8/9/9/9. Rather than wait for round 6, I ran my own sweeps against
+classes of defect nobody had checked, and the two most valuable findings of the round came
+from there rather than from any report.
+
+- **A template the workshop tells participants to deploy had no runnable command.**
+  Comparing each `infra/*.bicep`'s required parameters against every `--template-file`
+  invocation in the docs showed `github-cicd.bicep` was described in prose in
+  `solutions/ch03/README.md` — *"Deploy `infra/github-cicd.bicep` at resource-group scope
+  with the exact ACR and Container App resource IDs"* — and nowhere shown as a command. It
+  was the only template in the repo in that state, and it asserts the shape of all three
+  IDs it receives, so a reader's invented invocation fails at deploy time rather than at
+  review time. The solution now reads the three values out of the validated handoff with
+  `jq` instead of asking anyone to retype them.
+
+  The same sweep found `infra/README.md`'s own what-if example omitting the required
+  `sourceCommit`, so the command in the infrastructure README could not have run either.
+
+- **Two of my own detectors were wrong before the repo was.** The first pass of the
+  parameter sweep reported that both copilot-rewrite solutions deployed `main.bicep` six
+  times without pinning `sourceCommit` — the exact class round 4 had called blocking. It
+  was a false positive: those runbooks use the grouped `--parameters a=1 b=2` form, so the
+  assignment is mid-line, and my line-anchored regex could not see it. A second false
+  positive flagged `docs/Facilitator.md` for a block that is deliberately schematic. Both
+  detectors were corrected before anything was changed. **The repository was right and I
+  was wrong, twice, in the same sweep** — which is the argument for verifying a finding
+  against the file before acting on it, including one's own.
+
+- **Reference runbooks now run as printed.** Six `<placeholder>` values survived in the
+  Java and .NET copilot paths, four of them at the database cutover — the least
+  recoverable point in Challenge 1 — while the line directly above them read the password
+  from the protected store. All six now derive from the same sources the clean manual path
+  already used: `$env:CATALOG_DATABASE_*` for source connection fields, and
+  `$ReleaseTarget.database.applicationPrincipal.name` for the post-migration verifier.
+
+  Where a value is genuinely the reader's to choose — a rewrite slice name, a run ID — the
+  block now uses the repository's existing `: "${VAR:?explanation}"` idiom so it fails with
+  a sentence instead of a syntax error. The guard that enforces this permits exactly two
+  kinds of placeholder: a value only the facilitator can know, and a secret the reader must
+  choose. **Printing a literal secret would be the worse bug**, so the guard must not push
+  anyone toward one.
+
+- **The demo's closing beat now runs cold.** `docs/Demo.md`'s honesty table promised the
+  scorecard step ran from checked-in data; it read three files from the empty `evidence/`
+  directory and died on the first. Two fixtures were added under
+  `workshop/contracts/fixtures/wrapup/`, built from the exact field shapes the Challenge 0
+  and Challenge 6 producers emit, and the step now reproduces its four documented lines
+  byte for byte. The guard asserts the printed figures still match the fixtures that
+  produce them, and that the fixture's `minutesToRecovery` agrees with its own timestamps.
+
+- **A fix of mine broke an existing test, for a good reason.** Replacing `<slice-name>`
+  with a required variable broke `test_rewrite_slice_blocks_fail_before_commit`, which
+  *executes* that block in a sandbox to prove it refuses to commit after a failure. The
+  harness substituted the placeholder textually. The test was right to fail — it now
+  supplies `SLICE_NAME` the way a participant would, and still proves the same property.
+
+One process note. The delivery critic reported that the repository changed underneath its
+round-5 review, and correctly withheld a flaky-test finding it had traced to my edits
+rather than to the suite. Reviews from here run against a frozen tree.
+
+## Round 6 — the phase vocabulary, and a regression I caused myself
+
+Scores entering this round were quality 7, didactics 9, selling 10, delivery 9,
+conformance 9. Quality had *dropped two points*, and the cause was a fix of mine.
+
+- **`$env:CATALOG_*` never existed in a participant's shell.** Round 5 added runbook steps
+  that read `$env:CATALOG_DATABASE_HOST` and friends. Those assignments live inside the
+  here-string that becomes the application's scheduled-task start script, so they are
+  process-scope for the app and invisible to every other session. Ninety-six reads across
+  the runbooks were reading nothing. `Set-CatalogEnvironmentForParticipants` now persists
+  the non-secret values at Machine scope immediately before the task is registered, for
+  both stacks, with the database password deliberately excluded. This also closed a latent
+  bug in `solutions/ch01-manual/dotnet/README.md`, which read a variable it never set.
+
+- **Two of my own verification tools were lying to me.** The PowerShell parse check passed
+  a `[ref]` to an undeclared variable, threw, and printed `PARSE OK` regardless. The
+  provisioner write-detector matched `-Path` *inside* `Join-Path`, so it resolved the wrong
+  file. Both were corrected before the findings they produced were trusted. A guard that
+  cannot fail is worse than no guard, because it is counted as evidence.
+
+- **Unbound shell variables in three deployment blocks.** The delivery critic found one
+  `$GITHUB_REPOSITORY` with nothing behind it. Generalising the check to *every* expansion
+  in a deployment block found nine more, including a block in `solutions/ch02/README.md`
+  whose own prose claimed it had guards it did not have.
+
+- **Build-phase codes were reader-visible everywhere.** `P5`, `P6`, `P8` name the order
+  this repository was built in and mean nothing to a participant. They had reached fifteen
+  test filenames, the contract guides, Bicep parameter descriptions, and — worst — the
+  error strings the evidence validators print at a participant. All are now named by
+  challenge or component. The guard that keeps them out has to be careful: Azure ships
+  real identifiers of the same shape, so Defender for Servers Plan 2 and the Premium SSD
+  disk tiers are allowed *per file and per token*, and a genuine phase code in one of those
+  same files still fails.
+
+- **The golden-handoff validation command could never have exited `0`.** The validator
+  resolves evidence relative to `--repository-root`, and the path registry requires the
+  contract at `evidence/modernization-contract.json`. `workshop/golden/README.md` pointed
+  the root at this repository, which made the path `workshop/golden/…` and matched no
+  slice. A golden bundle is its own validation root. `.gitignore` had already anticipated
+  the correct layout; the documented command had not. `golden-dryrun` now walks the same
+  checks in T-4 order and stops at the first defect instead of emitting a schema error set.
+
+- **An agent corrected my citation, and was right.** The Defender seeding work was
+  dispatched against `docs/RewritePlan.md:607-643`, which is the SRE Agent section. The
+  Defender requirements are at 572–603. The agent implemented the correct section and said
+  so rather than building what it was told.
+
+- **The SRE response plan stays out of Bicep, with evidence.** No ARM resource type exists:
+  the published spec has four PUT-able paths and none is a response plan, and the Bicep
+  type index rejects every candidate name with `BCP081`. The repository's own contract had
+  already recorded `responsePlanConfiguredInIaC: false`, and the acceptance suite asserts
+  it. The template now carries the citations rather than the appearance of an omission.
+
+- **Least privilege, once more.** `backend.hcl.example` asked for Storage Blob Data *Owner*
+  where the facilitator command grants *Contributor*. Contributor already covers the blob
+  leases Terraform uses for state locking; Owner only adds RBAC management. The example was
+  the outlier.
+
+- **The .NET app validated three settings by defaulting them.** `CatalogRuntimeOptions`
+  read `DEPLOYMENT_ENVIRONMENT`, `OTEL_SERVICE_VERSION` and `CONTAINER_APP_REVISION` with
+  `?? "lab"`, `?? "1.0.0"` and `?? "local"`. A misconfigured deployment therefore started
+  and lied about which environment and which revision it was, which is precisely the
+  signal the observability challenge depends on. All three are now required, matching the
+  Java implementation that already used `require(...)`. The test fixtures that this broke
+  were repaired by supplying the values, not by restoring the fallbacks.
+
+- **Five behavior tests, mirrored into both trees.** The legacy and reference test suites
+  were already byte-identical in six of eight files; the deltas are Azure-only exclusions,
+  not a deliberately thinner legacy suite. So the new tests belong in both. They exercise
+  the real repository, importer, DbContext and HTTP pipeline against in-memory SQLite —
+  logic, not SQL Server's collation engine, and the code says so.
+
+- **A guard that binds the two halves of the environment together.** Persisting `CATALOG_*`
+  at Machine scope only helps if the values match what the application actually runs with.
+  The new guard requires every key present in both places to agree, and requires the
+  participant-facing `CATALOG_BASE_URL` to carry the same port the provisioner's own smoke
+  test calls. Both halves were mutation-tested.
+
+- **Committing the work exposed a guard that had been scanning half the repository.**
+  `test_no_build_phase_codes_reach_a_reader` enumerated files with `git ls-files`, which
+  lists the index. While the rewrite sat uncommitted, 121 files — the entire
+  `solutions/reference/` tree among them — were invisible to it, and it reported green the
+  whole time. The moment the tree was committed it failed immediately on `docs/CostEstimate.md`.
+  A guard that only sees committed work is weakest exactly when the risk is highest, so it
+  now lists untracked-but-not-ignored files too, and that widening was proved by planting a
+  leak in an uncommitted file. The offending matches were genuine Azure identifiers —
+  Premium SSD tier `P10`, Defender for Servers plans `P1` and `P2` — and were allowlisted
+  per file and per token rather than by loosening the pattern.
+
+- **Generated packaging metadata was tracked.** `.gitignore` covered `__pycache__/` but not
+  `*.egg-info/`, so six files that `uv` rewrites on every editable install were committed.
+  Each facilitator would have inherited a dirty working tree they did not cause. The
+  directory is untracked, the ignore rule is in place, and a guard now fails if any
+  generated Python metadata is tracked — it was verified against the live defect, failing
+  before the fix and passing after.

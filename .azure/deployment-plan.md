@@ -65,9 +65,19 @@ Consequences:
 Use standalone Bicep under `infra/`. Do not introduce `azd`, Terraform, a deployment script,
 or a second target architecture.
 
-`infra/main.bicep` is subscription-scoped. It creates the named resource group and invokes a
-resource-group-scoped environment module. This permits a clean subscription what-if without
-pre-creating a validation resource group.
+`infra/main.bicep` is resource-group-scoped (`targetScope = 'resourceGroup'`) and creates no
+resource group. The facilitator creates each participant's resource group at T-1, together with
+the two P3 legacy VMs, and grants that participant `Owner` on that one group and nothing above
+it. The template therefore deploys *into* that existing group and invokes the environment module
+there. Its `deploysIntoTheParticipantResourceGroup` assert requires `resourceGroupName` to equal
+`resourceGroup().name`, so a parameter file aimed at another participant's group fails before it
+can fill the wrong group. Validation, what-if, and deployment all use `az deployment group`
+against that existing group; a participant needs no rights outside it, and one participant's
+failure cannot take down the room.
+
+`infra/sre-agent.bicep` is the single deliberate exception. It is subscription-scoped because it
+defines a custom role definition, which cannot be scoped below a subscription, and only the
+facilitator runs it.
 
 The deployment has two explicit stages:
 
@@ -98,7 +108,7 @@ absent Container App.
 
 The Bicep module graph will contain:
 
-- resource group and deterministic naming;
+- deterministic naming derived from the participant resource group the template deploys into;
 - VNet, Container Apps infrastructure subnet, private-endpoint/delegated data subnets, and
   private DNS;
 - typed source VM/VNet inputs, bidirectional source-to-target VNet peering, and source-VNet
@@ -402,7 +412,7 @@ az bicep version
 az bicep build --file infra/main.bicep
 ```
 
-Build every module and parameter file, then run subscription-scope what-if in Sweden Central
+Build every module and parameter file, then run resource-group what-if in Sweden Central
 for:
 
 - .NET bootstrap with Blob;
@@ -415,8 +425,8 @@ for:
 What-if command shape:
 
 ```bash
-AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub what-if \
-  --location swedencentral \
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
+  --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
   --parameters @<scenario-parameter-file>
 ```
@@ -444,7 +454,7 @@ resource mutation is authorized by this plan.
 #### Bicep validation steps
 
 - [x] 1. Bicep compilation
-- [x] 2. Subscription template validation
+- [x] 2. Resource-group template validation
 - [x] 3. Six-scenario what-if preview
 - [x] 4. Azure authentication and context
 - [x] 5. Bicep linting
@@ -475,8 +485,8 @@ workshop subscription. No deployment command is part of this validation.
   `a7b1484c-f66a-496a-b1cf-35631a50396c`.
 - `az version --query '"azure-cli"' --output tsv` returned `2.80.0`.
 - `az bicep version` returned `0.43.8`.
-- Read-only effective-access inspection confirmed the signed-in facilitator has `Owner` at
-  the exact subscription scope.
+- Read-only effective-access inspection confirmed the signed-in facilitator has `Owner` on the
+  validation subscription itself, which is what the facilitator-only SRE template requires.
 
 ### Bicep and ARM validation
 
@@ -491,16 +501,17 @@ The commands produced zero errors. The only diagnostics were the repository-know
 experimental-assert warning, newer-CLI notice, two conservative BCP334 minimum-name
 warnings, and safe-access suggestions.
 
-Each saved sanitized scenario then passed both subscription validation and what-if:
+Each saved sanitized scenario then passed both ARM validation and what-if against an existing
+resource group:
 
 ```bash
-AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub validate \
-  --location swedencentral \
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group validate \
+  --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
   --parameters @<scenario-parameter-file>
 
-AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment sub what-if \
-  --location swedencentral \
+AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
+  --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
   --parameters @<scenario-parameter-file> \
   --result-format ResourceIdOnly \
@@ -535,13 +546,12 @@ The focused cross-layer role gate passed:
 
 ```bash
 cd tests/acceptance
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run pytest -q \
-  tests/test_p4_implementation_contract.py \
-  tests/test_p6_cicd_challenge.py \
-  tests/test_p7_defender_foundation.py \
-  tests/test_p8_sre_agent_contracts.py \
-  tests/test_p8_sre_agent_challenge.py
+uv --no-config run pytest -q \
+  tests/test_azure_implementation_contract.py \
+  tests/test_ch03_cicd_challenge.py \
+  tests/test_ch05_defender_foundation.py \
+  tests/test_ch06_sre_agent_contracts.py \
+  tests/test_ch06_sre_agent_challenge.py
 ```
 
 Result: `100 passed in 9.78s`. Read-only `az role definition list --name <role-id>`

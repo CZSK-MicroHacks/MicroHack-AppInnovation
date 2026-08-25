@@ -1,5 +1,17 @@
 # Challenge 5 solution: digest-bound Defender evidence
 
+**What this is for.** The exact commands behind
+[Challenge 5](../../challenges/ch05-defender/README.md): binding the handoff, capturing
+before-state, applying each of the four bounded controls for both database families,
+running the five current-signal queries with the right method and API version, and
+assembling the digest-bound capture.
+
+**When to open it.** Open it when you know what you want to prove but not which ARM call
+proves it, when the validator rejects a capture and you need the canonical shape, or when
+you are facilitating. If you have not yet decided what each of the four controls *should*
+be in your environment, decide that first — this guide captures decisions, it does not
+make them.
+
 Run these commands from the repository root in Bash unless a section explicitly says
 to run from `tests/acceptance`. They bind only the selected handoff resources. Never run
 the Azure commands in this guide against another participant scope.
@@ -97,7 +109,8 @@ jq -e --arg subscription "$SUBSCRIPTION_ID" --arg selected "$SOURCE_VM_ID" '
 
 Confirm with the facilitator that `PRICINGS` proves `CloudPosture`, `Containers`,
 `SqlServers`, `OpenSourceRelationalDatabases`, and subscription-enforced
-`VirtualMachines` P2. Confirm `MANUAL_PREFLIGHT` records the Owner-only
+`VirtualMachines` at Defender for Servers P2 — Plan 2, the paid tier, applied across the
+provisioned two-VM baseline. Confirm `MANUAL_PREFLIGHT` records the Owner-only
 `azure-portal-owner-preflight` for Serverless Containers. Participants must not change
 these subscription settings.
 
@@ -616,6 +629,7 @@ Never copy fixture IDs, hashes, timestamps, findings, or example decisions.
 From `tests/acceptance`, run the exact frozen registry commands:
 
 ```bash
+cd tests/acceptance
 uv --no-config run catalog-render-defender-evidence --capture evidence/defender/capture.json --handoff evidence/modernization-contract.json --output evidence/defender-report.json --repository-root ../..
 uv --no-config run catalog-validate-defender-evidence --capture evidence/defender/capture.json --handoff evidence/modernization-contract.json --report evidence/defender-report.json --contracts workshop/contracts --repository-root ../..
 ```
@@ -659,3 +673,9 @@ Only an authorized facilitator may restore prior paid-plan pricing, subplan, enf
 extension, agent, and policy state, verify the post-cleanup inventory, and issue the
 cost query. Participants must not disable plans, delete agents/extensions/policies, or
 inspect or alter another participant scope.
+
+---
+
+**Back to** [Challenge 5](../../challenges/ch05-defender/README.md) ·
+[Solution 6](../ch06-sre-agent/README.md) ·
+[workshop overview](../../README.md)

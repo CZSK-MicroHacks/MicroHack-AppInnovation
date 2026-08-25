@@ -1,21 +1,13 @@
-# Java/PostgreSQL catalog target
+# Java/PostgreSQL catalog baseline
 
-This directory contains one monolithic Spring Boot 4.0.7 application for
-Microsoft OpenJDK 21.0.12+8-LTS and PostgreSQL 18.6. It uses Spring MVC, Thymeleaf, JPA schema
-validation, and the Flyway-owned `V1__contract_baseline.sql` migration. It exposes
-the same frozen routes and data behavior in local and Azure target modes.
-
-## Workshop position
-
-Challenge 0 compares the pre-warmed Java 17/PostgreSQL VM with the .NET/SQL Server
-baseline. Selecting `java-postgresql` makes this directory the application source for
-exactly one [Challenge 1 path](../challenges/ch01/README.md). Every path targets the
-same `infra/main.bicep` deployment and must publish a valid modernization handoff before
-the shared operational chapters.
+This directory contains one intentionally monolithic Spring Boot 3.5.16 application for
+Microsoft OpenJDK 17.0.20+8 and PostgreSQL 18.6. It uses Spring MVC, Thymeleaf, JPA schema
+validation, and the Flyway-owned `V1__contract_baseline.sql` migration. It contains no
+student-facing container image or Azure infrastructure.
 
 ## Prerequisites
 
-- Microsoft OpenJDK 21.0.12+8-LTS
+- Microsoft OpenJDK 17.0.20+8
 - Docker 27.4 or a PostgreSQL 18.6 service
 - `psql` 18.6 for full database acceptance
 - `uv` 0.8.22 and Python 3.12 for the shared acceptance harness
@@ -33,14 +25,8 @@ Supply every secret outside source control:
 | `CATALOG_DATABASE_NAME` | Database name |
 | `CATALOG_DATABASE_USERNAME` | Database application identity |
 | `CATALOG_DATABASE_PASSWORD` | Database password |
-| `CATALOG_DATABASE_AUTHENTICATION` | `password-secret` (default) or `managed-identity` |
-| `CATALOG_DATABASE_JDBC_AUTH_PARAMETER` | Managed identity only: `&authenticationPluginClassName=com.azure.identity.extensions.jdbc.postgresql.AzurePostgresqlAuthenticationPlugin` |
-| `AZURE_CLIENT_ID` | User-assigned workload identity client ID |
 | `CATALOG_DATABASE_SSL_MODE` | PostgreSQL JDBC SSL mode; use `disable` only locally |
 | `CATALOG_IMAGES_PATH` | Absolute or working-directory-relative canonical image directory |
-| `CATALOG_IMAGE_PROVIDER` | `local` (default) or `azure-blob` |
-| `CATALOG_BLOB_SERVICE_ENDPOINT` | Blob provider HTTPS service endpoint |
-| `CATALOG_BLOB_CONTAINER` | Blob provider container |
 | `CATALOG_SEED_PATH` | Absolute or working-directory-relative `catalog.json` |
 | `CATALOG_STARTUP_IMPORT_ENABLED` | `true` or `false`; default `true` |
 | `PERFTEST_API_KEY` | Required non-default API key |
@@ -52,9 +38,6 @@ Supply every secret outside source control:
 
 Standard `OTEL_*` exporter variables configure protocol, headers, TLS, sampling, and
 timeouts. Set `OTEL_SDK_DISABLED=true` only when intentionally running without a collector.
-Managed identity mode leaves `CATALOG_DATABASE_PASSWORD` unset; the pinned Azure JDBC
-authentication plugin refreshes PostgreSQL access tokens. Blob reads use the same
-user-assigned identity and accept only canonical lowercase UUID PNG keys.
 
 Catalog imports validate and write through a proxied transaction worker. The surrounding
 telemetry boundary reports completion only after commit and records one rejected document when
@@ -62,7 +45,10 @@ parsing, validation, persistence, or transaction commit fails.
 
 ## Local PostgreSQL and run
 
-The disposable database below uses the frozen multi-platform PostgreSQL image digest:
+On the provisioned workshop VM you do not need this section: PostgreSQL 18.6 is already
+installed as the `postgresql-x64-18` Windows service, and the VM has no Docker daemon.
+The container below is for running this baseline on your own machine instead. It uses
+the frozen multi-platform PostgreSQL image digest:
 
 ```bash
 docker run -d --name mh-java-postgres \
@@ -102,19 +88,6 @@ Open `http://localhost:8080/`. Liveness is `/healthz`; readiness is `/readyz`.
 java -jar target/catalog-java-1.0.0.jar
 ```
 
-## Build the target container
-
-From the repository root:
-
-```bash
-docker buildx build --platform linux/amd64 --load \
-  -f java/Dockerfile -t mh-java:p4 .
-```
-
-The digest-pinned image runs as numeric non-root user `10001`, listens on `8080`,
-and includes the canonical seed JSON read-only. Set
-`CATALOG_STARTUP_IMPORT_ENABLED=false` after migration verification.
-
 Surefire writes native JUnit XML to `target/surefire-reports/`, including all fourteen
 frozen runtime display names and their package-qualified test classes. The conformance
 suite reads both shared normalization and text-validation vector files directly from
@@ -122,15 +95,16 @@ suite reads both shared normalization and text-validation vector files directly 
 
 ## Full shared acceptance
 
-Run from `tests/acceptance` while the JAR and database are running:
+Run from the repository root while the JAR and database are running:
 
 ```bash
+cd tests/acceptance
 export CATALOG_BASE_URL="http://localhost:8080"
 export CATALOG_DATABASE_KIND=postgresql
 export CATALOG_DATABASE_TARGET=local
-uv run pytest -q
-uv lock --check --offline
-uv run python -m catalog_acceptance \
+uv --no-config run pytest -q
+uv --no-config lock --check --offline
+uv --no-config run python -m catalog_acceptance \
   --profile full \
   --base-url "$CATALOG_BASE_URL" \
   --performance-api-key "$PERFTEST_API_KEY" \
@@ -166,6 +140,3 @@ recreates the exact schema and startup import restores 198 figures and 20 catego
 docker rm -f mh-java-postgres
 # Repeat the docker run command above, then restart the JAR.
 ```
-
-For cross-layer diagnosis, authorization boundaries, and evidence failures, use the
-repository [troubleshooting guide](../docs/Troubleshooting.md).

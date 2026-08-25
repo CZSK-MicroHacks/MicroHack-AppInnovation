@@ -6,9 +6,7 @@ public interface IImageStore
 {
     string GetImageUrl(string fileName);
 
-    Task<ReadOnlyMemory<byte>?> ReadAsync(
-        string fileName,
-        CancellationToken cancellationToken);
+    bool TryResolvePath(string fileName, out string path);
 }
 
 /// <summary>
@@ -25,13 +23,12 @@ public sealed class LocalImageStore : IImageStore
 
     public string GetImageUrl(string fileName) => $"/images/{fileName}";
 
-    public async Task<ReadOnlyMemory<byte>?> ReadAsync(
-        string fileName,
-        CancellationToken cancellationToken)
+    public bool TryResolvePath(string fileName, out string path)
     {
+        path = string.Empty;
         if (!IsCanonicalImageKey(fileName))
         {
-            return null;
+            return false;
         }
 
         var candidate = Path.GetFullPath(Path.Combine(_rootPath, fileName));
@@ -40,10 +37,11 @@ public sealed class LocalImageStore : IImageStore
             || Path.IsPathRooted(relative)
             || !File.Exists(candidate))
         {
-            return null;
+            return false;
         }
 
-        return await File.ReadAllBytesAsync(candidate, cancellationToken);
+        path = candidate;
+        return true;
     }
 
     public static bool IsCanonicalImageKey(string fileName)

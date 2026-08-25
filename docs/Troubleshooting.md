@@ -1,7 +1,31 @@
 # Troubleshooting
 
+## Start here: find your symptom
+
+| What you are seeing | Most likely cause | Go to |
+| --- | --- | --- |
+| `pytest` fails on a contract or fixture | Wrong working directory, or an edited generated file | [Contract and repository failures](#2-contract-and-repository-failures) |
+| `uv` cannot resolve packages | A global uv config is overriding the project — add `--no-config` | [Contract and repository failures](#2-contract-and-repository-failures) |
+| `error: --base-url or CATALOG_BASE_URL is required` | The shell predates provisioning, so the Machine-scope catalog variables are not loaded | [Application health failures](#4-application-health-failures) |
+| The catalog will not load on the VM | Provisioning did not finish its health checks | [Workshop VM failures](#3-workshop-vm-failures) |
+| `/healthz` or `/readyz` returns non-200 | Application or database not ready | [Application health failures](#4-application-health-failures) |
+| Wrong number of figures, categories, or images | Corpus or migration mismatch | [Migration or corpus failures](#5-migration-or-corpus-failures) |
+| Container App will not start, or has no revision | Image, identity, or configuration problem in the target | [Azure target failures](#6-azure-target-failures) |
+| `az deployment` is rejected for a missing required parameter, before anything is created | `sourceCommit` and `imageDigest` are deliberately absent from the protected parameter files | [Azure target failures](#6-azure-target-failures) |
+| `az deployment` fails with `AuthorizationFailed` | Wrong scope or insufficient role — this is a facilitator gate | [Authorization and cleanup failures](#8-authorization-and-cleanup-failures) |
+| The handoff validator rejects your evidence | A producer step did not complete; the evidence is a symptom, not the bug | [Challenge evidence failures](#7-challenge-evidence-failures) |
+| `docker` is "not recognized" on the VM | No Docker daemon — deliberate; builds run in ACR | [Workshop VM failures](#3-workshop-vm-failures) |
+| A commit SHA does not match what a validator expects | Two different SHAs exist on the VM | [Workshop VM failures](#3-workshop-vm-failures) |
+| A command needs a resource that does not exist | Facilitator prerequisite not provisioned | Ask your facilitator; see [`Facilitator.md`](Facilitator.md) |
+
+## How to think about a failure
+
 Use the narrowest failing contract to find the owning layer. Do not repair evidence,
 change a schema locally, or mutate Azure until the producer failure is understood.
+
+**Never hand-edit an evidence document to make a validator pass.** The validator is
+telling you a step upstream did not do its job; editing the output hides the bug and
+breaks every downstream chapter that consumes it.
 
 ## 1. Confirm the execution boundary
 
@@ -23,16 +47,15 @@ Run the shared gate from its managed environment:
 
 ```bash
 cd tests/acceptance
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run pytest -q
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config lock --check --offline
+uv --no-config run pytest -q
+uv --no-config lock --check --offline
 ```
 
 Common causes:
 
 - running outside `tests/acceptance`, so relative contract paths are wrong;
 - using a global Python environment instead of `uv`;
+- a machine-level `uv` configuration overriding the project — `--no-config` avoids it;
 - editing a generated fixture, normalized report, or lock file;
 - consuming a branch, tag, or short SHA where a full immutable commit is required; or
 - implementing stack-specific behavior that disagrees with shared vectors.
@@ -41,6 +64,17 @@ Fix the producer or contract owner. Do not weaken a validator to accept one loca
 output.
 
 ## 3. Workshop VM failures
+
+The source tree lives at `C:\MicroHack\source`, extracted from a downloaded archive.
+Pinned Git for Windows **is** installed, and provisioning seeds that directory with a
+single baseline commit, so `git status`, `git add`, `git commit`, and `git rev-parse HEAD`
+all work. **`docker` is not installed**, and that is deliberate — container images are
+built with `az acr build`, which builds inside Azure Container Registry.
+
+Two SHAs exist and they are not interchangeable. `git rev-parse HEAD` identifies the
+participant's own work and is what image tags, revisions, and handoffs bind to.
+`C:\MicroHack\source\.source-commit` records which upstream archive was provisioned. If a
+handoff is rejected for a commit mismatch, this confusion is the first thing to check.
 
 On the affected VM, inspect only its matching stack:
 
@@ -79,6 +113,23 @@ Verify the database family, host, port, authentication mode, SSL requirements, i
 provider, seed path, and exact managed identity. Never print a password, API key, or
 connection string while debugging.
 
+### `--base-url or CATALOG_BASE_URL is required`
+
+The acceptance CLI reads `CATALOG_BASE_URL` from the environment. Provisioning persists
+it — along with `CATALOG_DATABASE_HOST`, `_PORT`, `_NAME`, `_USERNAME`, and the corpus
+paths — at Machine scope, so only shells started *after* provisioning finished inherit
+them. A console left open across the provisioning run sees none of them.
+
+Open a new PowerShell session. To confirm the values arrived:
+
+```powershell
+$env:CATALOG_BASE_URL
+$env:CATALOG_DATABASE_HOST
+```
+
+`CATALOG_DATABASE_PASSWORD` is deliberately never persisted; it stays in
+`C:\MicroHack\secrets` and is passed explicitly where a command needs it.
+
 ## 5. Migration or corpus failures
 
 The expected corpus is always 198 figures, 20 categories, and 198 canonical images.
@@ -97,7 +148,15 @@ recreating a database. Do not add an adoption adapter.
 
 ## 6. Azure target failures
 
-Start with the validated handoff, not portal discovery:
+A deployment rejected before any resource is created is almost always a missing parameter,
+not a broken parameter file. `sourceCommit` — and, at the two application stages,
+`imageDigest` — are deliberately absent from the protected files under `C:\protected\`.
+Neither value existed when provisioning wrote those files, and a placeholder that satisfied
+`infra/main.bicep`'s 40-hex and `sha256:` format asserts would deploy the wrong source
+silently, so a forgotten override has to fail instead. Supply both on the command line
+after the `@file` argument, where a later `--parameters` overrides an earlier one.
+
+Once resources exist, start with the validated handoff, not portal discovery:
 
 1. Validate `evidence/modernization-contract.json`.
 2. Confirm subscription/resource-group relationships and exact resource IDs.

@@ -983,7 +983,7 @@
       "selected-database-platform-outage",
       "application-image-regression"
     ],
-    "recommendedAction": "Restore 100 percent traffic to the retained P6-proven healthy handoff revision.",
+    "recommendedAction": "Restore 100 percent traffic to the retained CI/CD-proven healthy handoff revision.",
     "preventionAction": "Validate the selected-database endpoint and readiness path before assigning production traffic.",
     "approvedByPrincipalId": "00000000-0000-0000-0000-000000000013",
     "participantApproved": false,

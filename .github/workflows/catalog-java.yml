@@ -19,7 +19,14 @@ env:
 
 jobs:
   staging:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`. The workshop's whole premise is a reproducible
+    # toolchain (workshop/toolchain.lock.json pins the JDK, the .NET SDKs, Git by
+    # Authenticode subject and jq by hash), so the CI that validates the handoff
+    # must not float its own base image. `ubuntu-latest` currently resolves to
+    # ubuntu-24.04, so this pin is behaviour-preserving today; it becomes the
+    # thing that stops a runner-image rollover from changing the result of a
+    # rehearsal that is supposed to be repeatable a year later.
+    runs-on: ubuntu-24.04
     environment: staging
     steps:
       - name: Check out the workflow control commit
@@ -424,7 +431,8 @@ jobs:
 
   production:
     needs: staging
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as `staging`; see the note there.
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - name: Check out the approved control commit

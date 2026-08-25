@@ -34,7 +34,7 @@ param agentResourceGroupName string = 'rg-sre-${teamName}'
 @maxLength(32)
 param agentName string = 'sre-catalog-${teamName}'
 
-@description('Optional resource tags applied to the dedicated P8 resources.')
+@description('Optional resource tags applied to the dedicated SRE Agent resources.')
 param tags object = {}
 
 var sreContract = loadJsonContent('../workshop/contracts/sre-agent.json')
@@ -160,7 +160,44 @@ resource monitoringContributor 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-@description('Non-secret facilitator handoff for P8 foundation capture.')
+// The agent's incident response plan (incident filter + handler + autonomy level) is not
+// declared here because the Azure SRE Agent control plane does not expose it. Verified
+// 2026-08-25 against api-version 2026-01-01:
+//
+//   * Azure/azure-rest-api-specs, path specification/app/resource-manager/Microsoft.App/
+//     SreAgent/stable/2026-01-01/sreagent.json, exposes exactly four PUT-able resource
+//     paths - Microsoft.App/agentSpaces, Microsoft.App/agentSpaces/connectors,
+//     Microsoft.App/agents and Microsoft.App/agents/connectors. Its AgentProperties
+//     definition carries no response-plan property, so a plan cannot be nested on the
+//     agent either.
+//   * `az provider show --namespace Microsoft.App` returns no response-plan child type.
+//   * Bicep resolves Microsoft.App/agents/connectors at this api-version but reports
+//     BCP081 "does not have types available" for Microsoft.App/agents/responsePlans,
+//     .../incidentResponsePlans, .../plans and .../customAgents, confirming those types
+//     do not exist rather than merely lacking a type definition locally.
+//   * https://learn.microsoft.com/azure/sre-agent/incident-response-plans and
+//     https://learn.microsoft.com/azure/sre-agent/response-plan (both read 2026-08-25)
+//     document creation only through the portal Builder > Incident response plans page
+//     or the Agent Canvas wizard. The single programmatic surface is the agent data
+//     plane, reached through `azmcp sreagent incidents plans create` - see
+//     https://learn.microsoft.com/azure/developer/azure-mcp-server/tools/azure-sre-agent
+//     - which is not ARM and therefore cannot be expressed in this template.
+//
+// The frozen contract encodes the same conclusion: responsePlan.producer is
+// `azure-portal-facilitator-export` and responsePlan.opaqueIncidentFiltersInIaCAllowed is
+// false, so the plan is captured as reviewed portal evidence rather than opaque filter
+// JSON. What this template does own in code is every part of the plan that is an agent
+// property: actionConfiguration.mode (Review), actionConfiguration.accessLevel (Low), the
+// Azure Monitor incident-management connection, and the bounded traffic-only rollback
+// role. The facilitator must still create one Azure Monitor plan named
+// `catalog-reviewed-rollback` covering the Challenge 6 signal/remediation pair - a Sev2
+// `MH-SRE-` failed-request alert on the bad Container App revision, remediated by shifting
+// traffic weight back to the retained healthy revision - delete the auto-created quickstart
+// plan, run the reject-path test incident, and export
+// evidence/sre-agent/response-plan-preflight.json. That procedure is
+// workshop/sre-agent/README.md, section "Configure and preflight the response plan".
+// Revisit this flag when Microsoft.App ships a response-plan resource type.
+@description('Non-secret facilitator handoff for SRE Agent foundation capture.')
 output sreAgentFoundation object = {
   contractVersion: sreContract.schemaVersion
   participantResourceGroupId: participantResourceGroup.id
@@ -179,5 +216,6 @@ output sreAgentFoundation object = {
   participantRoleAssignmentResourceIds: workloadRbac.outputs.roleAssignmentResourceIds
   monitoringContributorRoleAssignmentResourceId: monitoringContributor.id
   humanRoleAssignmentResourceIds: foundation.outputs.humanRoleAssignmentResourceIds
+  // False is verified, not aspirational - see the response-plan note above this output.
   responsePlanConfiguredInIaC: false
 }

@@ -2,6 +2,7 @@
 # Python / uv
 __pycache__/
 .venv/
+*.egg-info/
 
 # Environment files
 .env
@@ -51,3 +52,11 @@ lcov.info
 # Logs (dotnet)
 *.trx
 
+
+# Provisioner-generated SDK pin (written into the source tree after the baseline commit)
+global.json
+
+# Golden handoffs are facilitator- and delivery-specific: they carry live Azure resource
+# IDs and an image digest that go stale the moment that environment is torn down.
+# Build your own with catalog-migrate render-handoff. See workshop/golden/README.md.
+workshop/golden/*/evidence/

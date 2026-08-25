@@ -18,14 +18,25 @@ vm_size           = "Standard_D2as_v5"
 vm_vcpus          = 2
 os_disk_size_gb   = 127
 
-# Immutable application source. Keep the frozen commit unless a new contract is approved.
-source_commit = "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
+# Immutable application source. REQUIRED - there is no default, and the historical
+# fd298de6 pin is rejected. Set this to the published workshop commit for THIS delivery
+# and verify the archive before provisioning: see "Re-pin the VM source commit" in
+# docs/Facilitator.md.
+source_commit = ""
 # Set TF_VAR_source_archive_sha256 to the reviewed 64-hex archive digest.
+
+# Facilitator identity recorded by infra/main.bicep and written into the protected
+# deployment parameter files on every participant VM. REQUIRED - there are no defaults.
+# Read the object ID with: az ad signed-in-user show --query id -o tsv
+facilitator_principal_name      = "facilitator@yourcompany.onmicrosoft.com"
+facilitator_principal_object_id = "00000000-0000-0000-0000-000000000000"
 
 # Entra ID domain for creating workshop users
 entra_user_domain = "yourcompany.onmicrosoft.com"
 
-# Set TF_VAR_entra_user_password when manage_entra_users is true.
+# Terraform generates a separate initial password per user; read them with
+# `terraform output -json entra_user_credentials`. Optionally override the length:
+# entra_user_password_length = 24
 
 # Whether to create Entra ID users for the workshop
 manage_entra_users = true

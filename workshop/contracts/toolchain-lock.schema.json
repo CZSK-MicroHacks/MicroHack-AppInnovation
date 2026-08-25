@@ -234,7 +234,9 @@
         "bicep",
         "sqlPackage",
         "terraform",
-        "uv"
+        "uv",
+        "git",
+        "jq"
       ],
       "properties": {
         "maven": {
@@ -279,6 +281,12 @@
         },
         "azureCli": {
           "$ref": "#/$defs/windowsInstaller"
+        },
+        "git": {
+          "$ref": "#/$defs/windowsInstaller"
+        },
+        "jq": {
+          "$ref": "#/$defs/windowsBinary"
         },
         "bicep": {
           "$ref": "#/$defs/versionObject"
@@ -890,6 +898,34 @@
     "imageDigest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "windowsBinary": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A standalone Windows executable that upstream ships unsigned, so it is pinned by SHA-256 alone and cross-checked against the publisher's own checksum file rather than by Authenticode subject.",
+      "required": [
+        "version",
+        "architecture",
+        "url",
+        "sha256"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/versionString"
+        },
+        "architecture": {
+          "enum": [
+            "x64"
+          ]
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     }
   }
 }

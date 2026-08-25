@@ -1,39 +1,206 @@
-# Challenge 0: compare and select a baseline
+# Challenge 0: meet the application you are about to move
 
-## Objective
+**By the end of this chapter you will have opened both legacy catalogs, measured how the
+one you keep behaves today, and committed to a single stack for the rest of the
+workshop.**
 
-Verify both facilitator-provisioned legacy applications against the same observable
-baseline, select one stack for the workshop, and deallocate the unselected VM only after
-facilitator approval. This challenge changes no application or database content.
+## Why this matters
 
-You will compare:
+You are about to spend two days arguing that this application should not live on a
+virtual machine. That argument needs a *before*. Today the catalog, its database, its 198
+photographs, its connection string and its only log file all sit on one Windows Server
+box — so a slow query, a full disk, a failed patch, and a bad release are all the same
+outage.
+
+This chapter is where you see that for yourself and write down the numbers you will use
+on day 2 to prove the move was worth it. It is also where you choose which of the two
+legacy stacks you will carry forward.
+
+**Estimated time:** 50–60 minutes, including two Azure Bastion sessions.
+
+## Before you start
+
+- Your facilitator has given you a participant resource group (`rg-userNNN`), both VM
+  names, and Azure Bastion access to both private VMs.
+- Your facilitator has given you the **full 40-character lowercase commit** the VMs were
+  provisioned from. You will need it three times; keep it on the clipboard.
+- Both VMs report a successful provisioning state.
+- You know whether you are authorized to change VM power state yourself, or whether the
+  facilitator will do it for you.
+
+Stop and ask if either VM is unavailable, or if you can see another participant's
+resource group. Do not repair provisioning during this challenge — that is facilitator
+work, and a repaired VM is no longer the frozen baseline everyone else is comparing
+against.
+
+New vocabulary in this chapter — *baseline*, *evidence*, *handoff*, *stack* — is defined
+in the [glossary](../../docs/Glossary.md).
+
+## The concept
+
+Two applications. Same catalog, same 198 figures, same 20 categories, same routes,
+same behavior. One is .NET 8 on SQL Server 2022 Express; the other is Java 17 on
+PostgreSQL 18. They exist so that you can practise on the stack your own estate actually
+runs.
+
+What they also share is a shape, and the shape is the problem:
+
+```mermaid
+flowchart TB
+  subgraph VM["One Windows Server VM — one failure domain"]
+    APP["Catalog application<br/>started by a scheduled task"]
+    DB[("Database<br/>installed beside the app")]
+    IMG["198 PNG files<br/>C:\MicroHack\source\data\images"]
+    CFG["Connection string<br/>C:\MicroHack\secrets\*.json"]
+    LOG["The only diagnostics<br/>C:\MicroHack\logs\*-app.log"]
+  end
+  APP --> DB
+  APP --> IMG
+  APP --> CFG
+  APP --> LOG
+```
+
+Every arrow in that diagram is something you will move somewhere else over the next two
+days. Nothing here scales independently, nothing here fails independently, and nothing
+here can be observed from outside the box.
+
+![The catalog application: 198 collectible figures across 20 categories, with search, category filtering, and a photograph for every item](../../images/catalog.png)
+
+## Your goal
+
+Experience both applications, capture a legacy baseline you can defend, verify that both
+match the frozen provisioning contract, record one selection, and shut down the machine
+you are not keeping.
+
+You are done when `evidence/ch00-selection.json` names exactly one stack, both baseline
+markers check out, and the unselected VM is deallocated with approval.
+
+## 1. Open both catalogs
+
+Connect to each VM through Azure Bastion and open the catalog in the VM's browser:
 
 | Stack ID | VM | Runtime and database | Local URL |
 | --- | --- | --- | --- |
 | `dotnet-sqlserver` | `vm-dotnet-userNNN` | .NET 8 and SQL Server 2022 Express | `http://localhost:5000` |
 | `java-postgresql` | `vm-java-userNNN` | Microsoft OpenJDK 17 and PostgreSQL 18 | `http://localhost:8080` |
 
-Both applications must expose the same catalog behavior. Runtime, framework, database,
-and implementation details are valid selection criteria; observable contract drift is
-not.
+Spend five minutes per application actually using it. Search for a figure. Filter by a
+category. Open a detail page and load its photograph. The two applications should look
+and behave identically — that is deliberate, and it is what makes the comparison in
+Challenge 1 fair.
 
-## Facilitator start gate
+While you are there, notice what you *cannot* do: there is no second instance to fail
+over to, no dashboard telling you how many requests just arrived, and no URL to give
+anyone outside this VM.
 
-Before you begin, the facilitator must provide:
+## 2. Take the baseline day 2 will argue with
 
-- the exact participant resource group and both VM names;
-- Azure Bastion access to both private VMs;
-- the immutable repository commit used to provision them;
-- confirmation that both VM provisioning states succeeded; and
-- a decision on whether you may deallocate the unselected VM yourself.
+This is the "before" column of your final scorecard. Run it on **both** VMs — it takes
+about three minutes each — changing only the two values at the top.
 
-Stop if either VM is unavailable or if you can see another participant's resource group.
-Do not repair provisioning during this challenge.
+```powershell
+$stack = 'dotnet'                     # 'java' on the other VM
+$baseUrl = 'http://localhost:5000'    # 'http://localhost:8080' on the Java VM
 
-## 1. Verify the .NET baseline
+Invoke-WebRequest "$baseUrl/" -UseBasicParsing | Out-Null
+$samples = 1..20 | ForEach-Object {
+  (Measure-Command {
+    Invoke-WebRequest "$baseUrl/" -UseBasicParsing | Out-Null
+  }).TotalMilliseconds
+}
+$sorted = @($samples | Sort-Object)
+$mid = [int][math]::Floor($sorted.Count / 2)
+$os = Get-CimInstance Win32_OperatingSystem
 
-Connect to the .NET VM through Azure Bastion, open PowerShell in the repository root,
-and run:
+$pain = [ordered]@{
+  stack             = $stack
+  measuredAtUtc     = (Get-Date).ToUniversalTime().ToString('o')
+  catalogMedianMs   = [math]::Round($sorted[$mid], 1)
+  catalogSlowestMs  = [math]::Round($sorted[-1], 1)
+  hostCpuCount      = [int]$env:NUMBER_OF_PROCESSORS
+  hostMemoryGb      = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+  applicationHosts  = @(Get-Process dotnet, java -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+  databaseServices  = @(Get-Service |
+    Where-Object { $_.Name -match '^(MSSQL|postgresql)' } |
+    ForEach-Object { "$($_.Name)=$($_.Status)" })
+  startupTasks      = @(Get-ScheduledTask -TaskName 'MicroHack-*' -ErrorAction SilentlyContinue |
+    ForEach-Object { "$($_.TaskName)=$($_.State)" })
+  imageFilesOnDisk  = @(Get-ChildItem 'C:\MicroHack\source\data\images' -Filter *.png).Count
+  configurationFile = "C:\MicroHack\secrets\$stack.json"
+  onlyDiagnostics   = "C:\MicroHack\logs\$stack-app.log"
+  runningInstances  = 1
+  autoscale         = $false
+  distributedTraces = $false
+}
+
+New-Item evidence -ItemType Directory -Force | Out-Null
+$pain | ConvertTo-Json -Depth 10 |
+  Set-Content "evidence/ch00-pain-$stack.json" -Encoding utf8
+$pain | Format-List
+```
+
+**Write down `catalogMedianMs` for the stack you keep.** In Challenge 2 you will put it
+next to the median response time the load engine reports while the modernized catalog is
+under load, and it is the first row of the
+[wrap-up scorecard](../wrapup/README.md).
+
+Now read the rest of the output, because it is the actual lesson:
+
+- `applicationHosts` and `databaseServices` are on the **same machine**. One noisy query
+  and the web tier starves.
+- `hostCpuCount` and `hostMemoryGb` are your entire capacity plan. `runningInstances` is
+  `1` and `autoscale` is `false` — a traffic spike is survived by hoping.
+- `imageFilesOnDisk` is 198 photographs living on a C: drive. Rebuild the VM and they are
+  gone.
+- `configurationFile` holds a database credential in a file on the server.
+- `onlyDiagnostics` is a text file. `distributedTraces` is `false`. That is your entire
+  answer to "why was it slow at 02:00 last Tuesday?".
+
+Finally, work out how you would ship a one-line fix to this application right now. Look
+at `C:\MicroHack\app\$stack` and the `MicroHack-*` scheduled task, then count the steps:
+build somewhere, copy files onto this box, stop the task, swap the files, start the task,
+check the site by hand. **There is no step in that list that undoes it.**
+
+That count is the "before" for three rows of the wrap-up scorecard, so record it in the
+same file as everything else rather than on a sticky note. Set `$stack`, fill in the three
+values, and run this on the VM you just measured:
+
+```powershell
+$stack = 'dotnet'            # 'java' on the other VM
+
+$counted = [ordered]@{
+  manualDeploySteps   = 0    # every step in the list you just made
+  manualRollbackSteps = 0    # how many of those steps undo the release
+  manualDeployWindow  = ''   # when you would have been allowed to run them
+}
+
+if ($counted.manualDeploySteps -lt 1 -or -not $counted.manualDeployWindow) {
+  throw 'Count the steps and name the release window before running this.'
+}
+
+$painPath = "evidence/ch00-pain-$stack.json"
+$pain = Get-Content $painPath -Raw | ConvertFrom-Json
+foreach ($field in $counted.Keys) {
+  $pain | Add-Member -NotePropertyName $field -NotePropertyValue $counted[$field] -Force
+}
+$pain | ConvertTo-Json -Depth 10 | Set-Content $painPath -Encoding utf8
+$pain | Select-Object manualDeploySteps, manualRollbackSteps, manualDeployWindow
+```
+
+The guard is the point: a blank count would put an empty cell on the scorecard, and an
+empty cell is the one thing a before/after table cannot survive. `manualRollbackSteps` is
+almost certainly `0`, and that zero is the most quotable number Challenge 0 produces —
+Challenge 3 replaces it with a timed traffic weight change.
+
+## 3. Verify the .NET baseline
+
+Both VMs were provisioned from one immutable commit and carry a signed marker proving
+what was installed. Confirming it now means that any difference you see later is
+something *you* changed.
+
+Connect to the .NET VM through Azure Bastion, open PowerShell at the source tree
+(`cd C:\MicroHack\source`), and run:
 
 ```powershell
 $stack = 'dotnet'
@@ -79,7 +246,12 @@ $marker | ConvertTo-Json -Depth 10 |
 Record the full `sourceCommit` and `verifiedAtUtc` values. Do not edit the copied marker.
 The source marker is `C:\MicroHack\status\dotnet-smoke.json`.
 
-## 2. Verify the Java baseline
+Notice that the application answers on two separate routes: `/healthz` says the process
+is alive, `/readyz` says it can actually reach its data. On this VM both are always true
+together, because the database is the same machine. Keep that distinction — it becomes
+load-bearing the moment the database moves away.
+
+## 4. Verify the Java baseline
 
 Connect to the Java VM and repeat the same check with only these two values changed:
 
@@ -93,9 +265,14 @@ routes are identical to the .NET check. The source marker is
 `C:\MicroHack\status\java-smoke.json`. Use the same facilitator-provided
 `$expectedSourceCommit`; do not substitute the current branch or a short SHA.
 
-## 3. Compare implementation boundaries
+Both applications must report the same `198` figures, `20` categories, and 198 images.
+If they do not, stop — the comparison is no longer fair and the facilitator needs to
+reprovision.
 
-Review both applications before choosing:
+## 5. Choose the stack you will carry forward
+
+You have now used both applications and measured both. Choose on that basis, not on the
+version numbers.
 
 | Decision area | .NET/SQL Server | Java/PostgreSQL |
 | --- | --- | --- |
@@ -105,14 +282,20 @@ Review both applications before choosing:
 | Azure database | Azure SQL Database | Azure Database for PostgreSQL Flexible Server |
 | Application directory | `dotnet/` | `java/` |
 | Target stack ID | `dotnet-sqlserver` | `java-postgresql` |
+| Database cutover you will run | `.bacpac` export and import | `pg_dump` export and restore |
+| Migration feels like | Schema-and-data package handed to Azure SQL | Logical dump replayed into a managed server |
 
-The target behavior, canonical data, acceptance harness, Azure Container Apps runtime,
-and downstream Challenges 2 through 6 are shared. Select based on the implementation you
-want to practice, not on an expectation that one stack has a weaker success contract.
+Both stacks converge on identical target behavior, the same canonical data, the same
+acceptance harness, the same Azure Container Apps runtime, and the same Challenges 2
+through 6. Neither is the easy option.
 
-## 4. Record the selection
+Pick the one closest to what you support at home — or, if your table can split, pick
+different ones deliberately so you have someone to compare notes with at the wrap-up.
 
-On the selected VM, replace the placeholders and create the selection record:
+## 6. Record the selection
+
+On the selected VM, replace the placeholders and create the selection record. Every later
+chapter reads this file to know which stack you are on, so it has to be exact:
 
 ```powershell
 $selectedStack = '<dotnet-sqlserver|java-postgresql>'
@@ -137,7 +320,7 @@ $selection | ConvertTo-Json -Depth 10 |
   Set-Content evidence/ch00-selection.json -Encoding utf8
 ```
 
-Validate the machine-readable decision:
+Then check your own work before anyone else does:
 
 ```powershell
 $selection = Get-Content evidence/ch00-selection.json -Raw | ConvertFrom-Json
@@ -176,10 +359,13 @@ if (
 }
 ```
 
-## 5. Deallocate the unselected VM
+Silence means it passed.
 
-This is a live Azure mutation. Run it only after the facilitator authorizes your exact
-resource group and VM name:
+## 7. Deallocate the unselected VM
+
+You only need one legacy machine from here on, and the other one costs money for two
+days. This is a live Azure mutation. Run it only after the facilitator authorizes your
+exact resource group and VM name:
 
 ```powershell
 az vm deallocate `
@@ -193,16 +379,103 @@ database, resource group, or shared network. The facilitator can restore it with
 
 ## Success criteria
 
-- Both immutable provisioning markers report their correct stack and the same
-  `198/20/198` corpus, and each marker's `sourceCommit` equals the same
-  facilitator-provided full commit.
+- You have used both catalogs in a browser and can describe what the application does
+  without reading this page.
+- `evidence/ch00-pain-dotnet.json` and `evidence/ch00-pain-java.json` exist, and you can
+  state your selected stack's `catalogMedianMs` from memory.
+- Your selected stack's pain file carries a non-zero `manualDeploySteps` and a
+  `manualDeployWindow` you can defend, because the wrap-up reads both as the "before" for
+  pipeline lead time and rollback.
+- Both provisioning markers report their correct stack and the same `198`/`20`/198
+  corpus, and each marker's `sourceCommit` equals the same facilitator-provided full
+  commit.
 - Both applications return HTTP 200 for catalog, liveness, readiness, and one canonical
   PNG image.
 - `evidence/ch00-selection.json` passes the validation block and names exactly one stack.
 - The selected VM remains running.
-- The unselected VM is deallocated with approval, or the facilitator records that
-  deallocation is deferred.
-- No application, database, role assignment, provider, or resource is modified beyond
-  the approved VM power-state change.
+- The unselected VM reports `PowerState/deallocated` with approval, or the facilitator
+  records that deallocation is deferred.
+- No application, database, role assignment, provider, or resource is modified beyond the
+  approved VM power-state change.
 
-Continue to [Challenge 1](../ch01/README.md) and the path chosen by the facilitator.
+## Hints
+
+<details>
+<summary>Hint 1 — a nudge</summary>
+
+The measurement block is ordinary PowerShell: it makes 20 requests, sorts the timings,
+and asks Windows what else is running on this machine. If it throws, read which line
+threw — a missing path or an unexpected service name is a fact about the VM worth
+knowing, not a bug to work around.
+
+For the selection record, everything in it is either something the facilitator told you
+or something you can read off the VM. Nothing is invented.
+
+</details>
+
+<details>
+<summary>Hint 2 — the approach</summary>
+
+Work VM by VM rather than step by step: connect to the .NET VM, browse it, run the
+measurement block, run the marker check, disconnect. Then do the same on the Java VM.
+Only then choose, record the selection on the machine you keep, and deallocate the other.
+
+The resource group is always `rg-userNNN`, and the VM names are always
+`vm-dotnet-<userNNN>` and `vm-java-<userNNN>`. If the validation block complains about
+the VM mapping, you have almost certainly swapped `selectedVm` and `unselectedVm`.
+
+</details>
+
+<details>
+<summary>Hint 3 — nearly the answer</summary>
+
+The commit is the usual failure. `$expectedSourceCommit` must be the full 40-character
+lowercase SHA the facilitator provisioned from, pasted identically into all three blocks
+— the .NET check, the Java check, and the selection record. `git rev-parse HEAD` on the
+VM is *not* a substitute, and neither is a short SHA or a branch name.
+
+The facilitator-side expectations for every field, the exact VM-to-stack mapping, and the
+power-state verification are written out in
+[the Challenge 0 solution](../../solutions/ch00/README.md).
+
+</details>
+
+## If it goes wrong
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `The .NET provisioning marker does not match the frozen baseline.` | `$expectedSourceCommit` is a short SHA, a branch, uppercase, or from the wrong provisioning run. | Paste the full 40-character lowercase commit the facilitator gave you. If it still fails, the VM was provisioned from a different commit — that is a facilitator repair, not yours. |
+| `The .NET baseline HTTP checks failed.` | The `MicroHack-*` scheduled task or the local database service is not running yet. | Check `Get-ScheduledTask -TaskName 'MicroHack-*'` and the database service state, wait for startup to finish, and retry. Do not reseed the database. |
+| `Challenge 0 selection evidence is invalid.` | Selected and unselected VM names are swapped, or the resource group is not `rg-userNNN`. | Re-read the mapping in step 6: the selected stack determines both names. |
+| The deallocation command in step 7 returns an authorization error | You are Owner on your resource group only, and the facilitator retains power-state rights. | Ask the facilitator to run it and record the outcome. Deferred deallocation is an acceptable outcome for this chapter. |
+
+Everything else: [troubleshooting](../../docs/Troubleshooting.md).
+
+## What you just proved
+
+You now have a defensible *before*. Not "the legacy app was slow" — but a median page
+response in milliseconds, on a named machine, with a named CPU and memory budget, one
+instance, no autoscale, 198 photographs on a local disk, a credential in a config file,
+and a text file as the only diagnostic surface.
+
+| | What you measured today |
+| --- | --- |
+| Catalog page, median | your `catalogMedianMs`, from one instance |
+| Instances available | 1 |
+| Autoscale | none |
+| Recovery from a bad release | restore from backup |
+| Answer to "why was it slow?" | one text file on the server |
+
+Keep that. In Challenge 2 you will put a real load through the modernized application and
+watch replicas appear; in Challenge 3 you will time a deployment and a rollback; in
+Challenge 6 an agent will recover an incident while you watch. Every one of those numbers
+is meaningless without the column you just filled in.
+
+You have also committed to one stack. That decision is now in
+`evidence/ch00-selection.json`, and every remaining chapter reads it rather than asking
+you again.
+
+---
+
+**Previous:** [Workshop overview](../../README.md) ·
+**Next:** [Challenge 1: choose how you modernize](../ch01/README.md)

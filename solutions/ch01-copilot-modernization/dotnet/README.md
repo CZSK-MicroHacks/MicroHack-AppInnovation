@@ -1,6 +1,11 @@
 # Path 1C solution: .NET and SQL Server
 
-Run this guide on the selected .NET P3 VM from the repository root. The source
+**Open this if** you chose [Path 1C: GitHub Copilot modernization](../../../challenges/ch01-copilot-modernization/README.md)
+with the .NET/SQL Server baseline and want the exact command for a step, the precise
+ordering of commit → clean-tree check → source-commit recapture, or a way to finish when
+time runs short. End to end this is a 5–7 hour path.
+
+Run this guide on the selected .NET legacy VM from the repository root. The source
 is .NET runtime `8.0.30` with SDK `8.0.424`; the accepted target is .NET runtime
 `10.0.11` with SDK `10.0.400`, ASP.NET Core/EF Core `10.0.11`, Azure SQL
 Database, and repository `catalog-dotnet`. SQL migration is
@@ -15,6 +20,31 @@ The target packages and images are pinned in `workshop/toolchain.lock.json`:
   `mcr.microsoft.com/dotnet/sdk:10.0.400-azurelinux3.0-amd64@sha256:679e7b7e9d0315ad34438bee49b4fb0658c4c42a3aa08ae8557d1bd03f49c28b`
 - runtime image
   `mcr.microsoft.com/dotnet/aspnet:10.0.11-azurelinux3.0-amd64@sha256:d21a49ce9556f5e50afc5a33cc45ec7a40b5739f10397368810193666e559a79`
+
+## Where you work, and what the VM does not have
+
+Every command here runs on the selected VM from Challenge 0, reached over Azure Bastion.
+The source tree is at `C:\MicroHack\source`, extracted from a verified archive by the
+provisioner. **That directory is what "the repository root" means in this and every other
+workshop document.** Start each terminal with `cd C:\MicroHack\source`.
+
+The VM ships a deliberately small, fully pinned toolchain. Pinned Git for Windows is part
+of it, so `C:\MicroHack\source` is a real working tree: because the source arrives as a
+verified archive rather than a clone, the provisioner initializes a repository there and
+makes one baseline commit. There is **no Docker daemon**:
+
+| You need | On the VM |
+| --- | --- |
+| the exact 40-character upstream source commit | the marker file `C:\MicroHack\source\.source-commit`, written by the provisioner when it extracts the source archive. Quote it as archive provenance and nothing else — GitHub has never seen that commit. |
+| a container image build | `az acr build`, used in step 4, uploads the build context and builds inside Azure Container Registry, so no local daemon is required |
+| to commit accepted modernization tasks | `git add` and `git commit` in `C:\MicroHack\source`, exactly as steps 1 and 3 write them |
+| to publish them | `git push` to your own GitHub repository, exactly as step 3 writes it |
+
+The two `git rev-parse HEAD` readings in steps 1 and 3 are both your own commits:
+`$StartingCommit` is the baseline before you change anything, and `$SourceCommit` is the
+pushed commit holding your reviewed modernization delta. Neither is the `.source-commit`
+marker, so never substitute one for the other. See
+[If a command will not run here](#if-a-command-will-not-run-here) at the end.
 
 ## 1. Freeze source and IDE evidence
 
@@ -124,23 +154,45 @@ to another database family, adds SQL credentials to source, chooses Azure
 Files, weakens TLS, changes a frozen contract, replaces immutable image
 references, skips tests, or reports an unsupported transformation.
 
-After all modernization tasks are accepted, commit the complete reviewed delta
-and recapture its identity. Do not use `$StartingCommit` for any build,
-migration, deployment, or evidence:
+After all modernization tasks are accepted, commit the complete reviewed delta,
+publish it to your own GitHub repository, and recapture its identity.
+Do not use `$StartingCommit` for any build, migration, deployment, or evidence:
 
 ```powershell
 git add -- dotnet evidence\assessment.md evidence\modernization-plan.md `
   evidence\task-results.json evidence\build-test-cve-summary.md `
-  evidence\ide-extensions.txt evidence\dotnet-modernization.trx
+  evidence\ide-extensions.txt
+git add --force -- evidence\dotnet-modernization.trx
 git commit -m 'Accept .NET Copilot modernization tasks'
 if (git status --porcelain) {
   throw 'Accepted modernization changes must be committed and the worktree clean.'
 }
+$ParticipantRepositoryUrl = '<facilitator-provided-https-url-of-your-repository>'
+if ((git remote) -contains 'origin') {
+  git remote set-url origin $ParticipantRepositoryUrl
+}
+else {
+  git remote add origin $ParticipantRepositoryUrl
+}
+git push --set-upstream origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the workshop branch failed.' }
 $SourceCommit = (git rev-parse HEAD).Trim()
 if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'Final source commit must be an exact lowercase full 40-hex SHA.'
 }
 ```
+
+`evidence\dotnet-modernization.trx` is forced because the repository ignores `*.trx`, and
+Challenge 3 has to be able to read the run it reports on.
+
+The first push opens a browser sign-in through Git Credential Manager. Sign in as the
+account that owns the repository; the credential is reused by every later push. Re-running
+the block is safe — `git remote set-url` replaces an existing `origin` rather than failing.
+
+`$SourceCommit` is now a commit that exists on GitHub. The handoff records it, and
+Challenge 3 checks the application source out of your repository at exactly this SHA and
+builds `dotnet/Dockerfile` from that checkout. A commit that never left this VM would fail
+that checkout, so do not continue until the push succeeds.
 
 Create `evidence/runtime-test-report.json` for the native TRX by following
 `workshop/contracts/runtime-test-evidence.schema.json`. It must reference the
@@ -149,27 +201,35 @@ TRX containing all fourteen exact frozen test identities and bind
 
 ## 4. Build the immutable container
 
-Use the frozen Dockerfile from the repository root:
+Use the Dockerfile you authored at the repository root. Build it **in Azure Container
+Registry** with `az acr build`: the provisioned VM has no Docker daemon, and `az acr
+build` uploads the context and builds inside the registry, so none is needed.
 
 ```powershell
-docker buildx build --platform linux/amd64 --load `
-  --file dotnet/Dockerfile `
-  --tag "catalog-dotnet:$SourceCommit" .
+$RegistryName = $Target.containerRegistry.resourceId.Split('/')[-1]
+$BuildJson = az acr build `
+  --registry $RegistryName `
+  --image "catalog-dotnet:$SourceCommit" `
+  --file dotnet\Dockerfile `
+  . --output json
+if ($LASTEXITCODE -ne 0) { throw 'ACR build failed' }
 ```
+
+If `$Target` is not yet loaded in this shell, read it first from
+`evidence\azure-target-output.json` as shown in step 5.
 
 Review that the image is non-root, listens on `8080`, and takes database,
 Blob, and telemetry configuration from the environment. A supported IDE
 containerization task may prepare or review these changes, but
 `dotnet/Dockerfile` and its locked digests are the accepted artifact.
 
-Use the facilitator-approved ACR workflow to publish exactly
-`catalog-dotnet:$SourceCommit`. Never use `latest`. Do not continue until the
-registry returns an immutable digest.
+The build publishes exactly `catalog-dotnet:$SourceCommit`. Never use `latest`. Do not
+continue until the registry returns an immutable digest.
 
 ## 5. Native SQL and Blob cutover
 
 The extension does not perform database cutover. Run the frozen migration CLI
-on this P3 source VM over the approved private migration path. The bootstrap
+on this legacy source VM over the approved private migration path. The bootstrap
 output must already exist at `evidence/azure-target-output.json`.
 
 ```powershell
@@ -253,8 +313,43 @@ created and verification requires it to remain absent.
 Use only reviewed `infra/main.bicep` application-stage deployments. Deploy the
 same `catalog-dotnet@$ImageDigest` first with
 `applicationRevisionRole=baseline`, then with
-`applicationRevisionRole=release`. Supply secrets through protected
+`applicationRevisionRole=release` — the two protected application parameter
+files already select those roles. Supply secrets through protected
 facilitator inputs, never command literals or tracked parameter files.
+
+`infra/main.bicep` is resource-group scoped. Deploy it with `az deployment group create`
+into the resource group you already own — the one the facilitator created before the
+workshop, holding your two legacy VMs. The template does not create a resource group and
+nothing on this path deploys at subscription scope, which is what keeps your rights to
+Owner on that one group. Take the `--resource-group` value from the `resourceGroupName`
+already carried by the protected parameters file, rather than typing a name twice:
+
+```powershell
+$ResourceGroup = (Get-Content 'C:\protected\copilot-modernization-dotnet-bootstrap.json' -Raw |
+  ConvertFrom-Json).parameters.resourceGroupName.value
+if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
+  throw 'the protected parameters must name your participant resource group'
+}
+```
+
+Those `C:\protected\*.json` documents are not yours to write. The facilitator's
+provisioning wrote `copilot-modernization-dotnet-bootstrap.json`,
+`copilot-modernization-dotnet-baseline.json`, and
+`copilot-modernization-dotnet-release.json` on this VM before the workshop started, one
+per deployment stage. Each is a standard ARM parameter document carrying the values only
+the facilitator knew then: your `resourceGroupName` and `teamName`, the exact
+`migrationSourceVmResourceId` and `migrationSourceVirtualNetworkResourceId`,
+`facilitatorPrincipalName` and `facilitatorPrincipalObjectId`, and the `performanceApiKey`
+the application stage asserts on.
+
+Every protected parameter document must set `resourceGroupName` to your own resource
+group. `infra/main.bicep` asserts that `resourceGroupName` equals the group it is deployed
+into, so a file naming anywhere else is refused before a single resource is touched.
+
+`sourceCommit` and `imageDigest` are deliberately absent from all three files: neither
+value existed when they were written, and a placeholder that satisfied the template's
+format assert would silently deploy the wrong source. Both deployments below pass them
+explicitly, where a later `--parameters` overrides the file.
 
 Before either application-stage deployment, capture exact registry evidence:
 
@@ -280,9 +375,38 @@ if ($ImageDigest -notmatch '^sha256:[0-9a-f]{64}$') {
   evidence\container-registry.json
 ```
 
-After release deployment, replace `evidence/azure-target-output.json` with the
-release-role application-stage output. Verify the retained rollback revision
-with the frozen query:
+Deploy baseline first, then release. Both carry the same immutable digest; only the
+protected file, the deployment name, and therefore the revision role differ:
+
+```powershell
+az deployment group create `
+  --name "copilot-modernization-dotnet-baseline-$($SourceCommit.Substring(0, 12))" `
+  --resource-group $ResourceGroup `
+  --template-file infra\main.bicep `
+  --parameters '@C:\protected\copilot-modernization-dotnet-baseline.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --output none
+if ($LASTEXITCODE -ne 0) { throw 'baseline deployment failed' }
+
+$ReleaseLines = az deployment group create `
+  --name "copilot-modernization-dotnet-release-$($SourceCommit.Substring(0, 12))" `
+  --resource-group $ResourceGroup `
+  --template-file infra\main.bicep `
+  --parameters '@C:\protected\copilot-modernization-dotnet-release.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --query properties.outputs.targetOutput.value `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'release deployment failed' }
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD 'evidence\azure-target-output.json'),
+  ($ReleaseLines -join [Environment]::NewLine),
+  [System.Text.UTF8Encoding]::new($false)
+)
+```
+
+That write replaces the bootstrap document at `evidence/azure-target-output.json` with the
+release-role application-stage output. Verify it, and the retained rollback revision, with
+the frozen query:
 
 ```powershell
 $ReleaseTarget = Get-Content evidence\azure-target-output.json -Raw |
@@ -423,6 +547,27 @@ Remove-Item -Force $Artifact -ErrorAction SilentlyContinue
 git status --short
 ```
 
+The handoff itself is not yet on GitHub. Challenge 3 reads
+`evidence/modernization-contract.json` from the commit it dispatches, and that commit must
+be a **later** commit than the source commit it builds. Publish the validated evidence as
+one follow-up commit, after the transients above are gone so nothing transient ships:
+
+```powershell
+git add --all
+git commit -m 'Record the validated modernization handoff'
+if (git status --porcelain) {
+  throw 'The handoff evidence must be committed before Challenge 3 runs.'
+}
+git push origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the handoff evidence failed.' }
+if ((git rev-parse HEAD).Trim() -ceq $SourceCommit) {
+  throw 'The handoff commit must be later than the published source commit.'
+}
+```
+
+Challenge 3 dispatches its workflow from this evidence commit, reads the handoff there,
+and checks the application source out separately at `$SourceCommit`.
+
 Keep the exact required evidence, reviewed source changes, and frozen target
 assets. Rejoin the shared workshop only after the handoff validator succeeds;
 downstream challenges consume `evidence/modernization-contract.json`, not IDE
@@ -433,3 +578,18 @@ assessment or task output.
 The preview Modernize CLI is optional and not required for this solution. It
 cannot replace the signed IDE workflow, native build/tests, `catalog-migrate`,
 full acceptance, telemetry proof, or handoff validation.
+
+## If a command will not run here
+
+| Symptom | Cause | What to do |
+| --- | --- | --- |
+| `git` is not recognized | Git for Windows is pinned and installed at `C:\Program Files\Git\cmd\git.exe`, but a shell opened before provisioning finished does not have it on `PATH`. | Open a new terminal and `cd C:\MicroHack\source` again, or call the full path once to confirm the install. |
+| `git rev-parse HEAD` does not match `.source-commit` | Expected. The working tree is a local repository initialized over the extracted archive, so its commits are unrelated to the published upstream commit. | Use `git rev-parse HEAD` for the commit holding your work, which is what every build, deployment, and evidence file here is keyed to. Use `.source-commit` only when a step asks for upstream archive provenance. |
+| `docker` is not recognized | The provisioned VM has no Docker daemon. | Step 4 already uses `az acr build`, which needs none. If any generated task proposes a local `docker build`, reject it and replan — that is exactly the kind of preflight mismatch step 3 asks you to record. |
+
+---
+
+**Challenge:** [Path 1C: GitHub Copilot modernization](../../../challenges/ch01-copilot-modernization/README.md) ·
+**Other stack:** [Copilot modernization Java](../java/README.md) ·
+**Modernized target:** [Reference implementation](../../reference/README.md) ·
+**Next:** [Challenge 2: load and autoscaling](../../../challenges/ch02/README.md)

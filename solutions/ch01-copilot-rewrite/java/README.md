@@ -1,9 +1,36 @@
 # Java/PostgreSQL bounded Copilot rewrite reference
 
+**Open this if** you chose [Path 1B: bounded rewrite with GitHub Copilot](../../../challenges/ch01-copilot-rewrite/README.md)
+with the Java/PostgreSQL baseline and want the executable form of a checkpoint, a worked
+prompt, or a way back after a rejected slice. The full path runs 8–12 hours; this
+document does not shorten it, it removes the guesswork.
+
 This is a runnable reference slice, not a complete rewrite to copy and paste. Work
 from the repository root unless a command changes directory. Replace angle-bracket
 values from the participant environment; never commit those values or shell history
 containing secrets.
+
+## Where you work, and what the VM does not have
+
+Every Azure and migration command here runs on the selected VM from Challenge 0, reached
+over Azure Bastion. The source tree is at `C:\MicroHack\source`, extracted from a
+verified archive by the provisioner. **That directory is what "the repository root" means
+in this and every other workshop document.** Start each terminal with
+`cd C:\MicroHack\source`.
+
+The VM ships a deliberately small, fully pinned toolchain. Git is part of it; a Docker
+daemon is not:
+
+| You need | On the VM |
+| --- | --- |
+| a per-slice commit | Pinned Git for Windows is installed, and `C:\MicroHack\source` is a working tree holding one baseline commit. `git add`, `git commit`, `git status --porcelain`, and `git rev-parse HEAD` all work. |
+| the commit identifying *your* rewrite | `git rev-parse HEAD`, after committing the slice. This is what the image tag, revisions, and handoff use. |
+| the upstream archive provenance | the marker file `C:\MicroHack\source\.source-commit`. This is a *different* SHA from the one above: the source arrives as a verified archive, so its local baseline commit is unrelated to the upstream commit that marker names. GitHub has never seen that commit, so never substitute one for the other. |
+| to publish your rewrite | `git push` to your own GitHub repository, exactly as section 4 writes it |
+| a container image build | `az acr build` uploads the build context and builds inside Azure Container Registry, so no local daemon is required |
+
+Because the build happens in the registry, section 4 checks the Dockerfile you authored
+and section 5 builds it — after bootstrap has created the registry to build it in.
 
 ## Registered boundary
 
@@ -25,7 +52,7 @@ migration extension for this path.
 
 ## 1. Preflight and characterization checkpoint
 
-**Executable proof**
+**Executable proof (bash — the VM's shell is PowerShell; see [If a command will not run here](#if-a-command-will-not-run-here))**
 
 ```bash
 set -euo pipefail
@@ -38,8 +65,7 @@ mkdir -p evidence .workshop-tmp
 ./java/mvnw -f java/pom.xml test
 cp -R java/target/surefire-reports .workshop-tmp/java-characterization
 cd tests/acceptance
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py
 cd ../..
 ```
 
@@ -91,29 +117,28 @@ Ask for and accept one generated diff at a time.
 > database family, infrastructure, migration, deployment topology, or unrelated
 > dependencies. Surface configuration and errors explicitly.
 
-**Executable proof after every generated diff**
+**Executable proof after every generated diff (bash — the VM's shell is PowerShell; see [If a command will not run here](#if-a-command-will-not-run-here))**
 
 ```bash
 set -euo pipefail
+: "${SLICE_NAME:?Name the slice you just approved, e.g. SLICE_NAME=pricing-rules}"
 git diff -- java
 ./java/mvnw -f java/pom.xml test
-rm -rf .workshop-tmp/java-<slice-name>
-mkdir -p .workshop-tmp/java-<slice-name>
-cp -R java/target/surefire-reports .workshop-tmp/java-<slice-name>/
+rm -rf .workshop-tmp/java-$SLICE_NAME
+mkdir -p .workshop-tmp/java-$SLICE_NAME
+cp -R java/target/surefire-reports .workshop-tmp/java-$SLICE_NAME/
 cd tests/acceptance
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run pytest -q tests/test_contract_assets.py
-UV_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple \
-  uv --no-config run python -m catalog_acceptance \
+uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run python -m catalog_acceptance \
   --profile smoke \
   --base-url "$CATALOG_BASE_URL" \
   --performance-api-key "$PERFTEST_API_KEY" \
-  --output "../../.workshop-tmp/java-<slice-name>-acceptance.json"
+  --output "../../.workshop-tmp/java-$SLICE_NAME-acceptance.json"
 cd ../..
 git diff --check
 git add -- java
 git diff --cached --check
-git commit -m "Complete bounded Java rewrite slice <slice-name>"
+git commit -m "Complete bounded Java rewrite slice $SLICE_NAME"
 ```
 
 Record the human decision and command result in
@@ -146,6 +171,20 @@ if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
     throw 'Commit every accepted slice and clean the implementation tree first.'
 }
 
+if (git status --porcelain) {
+    git add --all
+    git commit -m 'Commit the rewritten catalog and its review evidence'
+}
+$ParticipantRepositoryUrl = '<facilitator-provided-https-url-of-your-repository>'
+if ((git remote) -contains 'origin') {
+    git remote set-url origin $ParticipantRepositoryUrl
+}
+else {
+    git remote add origin $ParticipantRepositoryUrl
+}
+git push --set-upstream origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the workshop branch failed.' }
+
 $SourceCommitLines = git rev-parse HEAD
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $SourceCommit = ($SourceCommitLines -join '').Trim()
@@ -153,17 +192,38 @@ if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
     throw 'SOURCE_COMMIT must be a lowercase full 40-hex commit.'
 }
 
-docker buildx build --platform linux/amd64 --load `
-  -f java/Dockerfile `
-  -t "catalog-java:$SourceCommit" .
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-docker image inspect "catalog-java:$SourceCommit" `
-  --format '{{json .Config.User}} {{json .Config.ExposedPorts}}'
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$DockerfilePath = 'java\Dockerfile'
+if (-not (Test-Path $DockerfilePath)) {
+    throw 'Author java/Dockerfile before the container checkpoint.'
+}
+$Dockerfile = Get-Content -Path $DockerfilePath -Raw
+if ($Dockerfile -notmatch '(?m)^\s*USER\s+(?!root\s*$)\S+') {
+    throw 'The runtime stage must declare a non-root USER.'
+}
+if ($Dockerfile -notmatch '(?m)^\s*EXPOSE\s+8080\s*$') {
+    throw 'The runtime stage must expose 8080.'
+}
 ```
 
-## 5. P4 bootstrap, native migration, and ordered cutover
+The first push opens a browser sign-in through Git Credential Manager. Sign in as the
+account that owns the repository; the credential is reused by every later push. Re-running
+the block is safe — `git remote set-url` replaces an existing `origin` rather than failing.
+The dirty check above already refuses uncommitted implementation bytes, so the conditional
+commit only ever picks up review evidence written in the previous sections.
+
+`$SourceCommit` is therefore a commit that exists on GitHub. The handoff records it, and
+Challenge 3 checks the application source out of your repository at exactly this SHA and
+builds `java/Dockerfile` from that checkout. A commit that never left this VM would fail
+that checkout, so do not continue until the push succeeds.
+
+The image itself is built in section 5, once bootstrap has created the registry to
+build it in. Deferring the build is what lets this path run on the provisioned VM,
+which has no Docker daemon: `az acr build` uploads this context and builds it inside
+Azure Container Registry. The two guards above are the daemon-free equivalent of
+inspecting the built image's user and exposed port, and they fail here — before any
+Azure resource exists — rather than after a five-minute remote build.
+
+## 5. Shared-target bootstrap, native migration, and ordered cutover
 
 Use protected parameter documents outside the repository. They supply every required
 value from `infra/main.bicep`, including secure values, source VM/VNet resource IDs,
@@ -173,19 +233,44 @@ managed-identity application authentication; if the approved scenario selects
 the exact migration environment variable. The following participant commands are
 PowerShell-native; this reference does not claim they were run.
 
+You do not write those documents. The facilitator's provisioning wrote them on this VM
+before the workshop started, as `C:\protected\copilot-rewrite-java-bootstrap.json`,
+`...-baseline.json`, and `...-release.json` — one per deployment stage. They carry the
+only values that were knowable then: your `resourceGroupName` and `teamName`, the exact
+`migrationSourceVmResourceId` and `migrationSourceVirtualNetworkResourceId`,
+`facilitatorPrincipalName` and `facilitatorPrincipalObjectId`, and the
+`performanceApiKey` the application stage asserts on. `sourceCommit` and `imageDigest`
+are deliberately absent, because neither exists until you publish and build; every
+deployment below passes them explicitly, and a later `--parameters` overrides the file.
+
+Every one of those documents must set `resourceGroupName` to your own resource group.
+`infra/main.bicep` asserts that `resourceGroupName` equals the group it is deployed into,
+so a file naming anywhere else is refused before a single resource is touched.
+
 ### Bootstrap and immutable ACR publication
 
 Run bootstrap from the committed repository root with the isolated facilitator
-profile. Every state-changing command has an immediate exit guard.
+profile. Every state-changing command has an immediate exit guard. `$ResourceGroup` comes
+from the protected bootstrap parameters, which already carry `resourceGroupName`. You
+deploy into the resource group you already own — the one the facilitator created before
+the workshop, holding your two legacy VMs. `infra/main.bicep` is resource-group scoped,
+does not create a resource group, and asserts that its `resourceGroupName` matches the
+group it is deployed into. Nothing on this path deploys at subscription scope, which is
+what keeps your rights to Owner on that one group.
 
 ```powershell
 $env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-365'
+$ResourceGroup = (Get-Content 'C:\protected\copilot-rewrite-java-bootstrap.json' -Raw |
+  ConvertFrom-Json).parameters.resourceGroupName.value
+if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
+  throw 'the protected parameters must name your participant resource group'
+}
 New-Item -ItemType Directory -Force evidence | Out-Null
-$BootstrapLines = az deployment sub create `
+$BootstrapLines = az deployment group create `
   --name "p5-java-bootstrap-$($SourceCommit.Substring(0, 12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
-  --parameters "@C:\protected\p5-java-bootstrap.json" `
+  --parameters "@C:\protected\copilot-rewrite-java-bootstrap.json" `
   --parameters deploymentStage=bootstrap stack=java-postgresql `
     imageProvider=azure-blob sourceCommit=$SourceCommit `
   --query properties.outputs.targetOutput.value `
@@ -203,12 +288,14 @@ $SubscriptionId = ($Bootstrap.containerRegistry.resourceId -split '/')[2]
 $RegistryName = ($Bootstrap.containerRegistry.resourceId -split '/')[-1]
 $LoginServer = $Bootstrap.containerRegistry.loginServer
 
-az acr login --name $RegistryName --subscription $SubscriptionId
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $PublishedTag = "$LoginServer/catalog-java:$SourceCommit"
-docker tag "catalog-java:$SourceCommit" $PublishedTag
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-docker push $PublishedTag
+az acr build `
+  --registry $RegistryName `
+  --subscription $SubscriptionId `
+  --image "catalog-java:$SourceCommit" `
+  --file java\Dockerfile `
+  --platform linux/amd64 `
+  .
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $ImageDigestLines = az acr manifest show-metadata `
@@ -229,12 +316,12 @@ The commit tag locates registry evidence only. Application deployments receive
 `ImageDigest` and therefore resolve to `ImageReference`; never deploy `latest`, the
 commit tag, or another mutable reference.
 
-### Windows P3 source-VM migration
+### Windows source-VM migration
 
-On the exact Windows P3 source VM declared in
+On the exact Windows legacy source VM declared in
 `target-output.network.migrationSourceVmResourceId`, first verify the checkout and
-derive source identity. Only after that clean check, copy the bootstrap target output
-from `C:\protected\azure-target-output.json` into the checkout. Run all native
+derive source identity. Only after that clean check, confirm the bootstrap target output
+your step-5 deployment wrote to `evidence\azure-target-output.json` is still present. Run all native
 transfer there, not from Linux, macOS, Cloud Shell, or the application. Supply
 each password only through the protected prompt immediately before the command that
 permits it. Managed-identity mode forbids
@@ -274,9 +361,12 @@ $RepositoryRoot = (Resolve-Path .).Path
 $TargetOutput = Join-Path $RepositoryRoot 'evidence\azure-target-output.json'
 $MigrationReport = Join-Path $RepositoryRoot 'evidence\migration-report.json'
 $ImageDirectory = Join-Path $RepositoryRoot 'data\images'
-$DatabaseArtifact = 'C:\protected\catalog.dump'
+$DatabaseArtifact = 'C:\ProgramData\MicroHack\migration\catalog.dump'
 New-Item -ItemType Directory -Force (Join-Path $RepositoryRoot 'evidence') | Out-Null
-Copy-Item 'C:\protected\azure-target-output.json' $TargetOutput
+New-Item -ItemType Directory -Force (Split-Path $DatabaseArtifact) | Out-Null
+if (-not (Test-Path -LiteralPath $TargetOutput)) {
+  throw "The bootstrap deployment output is missing. Re-run step 5 before migrating."
+}
 $Target = Get-Content $TargetOutput -Raw | ConvertFrom-Json
 if ($Target.sourceCommit -cne $SourceCommit) {
   throw 'The protected bootstrap target does not match this source commit.'
@@ -295,10 +385,10 @@ try {
   $env:MIGRATION_SOURCE_DATABASE_PASSWORD = Read-ProtectedValue `
     'Source PostgreSQL database password'
   uv --no-config run catalog-migrate postgresql export `
-    --source-host '<source-postgresql-host>' `
+    --source-host $env:CATALOG_DATABASE_HOST `
     --source-port 5432 `
-    --source-database '<source-database>' `
-    --source-username '<source-user>' `
+    --source-database $env:CATALOG_DATABASE_NAME `
+    --source-username $env:CATALOG_DATABASE_USERNAME `
     --source-commit $SourceCommit `
     --target-output $TargetOutput `
     --artifact $DatabaseArtifact
@@ -382,22 +472,22 @@ the bootstrap document before handoff. The retained baseline is verified only af
 release has made it inactive.
 
 ```powershell
-az deployment sub create `
+az deployment group create `
   --name "p5-java-baseline-$($SourceCommit.Substring(0, 12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
-  --parameters "@C:\protected\p5-java-application.json" `
+  --parameters "@C:\protected\copilot-rewrite-java-baseline.json" `
   --parameters deploymentStage=application applicationRevisionRole=baseline `
     stack=java-postgresql imageProvider=azure-blob `
     sourceCommit=$SourceCommit imageDigest=$ImageDigest `
   --output none
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$ReleaseLines = az deployment sub create `
+$ReleaseLines = az deployment group create `
   --name "p5-java-release-$($SourceCommit.Substring(0, 12))" `
-  --location swedencentral `
+  --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
-  --parameters "@C:\protected\p5-java-application.json" `
+  --parameters "@C:\protected\copilot-rewrite-java-release.json" `
   --parameters deploymentStage=application applicationRevisionRole=release `
     stack=java-postgresql imageProvider=azure-blob `
     sourceCommit=$SourceCommit imageDigest=$ImageDigest `
@@ -459,7 +549,8 @@ Complete:
 - `evidence/decision-log.md` with accepted/rejected design choices and an explicit
   `## Architecture delta` section listing changed boundaries and confirming
   PostgreSQL Flexible Server, one application container, Blob images, ACA readiness,
-  external configuration, native `catalog-migrate`, and P4 Bicep remain preserved;
+  external configuration, native `catalog-migrate`, and shared-target Bicep remain
+  preserved;
 - `evidence/rollback-runbook.md` with prerequisites, exact retained baseline
   revision, traffic restoration, database/artifact boundaries, verification, and
   escalation;
@@ -504,13 +595,49 @@ retained rollback revision.
 
 ## Cleanup and rejoin
 
-Remove only local transient artifacts after evidence has been copied:
+Remove only local transient artifacts after evidence has been copied (bash):
 
 ```bash
 rm -rf .workshop-tmp
 git status --short
 ```
 
+The handoff itself is not yet on GitHub. Challenge 3 reads
+`evidence/modernization-contract.json` from the commit it dispatches, and that commit must
+be a **later** commit than the source commit it builds. Publish the validated evidence as
+one follow-up commit, after the transient directory is gone so nothing transient ships:
+
+```powershell
+git add --all
+git commit -m 'Record the validated modernization handoff'
+if (git status --porcelain) {
+    throw 'The handoff evidence must be committed before Challenge 3 runs.'
+}
+git push origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the handoff evidence failed.' }
+if ((git rev-parse HEAD).Trim() -ceq $SourceCommit) {
+    throw 'The handoff commit must be later than the published source commit.'
+}
+```
+
+Challenge 3 dispatches its workflow from this evidence commit, reads the handoff there,
+and checks the application source out separately at `$SourceCommit`.
+
 Do not remove `evidence/`, migration artifacts, or the retained baseline revision.
 Rejoin the shared workshop at the next challenge only after handoff validation passes
 and a human signs `review-checklist.md`, `decision-log.md`, and the rollback runbook.
+
+## If a command will not run here
+
+| Symptom | Cause | What to do |
+| --- | --- | --- |
+| `git rev-parse HEAD` returns a SHA that is not the upstream archive commit | Expected. The source arrives as a verified archive, not a clone, so provisioning seeds `C:\MicroHack\source` with its own baseline commit. | That is correct and intended: `git rev-parse HEAD` identifies *your* rewrite, is the commit section 4 pushes to your GitHub repository, and is what the image tag, revisions, and handoff bind to. Upstream archive provenance is `C:\MicroHack\source\.source-commit`. Never substitute one for the other. |
+| `docker` is not recognized | The provisioned VM has no Docker daemon. | Build with `az acr build --registry <acr> --image "<repo>:$SourceCommit" --file <stack>\Dockerfile . ` — it uploads the context, builds in the registry, and publishes the tag in one step. Resolve the digest afterwards with `az acr manifest show-metadata`, exactly as the cutover section already does. |
+| `set -euo pipefail` fails | The executable-proof blocks are bash; PowerShell is the VM's shell. | Translate them one line at a time. The guards they express — fail fast, clean tree, pinned extensions — still apply. |
+
+---
+
+**Challenge:** [Path 1B: bounded rewrite with GitHub Copilot](../../../challenges/ch01-copilot-rewrite/README.md) ·
+**Other stack:** [Copilot rewrite .NET](../dotnet/README.md) ·
+**Modernized target:** [Reference implementation](../../reference/README.md) ·
+**Next:** [Challenge 2: load and autoscaling](../../../challenges/ch02/README.md)

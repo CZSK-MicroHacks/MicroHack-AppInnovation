@@ -19,7 +19,14 @@ env:
 
 jobs:
   staging:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`. The workshop's whole premise is a reproducible
+    # toolchain (workshop/toolchain.lock.json pins the .NET SDKs, the JDK, Git by
+    # Authenticode subject and jq by hash), so the CI that validates the handoff
+    # must not float its own base image. `ubuntu-latest` currently resolves to
+    # ubuntu-24.04, so this pin is behaviour-preserving today; it becomes the
+    # thing that stops a runner-image rollover from changing the result of a
+    # rehearsal that is supposed to be repeatable a year later.
+    runs-on: ubuntu-24.04
     environment: staging
     steps:
       - name: Check out the workflow control commit
@@ -146,7 +153,17 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
         with:
-          dotnet-version: 10.0.400
+          # Two SDKs on purpose. The handoff contract does not pin a target
+          # framework, so a participant legitimately arrives here on either
+          # runtime: the copilot-modernization path retargets to .NET 10, while
+          # the manual and copilot-rewrite paths containerize the source as-is
+          # and stay on .NET 8. Declaring only the target made this job depend on
+          # the hosted runner happening to preinstall 8.0.424 as well; when that
+          # image drops .NET 8, `dotnet test` aborts with "You must install or
+          # update .NET to run this application" and it reads like broken code.
+          dotnet-version: |
+            8.0.424
+            10.0.400
 
       - name: Test the handoff application source
         shell: bash
@@ -438,7 +455,8 @@ jobs:
 
   production:
     needs: staging
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as `staging`; see the note there.
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - name: Check out the approved control commit

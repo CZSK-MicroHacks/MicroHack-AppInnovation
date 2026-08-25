@@ -1,5 +1,25 @@
 # Challenge 2 solution: render evidence from raw Azure captures
 
+**Open this when** you have tried [Challenge 2](../../challenges/ch02/README.md) and are
+stuck on a specific step, or when you are facilitating and need the exact commands and
+their fail-closed assertions.
+
+This is the full reference run for the load and autoscaling chapter. Every block is
+copy-pasteable, and every block stops the moment something is not true, so a participant
+never builds evidence on top of a silent failure.
+
+**Prerequisite deployment.** Two inputs come from `infra/perf-testing.bicep`, a
+resource-group-scope template that must be deployed before a participant starts: an
+Azure Load Testing resource (`LOAD_TEST_RESOURCE_ID`, from the `loadTestResourceId`
+output) and an RBAC-authorized Key Vault holding the catalog performance-test API key
+(`PERFTEST_API_KEY_SECRET_URI`, `<keyVaultUri>secrets/PERFTEST_API_KEY`). Deploy it after
+`infra/github-cicd.bicep`, passing that template's `identityPrincipalId` output as
+`workflowIdentityPrincipalId`. The template creates the vault but deliberately not the
+secret **value** — set it once with `az keyvault secret set` using an identity holding
+`Key Vault Secrets Officer`. Role assignments for the workflow identity and for the load
+test's own system-assigned identity are created by the template. Exact commands:
+[infra/README.md → *Challenge 2 performance-test prerequisites*](../../infra/README.md).
+
 Run from the repository root in Bash. These commands read the existing handoff,
 create or update only the named Azure Load Testing test, execute that test, and
 read Azure state. They do not deploy the application, create a replacement
@@ -9,6 +29,10 @@ This procedure consumes `shared-challenges.json` version `1.2.0`, its
 `loadEvidenceProtocol`, and `load-evidence-capture.schema.json` version `1.0.0`
 without reinterpretation. The renderer emits the version `1.1.0` report and
 normalized observations required by that protocol.
+
+Expect roughly 75–110 minutes end to end, of which **at least 35 minutes is waiting**:
+ten minutes of quiet baseline, about ten minutes of load-engine provisioning and the
+300-second run, and up to fifteen minutes waiting for replicas to fall back to one.
 
 Use the exact commands and stop on any error:
 
@@ -36,6 +60,36 @@ mkdir -p "$RAW"
 ```
 
 ## 1. Bind the exact handoff
+
+Everything downstream is identified by the validated Challenge 1 handoff, never by a
+portal search. This block also picks the database metric for the stack — Azure SQL is
+database-scoped, PostgreSQL emits `cpu_percent` at the server — and refuses to continue
+unless the Load Testing resource ID and Key Vault secret URI from the
+`infra/perf-testing.bicep` deployment are both present and well formed. The
+`${VAR:?...}` guards below are the enforcement point: export both values before running
+this step.
+
+Derive them from the prerequisite deployment rather than from the portal — `DEPLOYMENT`
+is the name of the `infra/perf-testing.bicep` deployment:
+
+```bash
+: "${RESOURCE_GROUP:?export the resource group holding the perf-testing deployment}"
+: "${DEPLOYMENT:?export the infra/perf-testing.bicep deployment name}"
+
+PERF_OUTPUTS=$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOYMENT" \
+  --query properties.outputs \
+  --output json)
+
+export LOAD_TEST_RESOURCE_ID=$(jq -er '.loadTestResourceId.value' <<<"$PERF_OUTPUTS")
+export PERFTEST_API_KEY_SECRET_URI="$(jq -er '.keyVaultUri.value' <<<"$PERF_OUTPUTS")secrets/PERFTEST_API_KEY"
+```
+
+The `keyVaultUri` output already ends in `/`, so the concatenation yields a valid secret
+identifier. If `az keyvault secret show --vault-name "$(jq -er '.keyVaultName.value'
+<<<"$PERF_OUTPUTS")" --name PERFTEST_API_KEY` returns nothing, the one-time
+`az keyvault secret set` step has not been run yet.
 
 ```bash
 SLICE_ID=$(jq -er '.sliceId' "$HANDOFF")
@@ -99,7 +153,12 @@ This flow applies unchanged to `manual-dotnet`, `manual-java`,
 `copilot-rewrite-dotnet`, `copilot-rewrite-java`,
 `copilot-modernization-dotnet`, and `copilot-modernization-java`.
 
-## 2. Capture P4 scale configuration and baseline
+## 2. Capture the scale configuration and a quiet baseline
+
+Record what the target's scale rule actually is at the moment you observe it, then stay
+off the app for ten minutes. The `etag` is what ties the recorded configuration to the
+live resource; the ten minutes are what give Azure Monitor a one-replica data point to
+compare the spike against.
 
 Capture the raw Container App ARM response, including its `etag`. Do not extract
 or normalize it.
@@ -135,6 +194,10 @@ required one-replica point before load.
 
 ## 3. Run the bounded JMeter test
 
+This is the ~10-minute wait. Azure provisions a load engine, runs the plan for exactly
+300 seconds, and deprovisions; the poll loop below is fail-closed on any status other
+than the known in-flight set.
+
 The JMX has one HTTPS `GET /perftest/catalog` sampler, 40 users, a 300-second
 scheduler, HTTP `200` assertion, stop-on-sample-error behavior, and both
 redirect modes disabled. The hostname comes from `CATALOG_BASE_HOST`; the API
@@ -164,7 +227,7 @@ TEST_RUN_START_JSON=$(
     --test-id "$TEST_ID" \
     --test-run-id "$TEST_RUN_ID" \
     --display-name "$TEST_RUN_ID" \
-    --description "P6 bounded catalog autoscaling evidence" \
+    --description "Bounded catalog autoscaling evidence" \
     --output json
 )
 jq -e --arg testId "$TEST_ID" --arg runId "$TEST_RUN_ID" '
@@ -207,6 +270,12 @@ Do not use request time or polling time in place of the Azure engine timestamps.
 Any redirect remains a 3xx response and fails the HTTP `200` assertion.
 
 ## 4. Capture exact database and revision-filtered replica metrics
+
+Two series matter here and they answer two different questions: the database metric
+answers "did the extra replicas reach the data tier?", and the revision-filtered
+`Replicas` series answers "did this revision — not some neighbour — add and release
+capacity?". Getting the `revisionName` filter wrong is the single most common way to
+produce a series that looks right and proves nothing.
 
 Capture the database window through the observed run end:
 
@@ -311,7 +380,8 @@ only after `LOAD_END` fails.
 
 ## 5. Hash raw inputs into the canonical capture manifest
 
-Hash the exact four raw Azure responses and both checked-in assets:
+The manifest is the join between "what Azure said" and "what the report claims". Hash the
+exact four raw Azure responses and both checked-in assets:
 
 ```bash
 sha256_file() {
@@ -436,3 +506,30 @@ The renderer deterministically writes `evidence/load-test-report.json` version
 `database.json`, and `recovery.json` under `evidence/load/`. The validator
 re-renders from the digest-bound raw captures, so manual normalized evidence,
 changed raw data, or changed assets fail closed.
+
+## If it goes wrong
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `LOAD_TEST_RESOURCE_ID` or `PERFTEST_API_KEY_SECRET_URI` is unset, or `az resource show` cannot find the resource | `infra/perf-testing.bicep` has not been deployed to this resource group | Deploy it and set the `PERFTEST_API_KEY` secret value, then re-run step 1. See [infra/README.md](../../infra/README.md) |
+| `az load test create --secret` cannot resolve the secret | The load test's system-assigned identity lacks `Key Vault Secrets User`, or the secret value was never set | Redeploy `infra/perf-testing.bicep` (it creates that role assignment) and confirm `az keyvault secret show --name PERFTEST_API_KEY` returns a value |
+| The run ends with `errorCount` above zero | The sampler received a 3xx or 4xx — usually a wrong or unreadable `x-api-key` | Confirm the Key Vault secret holds the catalog performance-test key and the Load Testing identity can read it. Redirects are intentionally not followed, so a 3xx fails the `200` assertion |
+| The replica jq assertion fails on time-series length | The metric query was issued without the `revisionName` filter, or against the wrong resource | Re-issue with `--filter "revisionName eq '$APP_REVISION'"` against `APP_RESOURCE_ID` |
+| Replicas never return to one inside 900 seconds | The recovery poll started before the engine finished deprovisioning, or traffic is still arriving | Confirm the run is `DONE` and nothing else is calling the app, then re-run the recovery loop |
+| The validator reports digest drift | A raw file was re-captured, reformatted, or pretty-printed after hashing | Re-hash the exact bytes now on disk and re-render; never hand-edit normalized evidence |
+
+The broader diagnostic workflow is in
+[the troubleshooting guide](../../docs/Troubleshooting.md).
+
+## What a completed run shows
+
+`evidence/load-test-report.json` now carries the chapter's headline numbers: replicas
+moving `1 → 2` or `3` and back to `1`, zero errors across 40 virtual users for 300
+seconds, and a database peak above its own pre-load baseline. Those are the figures to
+read aloud in the debrief — they are the first quantitative answer the retailer has ever
+had to "what happens when it gets busy?".
+
+---
+
+**Back to** [Challenge 2: make the catalog survive a traffic spike](../../challenges/ch02/README.md)
+**Next solution:** [Challenge 3 solution](../ch03/README.md)

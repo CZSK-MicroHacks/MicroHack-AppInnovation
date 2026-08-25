@@ -1,6 +1,7 @@
 locals {
   padded                  = format("%03d", var.user_index)
   rg_name                 = "rg-user${local.padded}"
+  team_name               = "user${local.padded}"
   pip_name                = "pip-user${local.padded}"
   nat_pip_name            = "pip-nat-user${local.padded}"
   vnet_name               = "vnet-user${local.padded}"
@@ -21,17 +22,59 @@ locals {
     filesha256(local.provisioner_path),
     filesha256(local.bootstrapper_path),
     "custom-data-v2",
-    "gzip-bootstrap-v1"
+    "gzip-bootstrap-v1",
+    "gzip-provisioner-v1"
   ]))
+  # infra/main.bicep needs the exact ARM ID of each stack's legacy VM. It is composed from
+  # the resource group rather than read from azapi_resource.vm, because it travels in that
+  # same VM's custom data and a resource cannot reference itself.
+  source_vm_resource_ids = {
+    for stack, config in local.stacks :
+    stack => "${azapi_resource.rg.id}/providers/Microsoft.Compute/virtualMachines/${config.vm_name}"
+  }
+  provisioner_payload = {
+    for stack in keys(local.stacks) : stack => {
+      databasePassword                        = random_password.database[stack].result
+      performanceApiKey                       = random_password.performance_api_key[stack].result
+      facilitatorPrincipalName                = var.facilitator_principal_name
+      facilitatorPrincipalObjectId            = var.facilitator_principal_object_id
+      resourceGroupName                       = local.rg_name
+      teamName                                = local.team_name
+      adminUsername                           = var.admin_username
+      migrationSourceVirtualNetworkResourceId = azapi_resource.vnet.id
+      migrationSourceVmResourceId             = local.source_vm_resource_ids[stack]
+    }
+  }
+  # Azure decodes osProfile.customData into a binary array of at most 65,535 bytes and the
+  # provisioner alone is larger than that, so it travels gzipped. bootstrap-provision-vm.ps1
+  # still finds plain PowerShell between the markers: this wrapper takes the same four
+  # parameters, expands the real script to disk, and runs it from there, which keeps
+  # $PSCommandPath pointing at a real file. Compressing this way mirrors how the bootstrapper
+  # itself is already shipped through the extension command.
+  provisioner_body_path = "C:\\AzureData\\provision-vm-body.ps1"
+  provisioner_wrapper = join("\n", [
+    "param(",
+    "    [Parameter(Mandatory)][ValidateSet('dotnet', 'java')][string]$Stack,",
+    "    [Parameter(Mandatory)][string]$SourceCommit,",
+    "    [Parameter(Mandatory)][string]$SourceArchiveUrl,",
+    "    [Parameter(Mandatory)][string]$SourceArchiveSha256",
+    ")",
+    "$ErrorActionPreference='Stop'",
+    "$b=[Convert]::FromBase64String('${base64gzip(file(local.provisioner_path))}')",
+    "$m=New-Object IO.MemoryStream(,$b)",
+    "$g=New-Object IO.Compression.GZipStream($m,[IO.Compression.CompressionMode]::Decompress)",
+    "$r=New-Object IO.StreamReader($g)",
+    "try{$s=$r.ReadToEnd()}finally{$r.Dispose();$g.Dispose();$m.Dispose()}",
+    "[IO.File]::WriteAllText('${local.provisioner_body_path}',$s,(New-Object Text.UTF8Encoding($false)))",
+    "& powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File '${local.provisioner_body_path}' -Stack $Stack -SourceCommit $SourceCommit -SourceArchiveUrl $SourceArchiveUrl -SourceArchiveSha256 $SourceArchiveSha256",
+    "exit $LASTEXITCODE"
+  ])
   provisioner_custom_data = {
     for stack in keys(local.stacks) : stack => base64encode(join("\n", [
       "MICROHACK_CUSTOM_DATA_V2",
-      base64encode(jsonencode({
-        databasePassword  = random_password.database[stack].result
-        performanceApiKey = random_password.performance_api_key[stack].result
-      })),
+      base64encode(jsonencode(local.provisioner_payload[stack])),
       "MICROHACK_PROVISIONER_START",
-      file(local.provisioner_path)
+      local.provisioner_wrapper
     ]))
   }
   bootstrapper_gzip_base64 = base64gzip(file(local.bootstrapper_path))

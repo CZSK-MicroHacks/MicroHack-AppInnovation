@@ -1,6 +1,11 @@
 # Path 1C solution: Java and PostgreSQL
 
-Run this guide on the selected Java P3 VM from the repository root. The source
+**Open this if** you chose [Path 1C: GitHub Copilot modernization](../../../challenges/ch01-copilot-modernization/README.md)
+with the Java/PostgreSQL baseline and want the exact command for a step, the precise
+ordering of commit → clean-tree check → source-commit recapture, or a way to finish when
+time runs short. End to end this is a 5–7 hour path.
+
+Run this guide on the selected Java legacy VM from the repository root. The source
 is Microsoft OpenJDK `17.0.20+8` with Spring Boot `3.5.16`; the accepted target
 is Microsoft OpenJDK `21.0.12+8`, Spring Boot `4.0.7`, PostgreSQL Flexible
 Server `18`, and repository `catalog-java`. PostgreSQL migration is
@@ -17,6 +22,31 @@ The target dependencies and images are pinned in
 - `io.opentelemetry:opentelemetry-api:1.58.0`
 - build/runtime image
   `mcr.microsoft.com/openjdk/jdk:21-azurelinux@sha256:06ec8d4b09883cb695aa37e3ae85d1188f124b6dbcfeff97eeb09a926f7c389f`
+
+## Where you work, and what the VM does not have
+
+Every command here runs on the selected VM from Challenge 0, reached over Azure Bastion.
+The source tree is at `C:\MicroHack\source`, extracted from a verified archive by the
+provisioner. **That directory is what "the repository root" means in this and every other
+workshop document.** Start each terminal with `cd C:\MicroHack\source`.
+
+The VM ships a deliberately small, fully pinned toolchain. Pinned Git for Windows is part
+of it, so `C:\MicroHack\source` is a real working tree: because the source arrives as a
+verified archive rather than a clone, the provisioner initializes a repository there and
+makes one baseline commit. There is **no Docker daemon**:
+
+| You need | On the VM |
+| --- | --- |
+| the exact 40-character upstream source commit | the marker file `C:\MicroHack\source\.source-commit`, written by the provisioner when it extracts the source archive. Quote it as archive provenance and nothing else — GitHub has never seen that commit. |
+| a container image build | `az acr build`, used in step 4, uploads the build context and builds inside Azure Container Registry, so no local daemon is required |
+| to commit accepted modernization tasks | `git add` and `git commit` in `C:\MicroHack\source`, exactly as steps 1 and 3 write them |
+| to publish them | `git push` to your own GitHub repository, exactly as step 3 writes it |
+
+The two `git rev-parse HEAD` readings in steps 1 and 3 are both your own commits:
+`$StartingCommit` is the baseline before you change anything, and `$SourceCommit` is the
+pushed commit holding your reviewed modernization delta. Neither is the `.source-commit`
+marker, so never substitute one for the other. See
+[If a command will not run here](#if-a-command-will-not-run-here) at the end.
 
 ## 1. Freeze source and IDE evidence
 
@@ -130,9 +160,9 @@ database family, selects Azure Files, writes a password, weakens TLS, changes a
 frozen contract, introduces an unpinned dependency, replaces immutable images,
 skips tests, or cannot map to a supported task.
 
-After all modernization tasks are accepted, commit the complete reviewed delta
-and recapture its identity. Do not use `$StartingCommit` for any build,
-migration, deployment, or evidence:
+After all modernization tasks are accepted, commit the complete reviewed delta,
+publish it to your own GitHub repository, and recapture its identity.
+Do not use `$StartingCommit` for any build, migration, deployment, or evidence:
 
 ```powershell
 New-Item -ItemType Directory -Force evidence\runtime-tests | Out-Null
@@ -145,11 +175,29 @@ git commit -m 'Accept Java Copilot modernization tasks'
 if (git status --porcelain) {
   throw 'Accepted modernization changes must be committed and the worktree clean.'
 }
+$ParticipantRepositoryUrl = '<facilitator-provided-https-url-of-your-repository>'
+if ((git remote) -contains 'origin') {
+  git remote set-url origin $ParticipantRepositoryUrl
+}
+else {
+  git remote add origin $ParticipantRepositoryUrl
+}
+git push --set-upstream origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the workshop branch failed.' }
 $SourceCommit = (git rev-parse HEAD).Trim()
 if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'Final source commit must be an exact lowercase full 40-hex SHA.'
 }
 ```
+
+The first push opens a browser sign-in through Git Credential Manager. Sign in as the
+account that owns the repository; the credential is reused by every later push. Re-running
+the block is safe — `git remote set-url` replaces an existing `origin` rather than failing.
+
+`$SourceCommit` is now a commit that exists on GitHub. The handoff records it, and
+Challenge 3 checks the application source out of your repository at exactly this SHA and
+builds `java/Dockerfile` from that checkout. A commit that never left this VM would fail
+that checkout, so do not continue until the push succeeds.
 
 Create `evidence/runtime-test-report.json` for the preserved Surefire XML under
 `evidence/runtime-tests/` by following
@@ -158,26 +206,35 @@ fourteen exact frozen test identities to `$SourceCommit`.
 
 ## 4. Build the immutable container
 
-From the repository root:
+From the repository root. Build it **in Azure Container Registry** with `az acr build`:
+the provisioned VM has no Docker daemon, and `az acr build` uploads the context and
+builds inside the registry, so none is needed.
 
 ```powershell
-docker buildx build --platform linux/amd64 --load `
-  --file java/Dockerfile `
-  --tag "catalog-java:$SourceCommit" .
+$RegistryName = $Target.containerRegistry.resourceId.Split('/')[-1]
+$BuildJson = az acr build `
+  --registry $RegistryName `
+  --image "catalog-java:$SourceCommit" `
+  --file java\Dockerfile `
+  . --output json
+if ($LASTEXITCODE -ne 0) { throw 'ACR build failed' }
 ```
+
+If `$Target` is not yet loaded in this shell, read it first from
+`evidence\azure-target-output.json` as shown in step 5.
 
 Review that the image runs as numeric user `10001`, listens on `8080`, and
 externalizes database, Blob, and telemetry configuration. A supported IDE task
-may prepare or review containerization, but the accepted artifact is the frozen
-digest-pinned `java/Dockerfile`.
+may prepare or review containerization, but the accepted artifact is the
+digest-pinned `java/Dockerfile` you authored.
 
-Publish exactly `catalog-java:$SourceCommit` through the
-facilitator-approved ACR workflow. Never use `latest` or another mutable tag.
+The build publishes exactly `catalog-java:$SourceCommit`. Never use `latest` or another
+mutable tag.
 
 ## 5. Native PostgreSQL and Blob cutover
 
 The extension does not perform database cutover. Run all native commands on this
-P3 source VM over the approved private migration path. The bootstrap output must
+legacy source VM over the approved private migration path. The bootstrap output must
 already exist at `evidence/azure-target-output.json`.
 
 ```powershell
@@ -295,9 +352,44 @@ verification, or schema/data cutover to the extension.
 ## 6. Deploy baseline and release
 
 Use reviewed `infra/main.bicep` application-stage deployments. Deploy the same
-`catalog-java@$ImageDigest` first as `baseline`, then as `release`. Supply the
+`catalog-java@$ImageDigest` first as `baseline`, then as `release` — the two
+protected application parameter files already select those roles. Supply the
 PostgreSQL administrator secret and any mode-specific application secret only
 through protected facilitator inputs.
+
+`infra/main.bicep` is resource-group scoped. Deploy it with `az deployment group create`
+into the resource group you already own — the one the facilitator created before the
+workshop, holding your two legacy VMs. The template does not create a resource group and
+nothing on this path deploys at subscription scope, which is what keeps your rights to
+Owner on that one group. Take the `--resource-group` value from the `resourceGroupName`
+already carried by the protected parameters file, rather than typing a name twice:
+
+```powershell
+$ResourceGroup = (Get-Content 'C:\protected\copilot-modernization-java-bootstrap.json' -Raw |
+  ConvertFrom-Json).parameters.resourceGroupName.value
+if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
+  throw 'the protected parameters must name your participant resource group'
+}
+```
+
+Those `C:\protected\*.json` documents are not yours to write. The facilitator's
+provisioning wrote `copilot-modernization-java-bootstrap.json`,
+`copilot-modernization-java-baseline.json`, and
+`copilot-modernization-java-release.json` on this VM before the workshop started, one
+per deployment stage. Each is a standard ARM parameter document carrying the values only
+the facilitator knew then: your `resourceGroupName` and `teamName`, the exact
+`migrationSourceVmResourceId` and `migrationSourceVirtualNetworkResourceId`,
+`facilitatorPrincipalName` and `facilitatorPrincipalObjectId`, and the `performanceApiKey`
+the application stage asserts on.
+
+Every protected parameter document must set `resourceGroupName` to your own resource
+group. `infra/main.bicep` asserts that `resourceGroupName` equals the group it is deployed
+into, so a file naming anywhere else is refused before a single resource is touched.
+
+`sourceCommit` and `imageDigest` are deliberately absent from all three files: neither
+value existed when they were written, and a placeholder that satisfied the template's
+format assert would silently deploy the wrong source. Both deployments below pass them
+explicitly, where a later `--parameters` overrides the file.
 
 Capture exact registry evidence before deployment:
 
@@ -323,8 +415,38 @@ if ($ImageDigest -notmatch '^sha256:[0-9a-f]{64}$') {
   evidence\container-registry.json
 ```
 
-After release deployment, replace `evidence/azure-target-output.json` with the
-release-role application-stage output and verify the retained rollback:
+Deploy baseline first, then release. Both carry the same immutable digest; only the
+protected file, the deployment name, and therefore the revision role differ:
+
+```powershell
+az deployment group create `
+  --name "copilot-modernization-java-baseline-$($SourceCommit.Substring(0, 12))" `
+  --resource-group $ResourceGroup `
+  --template-file infra\main.bicep `
+  --parameters '@C:\protected\copilot-modernization-java-baseline.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --output none
+if ($LASTEXITCODE -ne 0) { throw 'baseline deployment failed' }
+
+$ReleaseLines = az deployment group create `
+  --name "copilot-modernization-java-release-$($SourceCommit.Substring(0, 12))" `
+  --resource-group $ResourceGroup `
+  --template-file infra\main.bicep `
+  --parameters '@C:\protected\copilot-modernization-java-release.json' `
+  --parameters sourceCommit=$SourceCommit imageDigest=$ImageDigest `
+  --query properties.outputs.targetOutput.value `
+  --output json
+if ($LASTEXITCODE -ne 0) { throw 'release deployment failed' }
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD 'evidence\azure-target-output.json'),
+  ($ReleaseLines -join [Environment]::NewLine),
+  [System.Text.UTF8Encoding]::new($false)
+)
+```
+
+That write replaces the bootstrap document at `evidence/azure-target-output.json` with the
+release-role application-stage output. Verify it, and the retained rollback, with the
+frozen query:
 
 ```powershell
 $ReleaseTarget = Get-Content evidence\azure-target-output.json -Raw |
@@ -373,7 +495,7 @@ try {
 $env:CATALOG_DATABASE_KIND = 'postgresql'
 $env:CATALOG_DATABASE_HOST = $ReleaseTarget.database.server
 $env:CATALOG_DATABASE_NAME = $ReleaseTarget.database.database
-$env:CATALOG_DATABASE_USERNAME = '<acceptance-verifier>'
+$env:CATALOG_DATABASE_USERNAME = $ReleaseTarget.database.applicationPrincipal.name
 $env:CATALOG_DATABASE_SSL_MODE = 'require'
 $env:CATALOG_DATABASE_TARGET = 'managed'
 $AcceptanceExit = 0
@@ -455,6 +577,27 @@ Remove-Item -Force $Artifact -ErrorAction SilentlyContinue
 git status --short
 ```
 
+The handoff itself is not yet on GitHub. Challenge 3 reads
+`evidence/modernization-contract.json` from the commit it dispatches, and that commit must
+be a **later** commit than the source commit it builds. Publish the validated evidence as
+one follow-up commit, after the transients above are gone so nothing transient ships:
+
+```powershell
+git add --all
+git commit -m 'Record the validated modernization handoff'
+if (git status --porcelain) {
+  throw 'The handoff evidence must be committed before Challenge 3 runs.'
+}
+git push origin workshop
+if ($LASTEXITCODE -ne 0) { throw 'Publishing the handoff evidence failed.' }
+if ((git rev-parse HEAD).Trim() -ceq $SourceCommit) {
+  throw 'The handoff commit must be later than the published source commit.'
+}
+```
+
+Challenge 3 dispatches its workflow from this evidence commit, reads the handoff there,
+and checks the application source out separately at `$SourceCommit`.
+
 Retain the required evidence, reviewed source delta, and frozen target assets.
 Rejoin only after handoff validation succeeds. Downstream challenges consume
 `evidence/modernization-contract.json`; assessment, plan, and task output do not
@@ -465,3 +608,18 @@ prove runtime behavior.
 The preview Modernize CLI is optional and not required. It cannot replace the
 signed IDE workflow, native Maven tests, `catalog-migrate`, full acceptance,
 telemetry evidence, or handoff validation.
+
+## If a command will not run here
+
+| Symptom | Cause | What to do |
+| --- | --- | --- |
+| `git` is not recognized | Git for Windows is pinned and installed at `C:\Program Files\Git\cmd\git.exe`, but a shell opened before provisioning finished does not have it on `PATH`. | Open a new terminal and `cd C:\MicroHack\source` again, or call the full path once to confirm the install. |
+| `git rev-parse HEAD` does not match `.source-commit` | Expected. The working tree is a local repository initialized over the extracted archive, so its commits are unrelated to the published upstream commit. | Use `git rev-parse HEAD` for the commit holding your work, which is what every build, deployment, and evidence file here is keyed to. Use `.source-commit` only when a step asks for upstream archive provenance. |
+| `docker` is not recognized | The provisioned VM has no Docker daemon. | Step 4 already uses `az acr build`, which needs none. If any generated task proposes a local `docker build`, reject it and replan — that is exactly the kind of preflight mismatch step 3 asks you to record. |
+
+---
+
+**Challenge:** [Path 1C: GitHub Copilot modernization](../../../challenges/ch01-copilot-modernization/README.md) ·
+**Other stack:** [Copilot modernization .NET](../dotnet/README.md) ·
+**Modernized target:** [Reference implementation](../../reference/README.md) ·
+**Next:** [Challenge 2: load and autoscaling](../../../challenges/ch02/README.md)

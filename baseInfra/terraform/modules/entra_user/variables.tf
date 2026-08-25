@@ -15,11 +15,18 @@ Must be non-empty when module is instantiated.
 EOT
 }
 
-variable "password" {
-  type        = string
-  sensitive   = true
+variable "password_length" {
+  type        = number
+  default     = 24
   description = <<EOT
-Password assigned to the created user (lab convenience).
-Should meet tenant password policy; not printed in plan/output.
+Character length of the per-user password generated inside this module.
+Every user receives a distinct random password that is never shared across participants
+and must be changed at first sign-in. Read it from the root `entra_user_credentials`
+sensitive output and distribute it to exactly one participant.
 EOT
+
+  validation {
+    condition     = var.password_length >= 16 && var.password_length <= 64
+    error_message = "password_length must be between 16 and 64 characters."
+  }
 }
