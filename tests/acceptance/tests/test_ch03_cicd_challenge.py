@@ -321,7 +321,7 @@ def test_guides_require_post_completion_attempt_bound_validation() -> None:
     assert solution.index("> evidence/cicd/workflow-run.json") < solution.index(
         "> evidence/cicd-report.json"
     )
-    assert "structure only and is never behavioral proof" in challenge
+    assert "structure only and is never behavioral proof" in " ".join(challenge.split())
 
 
 def test_owned_slice_executes_common_validator_integration(

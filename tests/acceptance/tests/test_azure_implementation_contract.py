@@ -53,7 +53,7 @@ def test_dotnet_exports_all_signals_to_azure_monitor_without_losing_otlp(
     assert "AddAzureMonitorMetricExporter" in program
     assert "AddAzureMonitorLogExporter" in program
     assert "AddOtlpExporter" in program
-    assert "cannot both be configured" in program
+    assert "cannot both be configured" in " ".join(program.split())
 
 
 def test_java_uses_the_locked_azure_monitor_autoconfigure_versions(
@@ -81,10 +81,10 @@ def test_java_uses_the_locked_azure_monitor_autoconfigure_versions(
     assert "<version>1.6.0</version>" in pom
     assert "AzureMonitorAutoConfigure.customize" in application
     assert "APPLICATIONINSIGHTS_CONNECTION_STRING" in options
-    assert "cannot both be configured" in options
+    assert "cannot both be configured" in " ".join(options.split())
 
 
-def test_p3_dotnet_vm_installs_the_locked_self_contained_sqlpackage(
+def test_dotnet_vm_installs_the_locked_self_contained_sqlpackage(
     repo_root: Path,
 ) -> None:
     """The source VM has a runtime-independent, digest-pinned BACPAC tool."""

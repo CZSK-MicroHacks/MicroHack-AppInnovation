@@ -227,11 +227,12 @@ is already complete.
 
 The deployment UAMI deliberately cannot audit itself. Use a separate facilitator
 session with Reader-equivalent
-`Microsoft.Authorization/roleAssignments/read`. Select the subscription from the UAMI
+`Microsoft.Authorization/roleAssignments/read`. `IDENTITY_RESOURCE_ID` takes the
+`identityResourceId` output you retained in step 1. Select the subscription from the UAMI
 resource ID before issuing the exact unscoped role query:
 
 ```bash
-IDENTITY_RESOURCE_ID="<identityResourceId>"
+IDENTITY_RESOURCE_ID="<your-identity-resource-id>"
 SUBSCRIPTION_ID="$(cut -d/ -f3 <<<"$IDENTITY_RESOURCE_ID")"
 IDENTITY_RESOURCE_GROUP="$(cut -d/ -f5 <<<"$IDENTITY_RESOURCE_ID")"
 IDENTITY_NAME="$(cut -d/ -f9 <<<"$IDENTITY_RESOURCE_ID")"

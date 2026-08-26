@@ -166,9 +166,27 @@
 - No code changes required in application; rebuild dev container to apply (`Rebuild Container`).
 ### 2025-09-08 (Dev Experience - SQL Server Express sidecar)
 - Updated `devcontainer.json` `postCreateCommand` to launch a persistent `microhack-sql` container (`mcr.microsoft.com/mssql/server:2022-latest`, `MSSQL_PID=Express`).
-- Added `MSSQL_SA_PASSWORD` env var (placeholder `YourStrong!Passw0rd!` – recommend override via local customization) and mapped port 1433 for host access.
+- Added `MSSQL_SA_PASSWORD` env var (a literal placeholder value at the time) and described port 1433 as available for host access.
 - Data persisted in named Docker volume `microhack-sql-data`; startup idempotent (skips if container already exists).
 - Rationale: sidecar container avoids complexity of running SQL Server service inside main dev container (no systemd), keeps image lean, and mirrors production external DB topology.
+
+> **Correction appended 2026-02.** Two statements in the entry above were wrong or had
+> gone stale, so the entry was edited in place rather than left to mislead; this note
+> records what changed and why.
+>
+> * The literal placeholder password was removed from this line. It was a well-known
+>   sample string rather than a real secret, but a password-shaped literal in a
+>   repository is copied far more often than it is read, and it contradicted the fix
+>   below. `.devcontainer/devcontainer.json:43` now reads
+>   `"MSSQL_SA_PASSWORD": "${localEnv:MSSQL_SA_PASSWORD}"`, so the value comes from the
+>   contributor's own host and is never committed.
+> * The claim that port 1433 was "mapped for host access" did not match
+>   `devcontainer.json`, which performs no such mapping. The wording now describes only
+>   what the configuration actually did.
+>
+> Nothing in this repository reads `MSSQL_SA_PASSWORD`; it is a convenience passthrough
+> for a SQL Server sibling container, which is why an unset value warns at container
+> create time instead of failing the build.
 ## Implementation Log
 ### YYYY-MM-DD Split setup script into modular stages
 Refactored `baseInfra/scripts/setup.ps1` into an orchestration-only script. Added modular scripts:
@@ -1131,3 +1149,636 @@ conformance 9. Quality had *dropped two points*, and the cause was a fix of mine
   directory is untracked, the ignore rule is in place, and a guard now fails if any
   generated Python metadata is tracked — it was verified against the live defect, failing
   before the fix and passing after.
+
+## Round 7 — the phase-code guard was reading a sixth of the repository
+
+Written after the fact, in round 8, because round 7 was fixed and never recorded. It is
+reconstructed **only from what the tree can prove**, and the tree proves less than a
+contemporaneous entry would have. `HEAD` is a single commit, `af03efe`, "harden the workshop
+across six audit rounds": everything after round 6 is uncommitted working tree, so `git` can
+separate round 7 from round 8 in *content* but not by *commit*. Where a fact was not
+recoverable, it is absent rather than reconstructed — including the review scores, which no
+artifact carries. What is below is diffable against `af03efe` today.
+
+- **A guard whose docstring described a scope it did not have.** At the end of round 6,
+  `test_no_build_phase_codes_reach_a_reader` listed its candidates with
+  `git ls-files --cached --others --exclude-standard` followed by a six-extension pathspec:
+  `*.md *.py *.json *.ps1 *.bicep *.tf`. That pathspec is the defect. Measured against
+  today's tree, it lists **293 files where the unfiltered listing gives 737**, and of the 444
+  it hides, **241 are readable text the guard never opened** — among them *every* `.java` and
+  `.cs` file in the repository, plus the `.razor` and `.cshtml` views and the `.bicepparam`
+  files. Round 6's own entry records that phase codes had leaked into "test filenames" and
+  "the error strings the evidence validators print". Those are precisely the files the
+  pathspec excluded. The guard reported green on the leak it was written to catch.
+
+- **Two smaller faults in the same six lines.** The listing was split with `.stdout.split()`,
+  which splits on whitespace and so corrupts any path containing a space; it is now `-z` with
+  a NUL split. And the guard had no floor at all — nothing asserted that it had looked at
+  anything. `PHASE_CODE_SCAN_FLOOR = 450` was added, against **530 decodable files** at the
+  time. Its comment records why the floor is a floor and not `> 0`: an earlier truncation of
+  this same guard scanned only the git index and *still* saw 172 files, so a non-empty check
+  would have passed on it. A guard that cannot report its own reach is a guard you are
+  trusting for its intentions.
+
+- **A precision the round-8 rewrite of that docstring gets slightly wrong.** It says the guard
+  "used to carry" two restrictions, "index-only listing, and a six-extension pathspec". Only
+  the pathspec was present at `af03efe`; the listing there already had `--cached --others
+  --exclude-standard`, and round 6's docstring already argued for it. The index-only state is
+  real — the scan-floor comment preserves its 172-file measurement — but it predates `HEAD`
+  and was repaired before round 7 began. Left as a note rather than silently corrected in a
+  file this entry does not own.
+
+## Round 8 — the guards that were scanning a fraction of the repository
+
+Numbered for the review round this work precedes. The round-7 entry above it was written
+during this round, from the tree rather than from memory.
+
+- **Two guards were green on a scope they had quietly outgrown.** The variable guard only
+  inspected bash blocks containing the literal string `az deployment`; the placeholder guard
+  only looked inside four glob patterns. Both now enumerate every tracked Markdown file with
+  `git ls-files`, which takes the variable guard from three blocks to **154 bash blocks,
+  scanned across all 58 tracked Markdown files**. Twenty-two unbound variables and three
+  unlabelled placeholders were sitting in the difference. Five of them were live defects that
+  seven rounds of critics had not found — not because the critics missed them, but because
+  nothing had ever looked there. Enumerating from `git ls-files` rather than from a glob list
+  also means the scope cannot go stale when a directory is added or renamed, which is how the
+  four globs decayed in the first place.
+
+- **The trigger was the defect, not the threshold.** The first widening kept a trigger and
+  merely loosened it, from `az deployment` to any block running `az`. That model died on
+  `solutions/ch04/README.md`, where `ARM_SERIALIZED_DATA` is expanded in a block containing
+  nothing but `jq`, `printf` and `shasum`. Unbound there, it hashes the empty string and
+  prints a digest that can never match the workbook — and the Azure CLI is nowhere near it. A
+  guard whose trigger names a *tool* is asserting that only that tool can fail. Both triggers
+  are gone. The contract is now one sentence each: every bash block binds or guards every
+  variable it expands, and every placeholder in a runnable block names who supplies the value.
+
+- **Stripping single-quoted spans with a regex misreads shell quoting.** `'[^']*'` cannot see
+  the `'\''` close-escape-reopen idiom, so it mis-aligns and reads the *following*
+  double-quoted span as unquoted. That produced a confident and wrong finding against
+  `workshop/sre-agent/README.md`, where `$principal` is a jq `--arg` name inside a
+  single-quoted program and not a shell expansion at all. It was proved a false positive by
+  binding `principal` to a sentinel in a real shell and observing that the sentinel never
+  reached the output — evidence, rather than a reading of the line. The extractor now walks
+  the string tracking quote state, which also subsumes the hand-written special case for the
+  correctly escaped `\$filter` OData parameter in `solutions/ch06-sre-agent/README.md`.
+
+- **A placeholder detector's character class is a list of the spellings you already thought
+  of.** `<[a-z][a-z0-9-]*>` could not match an uppercase letter, a dot, a pipe, a slash or a
+  space, so it was structurally blind to `<identityResourceId>`,
+  `<path-to-ch00-selection.json>` and `<dotnet-sqlserver|java-postgresql>` while looking
+  rigorous. `solutions/ch00/README.md` had two conventions on adjacent lines and the guard saw
+  only the compliant one. Admitting spaces surfaced two more that were whole English sentences
+  in angle brackets, one of them in this repository's own facilitator runbook. The convention
+  is now uniform across every Markdown file: a placeholder starts with `facilitator-`, `your-`
+  or `owner-`, or ends in `key`, `password`, `secret`, `token` or `user`. One holdout was kept
+  deliberately — `<dotnet-sqlserver|java-postgresql>` enumerates the two legal values instead
+  of asking for an unknown one, which documents more than a conforming name would, so the
+  guard now recognises pipe-separated choices as a category rather than demanding a rename.
+
+- **The last allowlist was removed rather than justified.** `.azure/deployment-plan.md` was
+  briefly exempted as a machine-generated record of decisions. It is not one: it already
+  carries a substantive accuracy correction from an earlier round, and a document we fix when
+  it is wrong is maintained, not frozen. Its two unbound variables were guarded and its
+  placeholders renamed like everything else. Neither guard now holds an exemption of any kind,
+  which is a far easier property to defend than a carve-out with a rationale attached to it.
+
+- **Bind where a real source exists; guard only where none does.** A guard stops a wrong run,
+  but a binding removes the chance of one. `WORKBOOK_RESOURCE_ID` now comes from the
+  `workbookResourceId` output at `infra/observability-workbook.bicep:105`,
+  `WORKFLOW_IDENTITY_PRINCIPAL_ID` from `infra/github-cicd.bicep:107`, `KEY_VAULT_NAME` from
+  `infra/perf-testing.bicep:101`, and every identifier in `docs/Demo.md` from the
+  `evidence/cicd-report.json` the demo has already produced — so nothing is typed on stage,
+  where an empty `--name ""` is the most expensive failure available. Binding `infra/README.md`
+  closed a documentation defect nobody had noticed: the prose claimed the block passed the
+  template's `identityPrincipalId` output, and the block did not. Where no source exists the
+  house idiom `: "${VAR:?…}"` is used, and for `PERFTEST_API_KEY` a guard is the deliberate
+  choice — defaulting a secret is how you come to ship one.
+
+- **Three unguarded variables were feeding a query time window.** `BAD_REVISION`,
+  `INVESTIGATION_END` and `INCIDENT_END` in `solutions/ch06-sre-agent/README.md` are consumed
+  as `--arg end "$…"`. Unset, they do not fail: they query an unbounded window and return
+  evidence that looks plausible and is wrong, in the one chapter whose entire subject is an
+  agent reasoning from evidence. A crash would have been kinder. All three are now guarded
+  beside their three existing siblings, in the block that first consumes each, with messages
+  that point at the drill capture rather than merely reporting the variable as missing.
+
+- **Blocks labelled "illustrative" were guarded too.** `docs/Demo.md` and the reproduce-it
+  shape in `docs/Facilitator.md` are prose-marked as examples, which is an argument for
+  leaving them unbound only until you remember that a fenced block is an offer to run it.
+  Both documents are executed live, and nothing stops a reader pasting. They were bound from
+  real sources rather than guarded, because the values existed.
+
+- **The T-4 rehearsal has coverage instead of a name.** `golden-dryrun` is the step that
+  decides whether there is a rejoin path at 15:15 for the half of the room that will not
+  finish Challenge 1, and its behaviour was asserted nowhere. `test_migration_handoff.py` now
+  exercises it end to end. Building those tests surfaced an ordering fact worth keeping:
+  `stack-match` cannot be reached by editing the contract's stack field, because the schema
+  check ahead of it catches the resulting `sliceId` disagreement first. The defect that step
+  actually exists for is a correct contract filed in the wrong stack directory.
+
+- **A document told the facilitator that a shipped command does not exist.** The rehearsal
+  section opened with "there is no dry-run harness" while the T-1 smoke table, in the same
+  document, required `golden-dryrun` to exit `0`. Whichever a facilitator read first, the
+  other was wrong, and the one who read the rehearsal first would hand-time a rehearsal a
+  command validates for them. The false clause is gone and the two places are cross-linked;
+  the true half — that nothing automates the timings, the transcript, or the inherited 1–2 day
+  estimate — was kept, because the harness validates the *bundle* and does not time the *cut*.
+
+- **A T-1 probe for the one directory nobody provisions.** Every Challenge 1 path writes its
+  database export under `C:\ProgramData\MicroHack\migration`. The first read of this looked
+  like a missing `mkdir`; it is not — all **six** path documents create it themselves. The
+  real exposure is the ACL: `provision-vm.ps1` brings `C:\ProgramData\MicroHack` into being as
+  SYSTEM, as a side effect of creating `vscode-extensions`, and never places an ACE on it, so
+  whether a non-elevated participant may add a subfolder under it is inherited-ACE behaviour
+  no delivery has tested. The new row tests it from the session a participant actually has,
+  and says what a failure means, because a facilitator who reads `Access is denied` there will
+  otherwise go looking for a typo in a runbook that is correct.
+
+- **A prerequisite row that could not be executed from the row.** Chapter 5's entry described
+  a captured, validated, distributed seed snapshot without naming the tool that captures it.
+  It now names `seed-defender-findings.ps1`, its owner, the artifact that proves it worked,
+  and the two conditions that gate it — the 24-hour plan wait and the golden handoff it binds
+  to, which is precisely why that row straddles T-5 and T-4.
+
+- **The Load Testing multiplicity, decided rather than hedged.** `docs/Facilitator.md` had
+  asked the facilitator to "budget one Load Testing resource per participant unless you decide
+  to share one". The workshop now budgets **thirty, one per participant, never shared**, and
+  the reason recorded is contention rather than cost: Challenge 2 puts the whole room under
+  load inside the same 35-minute window, so a shared resource serialises the one chapter whose
+  subject *is* autoscaling under load. A hedge in a blocker table is a decision deferred onto
+  someone with less context and less time.
+
+- **The UNVERIFIED billing period, resolved instead of relabelled.** The decision multiplied a
+  known unknown by thirty: `$10.00 per resource` with no stated period is the difference
+  between $300 once and $300 every month, on a row a facilitator hands to a budget owner. The
+  Retail Prices API cannot settle it — `unitOfMeasure` is `1`. Microsoft's own pricing page
+  can, and does: `$10.00 per month includes 50 Virtual User Hours (VUH) per month`, with an
+  FAQ entry stating the fee applies to a resource "active during any part of a month". The
+  live page has since dropped both the row and the FAQ entry, so the citation is to the dated
+  snapshot that still carries them, and two independent facts were checked to confirm it still
+  describes current billing: the archived regional spread matches today's API exactly
+  ($10.00, $12.50 in `usgov-virginia`), and the `JMeter Virtual User Included Usage` meter is
+  still live at $0.00/hour — an included-usage meter cannot mean anything without the fee that
+  buys the inclusion. What remains genuinely open is stated as such, with the one-minute Cost
+  Analysis check that closes it and the meter ID to filter on.
+
+- **The consequence mattered more than the number.** "Any part of a month" is not prorated, so
+  a Friday-to-Wednesday delivery that crosses a month end is billed twice — $600.00 for five
+  days. That turned a pricing footnote into a scheduling constraint, and it is now stated in
+  the blocker row, the cohort table, and the worked example, whose subtotal is given both ways
+  (≈ $2,579 within one month, ≈ $2,879 across two). A new **Pricing page** provenance label
+  was added to the document's legend so that a figure sourced from the pricing page rather
+  than the Retail API is auditable as such instead of being quietly promoted to "Retail API".
+
+- **A dead schema rule grew back after the first one was deleted.** Round 7's didactics review
+  asked for a `$defs`-reachability assertion "so the next dead region fails instead of
+  surviving". The dead `$defs/challenge` in `shared-challenges.schema.json` was deleted; the
+  assertion was not added. By this round `defender-cleanup.schema.json` had grown a *new*
+  unreferenced `$defs/resourceId` — a rule that reads like a constraint in review and does
+  nothing in the validator. It is deleted, the reachability guard exists, and it was
+  mutation-tested by planting a dead rule and confirming the failure. Independently
+  re-measured here: **41 contract schemas, 236 `$defs` entries, 0 unreachable.** Deleting the
+  instance without asserting the class is how the class regrows, which is the same lesson as
+  the guard triggers above, arriving from a different direction.
+
+- **Negative result: no `required` names a property the schema never defines.** Checked across
+  all 41 contract schemas. Every hit sits inside `if`/`then`/`allOf` composition, where the
+  shapes come from the parent schema — correct JSON Schema, not a dead rule. Recorded as a
+  negative because an audit that only lists what was broken says nothing about coverage. One
+  caveat on the count: a naive sibling-only detector reports 24 hits here and a
+  composition-aware one reports 8, and the difference is entirely detector naivety, not
+  disagreement about the tree. Worth knowing before someone re-runs this and thinks the number
+  moved. The naive pass did surface one shape worth a look on its own terms —
+  `database-contract.schema.json` `properties/common` carries `required` with no `properties`
+  and no `additionalProperties: false`, so its four keys are required to exist and then not
+  validated at all. That is legal and it does something, so it is not this defect class; it is
+  reported, not silently folded in.
+
+- **Negative result: no runbook command points at a file that does not exist.** The only
+  candidates are six references to `dotnet/Dockerfile` and `java/Dockerfile`, neither of which
+  is in the tree. Both are correct by design: the participant authors them during Challenge 1,
+  and the prose says so in those words — "the `Dockerfile` you authored". A guard for this
+  class would have to understand which files a runbook *creates* before it can judge which it
+  wrongly assumes, which is why the check was run by hand and recorded rather than automated.
+
+## Round 8 closure — four defects the critics named, and the one that cost the point
+
+Round 8 scored **didactics 10, delivery 10, conformance 10, quality 9, selling 9**. Selling
+filed a 10 and then withdrew it in an addendum after running a control the review had
+missed. This entry closes the selling and delivery gaps.
+
+- **Introducing a variable and converting only some of its uses.** `docs/Demo.md` step 4 was
+  changed this round to bind `CICD=evidence/cicd-report.json` and read `"$CICD"` — but only
+  in two of its three `jq` blocks. The third, at `:240`, kept the literal path, while `:244`
+  still told the facilitator that the example file is "substituted for the path above". The
+  step therefore had *two* substitution mechanisms and one instruction describing half of
+  them. Reproduced before fixing: with `CICD=workshop/contracts/cicd-evidence.example.json`
+  the first two blocks resolve `rg-mh-example` / `ca-mh-example` and the third exits `2` with
+  `jq: error: Could not open file evidence/cicd-report.json` — the rollback beat dies
+  two-thirds through, on the one demo the agenda is built around. `:240` now reads `' "$CICD"`
+  and `:243-245` names `CICD=` as the single substitution point for the whole step. Verified
+  by running all three blocks end to end: the third prints the documented `45 min` / `2 min`
+  byte-identically, `EXIT=0`. Steps 3 and 6, the two declared cold-runnable, were re-run and
+  are unregressed. Swept the rest of the document for the same shape: `CICD` is the only
+  variable `Demo.md` declares, and steps 1, 3 and 6 hard-code their paths with a matching
+  literal-path substitution instruction, so the blast radius really was that one step.
+
+- **A column that reconciled by neither route a reader has.** `docs/CostEstimate.md:231`
+  claimed a `× 30` base subtotal of **$2,017.23** while its five visible rows sum to
+  **$2,016.90** and 30 × the displayed **$67.24** gives **$2,017.20**. The true derivation is
+  30 × the unrounded **$67.2409** — an operand that appeared nowhere in the document. The
+  arithmetic was never wrong; it was unreproducible from the page, in the one document whose
+  whole method is "here is the meter, re-derive it". Deliberately **not** re-derived: the
+  totals are right, and a numeric rewrite is the worst place to risk a fresh second-order
+  defect. Two changes, no figure moved. The row's Basis cell — blank until now — carries the
+  missing operand, and one sentence after the provenance legend states that subtotals come
+  from unrounded values *and* that anything wider than rounding shows its arithmetic in the
+  row. The disclaimer alone would have been worse than nothing: it converts "sloppy" into
+  "unverifiable by design". The promise is what makes it honest, and the Basis cell is that
+  promise kept. The two remaining gaps are genuine single pennies. A fourth cell was checked
+  and left alone: `**Modernized subtotal**` at **$261.72** against 15 × ($12.89 + $4.56) =
+  $261.75, on the reasoning that it reconciles as 15 × an unrounded $17.448, is
+  rounding-scale across 30 items, and has no visible column to sum. **That reasoning was
+  reconsidered in round 9 and rejected.** "No visible column to sum" is the author's view of
+  the table, not the reader's — the row is labelled *50/50 split*, which instructs a reader to
+  multiply the two figures printed directly above it, and the sentence this same round added
+  to the legend had already promised the arithmetic in the row. Worse, the reconciliation
+  itself did not hold: no consistent reading of the two rows *as printed* yields $17.448.
+  The closest is rounded non-database .NET lines ($1.94/day → $3.4354) plus 16 active
+  vCore-hours ($9.48) = $12.9154, with Java at 42.5 h = $4.5333, summing to $17.4487 — which
+  would require the .NET row to print $12.92, not the $12.89 it carried at the time (that row
+  is now $12.90). And the $4.56 was a 42.75 h window inside a worked example that states
+  42.5 h everywhere else. Both figures moved in round 9 —
+  see [Round 9 closure](#round-9-closure--the-standard-we-set-and-the-four-rows-that-broke-it).
+
+- **The last untestable-here property is now asserted at provisioning time.**
+  `baseInfra/scripts/provision-vm.ps1` never created `C:\ProgramData\MicroHack\migration`.
+  All six Challenge 1 runbooks create it with `New-Item -Force`, so the directory was never
+  missing — what was untested was whether a *non-elevated* participant may add a subfolder
+  under a `C:\ProgramData\MicroHack` that provisioning creates as SYSTEM, as a side effect of
+  the `vscode-extensions` folder. That is inherited-ACE behaviour no delivery has exercised.
+  `New-MigrationExportDirectory` now creates the directory and calls the existing
+  `Set-ProtectedAcl` with `-ReadPrincipal $AdminUsername`, the same idiom already proven for
+  `C:\protected`. The one extension needed: `Read` was hard-coded as the principal's right,
+  so the helper gained a `[ValidateSet('Read','Modify')] $PrincipalRights` defaulting to
+  `Read`. Defaulting rather than switching is deliberate — the guard on this helper exists
+  precisely to keep the database passwords under `$SecretRoot` administrators-only, so the
+  grant stays opt-in per call site and no existing call site changed. Verified by executing
+  the real function with only its two Windows-only calls shadowed: `C:\protected` still
+  yields `SYSTEM=FullControl; Administrators=FullControl; azureuser=Read`, the migration
+  directory yields `azureuser=Modify`, `$SecretRoot` yields no principal ACE at all, and
+  `-PrincipalRights FullControl` is rejected by the ValidateSet. `FileSystemRights.Modify`
+  was confirmed to carry `CreateFiles` and `CreateDirectories` — the participant must be able
+  to *write* the export, not merely read it.
+
+- **A detection row that named the remedy class but not the remedy.** The T-1 probe at
+  `docs/Facilitator.md:783` told a facilitator that `Access is denied` means "an ACL fix on
+  the parent directory", which is a diagnosis, not a command — leaving them holding a
+  permissions problem across thirty VMs at T-1 with nothing to paste. The row now reads as
+  confirmation of a property provisioning asserts, carries an `az vm run-command invoke` /
+  `icacls ... /grant azureuser:(OI)(CI)M` remedy that fixes the ACL in place, and points at
+  [Reset one participant](Facilitator.md#reset-one-participant) so nobody reaches for a
+  re-image — which replaces both VMs for every participant. It also now says **leave the
+  directory** after removing the probe: the previous row told facilitators to delete it,
+  which would discard the very ACE that makes it work.
+
+- **The best safety story in the repository was invisible.** The acceptance harness's
+  destructive-delete boundary — the only thing separating "delete the fixture" from "delete a
+  participant's work" — was a string literal in `catalog_acceptance/database.py`, while
+  `behavior-contract.json` (`ownedProductIdPrefix`) and `database-contract.json`
+  (`acceptanceFixtureProductIdPrefix`) each declared the same boundary and nothing read
+  either. It is now bound by a mutation-tested guard, and both the selling and didactics
+  critics independently observed that participants would never see it: a grep across
+  `challenges/`, `docs/` and `README.md` returned nothing. Five lines now close
+  `challenges/ch01/README.md`'s **The concept**, which is where the section's own thesis
+  lives — extending it from *the handoff must be true* to *a declaration nothing reads is
+  decoration*. Told there it costs thirty seconds and lands as competence rather than
+  apology; told in `docs/` it is documentation nobody opens. Deliberately placed once rather
+  than in both the concept and the debrief — two homes for one artifact is exactly how
+  `ownedProductIdPrefix` and `acceptanceFixtureProductIdPrefix` happened.
+
+- **The cost fix was validated against the guard the critic asked for, both ways.** The
+  acceptance suite had already grown
+  `test_every_money_total_reconciles_with_the_rows_a_reader_can_see`, which allows a gap
+  wider than a cent per summed row only where the row shows its arithmetic. It passes with
+  the Basis cell, and reverting that one cell reproduces exactly the finding —
+  `'**Base subtotal**' column 2 claims $2,017.23, the 5 rows above it total $2,016.90 (off by
+  $0.33), and the row shows no arithmetic`. A fix that cannot be made to fail has not been
+  shown to be the thing that passed.
+
+- **The empty directory had a rot surface after all, and it was wrong.** `workshop/golden/`
+  ships only a README and two `.gitkeep`s, because a golden handoff is made of live resource
+  IDs and a checked-in one would be either a fabrication or a pointer at deleted resources.
+  The quality critic scored that honestly and said its remaining point needed a live T-4
+  rehearsal. But if the directory is empty by design, the README is the only thing that *can*
+  rot — and a facilitator follows it for one to two days against a real subscription before
+  anything checks their work. Two of its claims were machine-checkable. One was false: it said
+  `workshop/golden/*/modernization-contract.json` was ignored by Git, and Git does not ignore
+  that path. The real rule, `.gitignore:62`, ignores `workshop/golden/*/evidence/` — wider than
+  the sentence, so the rendered bundle was always protected and nothing could have leaked. The
+  sentence was still wrong, in a paragraph whose entire subject is not publishing somebody
+  else's live resource IDs, and it had been wrong for eight rounds of review. It is now bound:
+  the guard regex-parses *every* "is ignored by Git" claim out of the prose and asserts Git
+  agrees, so the next wrong sentence fails instead of sitting there.
+
+- **A guard that was correct only because someone guessed the right directory name.** The
+  mirror guard compared the legacy and reference trees by walking the filesystem and filtering
+  out a hand-written set of build directories — `bin`, `obj`, `target`, `.venv`, `__pycache__`,
+  `.git`. Running the Java suite for the first time dropped a hundred class files into
+  `solutions/reference/java/target/` and the guard passed, but only because `target` happened
+  to be on the list. That is the same **detector character class** failure the audit has hit
+  repeatedly: a hand-maintained list standing in for something the tooling already knows.
+  `_files_under()` now enumerates with `git ls-files --cached --others --exclude-standard`,
+  which honours every `.gitignore` in the tree including the nested one at
+  `solutions/reference/java/.gitignore:1`, and the hand-written set is deleted.
+
+- **Both application trees are now proven, and the Java one is proven to be load-bearing.**
+  `.NET` was already 45/45. Java had never been run — the machine's default JDK is 1.8 — so a
+  scratch Temurin JDK 21 was used with the repo's own `mvnw`: **35/35, BUILD SUCCESS**, with
+  `PostgreSqlIntegrationTest` excluded because Testcontainers needs a Docker daemon this
+  machine does not have (`Could not find a valid Docker environment` — an environment limit,
+  reported rather than hidden). Passing tests only prove the tests ran, so the modernization
+  was then reverted: `CatalogRuntimeOptions.require()` was changed from failing startup on a
+  missing telemetry identity variable back to the legacy silent `"unknown"` default. Exactly
+  three tests failed, all in `RuntimeIdentityConfigurationTest`, while that class's own
+  positive control `suppliedRuntimeIdentityVariablesReachTheOptions` stayed green — which is
+  what makes the three failures attributable to the revert rather than to drift.
+
+- **A rule was named, measured, and deliberately not enforced.** The conformance critic
+  observed that binding one constant does not establish the general rule that every constant in
+  `workshop/contracts/*.json` must be read rather than retyped. Enforcing it was attempted and
+  abandoned on evidence: at value level there are 703 shared strings across the contracts and
+  198 machine-like values shared across 28 data contract files, which no hand-maintained
+  allowlist survives; at file level the check comes back clean — 69 contract files, 449
+  candidate readers, none unreferenced and none named only in prose. So the generalization does
+  not reduce to reachability, and the value-level form is not mechanisable at acceptable
+  precision. Recorded as a review obligation rather than shipped as an over-fitted guard, on the
+  principle that a guard which mostly reports noise trains people to ignore it.
+
+## Round 9 closure — the standard we set, and the four rows that broke it
+
+Round 8 closed the `$2,017.23` base subtotal by adding a sentence to the provenance legend of
+`docs/CostEstimate.md:18-20`: subtotals come from unrounded values, and *where the gap is
+larger than rounding explains, the row's Basis cell gives the arithmetic that reproduces it.*
+That sentence is a standard, and four rows in the same document did not meet it. A
+second-order defect created by our own fix is still our defect, and this entry closes it.
+
+- **The row that a skeptic checks first.** `Modernized workload, .NET / Azure SQL` printed
+  **$12.89** with a Basis reading only "Derived over the ~42.5 h from Monday 15:30". The
+  obvious route fails loudly: $6.67/day × 42.5/24 = **$11.81**, an 8.4% gap on the row that
+  carries the document's most quoted claim — *.NET runs roughly 30% more than the legacy VM*.
+  The figure is right and the route is not obvious, which is the worst combination: the
+  database line does not pro-rate, because the daily table charges Azure SQL an allowance of
+  8 active vCore-hours per day rather than a rate per wall-clock hour. The window covers two
+  working days' worth of that allowance. Non-database lines are ($6.67 − $4.74) × 42.5/24 =
+  **$3.4177**; the allowance is $4.74 ÷ 8 = **$0.5925** per active vCore-hour, and 16 of them
+  is **$9.48**; the sum is **$12.8977**. And that is where the round turned on itself: the
+  derivation written to justify **$12.89** does not produce it — $12.8977 rounds to **$12.90**.
+  The row now prints $12.90. **The act of making the row reproducible is what exposed that it
+  was not**, which is the lesson worth keeping from this round. A figure nobody can re-derive
+  is not "probably fine"; it is unfalsified, and the difference only becomes visible when
+  somebody finally does the arithmetic and writes it down. Holding the figure and letting the
+  cell read `= $12.8977 ≈ $12.89` was the first instinct and it was wrong — the `≈` would have
+  been absorbing a rounding that goes the other way, on the row that is the load-bearing
+  evidence for the *~30% more than the legacy VM* claim, which is precisely the miniature of
+  the defect this round exists to remove. A reader who follows the cell must land where the
+  row says they land.
+
+- **A row that was simply wrong, by a quarter of an hour.** `Modernized workload, Java /
+  PostgreSQL` printed **$4.56**. Burstable PostgreSQL has no auto-pause and bills the whole
+  window, so there is no allowance subtlety to hide behind: $2.56 × 42.5/24 = **$4.5333**.
+  Working backwards, $4.56 is $2.56 × **42.75**/24 — a 42.75 h window in a worked example
+  that derives 42.5 h from its own clock times (Friday 17:00 → Wednesday 10:00 is 113 h;
+  Monday 15:30 is 70.5 h into it; 113 − 70.5 = 42.5). The document is self-consistent on 42.5
+  everywhere else, so the row is now **$4.53**. Writing a Basis cell that asserted 42.5 h
+  beside a figure that needs 42.75 h would have been worse than leaving the cell blank.
+
+- **Two blank subtotals, both of which a reader is instructed to reproduce.** `Modernized
+  subtotal, 50/50 split` claimed **$261.72**; the label tells a reader to take fifteen of each
+  stack, and 15 × ($12.89 + $4.56) is $261.75. It is now **$261.45** = 15 × ($12.90 + $4.53),
+  which matches the convention the cohort table two sections above already uses — its
+  `$138.45` is 15 × the displayed $6.67 and $2.56, not 15 × the unrounded $6.6712 and $2.5574.
+  `Azure subtotal` carried **≈ $2,579** with no working at all, the headline of the whole
+  example: $2,017.23 + $261.45 + $300.00 = **$2,578.68**, so the headline is unchanged and now
+  shows its terms. Everything downstream still holds without edit — ≈ $2,879 across a month
+  end ($2,878.68), the $2,750–$2,950 delivery range ($2,785.06 with a shared SRE agent,
+  $2,887.14 with one per team), and $92–$98 per participant ($92.84–$96.24). The comparison
+  prose at `:190-194` needed no edit either: *~30% more* ($6.67 ÷ $5.13 = 1.300), *$1.54 per
+  day more* and *$2.57 per day less* are all built on the **per-day** table, not on the
+  window figures that moved.
+
+- **A fifth row the widened guard found that the review had not.** `Total, after the Challenge
+  0 deallocation` claimed **$11.72** against a Basis of pure prose — "One VM's compute stops;
+  its disk keeps billing" — which is a reason, not an arithmetic. It follows the total above
+  it rather than a column of its own, so a reader has nothing to add: it now reads
+  $16.14 − 24 h @ $0.184 = $16.14 − $4.42 = **$11.72**, with the explanation kept after it. The
+  guard had been widened twice while this work was in flight — from *is the Basis cell
+  non-empty*, to *does its arithmetic land on the figure beside it*, to *does it restate that
+  figure* — and it is a strictly better guard for it: the round-8 fix would have passed a cell
+  reading "derived". Every Basis cell touched this round is therefore written to end on its own
+  number, and all five were mutation-checked against the live guard. Blanking each reproduces
+  its original offender; reducing one back to prose reproduces the prose rejection; a cell that
+  states its inputs but never lands on the total is rejected; and the critic's mutation — move
+  the figure to $9,999.99 and leave the Basis intact — is caught with *"its own stated basis
+  does not arrive at that figure"*, which is the failure mode the non-empty check could not see.
+
+- **The round-8 reasoning that let the subtotal stand is corrected above rather than
+  deleted.** It argued the row was safe because it "has no visible column to sum". That is the
+  author's view of the table wearing the reader's clothes; a row labelled *50/50 split* names
+  its own operands. The claimed reconciliation was also not reproducible: no consistent
+  reading of the two rows as printed yields the $17.448 it invoked.
+
+- **Three known residuals, swept for deliberately and deliberately left.** Recorded here so a
+  future reader finds them already-known rather than newly-discovered. *(a)* The two `Cohort of
+  30` base figures are a penny above the meters — 30 × the unrounded $16.1375 is $484.13,
+  printed $484.14, and $351.66 is internally consistent with it as $484.14 − $132.48. *(b)* The
+  two Defender database rows, **~$34.83** each, are reproducible only from the **monthly**
+  $15.00 meter (15 × 113 h × $15.00/730 = $34.83); the *hourly* meter their own Basis cells
+  name, $0.020161, gives $34.17. Both rows already carry an UNVERIFIED proration caveat, and
+  re-deriving an already-UNVERIFIED number is not an improvement — it dresses an unconfirmed
+  figure in the clothes of a derived one. *(c)* The teardown table's idle months, ~$28.59 and
+  ~$43.12, differ by exactly PostgreSQL's monthly compute (730 h × $0.0199 = $14.53) and so are
+  consistent with each other, but their shared $24.21 base does not decompose from the printed
+  meters — ACR $5.00 plus two private endpoints at $14.60 leaves **$4.61 unattributed**. Both
+  are prefixed `~` in a table that has no Basis column, which is the honest form for an
+  estimate, but the operand is missing.
+
+- **The residual that was closed instead of carried.** This entry first held a fourth item —
+  the .NET row printing $12.89 against a derivation of $12.8977 — as sub-cent drift not worth
+  republishing a quoted figure over. That reasoning was rejected in review for the same reason
+  the round-8 reasoning was: it is the author's tolerance, not the reader's experience. A
+  reader who follows the Basis cell arrives at $12.90 and finds $12.89 beside it, which is
+  exactly the moment this round was convened to eliminate. Two other cells do sit a hair under
+  a half-cent ($5.085 → $5.08, $27.685 → $27.68), but those are the lower cent that IEEE-754
+  rounding also produces, so they were never precedent for this one. The row is now $12.90 and
+  the drift is gone rather than documented — the general rule being that a residual you can
+  close by moving a number is not a residual, it is a defect with a note attached.
+
+## Round 10 closure — the label that was wrong while the number was right
+
+- **Two critics said the .NET window row spans three calendar days, and they were right.**
+  The Basis cell justified its 16 active vCore-hours as "the 8 h/day allowance on the two
+  days the window covers", and the window — Monday 15:30 to Wednesday 10:00 — covers three:
+  Monday's tail, all of Tuesday, Wednesday's morning. The label was the kind of sentence a
+  customer contradicts with a calendar. So the question was whether 16 survives a correct
+  label or whether the figure has to move to 24.
+- **[The agenda](Agenda.md#the-schedule) settles it at 16, and it is a label fix rather than
+  a figure move.** The agenda is a *two-day* agenda. Day 1 ends `15:45–17:00 | Challenge 2 —
+  load and autoscaling`, which is inside the window and is the most database-active block in
+  the workshop; day 2 runs `09:00–09:15 | Day 2 kickoff` through `16:40–17:00 | Closing
+  debrief`, a full eight hours. **Wednesday has no blocks at all** — the agenda ends at 17:00
+  on day 2 and the worked example tears down at 10:00 Wednesday — so with `autoPauseDelay: 60`
+  the database pauses an hour after Tuesday's close and Wednesday accrues nothing. Two days
+  carry the allowance, one does not: 2 × 8 = 16, and $12.90 stands unmoved.
+- **The soft spot is stated in the prose rather than buried in the cell.** Monday takes a
+  whole day's allowance while only 1.5 h of Monday falls inside the window. That is
+  defensible — the database is built and exercised during Challenge 1's own blocks
+  (`10:45–12:30`, `13:15–15:15`), before the window opens — but it is the assumption in the
+  row most worth arguing with, so the document now names it *and* prices the alternative:
+  charge Monday only its in-window 1.5 h and the row is $9.05 rather than $12.90. A reader
+  who disagrees with us can now see exactly what their disagreement is worth.
+- **The 264-character Basis cell became a pointer and a paragraph.** Didactics measured every
+  cell and found exactly one outlier — line 236 at 264 characters and nine operators, against
+  67 for the next worst. The cell now reads `Derived over the ~42.5 h window; see below` and
+  the derivation moved beneath the table in the shape already used for the month-end note,
+  leading with the point rather than the arithmetic: *Azure SQL is the one line that does not
+  scale with wall-clock time.* Line 235 was left exactly as it was, on didactics' instruction.
+- **Four smaller corrections, each of which was a figure contradicting its own page.** The
+  modernized daily `Total` had a blank Basis while printing $6.67 above a column that visibly
+  sums to $6.68; it now shows the unrounded rows reconstructed from the meter table,
+  $0.6912 + $4.7354 + $0.1666 + $0.48 + $0.598 = $6.6712. The Defender SQL row said "hourly
+  instance meter" but its figure only comes from the **monthly** one — 15 × 113 × $15.00 ÷ 730
+  = $34.83, where the hourly meter gives $34.17 — so the clause now names the meter it
+  actually used. The delivery total omitted the same-month qualifier that the two rows feeding
+  it both carry, which is load-bearing because a straddle lands at $3,085–$3,190, outside the
+  stated band; the qualifier and the straddle band are now both there. And the teardown
+  warning claimed $11,000–$15,000 against its own table's $11,771.55–$15,801.15 — a bullet
+  that *understated* the risk it exists to raise — now $11,800–$15,800 with the addition shown.
+- **The guard was rewritten mid-round and it changed what counts as evidence.** It no longer
+  accepts a Basis that restates its answer; the cell must contain an expression with an
+  operator that *evaluates* to the figure beside it, so `15 × ($99.99 + $4.53) = $261.45` now
+  fails where it once passed. This is the third widening in two rounds, and each one has found
+  something real: blankness, then prose, now answers acting as their own evidence.
+- **Known residuals, unchanged and still known.** The `Cohort of 30` $484.14 is a penny above
+  30 × $16.1375; the teardown table's ~$28.59 and ~$43.12 share a $24.21 base that leaves
+  $4.61 unattributed. Both are marked `~` or carry their own caveat, and re-deriving an
+  estimate does not make it a measurement.
+
+## Round 11 closure — the prose move that made the load-bearing row unguarded
+
+- **Moving the derivation into prose was right, and it silently removed the guard.** Round 10
+  reduced line 236's Basis to `Derived over the ~42.5 h window; see below` on didactics'
+  finding, and the prose beneath the table is a genuine improvement — *Azure SQL is the one
+  line that does not scale with wall-clock time* is a sentence a reader can repeat. But the
+  money guard only evaluates a cell that contains arithmetic, so a pointer cell is a cell it
+  never checks. The critic proved the cost: changing $12.90 to $99.90 passed the whole suite.
+  The single most load-bearing figure in the document had become the only one nothing verified.
+- **Landing arithmetic bought the coverage back without touching the prose.** The cell now
+  reads `$3.4177 + $9.48 = $12.8977 ≈ $12.90; derived below` — 49 characters against the 264
+  didactics objected to, and still under line 251's 67, so the density finding stays satisfied.
+  The full explanation stays where round 10 put it. The cell's only new job is to *land on the
+  figure* so a machine can check it. Mutating $12.90 → $99.90 now fails, as does garbling the
+  operand $3.4177, as does reverting the cell to its round-10 pointer form.
+- **The audit for other thinned rows found one, and it was a figure I had got wrong.** Line 168's
+  Basis, written in round 10, read `... = $6.6712 ≈ $6.67 (Java $12.787 ≈ $2.56)`. The Java
+  total is $2.5574, not $12.787 — I had written five times the figure into a cell whose stated
+  purpose was to make the figure reproducible. Nothing caught it: the guard evaluates one value
+  per `=`/`≈` segment, and $12.787 sat inside a segment opening with $6.67, so it was never
+  read. It now derives Java from the .NET total by the one row that differs,
+  $6.6712 − $4.7354 + $0.6216 = $2.5574 ≈ $2.56, which the guard does evaluate — mutating either
+  the Java figure or that operand now fails.
+- **This is the round-9 lesson recurring in a new form.** There, writing the derivation exposed
+  that $12.89 should have been $12.90. Here, the act of restoring machine-checkable arithmetic
+  exposed a bad figure that had survived two critics and a 10/10 score, because it was in the
+  one position the checker cannot see. A Basis cell is not evidence because it looks like
+  arithmetic; it is evidence only where something reads it.
+- **The teardown band now rounds outward.** Round 10's $11,800–$15,800 rounded the low bound
+  *up* and the high bound *down* against a table producing $11,771.55–$15,801.15 — the two
+  directions that flatter the claim, in a bullet whose entire purpose is to be believed. It is
+  now $11,700–$15,900, with the reason stated in the bullet, and the duplicate claim in
+  [Facilitator.md](Facilitator.md) moved with it.
+- **Known residuals, still known and still unchanged.** The `Cohort of 30` $484.14 penny; the
+  teardown table's $4.61 unattributed base. And a blind spot worth naming: line 168's column is
+  summable with a $0.01 gap against a $0.05 tolerance, so the guard reaches its Basis only
+  through the row-level check — the roughly thirty plain `Derived` rows elsewhere state no
+  arithmetic at all and are unverified by design, since arming every one of them is the uniform
+  refactor didactics warned against.
+
+## Round 12–13 closure — pinning the rows, and the seventh failure mode
+
+- **The money guard now checks every non-money cell in a row, not only the last one.** It
+  previously read the trailing Basis cell alone, so the Quantity column of the base
+  infrastructure table — `2 × 24 h @ $0.184` and its four neighbours — came under check for
+  the first time.
+- **Operand mutation survival fell 47% → 12% → 8% across the round.** The battery of 13
+  mutation classes is at 13/13 caught.
+- **Four defects were found in the guard rather than in the documents.** `@` was never parsed;
+  a cell was accepted if *any* one of its segments landed; a final `≈ $X` restatement was
+  compared against nothing; and widening the tokenizer twice invented values no document
+  stated — word-internal hyphens read as minus signs, and adjacent numbers welded into one.
+- **A seventh failure mode was identified: over-detection.** The first fix for the restatement
+  gap rejected five *legitimate* writing patterns. A guard that fails on a correct document is
+  how a team learns to disable the guard, so the fix was narrowed to distinguish `≈` — which
+  means "the same quantity, rounded", and must therefore agree with what precedes it — from
+  `=`, which may introduce a separately labelled quantity such as a stated alternative.
+- **The rows that show checkable arithmetic are now pinned by name, not counted.** A count
+  cannot notice one row being thinned into prose while another is added; `EVALUABLE_BASIS_ROWS`
+  fixes the identity of all 17.
+- **Two documentation changes closed the selling critic's last findings.** The base
+  infrastructure table now states what it is for — one participant's environment for one day,
+  and the table every later figure is multiplied out from — rather than arriving unlabelled.
+  And the $16.14 → $11.72 drop is framed as the argument it makes rather than the subtraction
+  it is: $4.42 ÷ $16.14 = 27% off the daily bill, earned by one command the participant runs.
+- **Challenge 0 did not tell the participant what the deallocation saves.** Step 7 said only
+  that the unselected VM "costs money for two days". It now names the figure at the point of
+  the work, which is the only place the lesson can land.
+- **The framing sentence added for S12-N1 named the wrong mechanism, and was corrected.** It
+  said the later tables are this one "multiplied out — by participants, by hours, by days",
+  which invites the arithmetic $16.14 × 113/24 × 30 = $2,279.78 against a stated base subtotal
+  of $2,017.23 — a 13.0% gap, in the one sentence whose job is to invite the reader to check.
+  The cohort figures are not the table multiplied but the table *split*, because of the
+  Challenge 0 deallocation described eight lines below: 65.5 h with both VMs running, then
+  47.5 h with one. The sentence now names that split, which reproduces to
+  65.5 × $0.67240 + 47.5 × $0.48840 = $67.2409 per participant and $2,017.23 across 30.
+- **Challenge 0 got the figure but not the concept, and now gets both.** Step 7 stated the
+  saving but not what makes it safe: deallocating is not deleting, the compute stops and the
+  disk keeps billing, and that is exactly why the VM can be started again. That clause lived
+  only in the cost document, which nobody reads while they are running the command.
+- **S12-M2 — the wrap-up scorecard's cost row now carries a direction caveat.** Its four
+  caveats covered method, definition, counting and estimation, but not direction, so a manager
+  handed "+30%" had nothing telling them the increase is the expected outcome. The caveat now
+  says which way the figure moves and why, and travels with the row.
+- **S12-N2 — the blank Basis at `CostEstimate.md`'s `Total, both VMs running` is deliberate and
+  stays.** A Basis cell exists so a reader can check a figure the page cannot otherwise show
+  its work for; here the column immediately above visibly sums to exactly $16.14
+  (8.83 + 1.43 + 4.56 + 1.08 + 0.24), so a Basis would restate the addition the reader has
+  just done. Verified.
+- **S11-N1 — fabricated-but-consistent operands are undetectable in principle, and were not
+  chased.** A basis whose arithmetic is internally consistent but whose input rate was invented
+  cannot be distinguished from a correct one without an external price source. The guard's
+  limit is stated here rather than hidden.
+- **Stated next step for whoever delivers this first.** Every figure in the cost document is a
+  list price under a stated assumption. The step from correct to excellent is one delivered
+  cohort's actual invoice printed beside the estimate.
+- **The last finding of the audit was over-detection again — the seventh failure mode, a second
+  time.** A guard asserted the prose phrase `facilitator authorizes` against raw markdown, so
+  re-wrapping a correct paragraph failed the suite while the warning it was checking for was
+  still present and still correct. A check that fails on a correct document teaches a team to
+  delete the check.
+- **Fixed at the source and swept.** The Challenge 0 guard now matches prose against a
+  whitespace-normalised copy of the document, while continuing to match commands such as
+  `az vm deallocate` exactly — a command split across a newline is broken code, not re-wrapped
+  prose. The sweep found **22 prose assertions matched against raw text**: 7 were already
+  normalised at their source and were left alone, and 15 were hardened.
+- **Proved in both directions rather than asserted.** Re-wrapping a phrase mid-sentence now
+  passes, and removing or altering the phrase is still caught — verified on
+  `challenges/ch00/README.md` and independently on `workshop/sre-agent/README.md`. Gate after
+  the sweep: 516 passed, 1 skipped.
+- **A probe artefact worth recording, because it nearly produced a false conclusion.** The first
+  attempt to prove the sweep reported both mutations as MISSED. The guards were fine; the probe
+  was searching the wrong files and replacing a phrase that was not contiguous in the text it
+  was editing, so it silently changed nothing and the suite passed for the wrong reason. **A
+  mutation probe that reports a clean pass without first proving its own edit landed is
+  indistinguishable from a guard that does not work.** This is the same lesson as the earlier
+  precise-anchor finding, and it recurred anyway.

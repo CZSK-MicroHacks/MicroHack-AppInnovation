@@ -180,11 +180,21 @@ The revision listing is the workflow's own capture
 `capture_revisions`) with a `--query` projection added so it fits a screen:
 
 ```bash
+CICD=evidence/cicd-report.json
+APP_RESOURCE_ID=$(jq -er '.subject.containerAppResourceId' "$CICD")
+RESOURCE_GROUP=$(cut -d/ -f5 <<<"$APP_RESOURCE_ID")
+APP_NAME=$(cut -d/ -f9 <<<"$APP_RESOURCE_ID")
+
 az containerapp revision list \
   --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
   --query "[].{revision:name, weight:properties.trafficWeight, health:properties.healthState}" \
   --output table
 ```
+
+The four names come from `evidence/cicd-report.json` — the same file the scorecard reads
+two beats from now — so the app you list is provably the one the pipeline promoted, and
+nothing has to be typed while the room is watching. `jq -er` stops if the file is missing
+rather than running `az` with an empty `--name`.
 
 Expected output — the bad revision is live. Names below are the sanitized ones from
 `workshop/contracts/fixtures/cicd/promotion-revisions.json`; yours carry your app name:
@@ -201,6 +211,9 @@ ever promotes, in the same workflow file, with `time` wrapped around it so the r
 see the clock:
 
 ```bash
+PREVIOUS_REVISION=$(jq -er '.revisions.previous' "$CICD")
+CANDIDATE_REVISION=$(jq -er '.revisions.candidate' "$CICD")
+
 time az containerapp ingress traffic set \
   --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
   --revision-weight "${PREVIOUS_REVISION}=100" "${CANDIDATE_REVISION}=0" \
@@ -224,11 +237,12 @@ jq -r '
   | (.traffic.safety.rollbackCompletedAt | fromdateiso8601) as $undoEnd
   | "pipeline lead time (dispatch to live): \(((($live - $dispatched) / 60) * 10 | round) / 10) min",
     "rollback duration:                     \(((($undoEnd - $undoStart) / 60) * 10 | round) / 10) min"
-' evidence/cicd-report.json
+' "$CICD"
 ```
 
-Expected output, from the repository's own
-`workshop/contracts/cicd-evidence.example.json` substituted for the path above:
+Expected output. Every block in this step reads `$CICD`, so one substitution covers all
+three: set `CICD=workshop/contracts/cicd-evidence.example.json` at the top of the step to
+rehearse without a live run, and it prints:
 
 ```text
 pipeline lead time (dispatch to live): 45 min

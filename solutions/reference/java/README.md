@@ -108,7 +108,7 @@ From the repository root, on a workstation with a Docker daemon. This reference 
 
 ```bash
 docker buildx build --platform linux/amd64 --load \
-  -f java/Dockerfile -t mh-java:p4 .
+  -f java/Dockerfile -t mh-java:local .
 ```
 
 The digest-pinned image runs as numeric non-root user `10001`, listens on `8080`,

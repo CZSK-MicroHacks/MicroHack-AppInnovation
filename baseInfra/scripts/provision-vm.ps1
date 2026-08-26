@@ -39,6 +39,7 @@ $ApplicationRoot = Join-Path $Root 'app'
 $StatusRoot = Join-Path $Root 'status'
 $SecretRoot = Join-Path $Root 'secrets'
 $ProtectedRoot = 'C:\protected'
+$MigrationRoot = 'C:\ProgramData\MicroHack\migration'
 $LogRoot = Join-Path $Root 'logs'
 $LogFile = Join-Path $LogRoot "provision-$Stack.log"
 
@@ -193,14 +194,22 @@ function Set-ProtectedAcl {
 
         [switch]$Directory,
 
-        # Optional account granted read-only access. Used for C:\protected, whose
-        # deployment parameter files the participant has to read from the ordinary,
-        # non-elevated session they run az from. The account is already a local
-        # administrator, so this grants no capability it could not obtain by elevating —
-        # it only removes a UAC filtered-token failure from the middle of Challenge 1.
-        # The database passwords under $SecretRoot are never given this parameter.
+        # Optional account granted access alongside SYSTEM and Administrators. Used for
+        # C:\protected, whose deployment parameter files the participant has to read from
+        # the ordinary, non-elevated session they run az from, and for $MigrationRoot,
+        # which the participant has to write into from that same session. The account is
+        # already a local administrator, so this grants no capability it could not obtain
+        # by elevating — it only removes a UAC filtered-token failure from the middle of
+        # Challenge 1. The database passwords under $SecretRoot are never given this
+        # parameter.
         [AllowEmptyString()]
-        [string]$ReadPrincipal = ''
+        [string]$ReadPrincipal = '',
+
+        # Rights for $ReadPrincipal. Read is the default because every other call site only
+        # needs the file back; $MigrationRoot needs Modify because the participant creates
+        # the database export inside it rather than reading something already there.
+        [ValidateSet('Read', 'Modify')]
+        [string]$PrincipalRights = 'Read'
     )
 
     $Acl = if ($Directory) {
@@ -215,7 +224,7 @@ function Set-ProtectedAcl {
         'BUILTIN\Administrators' = 'FullControl'
     }
     if (-not [string]::IsNullOrWhiteSpace($ReadPrincipal) -and -not $Grants.Contains($ReadPrincipal)) {
-        $Grants[$ReadPrincipal] = 'Read'
+        $Grants[$ReadPrincipal] = $PrincipalRights
     }
     foreach ($Grant in $Grants.GetEnumerator()) {
         if ($Directory) {
@@ -400,6 +409,29 @@ function Save-ProtectedDeploymentParameters {
             Write-ProvisionLog "Wrote protected deployment parameters $PathName-$Stack-$StageName.json."
         }
     }
+}
+
+function New-MigrationExportDirectory {
+    <#
+    .SYNOPSIS
+    Creates C:\ProgramData\MicroHack\migration with an explicit participant ACE.
+
+    .DESCRIPTION
+    All six Challenge 1 path documents write the database export under this directory, and
+    every one of them creates it with New-Item -Force first, so the directory itself is
+    never missing. What was untested is the permission. Provisioning creates
+    C:\ProgramData\MicroHack as SYSTEM — as a side effect of the vscode-extensions folder —
+    and never places an ACE on it, so whether a non-elevated participant may add a subfolder
+    under it is inherited-ACE behaviour no delivery has exercised on a real VM. Creating the
+    directory here with an explicit Modify ACE replaces that inheritance with a known ACL:
+    the runbook New-Item becomes a no-op, and the T-1 probe confirms a property that was
+    asserted at provisioning time rather than discovering one that was never asserted.
+    #>
+
+    New-Item -ItemType Directory -Path $MigrationRoot -Force | Out-Null
+    Set-ProtectedAcl -Path $MigrationRoot -Directory -ReadPrincipal $AdminUsername `
+        -PrincipalRights 'Modify'
+    Write-ProvisionLog "Prepared $MigrationRoot with Modify for $AdminUsername."
 }
 
 function Install-CommonTools {
@@ -1809,6 +1841,7 @@ function Invoke-StackSmokeCheck {
 try {
     Write-ProvisionLog "Starting idempotent provisioning for source commit $SourceCommit."
     Save-ProtectedDeploymentParameters
+    New-MigrationExportDirectory
     Stop-ApplicationTask
     Install-CommonTools
     Install-SourceArchive

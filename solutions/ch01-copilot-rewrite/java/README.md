@@ -122,6 +122,8 @@ Ask for and accept one generated diff at a time.
 ```bash
 set -euo pipefail
 : "${SLICE_NAME:?Name the slice you just approved, e.g. SLICE_NAME=pricing-rules}"
+: "${CATALOG_BASE_URL:?Set the modernized catalog base URL, e.g. CATALOG_BASE_URL=http://localhost:8080}"
+: "${PERFTEST_API_KEY:?Set the facilitator-supplied performance API key; do not echo it or commit it}"
 git diff -- java
 ./java/mvnw -f java/pom.xml test
 rm -rf .workshop-tmp/java-$SLICE_NAME
@@ -267,7 +269,7 @@ if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
 }
 New-Item -ItemType Directory -Force evidence | Out-Null
 $BootstrapLines = az deployment group create `
-  --name "p5-java-bootstrap-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-java-bootstrap-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-java-bootstrap.json" `
@@ -473,7 +475,7 @@ release has made it inactive.
 
 ```powershell
 az deployment group create `
-  --name "p5-java-baseline-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-java-baseline-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-java-baseline.json" `
@@ -484,7 +486,7 @@ az deployment group create `
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $ReleaseLines = az deployment group create `
-  --name "p5-java-release-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-java-release-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-java-release.json" `

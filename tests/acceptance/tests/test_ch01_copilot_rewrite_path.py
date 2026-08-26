@@ -263,8 +263,8 @@ def test_rewrite_source_identity_requires_committed_clean_bytes(
     challenge = _read_owned_document(
         repo_root, "challenges/ch01-copilot-rewrite/README.md"
     ).lower()
-    assert "commit every accepted slice" in challenge
-    assert "dirty implementation tree" in challenge
+    assert "commit every accepted slice" in " ".join(challenge.split())
+    assert "dirty implementation tree" in " ".join(challenge.split())
 
     for stack, content in _rewrite_solution_documents(repo_root).items():
         normalized = content.lower()
@@ -278,7 +278,7 @@ def test_rewrite_source_identity_requires_committed_clean_bytes(
             "git rev-parse head"
         )
         assert "-cnotmatch '^[0-9a-f]{40}$'" in identity
-        assert "commit every accepted slice" in identity
+        assert "commit every accepted slice" in " ".join(identity.split())
 
 
 def test_rewrite_migration_is_powershell_native_on_windows_source_vm(
@@ -674,6 +674,6 @@ def test_rewrite_slices_require_live_acceptance_and_architecture_delta(
         assert fail_fast < native_test < acceptance < commit
         assert "-m catalog_acceptance" in slice_loop
         assert "--profile smoke" in slice_loop
-        assert "application must be running" in slice_loop
-        assert "static contract tests" in slice_loop
+        assert "application must be running" in " ".join(slice_loop.split())
+        assert "static contract tests" in " ".join(slice_loop.split())
         assert "## architecture delta" in evidence

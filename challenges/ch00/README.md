@@ -299,10 +299,10 @@ chapter reads this file to know which stack you are on, so it has to be exact:
 
 ```powershell
 $selectedStack = '<dotnet-sqlserver|java-postgresql>'
-$selectedVm = '<selected-vm-name>'
-$unselectedVm = '<unselected-vm-name>'
-$resourceGroup = '<rg-userNNN>'
-$expectedSourceCommit = '<same-facilitator-provided-commit>'
+$selectedVm = '<your-selected-vm-name>'
+$unselectedVm = '<your-unselected-vm-name>'
+$resourceGroup = '<your-rg-userNNN>'
+$expectedSourceCommit = '<facilitator-provided-commit-same-as-above>'
 
 $selection = [ordered]@{
   schemaVersion = '1.0.0'
@@ -325,7 +325,7 @@ Then check your own work before anyone else does:
 ```powershell
 $selection = Get-Content evidence/ch00-selection.json -Raw | ConvertFrom-Json
 $allowed = @('dotnet-sqlserver', 'java-postgresql')
-$expectedSourceCommit = '<same-facilitator-provided-commit>'
+$expectedSourceCommit = '<facilitator-provided-commit-same-as-above>'
 
 if ($selection.resourceGroup -notmatch '^rg-(user[0-9]{3})$') {
   throw 'Challenge 0 resource group must identify one participant.'
@@ -364,8 +364,12 @@ Silence means it passed.
 ## 7. Deallocate the unselected VM
 
 You only need one legacy machine from here on, and the other one costs money for two
-days. This is a live Azure mutation. Run it only after the facilitator authorizes your
-exact resource group and VM name:
+days. Deallocating it takes $4.42 a day off your environment — $16.14 becomes $11.72,
+roughly 27% — for a machine you will not open again; the
+[cost estimate](../../docs/CostEstimate.md) shows the arithmetic. Deallocating is not
+deleting: the compute stops and the disk keeps billing, which is exactly why the VM can
+be started again. This is a live Azure mutation. Run it only after the
+facilitator authorizes your exact resource group and VM name:
 
 ```powershell
 az vm deallocate `

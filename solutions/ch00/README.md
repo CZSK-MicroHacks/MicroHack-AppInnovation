@@ -97,7 +97,7 @@ From an authorized facilitator shell, read the participant record, bind its stac
 the expected VM names, and verify both final power states:
 
 ```powershell
-$selection = Get-Content '<path-to-ch00-selection.json>' -Raw | ConvertFrom-Json
+$selection = Get-Content '<facilitator-provided-path-to-ch00-selection.json>' -Raw | ConvertFrom-Json
 $expectedSourceCommit = '<facilitator-provided-40-character-lowercase-commit>'
 if (
   $expectedSourceCommit -cnotmatch '^[0-9a-f]{40}$' -or

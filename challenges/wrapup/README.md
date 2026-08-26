@@ -61,7 +61,12 @@ Four rows need a caveat, and saying them is part of doing this properly.
   a headline number here would reward whoever started from the worst baseline.
 - **Cost to run** is the one row you did not measure. It is a list-price estimate for this
   workshop's shapes and assumptions, and the answer depends on which database your stack
-  uses. Quote it as an estimate, or re-derive it for your own region and agreement.
+  uses. Quote it as an estimate, or re-derive it for your own region and agreement. And
+  say which way it moves: on .NET / Azure SQL the modernized figure is *higher* — $5.13 to
+  $6.67, about 30% more — and that is the expected outcome, not a failed migration. The
+  legacy figure prices a machine; it does not price the patching, the backup, the
+  certificate renewal, or the out-of-hours release window that every other row on this
+  scorecard just removed. Hand over the +30% without that sentence and it reads as a loss.
 
 ## Discuss
 

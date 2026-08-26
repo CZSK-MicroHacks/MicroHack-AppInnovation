@@ -21,7 +21,16 @@
         "categoryIdentity",
         "acceptanceFixtureProductIdPrefix",
         "protectedCorpus"
-      ]
+      ],
+      "properties": {
+        "figureIdentity": { "type": "string" },
+        "categoryIdentity": { "type": "string" },
+        "acceptanceFixtureProductIdPrefix": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-$"
+        },
+        "protectedCorpus": { "type": "string" }
+      }
     },
     "sqlserver": {
       "$ref": "#/$defs/engine"

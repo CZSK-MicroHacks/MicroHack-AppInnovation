@@ -596,16 +596,27 @@ def test_target_database_verification_rejects_the_legacy_sql_principal(
 
 
 def test_source_contains_no_delete_or_resource_mutation_commands(repo_root: Path) -> None:
-    """Migration implementation has no delete or Azure resource-management command."""
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (repo_root / "tests/acceptance/catalog_migrate").rglob("*.py")
+    """Migration implementation has no delete or Azure resource-management command.
+
+    The module count is asserted because the check is a substring search over a joined
+    string: if the walk returns nothing, the join produces ``""`` and every forbidden
+    token is trivially absent. A destructive command could then be added to the
+    migration code with this guard still reporting green.
+    """
+    modules = sorted((repo_root / "tests/acceptance/catalog_migrate").rglob("*.py"))
+    assert len(modules) >= 10, (
+        f"only {len(modules)} migration modules found; this guard is not reading the "
+        "implementation it claims to protect"
     )
-    forbidden = (
+    source = "\n".join(path.read_text(encoding="utf-8") for path in modules)
+    offending = [token for token in (
         '"delete"',
         "'delete'",
         '"group", "create"',
         '"resource", "create"',
         '"deployment", "create"',
+    ) if token in source]
+    assert not offending, (
+        "the migration implementation may only read and copy; these commands mutate or "
+        "destroy Azure resources: " + ", ".join(offending)
     )
-    assert all(token not in source for token in forbidden)

@@ -79,6 +79,7 @@ RAW=evidence/sre-agent/raw
 mkdir -p "$RAW"
 : "${BAD_REVISION_CREATED_AT:?Set the facilitator-captured drill creation time}"
 : "${INCIDENT_START:?Set the incident-window start after drill creation}"
+: "${BAD_REVISION:?Set the facilitator-captured drill revision name}"
 
 jq -en \
   --arg created "$BAD_REVISION_CREATED_AT" \
@@ -108,6 +109,8 @@ Render the three exact query templates from `workshop/contracts/sre-agent.json`.
 Azure SQL use `microsoft.sql_server`; for PostgreSQL use `postgresql`.
 
 ```bash
+: "${INVESTIGATION_END:?Set the investigation-window end, strictly after the incident start}"
+
 case "$DATABASE_FAMILY" in
   azure-sql)
     DATABASE_SYSTEM=microsoft.sql_server
@@ -308,6 +311,7 @@ application component:
 
 ```bash
 : "${THREAD_ID:?Set the exact incident thread ID}"
+: "${INCIDENT_END:?Set the incident-window end, at or after the investigation end}"
 
 AGENT_AUDIT_QUERY=$(jq -r \
   --arg start "$INCIDENT_START" \

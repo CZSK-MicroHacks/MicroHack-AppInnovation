@@ -123,6 +123,8 @@ Ask for and accept one generated diff at a time.
 ```bash
 set -euo pipefail
 : "${SLICE_NAME:?Name the slice you just approved, e.g. SLICE_NAME=pricing-rules}"
+: "${CATALOG_BASE_URL:?Set the modernized catalog base URL, e.g. CATALOG_BASE_URL=http://localhost:5000}"
+: "${PERFTEST_API_KEY:?Set the facilitator-supplied performance API key; do not echo it or commit it}"
 git diff -- dotnet
 dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=$SLICE_NAME.trx" \
@@ -265,7 +267,7 @@ if ($ResourceGroup -cnotmatch '^rg-user[0-9]{3}$') {
 }
 New-Item -ItemType Directory -Force evidence | Out-Null
 $BootstrapLines = az deployment group create `
-  --name "p5-dotnet-bootstrap-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-dotnet-bootstrap-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-dotnet-bootstrap.json" `
@@ -437,7 +439,7 @@ release has made it inactive.
 
 ```powershell
 az deployment group create `
-  --name "p5-dotnet-baseline-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-dotnet-baseline-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-dotnet-baseline.json" `
@@ -448,7 +450,7 @@ az deployment group create `
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $ReleaseLines = az deployment group create `
-  --name "p5-dotnet-release-$($SourceCommit.Substring(0, 12))" `
+  --name "ch01-dotnet-release-$($SourceCommit.Substring(0, 12))" `
   --resource-group $ResourceGroup `
   --template-file infra/main.bicep `
   --parameters "@C:\protected\copilot-rewrite-dotnet-release.json" `

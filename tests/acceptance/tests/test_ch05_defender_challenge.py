@@ -198,7 +198,7 @@ def test_guides_enforce_participant_role_scope_and_cleanup_boundaries() -> None:
         "another participant scope",
     ):
         assert value.casefold() in combined.casefold()
-    assert "participants stop after validation" in combined.casefold()
+    assert "participants stop after validation" in " ".join(combined.casefold().split())
 
 
 def test_solution_exposes_digest_bound_raw_capture_workflow() -> None:

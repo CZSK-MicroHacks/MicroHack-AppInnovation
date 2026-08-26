@@ -109,6 +109,13 @@ those cannot be reached.
 This is worth stealing for your own estate. The handoff is the boundary between "we
 migrated it" and "we can prove we migrated it".
 
+A contract only earns its name if something reads it. An audit of this repository found
+that our own acceptance harness declared its destructive-delete boundary twice, under two
+different names, and then deleted rows using a string literal that matched neither
+declaration. Nothing was wrong at runtime — and nothing would have told us if it had become
+wrong. A guard now fails if the literal and either declaration disagree. Ask that of every
+contract you write: what breaks if the declaration and the code drift apart?
+
 ## Your goal
 
 Take the stack you selected in Challenge 0 and produce a running Azure Container Apps

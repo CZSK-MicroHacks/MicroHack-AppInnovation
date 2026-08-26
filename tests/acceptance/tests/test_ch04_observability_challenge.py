@@ -205,7 +205,7 @@ def test_guides_bind_frozen_live_evidence_and_common_validator() -> None:
     assert validator in solution
     assert "Challenge 2 remains authoritative" in challenge
     assert "four Application Insights panels" in challenge
-    assert "no revision filter" in solution
+    assert "no revision filter" in " ".join(solution.split())
     assert "synthetic" in challenge
     assert "never live" in challenge
     assert "synthetic structure, not evidence" in solution

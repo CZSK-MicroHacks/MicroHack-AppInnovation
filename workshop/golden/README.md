@@ -100,10 +100,12 @@ must keep existing until the workshop ends. Two consequences:
 
 ## Why these files are not committed
 
-`workshop/golden/*/modernization-contract.json` is ignored by Git. It is specific to one
-facilitator's subscription and one delivery, it goes stale the moment those resources are
-deleted, and committing it would put a stranger's resource IDs on a rejoin path that no
-longer resolves. Build your own; they are cheap to re-render once the environment exists.
+`workshop/golden/*/evidence/` is ignored by Git — the whole directory, not just the
+contract, because every artifact in it carries the same live identifiers. It is specific
+to one facilitator's subscription and one delivery, it goes stale the moment those
+resources are deleted, and committing it would put a stranger's resource IDs on a rejoin
+path that no longer resolves. Build your own; they are cheap to re-render once the
+environment exists.
 
 The shape you are producing is documented in
 [`workshop/contracts/README.md`](../contracts/README.md), and a complete, correctly

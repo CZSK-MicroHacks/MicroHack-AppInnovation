@@ -11,7 +11,7 @@
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/MicroHack-AppInnovation",
   "updateContentCommand": "dotnet restore ./dotnet || true",
-  "postCreateCommand": "az version && azd version && dotnet --info",
+  "postCreateCommand": "az version && azd version && dotnet --info && { [ -n \"$MSSQL_SA_PASSWORD\" ] || echo 'NOTE: MSSQL_SA_PASSWORD is unset on your host, so it is empty here. Nothing in this repository reads it and the container is fully usable without it. If you start a SQL Server container for local .NET work it will refuse to start with \"Password validation failed\", because it inherits the empty value. To fix that, set a strong password in your HOST shell (bash: export MSSQL_SA_PASSWORD=...  PowerShell: $env:MSSQL_SA_PASSWORD=...) and rebuild this container. Never commit the value.'; }",
   "features": {},
   "customizations": {
     "vscode": {
@@ -40,6 +40,6 @@
   "containerEnv": {
     "ASPNETCORE_ENVIRONMENT": "Development",
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-    "MSSQL_SA_PASSWORD": "YourStrong!Passw0rd!"
+    "MSSQL_SA_PASSWORD": "${localEnv:MSSQL_SA_PASSWORD}"
   }
 }

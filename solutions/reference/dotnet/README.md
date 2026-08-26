@@ -97,7 +97,7 @@ From the repository root, on a workstation with a Docker daemon. This reference 
 
 ```bash
 docker buildx build --platform linux/amd64 --load \
-  -f dotnet/Dockerfile -t mh-dotnet:p4 .
+  -f dotnet/Dockerfile -t mh-dotnet:local .
 ```
 
 The image is non-root, listens on port `8080`, contains the canonical seed JSON

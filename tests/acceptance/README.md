@@ -293,6 +293,21 @@ query-result JSON for every named trace, metric, log, and resource attribute. Na
 tests prove each rejected document adds exactly one counter unit; exported counter
 measurements are validated as positive integral aggregates and may exceed one.
 
+### The acceptance reset deletes rows, and one constant decides which
+
+`acceptance-reset` is the only operation here that deletes from a participant's
+database. What separates "delete the reserved fixture" from "delete their morning's
+work" is a single product-id prefix -- `10000000-0000-4000-8000-` -- and `database.py`
+refuses any id outside it. A participant can check their own data against that value.
+
+That prefix was a string literal. The contract declared the same boundary twice --
+`behavior-contract.json` as `import.acceptanceReset.ownedProductIdPrefix`,
+`database-contract.json` as `common.acceptanceFixtureProductIdPrefix` -- and nothing
+read either one, so narrowing the contract would not have narrowed the delete. It is
+now bound: `test_the_destructive_reset_boundary_matches_the_contract` fails if the
+code and the two declarations stop agreeing. This is what contract-first is for, and
+it took eight rounds of review to notice.
+
 ## Bounded target migration
 
 Install the package and inspect the exact seven-command surface:
@@ -356,7 +371,7 @@ uv run catalog-migrate render-handoff \
   --telemetry-report ../../evidence/telemetry-report.json \
   --runtime-test-report ../../evidence/runtime-test-report.json \
   --path copilot-modernization \
-  --rollback-revision '<container-app>--baseline-000000000000' \
+  --rollback-revision '<your-container-app>--baseline-000000000000' \
   --rollback-runbook ../../evidence/rollback-runbook.md \
   --output ../../evidence/modernization-contract.json
 ```

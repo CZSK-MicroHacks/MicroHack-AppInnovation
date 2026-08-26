@@ -204,10 +204,24 @@ repository, workflow path, control head SHA, ref, run ID, and run attempt. Stagi
 production jobs require positive immutable job IDs, successful conclusions, and
 positive, correctly ordered time windows.
 
-The facilitator first selects the UAMI/handoff subscription and then runs this exact
-unfiltered command without `--scope` or JMESPath:
+The facilitator first selects the UAMI/handoff subscription, reads the identity that step 1
+created, and only then runs the exact unfiltered command without `--scope` or JMESPath.
+`IDENTITY_RESOURCE_ID` takes the `identityResourceId` output of the step 1 deployment —
+everything else is derived from it, so this block runs top to bottom with nothing else to
+fill in:
 
 ```bash
+mkdir -p evidence/cicd
+
+IDENTITY_RESOURCE_ID="<your-identity-resource-id>"
+SUBSCRIPTION_ID="$(cut -d/ -f3 <<<"$IDENTITY_RESOURCE_ID")"
+az account set --subscription "$SUBSCRIPTION_ID"
+test "$(az account show --query id --output tsv)" = "$SUBSCRIPTION_ID"
+
+az identity show --ids "$IDENTITY_RESOURCE_ID" --output json \
+  > evidence/cicd/identity.raw.json
+PRINCIPAL_ID="$(jq -er '.principalId' evidence/cicd/identity.raw.json)"
+
 az role assignment list --all --include-inherited \
   --assignee-object-id "$PRINCIPAL_ID" \
   --fill-principal-name false \

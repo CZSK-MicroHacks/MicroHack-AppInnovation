@@ -72,7 +72,7 @@ REVISION_NAME=$(jq -er '.observability.revision' "$HANDOFF")
 : "${QUERY_START_TIME:?export the inclusive UTC window start, e.g. 2025-01-01T10:00:00Z}"
 : "${QUERY_END_TIME:?export the inclusive UTC window end, e.g. 2025-01-01T10:30:00Z}"
 
-az deployment group create \
+WORKBOOK_DEPLOYMENT=$(az deployment group create \
   --resource-group "$HANDOFF_APPLICATION_RESOURCE_GROUP" \
   --template-file infra/observability-workbook.bicep \
   --parameters \
@@ -83,7 +83,11 @@ az deployment group create \
     sourceCommit="$SOURCE_COMMIT" \
     revisionName="$REVISION_NAME" \
     queryStartTime="$QUERY_START_TIME" \
-    queryEndTime="$QUERY_END_TIME"
+    queryEndTime="$QUERY_END_TIME" \
+  --output json)
+
+WORKBOOK_RESOURCE_ID=$(jq -er '.properties.outputs.workbookResourceId.value' \
+  <<<"$WORKBOOK_DEPLOYMENT")
 ```
 
 Every identity above comes from the validated handoff, so a stale portal copy cannot
@@ -91,6 +95,13 @@ enter the deployment. `jq -er` fails on a missing or null field rather than pass
 empty string that Bicep would reject with a less obvious message. The
 `.observability.serviceVersion` field is the same 40-hex commit as `.source.commitSha`;
 the handoff validator asserts they agree.
+
+`WORKBOOK_RESOURCE_ID` comes from the deployment that just created the workbook — the
+`workbookResourceId` output of `infra/observability-workbook.bicep` — so the ID you
+capture in step 4 is necessarily the resource this step produced. Do not read it from the
+portal: the workbook name is a `guid()` derived from the workspace ID, so a hand-copied ID
+is both unmemorable and unverifiable. The same `jq -er` applies, and step 4 consumes the
+binding made here.
 
 The deployment creates only the workbook and `all-metrics-to-workspace` diagnostic
 setting. It does not create a DCR, alternate pipeline, Application Insights component,
@@ -133,11 +144,15 @@ Hash bytes exactly as checked in and hash the exact serialized string returned b
 ```bash
 shasum -a 256 workshop/observability/workbook.json
 shasum -a 256 workshop/observability/queries.kql
+ARM_SERIALIZED_DATA=$(jq -er '.properties.serializedData' \
+  evidence/observability/raw/workbook-arm.json)
 printf '%s' "$ARM_SERIALIZED_DATA" | shasum -a 256
 ```
 
 Do not pretty-print, parse/re-serialize, trim, or newline-terminate `serializedData` before
-hashing it.
+hashing it. `jq -er` emits the string value itself rather than a re-encoded object, and the
+command substitution strips only the single trailing newline `jq` adds — which is why the
+hash is taken through `printf '%s'` and not by piping `jq` straight into `shasum`.
 
 ## 5. Run and normalize the exact queries
 

@@ -13,6 +13,11 @@ the workshop — it is the week after it, when nobody destroys anything.
 | **Derived** | Arithmetic on a Retail API price plus a quantity taken from this repository's infrastructure code. The quantity's source file is cited. |
 | **Estimated** | An assumption about participant behaviour (how many hours a database is active, how much telemetry an app emits). The assumption is stated so you can substitute your own. |
 | **UNVERIFIED** | Could not be confirmed from the Retail Prices API. **Confirm with the Azure Pricing Calculator** before you quote it to anyone who signs invoices. |
+| **Pricing page** | Taken from Microsoft's own pricing page for the service, which states billing periods that the Retail Prices API does not carry. Cited with the URL — and, where the live page has since dropped the statement, with the dated snapshot that still has it. |
+
+Line items are rounded to cents for display and subtotals are computed from the unrounded
+values, so a subtotal does not always equal the column as printed; where the gap is larger
+than rounding explains, the row's Basis cell gives the arithmetic that reproduces it.
 
 Prices are list retail without any Enterprise Agreement, CSP, MACC, or reservation
 discount. They exclude tax. Re-derive them for your own region and agreement — a Sweden
@@ -60,13 +65,60 @@ curl -s "https://prices.azure.com/api/retail/prices?currencyCode=USD&\$filter=se
 | Log Analytics ingestion | **$2.99 / GB** | Retail API — `Log Analytics` / `Analytics Logs Data Ingestion` |
 | Log Analytics retention beyond the free period | $0.13 / GB / month | Retail API — `Analytics Logs Data Retention` |
 | Application Insights | — | Workspace-based; its data is billed through the Log Analytics ingestion meter above, not separately |
-| Azure Load Testing resource (`Azure App Testing`) | **$10.00 per resource** | Retail API — `Azure App Testing` / `JMeter` / `JMeter Load Testing Resource`, unit of measure `1`. **UNVERIFIED billing period** — the API does not state whether this is monthly; treat as monthly and **confirm with the Azure Pricing Calculator** |
-| Load-test virtual-user hours, included | $0.00 / VU-hour | Retail API — `JMeter Virtual User Included Usage` |
+| Azure Load Testing resource (`Azure App Testing`) | **$10.00 per resource per month** | Retail API — `Azure App Testing` / `JMeter` / `JMeter Load Testing Resource`, unit of measure `1`. The API does not carry the period; the **Pricing page** does, and it is monthly. See [The Load Testing fee is monthly](#the-load-testing-fee-is-monthly) |
+| Load-test virtual-user hours, included | $0.00 / VU-hour | Retail API — `JMeter Virtual User Included Usage`. **50 VU-hours per resource per month**, per the Pricing page note below |
 | Load-test virtual-user hours, additional | $0.15 / VU-hour | Retail API — `JMeter Virtual User Additional Usage` (drops to $0.06 above 10,000 VU-hours) |
 
-The Challenge 2 run is 40 virtual users for 300 seconds — **3.33 VU-hours**, which sits
-inside the included allotment. The virtual-user meter is effectively free here; the
-per-resource fee is not.
+The Challenge 2 run is 40 virtual users for 300 seconds — **3.33 VU-hours**, against 50
+included per resource per month. The virtual-user meter is effectively free here; the
+per-resource fee is not. Since 2026-03-01 a test run is billed a floor of 10 virtual users
+per engine for a minimum of 10 minutes, which for this run works out to 1.67 VU-hours —
+below the 3.33 actually used, so the floor does not bite and the figure above still stands.
+
+#### The Load Testing fee is monthly
+
+This line used to be labelled UNVERIFIED, and with thirty resources the label was no longer
+survivable: the gap between "once" and "per month" is the gap between $300 and $300 *every
+month the resources exist*, on a row you hand to a budget owner. It is resolved.
+
+**The $10.00 is a monthly fee, per resource, charged in full for a resource that exists
+during any part of a calendar month.** Microsoft's own pricing page said so in the row and
+again in its FAQ:
+
+> How am I charged for the initial 'Load Testing Resource' and how do the included Virtual
+> User Hours (VUH) work? For each 'Load Testing Resource' that is active during **any part
+> of a month** you will be charged the monthly fee, and have access to the included 50 VUH.
+
+That wording is from the [Azure Load Testing pricing
+page](https://azure.microsoft.com/en-us/pricing/details/load-testing/) as
+[archived on 2024-08-14](https://web.archive.org/web/20240814151631/https://azure.microsoft.com/en-us/pricing/details/load-testing/),
+where the table row reads `Load Testing Resource — $10.00 per month includes 50 Virtual
+User Hours (VUH) per month`. Two things corroborate that it still describes today's
+billing. The archived regional spread is *identical* to what the Retail API returns now —
+$10.00 everywhere, $12.50 in `usgov-virginia`. And the `JMeter Virtual User Included Usage`
+meter is still live at $0.00/hour with an effective date of 2025-03-01; an *included-usage*
+meter is meaningless without the fee that buys the inclusion, so the whole
+fee-plus-allowance model survived the rename to Azure App Testing.
+
+**What is still open, stated plainly.** The live pricing page no longer shows that row or
+that FAQ entry at all — the Azure Load Testing table on it now lists only the two VU-hour
+tiers. So the possibility that the fee was quietly retired and the meter left behind cannot
+be excluded from public sources, and if that is what happened the line is $0.00 rather than
+$300.00/month. Everything above says it was not, but say so honestly rather than round it
+away.
+
+**The single check that settles it**, and it takes one minute once you have provisioned:
+open Cost Analysis on the subscription, filter to meter `JMeter Load Testing Resource`
+(meter ID `0dae6d10-8474-58f8-8439-26f7a005d8dd`), and look at the first day after the
+`infra/perf-testing.bicep` deployments land. A charge there is the monthly fee; no charge
+by the second day means it was retired. Record the answer in the run log — it is a repo
+constant once someone has looked, and nobody should have to re-derive this.
+
+**The consequence you must act on either way**: "any part of a month" is not prorated. A
+delivery that provisions on 30 January and tears down on 4 February touches two calendar
+months and is billed **twice — $600.00, not $300.00** — for five days of use. Schedule
+provisioning and teardown inside one calendar month, or budget the second month
+deliberately.
 
 ### Facilitator-level and subscription-wide
 
@@ -87,6 +139,12 @@ per-resource fee is not.
 
 ### Base infrastructure
 
+This is one participant's environment for one day, and it is the foundation the rest of
+this document stands on: the cohort figures scale it by participants and by hours at
+*both* rates — 65.5 h with both VMs running, then 47.5 h with one deallocated — never at
+a single rate across the whole 113 h window. An error here is an error in every figure
+below it.
+
 | Line | Quantity | Per day | Basis |
 | --- | --- | ---: | --- |
 | Windows VMs | 2 × 24 h @ $0.184 | **$8.83** | Derived |
@@ -95,7 +153,15 @@ per-resource fee is not.
 | NAT gateway | 1 × 24 h @ $0.045 | **$1.08** | Derived |
 | Standard public IPs | 2 × 24 h @ $0.005 | **$0.24** | Derived |
 | **Total, both VMs running** | | **$16.14** | |
-| **Total, after the Challenge 0 deallocation** | | **$11.72** | One VM's compute stops; its disk keeps billing |
+| **Total, after the Challenge 0 deallocation** | | **$11.72** | Derived: $16.14 − one VM's 24 h @ $0.184 = $16.14 − $4.42 = $11.72. That VM's compute stops; its disk keeps billing |
+
+**The $4.42 between those two totals is the workshop's first cost lesson, and the
+participant is the one who earns it.** Deallocating the legacy VM they did not choose is a
+single command in [Challenge 0](../challenges/ch00/README.md), and it takes
+$4.42 ÷ $16.14 ≈ 27% off the daily bill for the rest of the workshop — for a machine
+nobody had opened. Nothing is deleted and nothing is lost: the disk keeps billing
+precisely because the VM can be restarted. Every argument later in this document is that
+same one at a larger scale.
 
 Data transfer (Bastion egress, NAT processed GB) is excluded — it is workload-dependent
 and small relative to the fixed hourly meters.
@@ -113,7 +179,7 @@ hours and idle for 16, and that the app emits about 0.2 GB of telemetry per day.
 | Container registry, Basic | $0.17 | $0.17 | Derived |
 | Private endpoints (2) | $0.48 | $0.48 | Derived |
 | Log Analytics ingestion | $0.60 | $0.60 | **Estimated** at 0.2 GB/day |
-| **Total** | **$6.67** | **$2.56** | |
+| **Total** | **$6.67** | **$2.56** | Unrounded: $0.6912 + $4.7354 + $0.1666 + $0.48 + $0.598 = $6.6712 ≈ $6.67; Java is the same less SQL: $6.6712 − $4.7354 + $0.6216 = $2.5574 ≈ $2.56 (rounding each row to cents makes the .NET column visibly sum to $6.68) |
 
 **The database choice moves the number more than anything else a participant does.**
 Serverless Azure SQL at 8 active hours costs roughly eight times the Burstable PostgreSQL
@@ -161,7 +227,7 @@ rather than by the move to containers. Participants record their stack's row in 
 | Base infrastructure, both VMs (day 1 before Challenge 0 completes) | **$484.14** |
 | Base infrastructure, after the Challenge 0 deallocation | **$351.66** |
 | Modernized workload, assuming a 50/50 stack split | **$138.45** |
-| Azure Load Testing resources, 30 × $10 | **$300.00 once** (UNVERIFIED period) |
+| Azure Load Testing resources, 30 × $10 — one per participant, [decided, not shared](Facilitator.md#decide-these-before-you-book-a-date) | **$300.00 per calendar month**, not per day — and **$600.00** if provisioning and teardown fall either side of a month end |
 
 ## Worked example: Friday provision → Wednesday teardown
 
@@ -180,12 +246,34 @@ runs for the remaining 47.5.
 | Bastion (113 h) | **$21.47** | **$644.10** | Derived |
 | NAT gateway (113 h) | $5.08 | $152.40 | Derived |
 | Public IPs (2 × 113 h) | $1.13 | $33.90 | Derived |
-| **Base subtotal** | **$67.24** | **$2,017.23** | |
-| Modernized workload, .NET / Azure SQL | $12.89 | — | Derived over the ~42.5 h from Monday 15:30 |
-| Modernized workload, Java / PostgreSQL | $4.56 | — | Derived over the same window |
-| **Modernized subtotal, 50/50 split** | — | **$261.72** | |
-| Azure Load Testing resources | $10.00 | $300.00 | UNVERIFIED billing period |
-| **Azure subtotal, excluding Defender and SRE Agent** | | **≈ $2,579** | |
+| **Base subtotal** | **$67.24** | **$2,017.23** | 30 × the unrounded per-participant base of $67.2409 = $2,017.23; the rows above are rounded to cents for display, so they visibly sum to $2,016.90 |
+| Modernized workload, .NET / Azure SQL | $12.90 | — | $3.4177 + $9.48 = $12.8977 ≈ $12.90; derived below |
+| Modernized workload, Java / PostgreSQL | $4.53 | — | Derived over the same window: $2.56/day × 42.5/24 = $4.5333 ≈ $4.53. Burstable PostgreSQL never pauses, so there is no active-hour allowance to add |
+| **Modernized subtotal, 50/50 split** | — | **$261.45** | 15 participants on each stack: 15 × ($12.90 + $4.53) = $261.45 |
+| Azure Load Testing resources | $10.00 | $300.00 | Monthly fee, one resource per participant. Assumes Friday and Wednesday fall in the same calendar month |
+| **Azure subtotal, excluding Defender and SRE Agent** | | **≈ $2,579** | $2,017.23 base + $261.45 modernized + $300.00 Load Testing = $2,578.68 ≈ $2,579 |
+
+**Azure SQL is the one line that does not scale with wall-clock time.** Everything else in
+the modernized stack bills by the hour, so the non-database half of the .NET row is just
+$6.67 − $4.74 = $1.93 a day stretched over the window: $1.93 × 42.5/24 = **$3.4177**.
+Serverless SQL bills only while active, at $4.74 ÷ 8 = **$0.5925** per active vCore-hour.
+The window touches three calendar days, but [the agenda](Agenda.md#the-schedule) schedules
+work on only two of them — Monday to 17:00, Tuesday from 09:00 to 17:00 — and Wednesday is
+teardown only, so the database auto-pauses after its 60 idle minutes and accrues nothing.
+Two days at the eight-hour allowance is 16 active vCore-hours, or **$9.48**, and $3.4177 +
+$9.48 = **$12.8977 ≈ $12.90**.
+
+Monday carries a whole day's allowance even though the window opens at 15:30, and that is
+the assumption in this row most worth arguing with. It holds because the database is
+created and worked during Challenge 1 itself, before the window opens, and because
+Challenge 2 — a load test — is the last block of the day. Move it and the row moves with
+it: charge Monday only the 1.5 hours that fall inside the window and the row is $9.05
+instead of $12.90.
+
+If that Friday and Wednesday straddle a month end, the Load Testing line doubles to
+**$600.00** and the subtotal becomes **≈ $2,879** — the fee is charged for any part of a
+month, so five days of use spanning two months costs two months. Nothing else in this table
+changes, because everything else is billed by the hour.
 
 Then the paid services the facilitator turns on:
 
@@ -193,15 +281,17 @@ Then the paid services the facilitator turns on:
 | --- | ---: | --- |
 | Defender for Servers P2, over the same 113 h | **$107.10** | Derived: $0.02/node/hr × (30 × 2 VMs × 65.5 h + 30 × 1 VM × 47.5 h) |
 | Defender for Containers image scans, ~3 images each | **$26.10** | Derived at $0.29/image; actual count depends on how many builds each participant pushes |
-| Defender for SQL, 15 participants | ~$34.83 | Derived from the hourly instance meter over 113 h. **UNVERIFIED proration** if your subscription bills the monthly node meter instead, in which case it is $225.00 |
-| Defender for open-source relational databases, 15 participants | ~$34.83 | Same proration caveat, and the price itself is UNVERIFIED |
+| Defender for SQL, 15 participants | ~$34.83 | Derived from the **monthly** $15.00 instance meter, prorated: 15 × 113 × $15.00 ÷ 730 = $34.83. **UNVERIFIED proration** if your subscription bills a whole month per node instead, in which case it is $225.00 |
+| Defender for open-source relational databases, 15 participants | ~$34.83 | Same proration: 15 × 113 × $15.00 ÷ 730 = $34.83, and the price itself is UNVERIFIED |
 | Defender CSPM | see note | **UNVERIFIED** — CSPM is billed per *billable resource*, not per VM, and the count depends on what else is in the subscription |
 | SRE Agent, **one shared** agent for 8 hours | **$3.52** | Derived: 4 agent units × $0.11 × 8 h |
 | SRE Agent, **one agent per team**, 30 teams, 8 hours | **$105.60** | Derived |
 
-**Total for a 30-person, Friday-to-Wednesday delivery: roughly $2,750–$2,950**, plus the
-GitHub plan and Copilot seats, which are not Azure meters. Call it **$92–$98 per
-participant** for the Azure side.
+**Total for a 30-person, Friday-to-Wednesday delivery: roughly $2,750–$2,950**, assuming
+Friday and Wednesday fall in the same calendar month, plus the GitHub plan and Copilot
+seats, which are not Azure meters. Call it **$92–$98 per participant** for the Azure side.
+Straddle a month end and the Load Testing line doubles: **$3,085–$3,190**, or **$102–$107**
+each.
 
 ## Where the money actually goes
 
@@ -247,7 +337,11 @@ This is the number to put in the budget alert.
 
 Two of those deserve to be said plainly:
 
-- **An un-destroyed cohort costs roughly $11,000–$15,000 per month.** That is more than the
+- **An un-destroyed cohort costs roughly $11,700–$15,900 per month.** The base
+  infrastructure rows plus both idle modernized halves: $10,695.90 + $428.85 + $646.80 =
+  $11,771.55 with one VM deallocated, $14,725.50 + $428.85 + $646.80 = $15,801.15 with
+  both still running, and the SRE Agent line below is on top of that. Both bounds are
+  rounded outward, so the band never flatters the table it summarises. It is more than the
   entire workshop, every month, for infrastructure nobody is using.
 - **The SRE Agent bills for existing, not for working.** Four agent units at $0.11 each,
   every hour, for as long as the resource exists. Stopping the agent does not stop the

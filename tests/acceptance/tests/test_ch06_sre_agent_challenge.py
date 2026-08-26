@@ -306,10 +306,10 @@ def test_facilitator_cleanup_is_authorized_and_protects_the_handoff(
     """Cleanup deletes only agent resources and verifies workload survival first."""
     guide = _read(repo_root, "workshop/sre-agent/README.md")
 
-    assert "separate authorization gate" in guide
+    assert "separate authorization gate" in " ".join(guide.split())
     assert "sre-agent-only" in guide
     assert "delete the agent and prove its ARM GET returns `404`" in guide
-    assert "delete only the dedicated agent resource group" in guide
+    assert "delete only the dedicated agent resource group" in " ".join(guide.split())
     assert "ARM GET every protected modernization and shared-challenge handoff resource" in guide
     assert "require HTTP `200`" in guide
     assert "query Cost Management last" in guide
@@ -319,7 +319,7 @@ def test_facilitator_cleanup_is_authorized_and_protects_the_handoff(
     assert "--body @\"$RAW/cost-query-body.json\"" in guide
     assert ".properties.nextLink == null" in guide
     assert "response: $response[0]" in guide
-    assert "do not flatten" in guide
+    assert "do not flatten" in " ".join(guide.split())
     assert "timeframeStart" not in guide
     assert "timeframeEnd" not in guide
     assert "Never run `az group delete` against the participant resource group" in guide

@@ -12,11 +12,19 @@ Anything red is fixed before 09:00, or that participant starts the day on a gold
 | Both VMs built correctly | `C:\MicroHack\status\dotnet-smoke.json` and `java-smoke.json` | Rerun provisioning on that stack — see [Reset one participant](Facilitator.md#reset-one-participant) |
 | Source tree is the one you pinned | `type C:\MicroHack\source\.source-commit` | Do not re-pin now. Re-pinning re-images every VM |
 | Both golden handoffs validate | `handoff_cli` against `workshop/golden/dotnet-sqlserver/` and `workshop/golden/java-postgresql/` — the command is in [`workshop/golden/README.md`](../workshop/golden/README.md) | You have no rejoin path at 15:15 |
+| Delivery baseline recorded | Your run log: the `git rev-parse HEAD` you captured at T-4, next to the rehearsal result — see [Rehearse the 15:15 cut](Facilitator.md#rehearse-the-1515-cut-before-you-have-to-perform-it), step 5 | You cannot say which tree the room ran, so nothing that goes wrong today is reproducible afterwards |
 | Seed snapshot valid | `evidence/defender/foundation/seed-snapshot.json` | Challenge 5 has nothing to investigate |
 | SRE foundation built, plan in Review | Portal, response plan `catalog-reviewed-rollback` | Challenge 6 is a talk, not a drill |
 | Approval gate is real | `production` environment on one repo offers required reviewers | Challenge 3 never pauses |
 | A push from a VM works | You pushed a throwaway commit from a provisioned VM yesterday | Challenge 1 stalls at its publish gate — before anyone's first migration command — for everyone at once |
 | Every participant can copy their repository URL | Wherever you put their resource group name | You dictate URLs across a room at 14:00 |
+
+The baseline is captured, not printed here. A commit cannot contain its own hash, so a SHA
+written into this card always names the commit *before* the tree you are delivering — wrong
+by exactly one, and it looks right. It is also a fact about one delivery rather than about
+the repository, and it would go stale the moment anything lands with nothing failing to tell
+you. Recorded in the run log beside the rehearsal result, the pair is what you actually need:
+which tree the room ran, and the evidence it was known-good when it ran.
 
 ## The clock, and where you decide
 

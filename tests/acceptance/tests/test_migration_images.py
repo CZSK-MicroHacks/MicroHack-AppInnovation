@@ -122,6 +122,12 @@ def test_target_verification_rejects_corrupt_downloaded_bytes(
         }
         for path in sorted((repo_root / "data/images").glob("*.png"))
     ]
+    # Without this floor an empty corpus would still raise -- for "nothing to verify"
+    # rather than for the corruption this test exists to detect, and the assertion below
+    # cannot tell those two failures apart.
+    assert len(listing) >= 150, (
+        f"only {len(listing)} images found; a corrupt-byte test needs the real corpus"
+    )
     runner = ImageRunner(
         listing,
         repo_root / "data/images",

@@ -21,9 +21,10 @@ your PATH. The command blocks use `\` line continuations and pipe JSON straight 
 so a PowerShell session parses them as errors rather than running them; there is no
 half-working middle state to notice late.
 
-Three blocks are deliberately not bash, and each says so where it appears. The capacity
-preflight is a PowerShell script, so it needs **PowerShell 7** (`pwsh`), which is
-cross-platform and which you need anyway. Two blocks under
+Five blocks are deliberately not bash, and each says so where it appears. The capacity
+preflight and the Defender seed capture are PowerShell scripts, and the legacy-VM capture that
+feeds the seed capture is a PowerShell block, so all three need **PowerShell 7**
+(`pwsh`), which is cross-platform and which you need anyway. Two blocks under
 [the cached-credential section](#the-facilitator-credential-sitting-on-every-participant-vm)
 run **on a participant VM**, in the ordinary Windows PowerShell session the participant
 already has. [`baseInfra/README.md`](../baseInfra/README.md) gives the same Terraform steps
@@ -36,7 +37,7 @@ do not blend the two forms.
 
 | Blocker | What is missing | What you must decide |
 | --- | --- | --- |
-| **Challenge 2 needs a Load Testing resource and a Key Vault secret** | Challenge 2 reads `LOAD_TEST_RESOURCE_ID` and `PERFTEST_API_KEY_SECRET_URI`. `infra/perf-testing.bicep` creates the Azure Load Testing resource, the Key Vault, and the role assignments — but **it does not create the secret value itself**, and it is a separate deployment from `infra/main.bicep`. | Who deploys `infra/perf-testing.bicep` for each participant, and who sets the API-key secret. Budget one Load Testing resource per participant unless you decide to share one. |
+| **Challenge 2 needs a Load Testing resource and a Key Vault secret** | Challenge 2 reads `LOAD_TEST_RESOURCE_ID` and `PERFTEST_API_KEY_SECRET_URI`. `infra/perf-testing.bicep` creates the Azure Load Testing resource, the Key Vault, and the role assignments — but **it does not create the secret value itself**, and it is a separate deployment from `infra/main.bicep`. | Who deploys `infra/perf-testing.bicep` for each participant, and who sets the API-key secret. **The count is not yours to decide: thirty, one per participant, never shared.** Challenge 2 puts the whole room under load inside the same 35-minute window, so a shared resource turns the chapter into a queue — and a serialised wait is the one thing the chapter *about autoscaling under load* cannot absorb. The fee is **monthly and charged for any part of a month**, so keep provisioning and teardown inside one calendar month or you pay it twice ([cost estimate](CostEstimate.md#cohort-of-30)). |
 | **Challenge 3's approval gate needs GitHub environment protection** | Deployment protection rules — the required-reviewers gate the whole chapter is built around — are **not available on private repositories on the GitHub Free plan**. `baseInfra/github/main.py` creates participant repositories with `private=True`, and `baseInfra/github/README.md` tells you to create a free organization. Those two facts are incompatible. | Either make the workshop repositories **public** (Free is then sufficient), or buy **GitHub Team or Enterprise Cloud** for the organization. If you do neither, the `production` job runs without ever pausing and there is no approval to record. |
 
 Both are prerequisites, not risks. Resolve them at the point where you are still choosing a
@@ -86,10 +87,12 @@ shape below is what you would run to reproduce it from your own machine; the par
 copy of it is PowerShell, on the VM:
 
 ```bash
+: "${RESOURCE_GROUP:?Set the participant resource group you are reproducing into}"
+
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
-  --parameters @<parameter file>
+  --parameters @<your-parameter-file>
 ```
 
 `infra/main.bicep` is `targetScope = 'resourceGroup'`. It does not create a resource group
@@ -125,7 +128,7 @@ Nothing below this line can be rushed later.
 | GitHub Copilot Business seats | GitHub org admin | One per participant who will use either Copilot path |
 | Defender for Cloud paid plans authorized | Subscription owner | Five pricing resources plus a subscription budget. Costs are in [the cost estimate](CostEstimate.md) |
 | SRE Agent region confirmed | You | Confirm the Azure SRE Agent is available in your chosen region and that the four-agent-unit hourly charge is authorized |
-| Teardown date and owner | You | Put it in a calendar with a person's name on it. An un-destroyed cohort costs $11,000–$15,000 per month |
+| Teardown date and owner | You | Put it in a calendar with a person's name on it. An un-destroyed cohort costs $11,700–$15,900 per month |
 
 ### T-7 working days — foundations
 
@@ -180,7 +183,7 @@ script, so run it in `pwsh`:
 
 ```pwsh
 ./baseInfra/scripts/preflight-capacity.ps1 `
-  -SubscriptionId '<subscription-guid>' `
+  -SubscriptionId '<facilitator-provided-subscription-guid>' `
   -Locations @('swedencentral', 'germanywestcentral') `
   -ParticipantCount 30 `
   -VmSize 'Standard_D2as_v5' `
@@ -292,31 +295,127 @@ exist.**
    the pricing API does not expose that switch, which is why Terraform does not model it.
 4. **Wait at least 24 hours.** This is the reason the golden environment is a T-5 task and
    not a T-2 one.
-5. **Capture the five artifacts** against the golden environment. Each is a plain Azure
-   Resource Manager GET, plus one Resource Graph query:
+5. **Record the two legacy VMs** in `evidence/defender/foundation/legacy-vm-coverage.json`.
+   Nothing else in the repository produces this file, and both the capture in step 6 and the
+   participant validator in `solutions/ch05-defender/README.md` refuse to run without it. Run
+   this from the repository root, in `pwsh`. Both resource IDs belong to the golden slot you
+   provisioned in step 1 — `az vm list --resource-group <facilitator-provided-golden-rg>
+   --query '[].id' --output tsv` prints them — and the VM your golden handoff names at
+   `network.migrationSourceVmResourceId` has to be one of the two, because the participant
+   validator matches it by resource ID:
 
-   | Signal | Request |
-   | --- | --- |
-   | Image assessment | `GET {ACR_RESOURCE_ID}/providers/Microsoft.Security/assessments/c0b7cfc6-3172-465a-b378-53c7ff2cc0d5/subAssessments?api-version=2019-01-01-preview` |
-   | Recommendations | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/assessments?api-version=2020-01-01` |
-   | Secure Score | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/secureScores?api-version=2020-01-01` |
-   | Benchmark controls | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/regulatoryComplianceStandards/Microsoft-cloud-security-benchmark/regulatoryComplianceControls?api-version=2019-01-01-preview` |
-   | Attack paths | `POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01` with a `securityresources \| where type == 'microsoft.security/attackpaths'` query |
+   ```pwsh
+   & {
+     $ErrorActionPreference = 'Stop'
+     $Vms = @(
+       @{ workload = 'dotnet'; resourceId = '<facilitator-provided-dotnet-vm-resource-id>' },
+       @{ workload = 'java'; resourceId = '<facilitator-provided-java-vm-resource-id>' }
+     )
+     $Captured = foreach ($Vm in $Vms) {
+       $Body = az resource show `
+         --ids $Vm.resourceId `
+         --api-version 2024-11-01 `
+         --output json | ConvertFrom-Json
+       if (-not $Body -or $Body.properties.provisioningState -ne 'Succeeded') {
+         throw "The $($Vm.workload) VM returned no provisioned body: $($Vm.resourceId)"
+       }
+       [ordered]@{
+         workload = $Vm.workload
+         request = [ordered]@{ method = 'GET'; resourceId = $Vm.resourceId }
+         response = [ordered]@{ statusCode = 200; body = $Body }
+       }
+     }
+     if (@($Captured).Count -ne 2) { throw 'Both VMs must be captured.' }
+     New-Item -ItemType Directory -Force -Path 'evidence/defender/foundation' | Out-Null
+     [ordered]@{
+       schemaVersion = '1.0.0'
+       observedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+       apiVersion = '2024-11-01'
+       virtualMachines = @($Captured)
+     } | ConvertTo-Json -Depth 64 |
+       Set-Content -Path 'evidence/defender/foundation/legacy-vm-coverage.json' -Encoding utf8
+   }
+   ```
 
-   The exact commands, with their fail-closed assertions, are in
-   `solutions/ch05-defender/README.md`. Attack paths may legitimately return empty; the
-   other four may not.
-6. **Write the seed snapshot** to `evidence/defender/foundation/seed-snapshot.json`. It
-   must record, for each artifact, the file path, its SHA-256, the timestamp it was
-   queried at, the scope resource ID, and the API version — plus, for the image assessment,
-   a `completed` status and the `sha256:` image digest. Validate it against
-   `workshop/contracts/defender-seed-snapshot.schema.json` before you distribute it.
-7. **Distribute it** with the participant materials. Participants investigate your snapshot;
+   The `& { … }` wrapper makes the whole capture one unit, so a VM that returns nothing —
+   wrong subscription, wrong ID, or one that never finished provisioning — stops the block
+   before anything is written, instead of leaving a half-file that step 6 fails on with a
+   message about the artifact rather than about the capture that produced it. Note that
+   `az vm show` has no `--api-version`, which is why this issues the GET through
+   `az resource show`.
+   `workshop/contracts/defender-legacy-vm-coverage.schema.json` is the authority and
+   `workshop/contracts/fixtures/defender/legacy-vm-coverage.json` shows the exact shape. No CLI
+   in this repository validates this one artifact against that schema offline, so its first
+   real check is step 6, which reads it and refuses any VM outside the golden subscription.
+6. **Capture the seed snapshot with the script**, from the repository root. This is the one
+   step you should not do by hand:
+
+   ```pwsh
+   ./baseInfra/scripts/seed-defender-findings.ps1 `
+     -SubscriptionId '<facilitator-provided-golden-subscription-guid>' `
+     -HandoffPath 'workshop/golden/dotnet-sqlserver/modernization-contract.json' `
+     -LegacyVmCoveragePath 'evidence/defender/foundation/legacy-vm-coverage.json'
+   ```
+
+   It issues the four Azure Resource Manager GETs at exactly the scopes and API versions the
+   frozen Defender contract names, writes each verbatim response into a digest-bound envelope
+   under `evidence/defender/foundation/` — `seed-recommendations.json`,
+   `seed-secure-score.json`, `seed-mcsb.json`, and `seed-image-assessment.json` — then writes
+   `seed-snapshot.json` and prints a JSON summary of what it captured. Both path parameters
+   are resolved against your working directory, which is why the block says repository root.
+
+   Four things are worth knowing before you run it:
+
+   - **It needs the golden handoff**, because it binds the snapshot to that handoff's
+     registry, repository, image digest, container app, and database server, and it refuses
+     any resource outside the golden subscription. The handoff is the T-4 task below, built
+     in this same environment — so let the 24-hour wait and the handoff build overlap, and
+     come back to this step once the handoff exists.
+   - **It fails closed on every assertion the participant validator later makes**: the pinned
+     Azure CLI (`2.80.0`, from `workshop/toolchain.lock.json`), the frozen contract version,
+     four non-empty responses, recommendation coverage of all five resource kinds with at
+     least one unhealthy finding, the subscription `ascScore` record, and an image
+     subassessment bound to the exact handoff repository and `sha256:` digest. A snapshot
+     that would not survive grading is never written at all. That is the whole reason to
+     prefer this over five GETs typed into a terminal at the end of a long week.
+   - **It does not capture attack paths.** That signal is a Resource Graph POST and the
+     script accepts only GET query contracts. Take it by hand from the table below.
+     `workshop/contracts/defender.json` marks its results optional, so an empty response is
+     fine — but the query still has to have been made.
+   - **It changes nothing.** No plan is enabled, no resource is modified, no credential is
+     printed.
+7. **Validate and distribute.** Check the snapshot against
+   `workshop/contracts/defender-seed-snapshot.schema.json`, then ship it with the participant
+   materials next to the other foundation artifacts. Participants investigate your snapshot;
    they never enable a plan and never wait 24 hours.
 
+**If the script will not run** — most often a different Azure CLI than the pinned one, or a
+finding that has not surfaced yet — capture the artifacts by hand instead, and use this same
+table for the attack-paths query in either case. Each is a plain Azure Resource Manager GET,
+plus one Resource Graph query:
+
+| Signal | Request |
+| --- | --- |
+| Image assessment | `GET {ACR_RESOURCE_ID}/providers/Microsoft.Security/assessments/c0b7cfc6-3172-465a-b378-53c7ff2cc0d5/subAssessments?api-version=2019-01-01-preview` |
+| Recommendations | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/assessments?api-version=2020-01-01` |
+| Secure Score | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/secureScores?api-version=2020-01-01` |
+| Benchmark controls | `GET {SUBSCRIPTION_SCOPE}/providers/Microsoft.Security/regulatoryComplianceStandards/Microsoft-cloud-security-benchmark/regulatoryComplianceControls?api-version=2019-01-01-preview` |
+| Attack paths | `POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01` with a `securityresources \| where type == 'microsoft.security/attackpaths'` query |
+
+The exact commands, with their fail-closed assertions, are in
+`solutions/ch05-defender/README.md`. Attack paths may legitimately return empty; the
+other four may not.
+
+By hand you must also write `evidence/defender/foundation/seed-snapshot.json` yourself. For
+each artifact it records the file path, its SHA-256, the timestamp it was queried at, the
+scope resource ID, and the API version — plus, for the image assessment, a `completed` status
+and the `sha256:` image digest.
+
 **Verify before you stop:** the recommendations artifact must cover all five resource kinds
-and contain at least one unhealthy recommendation. If it does not, your golden environment
-is missing a resource kind — fix that and re-capture, do not hand-edit the snapshot.
+and contain at least one unhealthy recommendation. The script enforces this and refuses to
+write a snapshot without it; by hand, nothing checks it but you. Either way, if a resource
+kind is missing then your golden environment is missing a resource — fix that and re-capture,
+do not hand-edit the snapshot.
 
 ### T-4 working days — build the golden handoffs
 
@@ -435,9 +534,16 @@ The golden-handoff cut is the only lever you have against the overrun the
 lever nobody in this repository has ever pulled. Rehearse it in the same sitting you build
 the handoffs, while the environment is fresh and what it tells you is still cheap to fix.
 
-Nothing here is automated: there is no dry-run harness, so the timings and the transcript
-are yours to keep. Keep them anyway. The 1–2 days in the lead-time table is the chapter's
-estimate inherited, not a figure anybody measured, and yours would be the first.
+`golden-dryrun` validates the *bundle* for you. It walks the same seven checks in T-4 order,
+stops at the first defect, and is the same command the T-1 smoke table requires to exit `0`
+before the room arrives — see
+[T-1 working day](#t-1-working-day--smoke-and-distribute). Run it here as well as there, so
+that a defect you can still fix cheaply is found in this sitting rather than the night before.
+
+What it does not do is time the *cut*. The wall clock below, the transcript, and the note
+about what needed a second attempt are yours to keep, and nothing automates any of them.
+Keep them anyway. The 1–2 days in the lead-time table is the chapter's estimate inherited,
+not a figure anybody measured, and yours would be the first.
 
 **1. Time the build while you do it.** Wall clock, not effort — the waiting is the part
 that surprises people:
@@ -484,6 +590,25 @@ than in front of somebody at 15:15. Fix the grant, never the handoff.
 **4. Write down what needed a second attempt.** Whatever went wrong once will go wrong
 again next delivery, and three honest lines in `workshop/golden/<stack>/README.md` are
 worth more to the next facilitator than the timings are.
+
+**5. Record the tree you rehearsed against.** A rehearsal result is only evidence if you can
+say which repository produced it. From the repository root:
+
+```bash
+git rev-parse HEAD
+```
+
+Write that commit into `workshop/golden/<stack>/README.md` beside the timings and the
+rehearsal outcome, and carry it into your run log. It is what makes anything that goes wrong
+on the day reproducible; without it, "it worked at T-4" is a claim nobody can check
+afterwards.
+
+Do not go looking for a delivery baseline committed somewhere in this repository, and do not
+add one. A commit cannot contain its own hash, so a SHA written into a tracked file always
+names the commit *before* the tree you are delivering — wrong by exactly one, and it looks
+right. The baseline is a fact about one delivery, not about the repository, which is the same
+reason `TF_VAR_source_archive_sha256` is captured at run time and `sourceCommit` appears in
+no parameter file.
 
 ### T-3 working days — SRE Agent foundation
 
@@ -552,7 +677,7 @@ values travel in VM custom data, which Azure will not let you update in place.
 cd baseInfra/terraform
 export TF_VAR_admin_password='<strong-facilitator-secret>'
 export TF_VAR_capacity_preflight_confirmed=true
-export TF_VAR_source_archive_sha256='<digest you recorded when you re-pinned the source commit>'
+export TF_VAR_source_archive_sha256='<facilitator-recorded digest from re-pinning the source commit>'
 
 terraform init -backend-config=backend.hcl
 terraform plan -var-file local.tfvars -out tfplan
@@ -655,6 +780,7 @@ credential map: read it when you are ready to set the secrets, not before.
 | **Deployment parameter files exist** | On one VM, in an ordinary **non-elevated** PowerShell — the session a participant has — `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` returns `9`, and `$p = (Get-Content C:\protected\manual-<stack>-baseline.json \| ConvertFrom-Json).parameters; $p.facilitatorPrincipalObjectId.value; [bool]$p.performanceApiKey.value` shows your object ID and `True`. Run it unelevated on purpose: that is the session Challenge 1 deploys from, so it also proves the Read ACE landed. `Access is denied` here means the grant is missing and every participant stops on their first deployment |
 | Bastion access works | Connect to at least one VM per region |
 | **A participant can write where the work happens** | In that same non-elevated session, `New-Item C:\MicroHack\source\.t1-probe -ItemType File` must **succeed** and `New-Item C:\protected\.t1-probe -ItemType File` must **fail** with `Access is denied`. Remove the probe afterwards. The first proves Challenge 1 can commit and build in the tree it was given; the second proves the parameter files cannot be edited into something that no longer matches the deployment they describe. A VM that passes the read check above and fails this one has the wrong ACL rather than a missing one |
+| **A participant can create the migration export directory** | **Confirmation, not discovery.** `baseInfra/scripts/provision-vm.ps1` now creates `C:\ProgramData\MicroHack\migration` itself and places an explicit **Modify** ACE for `admin_username` on it (`New-MigrationExportDirectory`, using the same `Set-ProtectedAcl` call that grants read on `C:\protected`), so the permission is asserted at provisioning time instead of inherited from a folder created as SYSTEM. Confirm it held: in that same non-elevated session, `New-Item C:\ProgramData\MicroHack\migration\.t1-probe -ItemType File` must **succeed**. Remove the probe but **leave the directory** — deleting it discards the ACE that makes this work. All six Challenge 1 path documents create the directory with `New-Item -Force` before writing the database export, so on a correctly provisioned VM that line is now a no-op. If the probe fails with `Access is denied`, do not re-image — [editing a provisioning script re-provisions every VM](#reset-one-participant) — fix the ACL in place, per VM: `az vm run-command invoke -g <rg> -n <vm> --command-id RunPowerShellScript --scripts 'New-Item -ItemType Directory -Force C:\ProgramData\MicroHack\migration > $null; icacls C:\ProgramData\MicroHack\migration /grant azureuser:(OI)(CI)M'`, substituting your own `admin_username` if you changed it from `azureuser`. Left unfixed, every participant loses their database export, which is the artifact Challenge 1 exists to produce |
 | Load Testing prerequisites exist | Deploy `infra/perf-testing.bicep` and set the performance-test API-key secret in the Key Vault it creates to the value `terraform output -json performance_api_keys` reports for that participant and stack. A secret that does not match the generated key fails Challenge 2 with a 401, not a deployment error |
 | GitHub repositories exist and the plan supports environment protection | Create the `staging` and `production` environments on one repository and confirm the required-reviewers setting is actually available |
 | **Each participant knows their repository HTTPS URL** | Challenge 1 ends with `git push` from the VM, and every runbook asks for a *facilitator-provided* HTTPS URL. Put each participant's URL somewhere they can copy it without typing — the same place you put their resource group name. A URL that has to be dictated across a room costs more time than it sounds like, and a mistyped one fails at the push, after the work is done |
@@ -797,8 +923,8 @@ nobody to do anything at all.
 3. **Sign it out as soon as the block ends,** on every VM you signed in on.
 
 **The sign-out step.** Run this **on the VM, in Windows PowerShell**, in the participant's
-own session — this is the second of the two blocks in this guide that is not your laptop's
-bash. `az logout` drops the account from the token cache; deleting the directory is what
+own session — this is the second of the two blocks that run on a participant VM rather than
+on your laptop. `az logout` drops the account from the token cache; deleting the directory is what
 guarantees no token, no profile, and no CLI residue is left behind:
 
 ```powershell
@@ -935,6 +1061,8 @@ terraform apply destroyplan
 ### 4. Verify
 
 ```bash
+: "${SUBSCRIPTION_ID:?Set the subscription you just destroyed, to verify it is empty}"
+
 az resource list --subscription "$SUBSCRIPTION_ID" --query "length(@)"
 az consumption budget list --subscription "$SUBSCRIPTION_ID" -o table
 ```
@@ -950,6 +1078,8 @@ Defender foundation, `baseInfra/terraform` creates one for you from
 it by hand:
 
 ```bash
+: "${SUBSCRIPTION_ID:?Set the workshop subscription the budget will guard}"
+
 az consumption budget create \
   --subscription "$SUBSCRIPTION_ID" \
   --budget-name mh-workshop \
@@ -975,7 +1105,7 @@ mailbox rather than a distribution list. Size it at roughly 1.5× the total in
 | 2 — Load and autoscaling | Load Testing resource deployed, API-key secret set in Key Vault; the filler content for 35 minutes of waiting ready to deliver | T-1 |
 | 3 — CI/CD and revisions | GitHub plan and repository visibility confirmed to support environment protection; `staging` and `production` environments creatable; you or a second person available to approve | T-15 for the plan, T-1 for the check |
 | 4 — Observability | Nothing beyond a validated handoff. Have the workbook deployment ready to demonstrate if you fall behind | — |
-| 5 — Cloud security posture | Seed snapshot captured from the golden environment, schema-validated, and distributed; participants hold `Security Reader` | T-5 to T-4 |
+| 5 — Cloud security posture | **You** run `baseInfra/scripts/seed-defender-findings.ps1` against the golden subscription — [T-5 working days](#t-5-working-days--the-golden-environment), step 6 — never a participant. It writes `evidence/defender/foundation/seed-snapshot.json` and the four digest-bound envelopes beside it, and prints a JSON summary; the snapshot existing and validating against `workshop/contracts/defender-seed-snapshot.schema.json` is what proves it worked. Two conditions gate it: the paid plan must have been enabled 24 hours earlier, and the golden handoff must already exist, because the script binds the snapshot to it — which is why this straddles T-5 and T-4. Attack paths are a Resource Graph POST the script will not make; take that one signal by hand. Then distribute the snapshot; participants investigate yours and hold `Security Reader` | T-5 to T-4 |
 | 6 — SRE Agent | Foundation built for the chosen model; response plan in Review mode; test incident sent and rejected; drill revision created at zero traffic; you holding SRE Agent Administrator | T-3 |
 | Wrap-up | Nothing. Protect the time slot instead — it is the only chapter that produces something a participant can show their manager | — |
 

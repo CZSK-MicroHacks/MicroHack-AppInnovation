@@ -59,7 +59,7 @@ through `az acr build`, so no Docker daemon is installed or required.
 
 ## Facilitator preflight
 
-Complete the repository-level [facilitator go/no-go matrix](../README.md#facilitator-go-no-go-matrix)
+Complete the repository-level [facilitator go/no-go matrix](../README.md#facilitator-gono-go-matrix)
 before this component gate. The two-VM baseline is consumed by
 [Challenge 0](../challenges/ch00/README.md).
 
@@ -75,7 +75,7 @@ VM size, and disk size:
 
 ```pwsh
 ./baseInfra/scripts/preflight-capacity.ps1 `
-  -SubscriptionId '<subscription-guid>' `
+  -SubscriptionId '<facilitator-provided-subscription-guid>' `
   -Locations @('swedencentral', 'germanywestcentral') `
   -ParticipantCount 10 `
   -VmSize 'Standard_D2as_v5' `
@@ -100,7 +100,7 @@ push and confirm the published archive really contains `infra/`, `workshop/contr
 snippet does nothing until you replace it:
 
 ```pwsh
-$commit = '<PASTE-THE-40-HEX-SOURCE-COMMIT>'   # placeholder: see docs/Facilitator.md
+$commit = '<facilitator-provided-40-character-lowercase-commit>'   # placeholder: see docs/Facilitator.md
 $archive = Join-Path $env:TEMP "$commit.zip"
 Invoke-WebRequest `
   -Uri "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/$commit.zip" `

@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 /** Verifies shared normalization and canonical identity vectors without reinterpretation. */
 class ConformanceVectorTest {
 
+    private static final String CONTRACTS_MARKER = "workshop/contracts";
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final CatalogDocumentParser parser = new CatalogDocumentParser(
             mapper,
@@ -158,10 +160,27 @@ class ConformanceVectorTest {
     }
 
     private static Path contract(String filename) {
-        return repositoryRoot().resolve("workshop/contracts").resolve(filename);
+        return repositoryRoot().resolve(CONTRACTS_MARKER).resolve(filename);
     }
 
+    /**
+     * Locates the repository root that owns the shared contracts by walking upward from the
+     * working directory until a directory containing {@code workshop/contracts} is found.
+     *
+     * <p>This file is mirrored byte-for-byte into {@code solutions/reference/java}, which sits
+     * two directories deeper than the legacy tree. A fixed relative parent therefore resolved
+     * correctly from one tree and silently to the wrong directory from the other; searching for
+     * the marker makes the same source correct from both. Failure is loud by design, because a
+     * silent wrong answer is what hid the original defect.
+     */
     static Path repositoryRoot() {
-        return Path.of("..").toAbsolutePath().normalize();
+        Path start = Path.of("").toAbsolutePath().normalize();
+        for (Path candidate = start; candidate != null; candidate = candidate.getParent()) {
+            if (Files.isDirectory(candidate.resolve(CONTRACTS_MARKER))) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Repository root was not found: no ancestor of " + start
+                + " contains a '" + CONTRACTS_MARKER + "' directory.");
     }
 }

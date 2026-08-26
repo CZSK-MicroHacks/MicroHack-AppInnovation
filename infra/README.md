@@ -80,6 +80,8 @@ outside the repository, replace every secure value, and set `resourceGroupName` 
 resource group you are deploying into — the template asserts the two agree:
 
 ```bash
+: "${RESOURCE_GROUP:?Set the resource group you are running what-if against}"
+
 AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
@@ -132,11 +134,21 @@ Deploy it after `github-cicd.bicep`, passing that template's `identityPrincipalI
 output:
 
 ```bash
-az deployment group create \
+: "${RESOURCE_GROUP:?Set the resource group holding the github-cicd deployment}"
+: "${CICD_DEPLOYMENT:?Set the infra/github-cicd.bicep deployment name}"
+
+WORKFLOW_IDENTITY_PRINCIPAL_ID=$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$CICD_DEPLOYMENT" \
+  --query properties.outputs.identityPrincipalId.value \
+  --output tsv)
+
+PERF_OUTPUTS=$(az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/perf-testing.bicep \
   --parameters workflowIdentityPrincipalId="$WORKFLOW_IDENTITY_PRINCIPAL_ID" \
-  --output json
+  --query properties.outputs \
+  --output json)
 ```
 
 It grants the workflow identity `Load Test Contributor` on the load test and
@@ -149,12 +161,21 @@ environment-specific. The facilitator sets it once, using an identity that holds
 `Key Vault Secrets Officer`:
 
 ```bash
+KEY_VAULT_NAME=$(jq -er '.keyVaultName.value' <<<"$PERF_OUTPUTS")
+: "${PERFTEST_API_KEY:?Set the performance-test API key; do not echo it or store it in the repository}"
+
 az keyvault secret set \
   --vault-name "$KEY_VAULT_NAME" \
   --name PERFTEST_API_KEY \
   --value "$PERFTEST_API_KEY" \
   --output none
 ```
+
+`KEY_VAULT_NAME` is the `keyVaultName` output of the deployment above, so the secret
+lands in the vault that deployment just created. `PERFTEST_API_KEY` is the only value
+here that is genuinely yours to supply, and it is guarded rather than defaulted — a
+default would publish a known key into a vault the workflow identity can read.
+`--output none` keeps the value off the terminal.
 
 Challenge 2 reads two values from this deployment: `loadTestResourceId` becomes
 `LOAD_TEST_RESOURCE_ID`, and the secret identifier

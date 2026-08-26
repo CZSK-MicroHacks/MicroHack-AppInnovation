@@ -237,10 +237,18 @@ def test_foundation_omits_unsupported_and_generalized_machinery(
     repo_root: Path,
 ) -> None:
     """The Terraform slice adds no portal switch, agents, policies, or rollback."""
-    terraform = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((repo_root / "baseInfra/terraform").glob("defender*.tf"))
-    ).lower()
+    # Naming the file rather than globbing for it: a glob that stops matching turns this
+    # whole contract into a vacuous pass, and the empty-string join would satisfy every
+    # assertion below.
+    slice_file = repo_root / "baseInfra/terraform/defender.tf"
+    assert slice_file.is_file(), (
+        f"{slice_file} is missing; the Defender foundation contract is unenforced"
+    )
+    terraform = slice_file.read_text(encoding="utf-8").lower()
+    assert len(terraform) > 500, (
+        "the Defender slice is too small to be the real thing; this guard proves "
+        "nothing against an emptied file"
+    )
 
     forbidden = (
         "serverless containers",
@@ -255,4 +263,7 @@ def test_foundation_omits_unsupported_and_generalized_machinery(
         "terraform destroy",
     )
     for value in forbidden:
-        assert value not in terraform
+        assert value not in terraform, (
+            f"the foundation slice reintroduced {value!r}; challenge 5 teaches the "
+            "portal-first path and this machinery pre-empts it"
+        )

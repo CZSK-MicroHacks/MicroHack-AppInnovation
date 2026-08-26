@@ -218,6 +218,9 @@ incident Activity Log window.
 Capture the exact healthy and drill revisions with:
 
 ```bash
+: "${HEALTHY_REVISION:?Set the retained healthy revision name}"
+: "${BAD_REVISION:?Set the drill revision you just created, named sre-bad- plus the commit prefix}"
+
 az rest --method get \
   --url "https://management.azure.com${APP_RESOURCE_ID}/revisions/${HEALTHY_REVISION}?api-version=2025-01-01" \
   > "$RAW/healthy-revision.json"

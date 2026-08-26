@@ -917,7 +917,7 @@ def _prepare_validator_bundle(
     return repository_root, evidence_path, evidence, handoff, observations
 
 
-def test_p6_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
+def test_registry_and_examples_match_frozen_schemas(repo_root: Path) -> None:
     """The shared-challenge registry and all three evidence examples remain executable."""
     contracts = _contracts(repo_root)
     registry = load_json(contracts / "shared-challenges.json")
@@ -992,7 +992,7 @@ def test_registry_validator_command_runs_from_acceptance_directory(
     }
 
 
-def test_p6_cicd_raw_fixtures_preserve_azure_response_shapes(
+def test_cicd_raw_fixtures_preserve_azure_response_shapes(
     repo_root: Path,
 ) -> None:
     """Sanitized raw fixtures retain RBAC and revision transition fields."""
@@ -1051,7 +1051,7 @@ def test_p6_cicd_raw_fixtures_preserve_azure_response_shapes(
         )
 
 
-def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> None:
+def test_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> None:
     """Load, CI/CD, and observability own exact nonoverlapping file sets."""
     registry = load_json(_contracts(repo_root) / "shared-challenges.json")
     challenges = registry["challenges"]
@@ -1213,7 +1213,7 @@ def test_p6_registry_freezes_disjoint_artifact_ownership(repo_root: Path) -> Non
         owned.update(files)
 
 
-def test_p6_registry_schema_rejects_cross_wired_stream_contracts(
+def test_registry_schema_rejects_cross_wired_stream_contracts(
     repo_root: Path,
 ) -> None:
     """A challenge cannot consume another stream's schema or validation command."""
@@ -1231,7 +1231,7 @@ def test_p6_registry_schema_rejects_cross_wired_stream_contracts(
         _validate(schema, registry)
 
 
-def test_p6_cicd_schema_rejects_invalid_all_plus_scope_enumeration(
+def test_cicd_schema_rejects_invalid_all_plus_scope_enumeration(
     repo_root: Path,
 ) -> None:
     """The Azure CLI `--all` audit cannot also declare a rejected scope."""
@@ -1251,7 +1251,7 @@ def test_p6_cicd_schema_rejects_invalid_all_plus_scope_enumeration(
         _validate(schema, evidence)
 
 
-def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
+def test_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
     """Freeze OIDC role scope, dual database signals, and workbook panels."""
     registry = load_json(_contracts(repo_root) / "shared-challenges.json")
     assert registry["consumes"] == {
@@ -1385,7 +1385,7 @@ def test_p6_identity_metrics_and_panels_are_exact(repo_root: Path) -> None:
     }
 
 
-def test_p6_observability_templates_bind_exact_query_inputs(repo_root: Path) -> None:
+def test_observability_templates_bind_exact_query_inputs(repo_root: Path) -> None:
     """Every frozen KQL template requires its authoritative identity parameters."""
     contract = load_json(_contracts(repo_root) / "observability-queries.json")
     queries = {item["id"]: item["template"] for item in contract["queries"]}
@@ -1429,7 +1429,7 @@ def test_p6_observability_templates_bind_exact_query_inputs(repo_root: Path) -> 
     )
 
 
-def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
+def test_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
     """Examples cannot self-attest without matching source, image, and revision data."""
     contracts = _contracts(repo_root)
     load = load_json(contracts / "load-test-evidence.example.json")
@@ -1575,7 +1575,7 @@ def test_p6_examples_bind_current_subjects_and_results(repo_root: Path) -> None:
         ),
     ],
 )
-def test_p6_schemas_reject_false_success(
+def test_schemas_reject_false_success(
     repo_root: Path,
     schema_name: str,
     example_name: str,
@@ -1596,7 +1596,7 @@ def test_p6_schemas_reject_false_success(
 
 
 @pytest.mark.parametrize("kind", ["load", "cicd", "observability"])
-def test_p6_validator_accepts_complete_handoff_bound_evidence(
+def test_validator_accepts_complete_handoff_bound_evidence(
     kind: str,
     tmp_path: Path,
     repo_root: Path,
@@ -1624,13 +1624,13 @@ def test_p6_validator_accepts_complete_handoff_bound_evidence(
     )
 
 
-def test_p6_load_contract_consumes_authoritative_p4_scale_rule(
+def test_load_contract_consumes_authoritative_p4_scale_rule(
     repo_root: Path,
 ) -> None:
     """Shared challenges must observe the existing Azure scale rule without replacing its revision."""
     registry = load_json(_contracts(repo_root) / "shared-challenges.json")
     load_example = load_json(_contracts(repo_root) / "load-test-evidence.example.json")
-    p4_environment = (repo_root / "infra/modules/environment.bicep").read_text(
+    environment_bicep = (repo_root / "infra/modules/environment.bicep").read_text(
         encoding="utf-8"
     )
 
@@ -1640,13 +1640,13 @@ def test_p6_load_contract_consumes_authoritative_p4_scale_rule(
         "concurrentRequests": 50,
     }
     assert load_example["scaleConfiguration"]["ruleName"] == "http"
-    assert "name: 'http'" in p4_environment
-    assert "concurrentRequests: '50'" in p4_environment
-    assert "minReplicas: 1" in p4_environment
-    assert "maxReplicas: 3" in p4_environment
+    assert "name: 'http'" in environment_bicep
+    assert "concurrentRequests: '50'" in environment_bicep
+    assert "minReplicas: 1" in environment_bicep
+    assert "maxReplicas: 3" in environment_bicep
 
 
-def test_p6_load_validator_rejects_self_attested_scale_out(
+def test_load_validator_rejects_self_attested_scale_out(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1674,7 +1674,7 @@ def test_p6_load_validator_rejects_self_attested_scale_out(
         )
 
 
-def test_p6_load_validator_rejects_unobserved_scale_configuration(
+def test_load_validator_rejects_unobserved_scale_configuration(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1698,7 +1698,7 @@ def test_p6_load_validator_rejects_unobserved_scale_configuration(
         )
 
 
-def test_p6_load_validator_rejects_boolean_scale_values(
+def test_load_validator_rejects_boolean_scale_values(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1722,7 +1722,7 @@ def test_p6_load_validator_rejects_boolean_scale_values(
         )
 
 
-def test_p6_load_validator_rejects_duration_timestamp_drift(
+def test_load_validator_rejects_duration_timestamp_drift(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1752,7 +1752,7 @@ def test_p6_load_validator_rejects_duration_timestamp_drift(
     "nonfinite_value",
     [float("nan"), float("inf"), float("-inf")],
 )
-def test_p6_load_validator_rejects_nonfinite_metric_points(
+def test_load_validator_rejects_nonfinite_metric_points(
     nonfinite_value: float,
     tmp_path: Path,
     repo_root: Path,
@@ -1777,7 +1777,7 @@ def test_p6_load_validator_rejects_nonfinite_metric_points(
         )
 
 
-def test_p6_load_validator_rejects_unrelated_handoff_resources(
+def test_load_validator_rejects_unrelated_handoff_resources(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1802,7 +1802,7 @@ def test_p6_load_validator_rejects_unrelated_handoff_resources(
         )
 
 
-def test_p6_load_validator_rejects_unrelated_successful_run(
+def test_load_validator_rejects_unrelated_successful_run(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1828,7 +1828,7 @@ def test_p6_load_validator_rejects_unrelated_successful_run(
         )
 
 
-def test_p6_load_validator_rejects_non_load_testing_resource_types(
+def test_load_validator_rejects_non_load_testing_resource_types(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1855,7 +1855,7 @@ def test_p6_load_validator_rejects_non_load_testing_resource_types(
         )
 
 
-def test_p6_load_validator_rejects_changed_test_artifacts(
+def test_load_validator_rejects_changed_test_artifacts(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1879,7 +1879,7 @@ def test_p6_load_validator_rejects_changed_test_artifacts(
         )
 
 
-def test_p6_load_validator_recomputes_normalized_raw_capture(
+def test_load_validator_recomputes_normalized_raw_capture(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1917,7 +1917,7 @@ def test_p6_load_validator_recomputes_normalized_raw_capture(
         )
 
 
-def test_p6_load_validator_rejects_report_predating_recovery(
+def test_load_validator_rejects_report_predating_recovery(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1943,7 +1943,7 @@ def test_p6_load_validator_rejects_report_predating_recovery(
         )
 
 
-def test_p6_cicd_validator_rejects_unrelated_candidate(
+def test_cicd_validator_rejects_unrelated_candidate(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1969,7 +1969,7 @@ def test_p6_cicd_validator_rejects_unrelated_candidate(
         )
 
 
-def test_p6_cicd_validator_rejects_wrong_stack_workflow(
+def test_cicd_validator_rejects_wrong_stack_workflow(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1995,7 +1995,7 @@ def test_p6_cicd_validator_rejects_wrong_stack_workflow(
         )
 
 
-def test_p6_cicd_validator_rejects_unrelated_github_run(
+def test_cicd_validator_rejects_unrelated_github_run(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2019,7 +2019,7 @@ def test_p6_cicd_validator_rejects_unrelated_github_run(
         )
 
 
-def test_p6_cicd_validator_separates_control_and_source_commits(
+def test_cicd_validator_separates_control_and_source_commits(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2047,7 +2047,7 @@ def test_p6_cicd_validator_separates_control_and_source_commits(
         )
 
 
-def test_p6_cicd_validator_rejects_handoff_digest_drift(
+def test_cicd_validator_rejects_handoff_digest_drift(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2070,7 +2070,7 @@ def test_p6_cicd_validator_rejects_handoff_digest_drift(
         )
 
 
-def test_p6_cicd_validator_binds_handoff_to_control_commit(
+def test_cicd_validator_binds_handoff_to_control_commit(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2097,7 +2097,7 @@ def test_p6_cicd_validator_binds_handoff_to_control_commit(
         )
 
 
-def test_p6_cicd_validator_rejects_image_commit_divergence(
+def test_cicd_validator_rejects_image_commit_divergence(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2126,7 +2126,7 @@ def test_p6_cicd_validator_rejects_image_commit_divergence(
         )
 
 
-def test_p6_cicd_validator_rejects_candidate_suffix_divergence(
+def test_cicd_validator_rejects_candidate_suffix_divergence(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2160,7 +2160,7 @@ def test_p6_cicd_validator_rejects_candidate_suffix_divergence(
         )
 
 
-def test_p6_cicd_validator_rejects_unrelated_smoke_endpoints(
+def test_cicd_validator_rejects_unrelated_smoke_endpoints(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2191,7 +2191,7 @@ def test_p6_cicd_validator_rejects_unrelated_smoke_endpoints(
         )
 
 
-def test_p6_cicd_validator_rejects_unrelated_transition_endpoints(
+def test_cicd_validator_rejects_unrelated_transition_endpoints(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2217,7 +2217,7 @@ def test_p6_cicd_validator_rejects_unrelated_transition_endpoints(
         )
 
 
-def test_p6_cicd_validator_rejects_cross_subscription_identity_enumeration(
+def test_cicd_validator_rejects_cross_subscription_identity_enumeration(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2267,7 +2267,7 @@ def test_p6_cicd_validator_rejects_cross_subscription_identity_enumeration(
         )
 
 
-def test_p6_cicd_validator_rejects_roles_for_another_principal(
+def test_cicd_validator_rejects_roles_for_another_principal(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2293,7 +2293,7 @@ def test_p6_cicd_validator_rejects_roles_for_another_principal(
         )
 
 
-def test_p6_cicd_validator_rejects_broader_principal_assignments(
+def test_cicd_validator_rejects_broader_principal_assignments(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2328,7 +2328,7 @@ def test_p6_cicd_validator_rejects_broader_principal_assignments(
         )
 
 
-def test_p6_cicd_validator_rejects_role_ids_outside_declared_scope(
+def test_cicd_validator_rejects_role_ids_outside_declared_scope(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2356,7 +2356,7 @@ def test_p6_cicd_validator_rejects_role_ids_outside_declared_scope(
         )
 
 
-def test_p6_cicd_validator_rejects_raw_role_audit_divergence(
+def test_cicd_validator_rejects_raw_role_audit_divergence(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2395,7 +2395,7 @@ def test_p6_cicd_validator_rejects_raw_role_audit_divergence(
         )
 
 
-def test_p6_cicd_validator_requires_raw_role_definition_resource_ids(
+def test_cicd_validator_requires_raw_role_definition_resource_ids(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2435,7 +2435,7 @@ def test_p6_cicd_validator_requires_raw_role_definition_resource_ids(
         )
 
 
-def test_p6_cicd_validator_rejects_hardcoded_revision_state(
+def test_cicd_validator_rejects_hardcoded_revision_state(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2471,7 +2471,7 @@ def test_p6_cicd_validator_rejects_hardcoded_revision_state(
         )
 
 
-def test_p6_cicd_validator_rejects_replayed_workflow_attempt(
+def test_cicd_validator_rejects_replayed_workflow_attempt(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2495,7 +2495,7 @@ def test_p6_cicd_validator_rejects_replayed_workflow_attempt(
         )
 
 
-def test_p6_cicd_validator_rejects_mutable_job_name_replay(
+def test_cicd_validator_rejects_mutable_job_name_replay(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2519,7 +2519,7 @@ def test_p6_cicd_validator_rejects_mutable_job_name_replay(
         )
 
 
-def test_p6_cicd_validator_rejects_report_predating_rollback(
+def test_cicd_validator_rejects_report_predating_rollback(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2542,7 +2542,7 @@ def test_p6_cicd_validator_rejects_report_predating_rollback(
         )
 
 
-def test_p6_cicd_validator_rejects_promotion_before_approval(
+def test_cicd_validator_rejects_promotion_before_approval(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2568,7 +2568,7 @@ def test_p6_cicd_validator_rejects_promotion_before_approval(
         )
 
 
-def test_p6_cicd_validator_requires_approval_before_production_job(
+def test_cicd_validator_requires_approval_before_production_job(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2594,7 +2594,7 @@ def test_p6_cicd_validator_requires_approval_before_production_job(
         )
 
 
-def test_p6_cicd_validator_requires_guard_before_promotion(
+def test_cicd_validator_requires_guard_before_promotion(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2621,7 +2621,7 @@ def test_p6_cicd_validator_requires_guard_before_promotion(
         )
 
 
-def test_p6_observability_validator_rejects_arbitrary_queries(
+def test_observability_validator_rejects_arbitrary_queries(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2654,7 +2654,7 @@ def test_p6_observability_validator_rejects_arbitrary_queries(
     "unsupported_shape",
     ["azure-metrics-v2", "revision-dimension", "maximum-aggregation"],
 )
-def test_p6_observability_validator_rejects_unsupported_aca_metric_queries(
+def test_observability_validator_rejects_unsupported_aca_metric_queries(
     unsupported_shape: str,
     tmp_path: Path,
     repo_root: Path,
@@ -2702,7 +2702,7 @@ def test_p6_observability_validator_rejects_unsupported_aca_metric_queries(
         )
 
 
-def test_p6_observability_validator_rejects_unrelated_workbook_content(
+def test_observability_validator_rejects_unrelated_workbook_content(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2731,7 +2731,7 @@ def test_p6_observability_validator_rejects_unrelated_workbook_content(
         )
 
 
-def test_p6_observability_validator_rejects_cross_workspace_panels(
+def test_observability_validator_rejects_cross_workspace_panels(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2765,7 +2765,7 @@ def test_p6_observability_validator_rejects_cross_workspace_panels(
         )
 
 
-def test_p6_observability_validator_rejects_nonfinite_nested_workbook_json(
+def test_observability_validator_rejects_nonfinite_nested_workbook_json(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2796,7 +2796,7 @@ def test_p6_observability_validator_rejects_nonfinite_nested_workbook_json(
         )
 
 
-def test_p6_observability_validator_rejects_unrelated_workbook_source(
+def test_observability_validator_rejects_unrelated_workbook_source(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2825,7 +2825,7 @@ def test_p6_observability_validator_rejects_unrelated_workbook_source(
         )
 
 
-def test_p6_observability_validator_rejects_unrelated_kql_source(
+def test_observability_validator_rejects_unrelated_kql_source(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2854,7 +2854,7 @@ def test_p6_observability_validator_rejects_unrelated_kql_source(
         )
 
 
-def test_p6_observability_validator_rejects_nested_workbook_queries(
+def test_observability_validator_rejects_nested_workbook_queries(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2904,7 +2904,7 @@ def test_p6_observability_validator_rejects_nested_workbook_queries(
         )
 
 
-def test_p6_observability_validator_rejects_invalid_workbook_query_context(
+def test_observability_validator_rejects_invalid_workbook_query_context(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2935,7 +2935,7 @@ def test_p6_observability_validator_rejects_invalid_workbook_query_context(
         )
 
 
-def test_p6_observability_validator_rejects_boolean_workbook_query_type(
+def test_observability_validator_rejects_boolean_workbook_query_type(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2966,7 +2966,7 @@ def test_p6_observability_validator_rejects_boolean_workbook_query_type(
         )
 
 
-def test_p6_observability_validator_rejects_wrong_workbook_source_id(
+def test_observability_validator_rejects_wrong_workbook_source_id(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2992,7 +2992,7 @@ def test_p6_observability_validator_rejects_wrong_workbook_source_id(
         )
 
 
-def test_p6_observability_validator_rejects_scalar_zero_results(
+def test_observability_validator_rejects_scalar_zero_results(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3016,7 +3016,7 @@ def test_p6_observability_validator_rejects_scalar_zero_results(
         )
 
 
-def test_p6_observability_validator_rejects_boolean_query_values(
+def test_observability_validator_rejects_boolean_query_values(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3046,7 +3046,7 @@ def test_p6_observability_validator_rejects_boolean_query_values(
     "nonfinite_value",
     [float("nan"), float("inf"), float("-inf")],
 )
-def test_p6_observability_validator_rejects_nonfinite_query_values(
+def test_observability_validator_rejects_nonfinite_query_values(
     nonfinite_value: float,
     tmp_path: Path,
     repo_root: Path,
@@ -3073,7 +3073,7 @@ def test_p6_observability_validator_rejects_nonfinite_query_values(
         )
 
 
-def test_p6_observability_validator_rejects_integer_enabled_flags(
+def test_observability_validator_rejects_integer_enabled_flags(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3097,7 +3097,7 @@ def test_p6_observability_validator_rejects_integer_enabled_flags(
         )
 
 
-def test_p6_observability_validator_rejects_rows_outside_query_window(
+def test_observability_validator_rejects_rows_outside_query_window(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3121,7 +3121,7 @@ def test_p6_observability_validator_rejects_rows_outside_query_window(
         )
 
 
-def test_p6_validator_rejects_symlinked_observations(
+def test_validator_rejects_symlinked_observations(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3147,7 +3147,7 @@ def test_p6_validator_rejects_symlinked_observations(
         )
 
 
-def test_p6_validator_rejects_symlinked_handoff_references(
+def test_validator_rejects_symlinked_handoff_references(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3173,7 +3173,7 @@ def test_p6_validator_rejects_symlinked_handoff_references(
         )
 
 
-def test_p6_validator_rejects_nested_handoff_symlinks(
+def test_validator_rejects_nested_handoff_symlinks(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3209,7 +3209,7 @@ def test_p6_validator_rejects_nested_handoff_symlinks(
         )
 
 
-def test_p6_validator_rejects_symlinks_inside_runtime_artifact_directories(
+def test_validator_rejects_symlinks_inside_runtime_artifact_directories(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3242,7 +3242,7 @@ def test_p6_validator_rejects_symlinks_inside_runtime_artifact_directories(
         )
 
 
-def test_p6_validator_rejects_intermediate_symlink_components(
+def test_validator_rejects_intermediate_symlink_components(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3267,7 +3267,7 @@ def test_p6_validator_rejects_intermediate_symlink_components(
         )
 
 
-def test_p6_validator_rejects_symlinked_top_level_report(
+def test_validator_rejects_symlinked_top_level_report(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3291,7 +3291,7 @@ def test_p6_validator_rejects_symlinked_top_level_report(
         )
 
 
-def test_p6_validator_rejects_substituted_contract_directories(
+def test_validator_rejects_substituted_contract_directories(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3314,7 +3314,7 @@ def test_p6_validator_rejects_substituted_contract_directories(
         )
 
 
-def test_p6_validator_rejects_symlinks_inside_contract_tree(
+def test_validator_rejects_symlinks_inside_contract_tree(
     tmp_path: Path,
     repo_root: Path,
     monkeypatch: pytest.MonkeyPatch,

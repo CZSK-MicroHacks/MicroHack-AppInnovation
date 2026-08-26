@@ -161,6 +161,12 @@ def test_challenge_zero_proves_both_baselines_and_one_selection() -> None:
         f"workshop/contracts/behavior-contract.json@{behavior_version}"
     )
 
+    # A prose phrase must survive the paragraph being re-wrapped: a line break inside
+    # "facilitator authorizes" is a formatting change, not a missing warning, and failing
+    # a correct document is how a team learns to delete the check. Commands stay exact --
+    # "az vm deallocate" split across a newline is broken code, not re-wrapped prose.
+    flowed = " ".join(challenge.split())
+
     for required in (
         "dotnet-sqlserver",
         "java-postgresql",
@@ -170,9 +176,11 @@ def test_challenge_zero_proves_both_baselines_and_one_selection() -> None:
         "20",
         "evidence/ch00-selection.json",
         "az vm deallocate",
-        "facilitator authorizes",
     ):
         assert required in challenge
+
+    for required in ("facilitator authorizes",):
+        assert required in flowed
 
     selection_record = _powershell_block_containing(
         challenge, "$selection = [ordered]@{"
@@ -318,15 +326,26 @@ def test_stale_duplicates_and_broad_cleanup_are_absent() -> None:
     assert "../challenges/ch00/README.md" in base_infrastructure
 
 
+LOCAL_LINK_FLOOR = 25
+
+
 def test_reconciled_navigation_has_no_broken_local_links() -> None:
     """Ensure every local link introduced by final navigation resolves in the repository."""
     broken: list[str] = []
+    checked = 0
 
     for source in _active_guide_paths():
         relative_path = source.relative_to(ROOT).as_posix()
         assert source.is_file(), relative_path
         for target in _local_link_targets(source):
+            checked += 1
             if not target.is_relative_to(ROOT) or not target.exists():
                 broken.append(f"{relative_path}: {target}")
 
+    # An empty link set passes this guard as happily as a correct one, so the walk
+    # has to prove it happened before its silence means anything.
+    assert checked >= LOCAL_LINK_FLOOR, (
+        f"only {checked} local links were resolved; the link extractor has stopped "
+        "finding navigation that this guard is supposed to be protecting"
+    )
     assert not broken, "\n".join(broken)

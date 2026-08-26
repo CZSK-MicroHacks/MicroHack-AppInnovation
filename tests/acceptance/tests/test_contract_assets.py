@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import gzip
 import io
@@ -9,6 +10,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -39,10 +41,21 @@ def _validate(schema: dict, instance: object) -> None:
 
 
 def test_contract_schemas_are_valid(repo_root: Path) -> None:
-    """Require every checked-in JSON Schema to be a valid Draft 2020-12 schema."""
+    """Require every checked-in JSON Schema to be a valid Draft 2020-12 schema.
+
+    The count is asserted because this guard has no offender list to be empty: if the
+    glob stops matching, every schema in the workshop goes unchecked and the test still
+    reports green.
+    """
     contracts = repo_root / "workshop" / "contracts"
-    for path in contracts.glob("*.schema.json"):
+    checked = 0
+    for path in sorted(contracts.glob("*.schema.json")):
         Draft202012Validator.check_schema(load_json(path))
+        checked += 1
+    assert checked >= 35, (
+        f"only {checked} contract schemas were validated; the workshop has many more, "
+        "so this guard is not running against the real contracts directory"
+    )
 
 
 def test_catalog_and_manifest_match_schemas(repo_root: Path) -> None:
@@ -185,7 +198,7 @@ def test_challenge_path_registry_rejects_cross_slice_mutations(
         _validate(schema, mutated)
 
 
-def test_p4_target_and_migration_examples_match_schemas(repo_root: Path) -> None:
+def test_target_and_migration_examples_match_schemas(repo_root: Path) -> None:
     """Require both target stages and database migration paths to remain valid."""
     contracts = repo_root / "workshop" / "contracts"
     target_schema = load_json(contracts / "azure-target-output.schema.json")
@@ -264,7 +277,7 @@ def test_p4_target_and_migration_examples_match_schemas(repo_root: Path) -> None
         _validate(operation_schema, result)
 
 
-def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
+def test_migration_cli_surface_is_exact(repo_root: Path) -> None:
     """Freeze command names, exit codes, and non-destructive safety boundaries."""
     contract = load_json(
         repo_root / "workshop" / "contracts" / "migration-cli-contract.json"
@@ -506,7 +519,7 @@ def test_p4_migration_cli_surface_is_exact(repo_root: Path) -> None:
         _validate(schema, invalid)
 
 
-def test_p4_migration_error_protocol_is_exact(repo_root: Path) -> None:
+def test_migration_error_protocol_is_exact(repo_root: Path) -> None:
     """Require typed, single-line failures with stable exit-code mappings."""
     contracts = repo_root / "workshop" / "contracts"
     schema = load_json(contracts / "migration-error.schema.json")
@@ -532,7 +545,7 @@ def test_p4_migration_error_protocol_is_exact(repo_root: Path) -> None:
             _validate(schema, invalid)
 
 
-def test_p4_contracts_reject_incompatible_modes(repo_root: Path) -> None:
+def test_contracts_reject_incompatible_modes(repo_root: Path) -> None:
     """Reject placeholder apps, SQL passwords, and mismatched storage authentication."""
     contracts = repo_root / "workshop" / "contracts"
     target_schema = load_json(contracts / "azure-target-output.schema.json")
@@ -1580,7 +1593,7 @@ def test_provisioner_installs_jq_exactly_as_the_lock_pins_it(repo_root: Path) ->
     script = _provisioner(repo_root)
     for pinned in (jq["version"], jq["url"], jq["sha256"]):
         assert pinned in script
-    assert "jq version verification failed" in script
+    assert "jq version verification failed" in " ".join(script.split())
 
 
 def test_provisioner_puts_git_bash_utilities_on_path(repo_root: Path) -> None:
@@ -1611,7 +1624,7 @@ def test_reprovisioning_preserves_participant_git_history(repo_root: Path) -> No
     the image tags and handoff bind to them. Replacing the tree would destroy them.
     """
     script = _provisioner(repo_root)
-    assert "leaving participant work untouched" in script
+    assert "leaving participant work untouched" in " ".join(script.split())
     assert "$Previous is deliberately kept" in script
 
 
@@ -1690,10 +1703,12 @@ def test_every_markdown_local_link_resolves(repo_root: Path) -> None:
     """
     skipped_roots = {".git", "node_modules", ".venv", "__pycache__"}
     broken: list[str] = []
+    checked = 0
 
     for document in sorted(repo_root.rglob("*.md")):
         if any(part in skipped_roots for part in document.parts):
             continue
+        checked += 1
         relative = document.relative_to(repo_root).as_posix()
         for match in re.finditer(r"\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
             target = match.group(1).split("#")[0].strip()
@@ -1705,6 +1720,7 @@ def test_every_markdown_local_link_resolves(repo_root: Path) -> None:
             if not (document.parent / target).resolve().exists():
                 broken.append(f"{relative} -> {target}")
 
+    assert checked >= 50, f"only {checked} documents scanned; the walk is not running"
     assert not broken, "unresolved local links:\n" + "\n".join(broken)
 
 
@@ -1741,15 +1757,18 @@ def test_participant_template_is_resource_group_scoped(repo_root: Path) -> None:
     )
 
     offenders: list[str] = []
+    checked = 0
     for document in sorted(repo_root.rglob("*.md")):
         if any(part in {".git", "node_modules", ".venv"} for part in document.parts):
             continue
+        checked += 1
         text = document.read_text(encoding="utf-8")
         for match in re.finditer(r"az deployment sub ", text):
             window = text[match.start():match.start() + 400]
             if "main.bicep" in window:
                 offenders.append(document.relative_to(repo_root).as_posix())
 
+    assert checked >= 50, f"only {checked} documents scanned; the walk is not running"
     assert not offenders, (
         "subscription-scope deployment of the participant template:\n"
         + "\n".join(sorted(set(offenders)))
@@ -1807,10 +1826,19 @@ def test_protected_parameter_paths_contain_no_unresolved_placeholder(
     throws the moment a participant runs it.
     """
     offenders: list[str] = []
+    seen = 0
     for relative in CH01_RUNBOOKS:
         for match in PROTECTED_PATH.findall((repo_root / relative).read_text()):
+            seen += 1
             if "<" in match or ">" in match:
                 offenders.append(f"{relative}: {match}")
+    # 28 paths match today. A regex that quietly stops matching would leave this
+    # guard reporting success over an empty enumeration, which is the exact way
+    # the placeholder it was written to catch reached participants in the first place.
+    assert seen >= PROTECTED_PATH_FLOOR, (
+        f"only {seen} protected parameter paths were examined across "
+        f"{len(CH01_RUNBOOKS)} runbooks; the pattern has stopped matching"
+    )
     assert not offenders, (
         "protected parameter paths must be literal, not placeholders: "
         + "; ".join(offenders)
@@ -1841,20 +1869,47 @@ def test_protected_parameter_files_have_a_producer(repo_root: Path) -> None:
 
 
 def test_performance_api_key_is_documented_somewhere(repo_root: Path) -> None:
-    """Require the hard-asserted application secret to be explained in prose.
+    """Require the hard-asserted application secret to be explained where it is needed.
 
     ``infra/main.bicep`` fails the application stage outright when
     ``performanceApiKey`` is empty, so a parameter nobody documents is a stop.
+
+    "Somewhere" used to mean any Markdown file in the repository, which the internal
+    build log satisfies on its own -- the guard would stay green while every reader-facing
+    document lost the parameter. The facilitator supplies the value and the Challenge 1
+    runbooks pass it, so those are the documents that must carry it.
     """
-    documented = [
+    # The build log records what was done, not what a reader must do; it can never be
+    # the thing that satisfies a documentation requirement.
+    internal = {"docs/ImplementationLog.md", "docs/RewritePlan.md"}
+
+    required = ["docs/Facilitator.md", "infra/README.md"] + [
+        f"solutions/{chapter}/{stack}/README.md"
+        for chapter in (
+            "ch01-manual",
+            "ch01-copilot-rewrite",
+            "ch01-copilot-modernization",
+        )
+        for stack in ("dotnet", "java")
+    ]
+    missing = [
+        relative
+        for relative in required
+        if "performanceApiKey" not in (repo_root / relative).read_text(encoding="utf-8")
+    ]
+    assert not missing, (
+        "infra/main.bicep asserts performanceApiKey is present for the application "
+        "stage, but these reader-facing documents never mention it: "
+        + ", ".join(missing)
+    )
+
+    documented = {
         path.relative_to(repo_root).as_posix()
         for path in repo_root.rglob("*.md")
-        if ".git" not in path.parts and "performanceApiKey" in path.read_text()
-    ]
-    assert documented, (
-        "infra/main.bicep asserts performanceApiKey is present for the application "
-        "stage, but no Markdown document mentions it"
-    )
+        if not set(path.parts) & {".git", ".venv", "node_modules"}
+        and "performanceApiKey" in path.read_text(encoding="utf-8")
+    }
+    assert documented - internal, "only internal build documents mention it"
 
 
 def test_recovery_time_lands_in_an_evidence_file(repo_root: Path) -> None:
@@ -1959,15 +2014,29 @@ def test_no_document_describes_the_participant_template_as_subscription_scoped(
 
 
 def test_participant_chapters_name_the_resource_group_parameter(repo_root: Path) -> None:
-    """Require the chapters to mention the parameter the template asserts on."""
-    mentions = [
+    """Require every chapter that deploys the template to name the parameter it asserts.
+
+    ``infra/main.bicep`` asserts ``resourceGroupName`` matches the group it is deployed
+    into, so a participant who never sees the parameter meets that assertion as an
+    error message. Each Challenge 1 path deploys, so each must name it -- checking that
+    *some* chapter does would let three of the four paths go silent.
+    """
+    deploying = sorted(
+        path
+        for path in (repo_root / "challenges").glob("ch01*/README.md")
+    )
+    assert len(deploying) == 4, (
+        f"expected the four Challenge 1 paths, found {len(deploying)}: "
+        f"{[path.parent.name for path in deploying]}"
+    )
+    silent = [
         path.relative_to(repo_root).as_posix()
-        for path in (repo_root / "challenges").rglob("*.md")
-        if "resourceGroupName" in path.read_text()
+        for path in deploying
+        if "resourceGroupName" not in path.read_text(encoding="utf-8")
     ]
-    assert mentions, (
-        "infra/main.bicep requires and asserts resourceGroupName, but no participant "
-        "chapter mentions it"
+    assert not silent, (
+        "infra/main.bicep requires and asserts resourceGroupName, but these chapters "
+        "never mention it: " + ", ".join(silent)
     )
 
 
@@ -1982,9 +2051,26 @@ def test_template_binds_migration_source_to_the_participant_group(
     )
 
 
+# Thirteen chapter READMEs today. A floor, not an equality: adding a chapter must not
+# fail the build, but losing the walk must.
+CHAPTER_README_FLOOR = 13
+
+
 def _chapter_readmes(repo_root: Path) -> list[Path]:
-    """Return every participant-facing chapter README, in stable order."""
-    return sorted((repo_root / "challenges").rglob("README.md"))
+    """Return every participant-facing chapter README, in stable order.
+
+    The floor is the point of this helper. Both callers assert the *absence* of a
+    defect across the chapters, and an enumeration that returns nothing satisfies an
+    absence trivially: rename ``challenges/`` and the two guards protecting the
+    bash-in-PowerShell class -- blocking when it was found -- both go green while
+    checking nothing at all.
+    """
+    readmes = sorted((repo_root / "challenges").rglob("README.md"))
+    assert len(readmes) >= CHAPTER_README_FLOOR, (
+        f"found {len(readmes)} chapter READMEs, expected at least {CHAPTER_README_FLOOR}; "
+        "the chapters have moved and every guard built on this walk is now vacuous"
+    )
+    return readmes
 
 
 def test_chapters_using_bash_state_which_shell_to_use(repo_root: Path) -> None:
@@ -2233,7 +2319,12 @@ def test_ch01_chapters_document_the_source_commit_override(repo_root):
 
         # The only true statement about `protected` and `sourceCommit` together is
         # that the field is absent on purpose. Any sentence pairing them must say so.
-        for sentence in re.findall(r"[^.\n]*sourcecommit[^.\n]*", normalized):
+        sentences = re.findall(r"[^.\n]*sourcecommit[^.\n]*", normalized)
+        assert len(sentences) >= SOURCE_COMMIT_SENTENCE_FLOOR, (
+            f"{slug}: only {len(sentences)} sentences mention sourcecommit; the "
+            "sentence split has stopped finding the prose it audits"
+        )
+        for sentence in sentences:
             if "protected" not in sentence:
                 continue
             assert re.search(
@@ -2294,6 +2385,7 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
     executable = {"bash", "sh", "shell", "console", "powershell", "pwsh", ""}
 
     offenders: list[str] = []
+    examined = 0
     for markdown in sorted(repo_root.rglob("*.md")):
         parts = markdown.relative_to(repo_root).parts
         if set(parts) & {".git", "node_modules", ".venv", "bin", "obj", "target"}:
@@ -2305,12 +2397,17 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
         for language, body in _fenced_blocks(markdown.read_text(encoding="utf-8")):
             if language.lower() not in executable:
                 continue
+            examined += 1
             if not invocation.search(body):
                 continue
             if establishes_cwd.search(body):
                 continue
             offenders.append(f"{'/'.join(parts)} ({language or 'plain'})")
 
+    assert examined >= 40, (
+        f"only {examined} executable fences examined; the fence filter is stale and "
+        "this guard would pass on a repository full of uncd'd suite invocations"
+    )
     assert not offenders, (
         "these blocks invoke the acceptance suite without a cd inside the block: "
         + ", ".join(offenders)
@@ -2342,9 +2439,11 @@ def test_shell_specific_blocks_declare_their_language(repo_root):
         r"\b(ConvertFrom-Json|ConvertTo-Json|Invoke-WebRequest|Invoke-RestMethod"
         r"|New-Item|Test-Path|Resolve-Path|Get-Content|Set-Content|Write-Host)\b"
     )
+    inspected = 0
     for rel in ("docs/Facilitator.md", "docs/Demo.md"):
         text = (repo_root / rel).read_text(encoding="utf-8")
         for index, (language, body) in enumerate(_fenced_blocks(text)):
+            inspected += 1
             lowered = language.lower()
             if powershell_only.search(body):
                 assert lowered in {"powershell", "pwsh"}, (
@@ -2358,6 +2457,10 @@ def test_shell_specific_blocks_declare_their_language(repo_root):
                     f"{rel} block {index} is fenced as {language} but uses "
                     "backslash line continuations, which PowerShell cannot parse"
                 )
+    assert inspected >= FENCED_BLOCK_FLOOR, (
+        f"only {inspected} fenced blocks were inspected across the two mixed-host "
+        "documents; the fence parser has stopped seeing them"
+    )
 
 
 def test_lead_time_is_labelled_as_the_interval_it_measures(repo_root):
@@ -2572,37 +2675,83 @@ def test_ci_explains_why_it_builds_with_a_daemon(repo_root: Path) -> None:
     )
 
 
-def test_reference_runbooks_contain_no_unresolved_placeholders(repo_root: Path) -> None:
-    """Solution runbooks must be executable as printed, not templates to fill in.
+#: Floors for the repo-wide Markdown walk. A glob list was tried first and rejected: it
+#: silently stopped covering anything that moved, and `docs/*.md` would not have
+#: followed `docs/` gaining a subdirectory. Asking git for every Markdown file it knows
+#: about cannot go stale that way.
+PLACEHOLDER_DOCUMENT_FLOOR = 50
+PLACEHOLDER_BLOCK_FLOOR = 240
 
-    A `<placeholder>` inside a solution's code fence fails at the point a facilitator is
-    least able to recover — mid-migration, after the deployment and image build. Every
-    value these blocks need is already reachable from the provisioned environment or the
-    validated target output, so a placeholder is a gap rather than a necessity.
+
+def test_every_command_block_placeholder_names_who_supplies_it(repo_root: Path) -> None:
+    """A placeholder in a runnable block must say who supplies the value.
+
+    An angle-bracket placeholder fails at the point a reader is least able to recover --
+    mid-migration, after the deployment and the image build. Most values these blocks
+    need are already reachable from the provisioned environment, so a placeholder is
+    usually a gap. The ones that are genuinely unknowable share a single convention:
+    they lead with the party who supplies them, or they name a secret that would be a
+    worse bug to print literally. Anything else is an unfinished sentence.
+
+    The detector is deliberately wider than the convention it enforces. An earlier
+    version matched only lowercase, hyphenated names, which made it blind to a
+    placeholder carrying a capital letter, a dot, a pipe or a slash -- and two such
+    placeholders were living inside the very tree it claimed to protect. A guard that
+    can only see compliant spellings is a guard that reports on itself.
     """
-    # Two placeholders are legitimate: a value only the facilitator can know, and a
-    # secret the reader must choose. Printing a literal secret would be the worse bug.
+    placeholder = re.compile(r"<[A-Za-z][A-Za-z0-9._|/ -]*>")
     permitted = re.compile(
-        r"<(?:facilitator|your|owner)[\w-]*>|<[\w-]*(?:key|password|secret|token|user)>",
+        r"<(?:facilitator|your|owner)[\w|./ -]*>|<[\w|./ -]*(?:key|password|secret|token|user)>",
         re.I,
     )
-    placeholder = re.compile(r"<[a-z][a-z0-9-]*>")
+    # A pipe-separated placeholder is an enumeration, not a blank: it prints every legal
+    # value at the point of use, so the failure this guard exists to prevent -- a reader
+    # facing a value they cannot determine -- cannot happen. Naming a supplier instead
+    # would remove information. The pipe is mandatory, so this can never match a
+    # single-token blank.
+    choice = re.compile(r"<[A-Za-z0-9][A-Za-z0-9._/-]*(?:\|[A-Za-z0-9][A-Za-z0-9._/-]*)+>")
+
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
 
     offenders: list[str] = []
-    for markdown in sorted(repo_root.glob("solutions/**/README.md")):
-        for language, block in _fenced_blocks(markdown.read_text(encoding="utf-8")):
+    documents = 0
+    blocks = 0
+    for relative in [path for path in listing.split("\0") if path]:
+        try:
+            content = (repo_root / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        documents += 1
+        for language, block in _fenced_blocks(content):
             if language.lower() not in {"bash", "sh", "shell", "powershell", "pwsh"}:
                 continue
+            blocks += 1
             for line in block.splitlines():
-                # Redirections and comparisons are not placeholders.
+                # Here-strings, redirections and comparisons are not placeholders.
                 if "<<" in line or "-lt" in line or "->" in line:
                     continue
-                for found in placeholder.findall(permitted.sub("", line)):
-                    rel = markdown.relative_to(repo_root)
-                    offenders.append(f"{rel}: {found} in `{line.strip()[:70]}`")
+                remaining = choice.sub("", permitted.sub("", line))
+                for found in placeholder.findall(remaining):
+                    offenders.append(f"{relative}: {found} in `{line.strip()[:70]}`")
 
+    assert documents >= PLACEHOLDER_DOCUMENT_FLOOR, (
+        f"only {documents} Markdown documents were read, below the floor of "
+        f"{PLACEHOLDER_DOCUMENT_FLOOR}; this guard is not looking where it claims to"
+    )
+    assert blocks >= PLACEHOLDER_BLOCK_FLOOR, (
+        f"only {blocks} command fences were examined, below the floor of "
+        f"{PLACEHOLDER_BLOCK_FLOOR}; the language filter is stale"
+    )
     assert not offenders, (
-        "solution runbooks must run as printed; unresolved placeholders: "
+        "every placeholder in a runnable block must name who supplies the value -- lead "
+        "with `facilitator-`, `your-` or `owner-`, name a secret, or list the legal "
+        "values pipe-separated; these do none of those: "
         + "; ".join(sorted(set(offenders)))
     )
 
@@ -2623,13 +2772,16 @@ def test_demo_steps_claimed_cold_runnable_have_a_checked_in_fixture(repo_root: P
 
     missing = sorted(path for path in referenced if not (repo_root / path).exists())
     named_fixtures = sorted(
-        set(re.findall(r"workshop/contracts/fixtures/[\w./-]+\.json", demo))
+        set(re.findall(r"workshop/contracts/[\w./-]+\.json", demo))
     )
     absent = [name for name in named_fixtures if not (repo_root / name).exists()]
     assert not absent, f"the demo names substitute fixtures that do not exist: {absent}"
     # Counting fixtures against gaps lets five unrelated fixtures "cover" five unrelated
     # gaps, so each missing path must be matched by name. One fixture is deliberately
     # renamed on the way into the SRE Agent bundle; that alias is declared, not inferred.
+    # The pattern above deliberately does not require a ``fixtures/`` path segment: it
+    # used to, which made the substitute named beside step 4 invisible and left this
+    # guard passing on the strength of an unrelated name several steps later.
     fixture_aliases = {"cicd-report.json": "cicd-evidence.json"}
     substitutes = {name.rsplit("/", 1)[-1] for name in named_fixtures}
     unsubstituted = [
@@ -2704,6 +2856,11 @@ def test_provisioner_invokes_only_commands_that_resolve(repo_root: Path) -> None
     source = script.read_text(encoding="utf-8")
 
     defined = set(re.findall(r"(?m)^\s*function\s+([A-Za-z]+-[A-Za-z]+)", source))
+    assert len(defined) >= PROVISIONER_FUNCTION_FLOOR, (
+        f"only {len(defined)} functions were parsed out of the provisioner; the "
+        "declaration pattern has stopped matching and every call below would "
+        "resolve against an empty set"
+    )
     assert "Write-ProvisionLog" in defined, (
         "the provisioner's own logging helper is missing -- this guard is "
         "reading the wrong file or the naming convention changed"
@@ -2783,42 +2940,116 @@ AMBIENT_SHELL_VARIABLES = frozenset(
     {"HOME", "PATH", "PWD", "USER", "SHELL", "TMPDIR", "RANDOM", "HOSTNAME"}
 )
 
+#: Floors for the repo-wide walk, matching the placeholder guard's scope. Widened twice:
+#: from `az deployment` blocks in `solutions/**` (three blocks), then from blocks calling
+#: `az` at all (thirty-two), which still could not see an unbound variable in a block of
+#: three `shasum` lines. The rule a reader actually relies on has nothing to do with the
+#: Azure CLI: a block must give a value to everything it expands.
+VARIABLE_BINDING_DOCUMENT_FLOOR = 50
+VARIABLE_BINDING_BLOCK_FLOOR = 140
 
-def test_deployment_blocks_bind_every_variable_they_expand(repo_root: Path) -> None:
-    """An `az deployment` block never expands a variable nothing in it defines."""
+
+def _outside_single_quotes(body: str) -> str:
+    """Return only the text bash would expand, with single-quoted spans removed.
+
+    Bash expands nothing inside `'…'`, and there is no escaping *inside* those quotes:
+    the `'\\''` idiom that jq programs use everywhere is a close, an escaped literal
+    quote, and a reopen. Stripping `'[^']*'` with a regex mis-aligns on that idiom and
+    starts reading quoted spans as unquoted -- which reports a jq `--arg` name as an
+    unbound shell variable, and calls a correct block a defect. Scanning the quote
+    state directly is the only way to get it right. A backslash outside the quotes
+    escapes the next character, which is how `\\$filter` stays an OData parameter.
+    """
+    kept: list[str] = []
+    quoted = False
+    index = 0
+    while index < len(body):
+        character = body[index]
+        if quoted:
+            quoted = character != "'"
+        elif character == "'":
+            quoted = True
+        elif character == "\\" and index + 1 < len(body):
+            index += 2
+            continue
+        else:
+            kept.append(character)
+        index += 1
+    return "".join(kept)
+
+
+def _shell_expansions(body: str) -> set[str]:
+    """Variables bash would actually expand in this block."""
+    return set(
+        re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", _outside_single_quotes(body))
+    )
+
+
+def _shell_bindings(body: str) -> set[str]:
+    """Every name this block gives a value, by any form the runbooks actually use."""
+    bound = set(re.findall(r"(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=", body))
+    # The `: "${VAR:?why}"` guard idiom, and `${VAR:-default}`.
+    bound |= set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):[?-]", body))
+    bound |= set(re.findall(r"(?m)^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)", body))
+    # `while IFS= read -r nic_id` and `for query_name in …` both bind a loop variable.
+    bound |= set(re.findall(r"\bread\s+(?:-r\s+)?([A-Za-z_][A-Za-z0-9_]*)", body))
+    bound |= set(re.findall(r"\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b", body))
+    return bound
+
+
+def test_every_bash_block_binds_every_variable_it_expands(repo_root: Path) -> None:
+    """No bash block expands a variable its document never gives a value.
+
+    An unbound variable does not announce itself. `--ids ""` fails inside Azure with a
+    message about the service rather than about the runbook, and an unbound value fed to
+    a query *time window* is worse still: it returns a plausible, wrong answer instead of
+    an error, which is the one outcome a chapter about reasoning from evidence cannot
+    afford. Neither of those is an Azure CLI problem, which is why the trigger is every
+    bash block rather than the ones that happen to call `az`.
+
+    Bindings accumulate across the blocks of a single document, because a runbook is one
+    shell session read top to bottom, not a set of independent scripts.
+    """
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
     offenders: list[str] = []
-    checked = 0
-
-    for runbook in sorted(repo_root.glob("solutions/**/README.md")):
-        content = runbook.read_text(encoding="utf-8")
+    documents = 0
+    blocks = 0
+    for relative in [path for path in listing.split("\0") if path]:
+        try:
+            content = (repo_root / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        documents += 1
+        bound: set[str] = set()
         for block in re.finditer(r"```bash\n(.*?)```", content, re.DOTALL):
             body = block.group(1)
-            if "az deployment" not in body:
-                continue
-            checked += 1
-
-            bound: set[str] = set()
-            # Plain assignments, grouped `--parameters name=value` forms, and the
-            # `: "${VAR:?explanation}"` guard idiom all count as binding.
-            bound.update(re.findall(r"(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=", body))
-            bound.update(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):[?-]", body))
-            bound.update(re.findall(r"(?m)^\s*(?:export|read)\s+([A-Za-z_][A-Za-z0-9_]*)", body))
-
-            expanded = set(
-                re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", body)
-            )
-            unbound = sorted(expanded - bound - AMBIENT_SHELL_VARIABLES)
-            for name in unbound:
-                line = content[: block.start()].count("\n") + 1
+            bound |= _shell_bindings(body)
+            blocks += 1
+            line = content[: block.start()].count("\n") + 1
+            for name in sorted(_shell_expansions(body) - bound - AMBIENT_SHELL_VARIABLES):
                 offenders.append(
-                    f"{runbook.relative_to(repo_root)} (block at line {line}) "
-                    f"expands ${name} without binding it"
+                    f"{relative} (block at line {line}) expands ${name} without binding it"
                 )
 
-    assert checked, "no `az deployment` bash blocks found in solutions/**"
+    assert documents >= VARIABLE_BINDING_DOCUMENT_FLOOR, (
+        f"only {documents} Markdown documents were read, below the floor of "
+        f"{VARIABLE_BINDING_DOCUMENT_FLOOR}; this guard is not looking where it claims to"
+    )
+    assert blocks >= VARIABLE_BINDING_BLOCK_FLOOR, (
+        f"only {blocks} bash blocks were examined, below the floor of "
+        f"{VARIABLE_BINDING_BLOCK_FLOOR}; the fence filter is stale"
+    )
+
     assert not offenders, (
-        "deployment blocks expand variables nothing binds, so they submit empty values "
-        "and fail inside Azure instead of failing with a sentence:\n  "
+        "these blocks expand variables nothing binds, so they submit empty values and "
+        "fail inside Azure instead of failing with a sentence:\n  "
         + "\n  ".join(offenders)
         + "\n\nBind it from the handoff, or guard it with the house idiom: "
         ': "${VAR:?what the reader should supply}"'
@@ -3117,65 +3348,197 @@ AZURE_P_IDENTIFIERS = {
     "challenges/ch05-defender/README.md": {"P2"},
     "docs/CommonErrors.md": {"P2", "P10"},
     "docs/CostEstimate.md": {"P1", "P2", "P10"},
-    "tests/acceptance/catalog_acceptance/defender_evidence.py": {"P2"},
+    "tests/acceptance/catalog_acceptance/defender_evidence.py": {"P2", "p2"},
     "tests/acceptance/tests/test_ch05_defender_contracts.py": {"P2"},
+    "tests/acceptance/tests/test_contract_assets.py": {"P2"},
     "solutions/ch05-defender/README.md": {"P2"},
+    "workshop/contracts/defender-evidence.example.json": {"p2"},
 }
+
+# An entry in the table above is necessary but not sufficient. The occurrence must also
+# sit near words that only appear when the subject really is an Azure product, so that
+# adding a file and token to the table cannot by itself silence a genuine leak.
+#
+# Purely contextual exemption -- dropping the table and trusting these words alone --
+# was measured and rejected. The generic members of any such vocabulary are ordinary
+# English: this repository's own planning record is named for the word "plan", and
+# "tier" and "disk" appear throughout the cost and infrastructure prose. A leak sitting
+# anywhere near that vocabulary would be exempted silently, everywhere, with nothing in
+# review to notice. Requiring both means a new Azure identifier costs one reviewable
+# table line, and the failure message below dictates that line verbatim.
+AZURE_IDENTIFIER_CONTEXT = (
+    "defender",
+    "premium",
+    "ssd",
+    "disk",
+    "sku",
+    "pricing",
+    "plan 2",
+    "enforced",
+    "enablement",
+    "coverage",
+)
+
+#: How far either side of the token the Azure vocabulary may sit. Wide, because the
+#: table is the primary gate and this is the second of two locks, not the only one.
+AZURE_CONTEXT_BEFORE = 200
+AZURE_CONTEXT_AFTER = 80
+
+# Upper case is always a phase code. Lower case is only a phase code when it is welded
+# into an identifier -- a snake_case test name, a hyphenated Azure deployment name, or
+# a container image tag. A bare lower-case percentile such as the ninety-fifth is
+# latency notation, which challenges 2 and 4 use correctly and constantly, so matching
+# case-blind would bury the guard in noise.
+PHASE_CODE_PATTERN = re.compile(r"\bP\d+\b|(?<=[_\-:])p\d+\b|\bp\d+(?=[_\-:])")
+
+# The scan saw 530 decodable files when this floor was set. A floor rather than a bare
+# non-empty check: both of this guard's past truncations still saw plenty of files --
+# 172 under index-only listing, and 293 under the six-extension pathspec -- so ``> 0``
+# would have reported green through either one.
+PHASE_CODE_SCAN_FLOOR = 450
+
+# Every repository-walking guard enumerates with this argv. The floors above cannot
+# defend it: the index alone already clears them, so dropping ``--others`` would leave
+# untracked work invisible while the count stayed green. The two guards below pin the
+# argv's behaviour and its adoption instead of its size.
+GIT_ENUMERATION_ARGV = ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"]
+GIT_ENUMERATION_CALL_SITE_FLOOR = 8
+# Two guards ask about trackedness itself -- "is this committed?" and "which files under
+# this tree are stray?" -- so a bare listing is correct there. The count is pinned rather
+# than forbidden: a narrowed walk elsewhere shows up as a third site.
+GIT_TRACKED_ONLY_CALL_SITES = 2
+
+
+def test_the_repository_enumeration_sees_files_that_are_not_yet_committed() -> None:
+    """The shared argv reports untracked work, not just the index.
+
+    A file a facilitator has written but not committed is exactly the file most likely
+    to break a run, so every walking guard must see it. Proved against a scratch
+    repository because the real one has no untracked files to prove it with.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        (root / "committed.md").write_text("committed\n", encoding="utf-8")
+        (root / "never-added.md").write_text("untracked\n", encoding="utf-8")
+        for argv in (
+            ["git", "init", "-q"],
+            ["git", "add", "committed.md"],
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        ):
+            subprocess.run(argv, cwd=root, check=True, capture_output=True)
+        listed = subprocess.run(
+            GIT_ENUMERATION_ARGV, cwd=root, check=True, capture_output=True, text=True
+        ).stdout.split("\0")
+        seen = {entry for entry in listed if entry}
+    assert seen == {"committed.md", "never-added.md"}, (
+        f"the shared enumeration argv reported {sorted(seen)}; a guard using it would "
+        "not see uncommitted work"
+    )
+
+
+def test_every_repository_walk_uses_the_enumeration_that_sees_uncommitted_work() -> None:
+    """The proven argv is the one the guards actually call.
+
+    Pairs with the behavioural guard above: that one proves the argv is right, this one
+    proves no call site has quietly reverted to a narrower listing.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    adopted = source.count('"--cached", "--others", "--exclude-standard"')
+    narrower = re.findall(r'"git",\s*"ls-files"(?![^\]]*--others)[^\]]*\]', source)
+    assert adopted >= GIT_ENUMERATION_CALL_SITE_FLOOR, (
+        f"only {adopted} call sites enumerate with the proven argv, below "
+        f"{GIT_ENUMERATION_CALL_SITE_FLOOR}; a walk has been narrowed"
+    )
+    assert len(narrower) <= GIT_TRACKED_ONLY_CALL_SITES, (
+        f"{len(narrower)} call sites enumerate without --others, above the "
+        f"{GIT_TRACKED_ONLY_CALL_SITES} that ask about trackedness on purpose; a walk "
+        f"has been narrowed and would miss uncommitted work: {narrower}"
+    )
 
 
 def test_no_build_phase_codes_reach_a_reader(repo_root: Path) -> None:
     """Nothing a participant or facilitator reads refers to a build phase by number.
 
     Phase codes name the order this repository was built in, not anything a reader can
-    see. They had leaked into runbooks, contract guides, test filenames and even the
-    error strings the evidence validators print, where they explain nothing.
+    see. They had leaked into runbooks, contract guides, test filenames, Azure
+    deployment names, container image tags, and the error strings the evidence
+    validators print, where they explain nothing.
 
-    Untracked-but-not-ignored files are scanned too. Listing only the index would make
-    this guard pass merely because work had not been committed yet, which is exactly
-    when a leak is most likely.
+    Every file git knows about is scanned, tracked or not, and the file types are not
+    filtered. This guard carried two truncations, one at a time and a round apart: it
+    listed only the git index, and later it filtered to a six-extension pathspec that
+    showed it 293 of 737 files, hiding every ``.java`` and ``.cs`` in the repository
+    while it reported green.
     """
-    tracked = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "*.md",
-            "*.py",
-            "*.json",
-            "*.ps1",
-            "*.bicep",
-            "*.tf",
-        ],
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         cwd=repo_root,
         capture_output=True,
         text=True,
         check=True,
-    ).stdout.split()
+    ).stdout
+    candidates = [path for path in listing.split("\0") if path]
 
     offenders: list[str] = []
-    for relative in tracked:
+    exercised: dict[str, set[str]] = {}
+    scanned = 0
+    for relative in candidates:
         if relative in PHASE_CODE_HISTORY:
             continue
         try:
             content = (repo_root / relative).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            continue
-        for match in re.finditer(r"\bP\d+\b", content):
+            continue  # Binary, or a symlink git lists but the tree does not hold.
+        scanned += 1
+        for match in PHASE_CODE_PATTERN.finditer(content):
             before = content[max(0, match.start() - 24) : match.start()]
             after = content[match.end() : match.end() + 1]
-            quoted = before.endswith(("'", '"')) and after in ("'", '"')
-            if quoted or match.group(0) in AZURE_P_IDENTIFIERS.get(relative, ()):
-                continue  # Quoted disk SKU tiers and the real Defender plan name.
-            offenders.append(
-                f"{relative}:{content[: match.start()].count(chr(10)) + 1}: "
-                f"{match.group(0)}"
-            )
+            if before.endswith(("'", '"')) and after in ("'", '"'):
+                continue  # A quoted literal is naming the token, not using it.
 
+            line = content[: match.start()].count(chr(10)) + 1
+            if match.group(0) in AZURE_P_IDENTIFIERS.get(relative, ()):
+                # Recorded before the context check, so that a listed token which does
+                # occur is never also reported as stale. The two failures have different
+                # remedies and must not be able to masquerade as one another.
+                exercised.setdefault(relative, set()).add(match.group(0))
+                window = content[
+                    max(0, match.start() - AZURE_CONTEXT_BEFORE) : match.end()
+                    + AZURE_CONTEXT_AFTER
+                ].lower()
+                if any(word in window for word in AZURE_IDENTIFIER_CONTEXT):
+                    continue
+                offenders.append(
+                    f"{relative}:{line}: {match.group(0)} is listed as an Azure "
+                    "identifier but nothing within "
+                    f"{AZURE_CONTEXT_BEFORE} characters names an Azure product, so the "
+                    "listing is doing the work a phase code would need it to do"
+                )
+                continue
+            offenders.append(f"{relative}:{line}: {match.group(0)}")
+
+    assert scanned >= PHASE_CODE_SCAN_FLOOR, (
+        f"only {scanned} files were scanned, below the floor of "
+        f"{PHASE_CODE_SCAN_FLOOR}; this guard is not looking where it claims to"
+    )
+    # A listing that exempts nothing is a listing nobody can evaluate. Left in place it
+    # becomes the obvious hiding spot: pre-declare a token, add the leak later, and the
+    # guard never objects. Every entry has to be earning its place right now.
+    stale = sorted(
+        f"{document} -> {token}"
+        for document, tokens in AZURE_P_IDENTIFIERS.items()
+        for token in tokens
+        if token not in exercised.get(document, set())
+    )
+    assert not stale, (
+        "these Azure-identifier exemptions no longer match anything and must be "
+        "deleted:\n  " + "\n  ".join(stale)
+    )
     assert not offenders, (
         "build-phase codes are reader-visible; name the challenge or the component "
-        "instead:\n  " + "\n  ".join(offenders[:20])
+        "instead. If one of these is a genuine Azure product identifier, add it to "
+        "AZURE_P_IDENTIFIERS as `\"<path>\": {\"<token>\"}` -- the surrounding prose "
+        "must already name the product:\n  " + "\n  ".join(offenders[:20])
     )
 
 
@@ -3250,6 +3613,13 @@ def test_no_generated_python_metadata_is_tracked(repo_root):
         check=True,
     ).stdout.splitlines()
 
+    # Bare ``ls-files`` is correct here -- "is it tracked" is a question about the
+    # index, unlike the phase-code guard which must also see untracked work. The floor
+    # guards the other failure mode: an empty listing would pass this vacuously.
+    assert len(tracked) >= 400, (
+        f"git lists only {len(tracked)} tracked files; this guard is not running "
+        "against the real repository"
+    )
     generated = sorted(
         path
         for path in tracked
@@ -3259,4 +3629,1343 @@ def test_no_generated_python_metadata_is_tracked(repo_root):
     )
     assert not generated, "generated metadata is tracked in git:\n  " + "\n  ".join(
         generated
+    )
+
+
+# Every challenge chapter is exempt from nothing here except the wrap-up, which is a
+# debrief rather than a challenge and so has no goal of its own to state.
+TEACHING_CONTRACT_HEADINGS = (
+    "## Your goal",
+    "## The concept",
+    "## Success criteria",
+    "## Hints",
+    "## If it goes wrong",
+)
+CHALLENGE_CHAPTER_COUNT = 12
+
+
+def test_every_challenge_keeps_the_microhack_teaching_contract(repo_root: Path) -> None:
+    """The pedagogy is a contract, not a habit -- so it is enforced like one.
+
+    Every chapter states a goal, teaches a concept before asking for work, offers a
+    graduated ladder of exactly three hints, says what done looks like, and says what to
+    do when it breaks. That shape is what makes this a MicroHack rather than a lab
+    script: a participant who is stuck can buy exactly as much help as they need and no
+    more, which is impossible if the hints collapse into a single answer or vanish.
+
+    Until this guard existed the entire structure was held together by memory. Deleting a
+    chapter's ``## Hints`` section wholesale, or replacing every hint body with "None.",
+    both left the suite fully green -- the tests guarded the fixes, not the teaching.
+    """
+    chapters = sorted(
+        path
+        for path in repo_root.glob("challenges/*/README.md")
+        if path.parent.name != "wrapup"
+    )
+    assert len(chapters) == CHALLENGE_CHAPTER_COUNT, (
+        f"expected {CHALLENGE_CHAPTER_COUNT} challenge chapters, found "
+        f"{len(chapters)}; update this guard deliberately when the workshop changes "
+        "shape, so that adding a chapter cannot silently skip the contract"
+    )
+
+    offenders: list[str] = []
+    for chapter in chapters:
+        name = chapter.parent.name
+        text = chapter.read_text(encoding="utf-8")
+
+        for heading in TEACHING_CONTRACT_HEADINGS:
+            if heading not in text:
+                offenders.append(f"{name}: missing `{heading}`")
+        if "## Hints" not in text or "## Success criteria" not in text:
+            continue  # Already reported; the slices below would be meaningless.
+
+        hints = text.split("## Hints", 1)[1].split("\n## ", 1)[0]
+        ladder = re.findall(r"<summary>(.*?)</summary>(.*?)</details>", hints, re.S)
+        if len(ladder) != 3:
+            offenders.append(
+                f"{name}: {len(ladder)} hints, expected a ladder of 3 "
+                "(a nudge, the approach, nearly the answer)"
+            )
+        for index, (summary, body) in enumerate(ladder, start=1):
+            # 200 characters is well under the 281 of the shortest real hint, so this
+            # catches gutting rather than policing house style.
+            if len(body.strip()) < 200:
+                offenders.append(
+                    f"{name}: hint {index} ({summary.strip()[:40]!r}) is "
+                    f"{len(body.strip())} characters -- too short to help anyone"
+                )
+        if len({summary.strip().lower() for summary, _ in ladder}) != len(ladder):
+            offenders.append(f"{name}: hint summaries repeat, so the ladder is flat")
+
+        criteria = text.split("## Success criteria", 1)[1].split("\n## ", 1)[0]
+        if len(criteria.strip()) < 200:
+            offenders.append(
+                f"{name}: success criteria are {len(criteria.strip())} characters -- "
+                "a participant cannot tell whether they are done"
+            )
+
+    assert not offenders, (
+        "the MicroHack teaching contract is broken in these chapters:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+# Every PowerShell script in the repository, not just the ones under baseInfra/scripts.
+# Pinned as a count so that adding a script is a deliberate act: an unreferenced script
+# is one nobody runs, and one nobody runs is one nobody has proved works.
+PROVISIONING_SCRIPT_COUNT = 5
+
+
+def test_every_provisioning_script_is_reachable_from_a_document(repo_root: Path) -> None:
+    """A script no document names is a script no facilitator will ever run.
+
+    This repository shipped a 571-line Defender seeding script that was referenced by
+    exactly zero files. It implemented a documented part of the plan, it was written
+    carefully, and it was unreachable -- the facilitator instead had a manual procedure
+    to perform by hand. Dead automation is worse than no automation, because it looks
+    like the job is done.
+
+    The enumeration is asserted to equal a known count rather than merely be non-empty.
+    A glob that silently stops matching is the failure mode this guard is most likely to
+    suffer, and a non-empty check would not notice it.
+
+    It enumerates by asking git, not by globbing one directory. Globbing
+    ``baseInfra/scripts`` hid ``baseInfra/terraform/import_existing_providers.ps1`` --
+    the same scope-blindness this guard exists to end, one directory over.
+    """
+    scripts = sorted(
+        repo_root / line
+        for line in subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.ps1"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if line
+    )
+    assert len(scripts) == PROVISIONING_SCRIPT_COUNT, (
+        f"expected {PROVISIONING_SCRIPT_COUNT} PowerShell scripts, found "
+        f"{len(scripts)}: {[path.name for path in scripts]}"
+    )
+
+    readable = [
+        path
+        for path in repo_root.rglob("*")
+        if path.suffix in {".md", ".ps1", ".json", ".yml", ".yaml"}
+        and path.is_file()
+        and not set(path.relative_to(repo_root).parts) & {".git", ".venv", "node_modules"}
+    ]
+    assert len(readable) >= 200, (
+        f"only {len(readable)} documents searched; the walk is not running"
+    )
+
+    unreachable: list[str] = []
+    for script in scripts:
+        mentions = [
+            document
+            for document in readable
+            if document != script and script.name in document.read_text(
+                encoding="utf-8", errors="ignore"
+            )
+        ]
+        if not mentions:
+            unreachable.append(script.name)
+
+    assert not unreachable, (
+        "these scripts are named by no document, so no facilitator will run them; "
+        "wire them into a runbook or delete them: " + ", ".join(unreachable)
+    )
+
+
+# The files Challenge 1 actually changes. Everything else present in both the legacy
+# tree and the reference tree must stay byte-identical, because the reference is meant
+# to be *the legacy app after modernization* -- not a parallel application that happens
+# to look similar.
+MODERNIZATION_SURFACE = {
+    "dotnet": {
+        "README.md",
+        "src/LegoCatalog.App/Configuration/CatalogRuntimeOptions.cs",
+        "src/LegoCatalog.App/Endpoints/CatalogEndpoints.cs",
+        "src/LegoCatalog.App/LegoCatalog.App.csproj",
+        "src/LegoCatalog.App/Program.cs",
+        "src/LegoCatalog.App/Services/LocalImageStore.cs",
+        "src/LegoCatalog.App/Services/StartupImportHostedService.cs",
+        "tests/LegoCatalog.App.Tests/ImageSecurityTests.cs",
+        "tests/LegoCatalog.App.Tests/LegoCatalog.App.Tests.csproj",
+    },
+    "java": {
+        "README.md",
+        "pom.xml",
+        "src/main/java/com/microsoft/microhack/catalog/CatalogApplication.java",
+        "src/main/java/com/microsoft/microhack/catalog/config/CatalogRuntimeOptions.java",
+        "src/main/java/com/microsoft/microhack/catalog/config/TomcatPathConfiguration.java",
+        "src/main/java/com/microsoft/microhack/catalog/service/LocalImageStore.java",
+        "src/main/java/com/microsoft/microhack/catalog/web/ImageController.java",
+        "src/main/resources/application.properties",
+        "src/test/java/com/microsoft/microhack/catalog/PostgreSqlIntegrationTest.java",
+    },
+}
+MIRRORED_FILE_FLOOR = {"dotnet": 35, "java": 40}
+
+# The files the modernization ADDS, and the files it REMOVES. Comparing only the files
+# present in both trees leaves both of these invisible: a file that exists on one side
+# and not the other is simply skipped, so a deletion needs no declaration and an
+# addition is never seen at all. Declaring them turns "the trees differ in shape" from
+# something a reader has to notice into something the suite asserts.
+MODERNIZATION_ADDITIONS = {
+    "dotnet": {
+        "Dockerfile",
+        "src/LegoCatalog.App/Services/AzureBlobImageStore.cs",
+        "tests/LegoCatalog.App.Tests/AzureConfigurationTests.cs",
+    },
+    "java": {
+        "Dockerfile",
+        "src/main/java/com/microsoft/microhack/catalog/service/AzureBlobImageStore.java",
+        "src/main/java/com/microsoft/microhack/catalog/service/ImageStore.java",
+        "src/test/java/com/microsoft/microhack/catalog/AzureConfigurationTest.java",
+        "src/test/java/com/microsoft/microhack/catalog/service/AzureBlobImageStoreTest.java",
+    },
+}
+
+# Empty on purpose, and asserted rather than assumed. The modernization currently
+# removes nothing -- every legacy file survives into the reference tree, changed or not.
+MODERNIZATION_DELETIONS: dict[str, set[str]] = {"dotnet": set(), "java": set()}
+
+
+def _files_under(root: Path) -> set[str]:
+    """Every source file below ``root``, as posix-relative strings.
+
+    Enumerated through git rather than the filesystem so that build output is excluded
+    by the same rules that decide what gets committed. A hand-listed set of directory
+    names -- ``bin``, ``obj``, ``target`` -- was doing this job, and it worked only for
+    as long as the list happened to be complete: running the Java suite once drops a
+    hundred class files into ``target/``, and the guard's correctness depended on
+    somebody having thought of that name in advance. Git already knows.
+    """
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return {entry for entry in listing.split("\0") if entry}
+
+
+def test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches(
+    repo_root: Path,
+) -> None:
+    """The reference solution must be the legacy app modernized, not a rewrite beside it.
+
+    A participant compares their own work against ``solutions/reference``. That
+    comparison is only honest if the two trees share an origin: every file the
+    modernization does not touch has to be byte-identical. Otherwise an unrelated edit
+    made in one tree quietly turns into a phantom "modernization step" a participant
+    cannot explain, or worse, hides a real step that no longer shows up as a difference.
+
+    Changing the surface is allowed -- it just has to be deliberate, by editing the set
+    above, rather than by drifting.
+
+    This comparison used to walk the legacy tree alone and skip any file missing from
+    the other side, which made the two trees' *shape* unguarded in both directions: a
+    file deleted from the reference solution needed no declaration, and a file added to
+    it was never looked at. Both sets are now asserted exactly.
+    """
+    for stack, surface in MODERNIZATION_SURFACE.items():
+        legacy = repo_root / stack
+        reference = repo_root / "solutions" / "reference" / stack
+        assert reference.is_dir(), f"{reference} is missing"
+
+        mirrored = 0
+        drifted: list[str] = []
+        legacy_files = _files_under(legacy)
+        reference_files = _files_under(reference)
+
+        assert reference_files - legacy_files == MODERNIZATION_ADDITIONS[stack], (
+            f"{stack}: the files the modernization adds are not the ones declared. "
+            "Walking only the legacy tree made these invisible, so a new file could "
+            "appear in the reference solution and no test would mention it:\n  "
+            f"undeclared additions: {sorted(reference_files - legacy_files - MODERNIZATION_ADDITIONS[stack])}\n  "
+            f"declared but absent:  {sorted(MODERNIZATION_ADDITIONS[stack] - reference_files)}"
+        )
+        assert legacy_files - reference_files == MODERNIZATION_DELETIONS[stack], (
+            f"{stack}: the files the modernization removes are not the ones declared. "
+            "A deletion used to require no declaration at all -- the comparison simply "
+            "skipped any file missing from one side:\n  "
+            f"undeclared deletions: {sorted(legacy_files - reference_files - MODERNIZATION_DELETIONS[stack])}\n  "
+            f"declared but present: {sorted(MODERNIZATION_DELETIONS[stack] & reference_files)}"
+        )
+
+        for relative in sorted(legacy_files & reference_files):
+            path = legacy / relative
+            twin = reference / relative
+            if path.read_bytes() == twin.read_bytes():
+                mirrored += 1
+            elif relative not in surface:
+                drifted.append(relative)
+
+        assert mirrored >= MIRRORED_FILE_FLOOR[stack], (
+            f"{stack}: only {mirrored} files are shared between the legacy and "
+            "reference trees; they have stopped being the same application"
+        )
+        assert not drifted, (
+            f"{stack}: these files differ between the legacy and reference trees but "
+            "are not part of the modernization the workshop teaches; either revert the "
+            "drift or add them to MODERNIZATION_SURFACE deliberately:\n  "
+            + "\n  ".join(drifted)
+        )
+
+        stale = sorted(
+            relative
+            for relative in surface
+            if (legacy / relative).is_file()
+            and (reference / relative).is_file()
+            and (legacy / relative).read_bytes() == (reference / relative).read_bytes()
+        )
+        assert not stale, (
+            f"{stack}: these files are declared as modernization steps but are now "
+            "identical in both trees, so the workshop no longer demonstrates them:\n  "
+            + "\n  ".join(stale)
+        )
+
+
+def test_local_docker_builds_are_caveated_wherever_a_reader_meets_them(
+    repo_root: Path,
+) -> None:
+    """A local ``docker build`` must say where it can run, because the VM cannot run it.
+
+    Participants work on a Windows VM with no Docker daemon; every image they build goes
+    through ``az acr build``. A ``docker build`` printed without that context is a
+    command that fails on the only machine the reader has, at the point in the day when
+    they have the least slack.
+
+    Two locations are excluded deliberately, not by omission:
+
+    * ``.github/workflows/`` builds on ``ubuntu-latest``, where a daemon is present and
+      a local build is the correct thing to do.
+    * ``.azure/`` is internal deployment planning that no participant or facilitator is
+      routed to; it is not part of the reader-facing narrative.
+
+    Everything else -- chapters, solutions, and the facilitator documents -- is in scope.
+    """
+    caveat = re.compile(
+        r"no daemon|without a Docker daemon|with a Docker daemon|az acr build", re.I
+    )
+    invocation = re.compile(r"^\s*docker\s+(?:buildx\s+)?build\b", re.M)
+
+    scanned = 0
+    offenders: list[str] = []
+    for markdown in sorted(repo_root.rglob("*.md")):
+        parts = markdown.relative_to(repo_root).parts
+        if set(parts) & {".git", ".venv", "node_modules"} or parts[0] in {".azure"}:
+            continue
+        if parts[0] == "docs" and parts[-1] in {"ImplementationLog.md", "RewritePlan.md"}:
+            continue  # Build history, describing decisions rather than instructing.
+        scanned += 1
+        text = markdown.read_text(encoding="utf-8")
+        for match in invocation.finditer(text):
+            # The caveat belongs with the command, not somewhere in the document.
+            window = text[max(0, match.start() - 700) : match.start()]
+            if not caveat.search(window):
+                offenders.append(
+                    f"{'/'.join(parts)}:{text[: match.start()].count(chr(10)) + 1}"
+                )
+
+    assert scanned >= 40, f"only {scanned} documents scanned; the walk is not running"
+    assert not offenders, (
+        "a local docker build is printed without saying it needs a workstation daemon, "
+        "so it fails on the workshop VM: " + ", ".join(offenders)
+    )
+
+
+def test_no_sample_credential_literals_survive_anywhere(repo_root: Path) -> None:
+    """No password-shaped literal ships, not even a famous placeholder one.
+
+    The dev container carried a well-known sample SA password for seven review rounds.
+    It was never a real secret, which is exactly why it survived: every reader assumed
+    somebody else had judged it harmless. A password-shaped string in a repository is
+    copied far more often than it is read, and the copy lands somewhere that matters.
+
+    The needle is assembled from fragments so that this guard does not match its own
+    source and report itself as the offender.
+    """
+    needles = ["Your" + "Strong!Passw0rd", "P@ssw0rd" + "123", "admin" + ":admin"]
+
+    scanned = 0
+    offenders: list[str] = []
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for relative in (path for path in listing.split("\0") if path):
+        try:
+            content = (repo_root / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        scanned += 1
+        for needle in needles:
+            if needle in content:
+                offenders.append(f"{relative}: {needle[:6]}...")
+
+    assert scanned >= PHASE_CODE_SCAN_FLOOR, (
+        f"only {scanned} files scanned; this guard is not looking where it claims to"
+    )
+    assert not offenders, (
+        "sample credential literals are still present; source them from the host "
+        "environment instead: " + ", ".join(offenders)
+    )
+
+
+def test_devcontainer_sources_its_database_password_from_the_host(
+    repo_root: Path,
+) -> None:
+    """The dev container must never carry a database password of its own.
+
+    Nothing in this repository reads ``MSSQL_SA_PASSWORD``; it is a convenience
+    passthrough for a SQL Server sibling container. That is precisely why it must not
+    fail the build when unset -- and equally why it must not be given a default.
+    """
+    devcontainer = (repo_root / ".devcontainer" / "devcontainer.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"MSSQL_SA_PASSWORD": "${localEnv:MSSQL_SA_PASSWORD}"' in devcontainer, (
+        "the dev container must inherit the SA password from the contributor's own "
+        "host shell, not define one"
+    )
+
+
+# Guards that walk the repository and then assert an offender list is empty are only as
+# good as the walk. A guard proves its walk happened by asserting something *positive*:
+# a count, a floor, or the truthiness of what it collected. ``assert not offenders`` is
+# not such a proof, which is the whole point.
+# ``re.findall``/``finditer`` earn their place here because prose is the least stable
+# input in the repository: a heading can be reworded and a pattern that matched it
+# yesterday silently matches nothing today, which is precisely how the round-9 golden
+# README guard came to report success on an empty enumeration.
+_ENUMERATION_IDIOM = re.compile(
+    r"\.rglob\(|\.glob\(|ls-files|os\.walk\(|re\.findall\(|re\.finditer\(|\.findall\(|\.finditer\("
+)
+_PROVING_COMPARISONS = (ast.Gt, ast.GtE, ast.Eq)
+_CLASSIC_IDIOM = re.compile(r"\.rglob\(|\.glob\(|ls-files|os\.walk\(")
+_FINDALL_IDIOM = re.compile(r"re\.findall\(|re\.finditer\(|\.findall\(|\.finditer\(")
+# One floor over a multi-arm search defends only the arm that dominates it. The
+# aggregate stood at 40 over 50 guards, which looked ample and was not: deleting the
+# helper arm left 42 and passed, silently dropping eight guards -- among them the two
+# shell-declaration guards protecting a class that blocked delivery in round 4. Each
+# arm is now floored against its own population, so headroom in one cannot pay for the
+# disappearance of another.
+WALKING_GUARD_FLOOR = 40
+CLASSIC_ARM_FLOOR = 25
+FINDALL_ARM_FLOOR = 8
+HELPER_ARM_FLOOR = 6
+
+
+def _enumerating_helpers(tree: ast.Module, text: str) -> set[str]:
+    """Return the module-level helpers that enumerate on a caller's behalf.
+
+    A guard that calls ``_chapter_readmes()`` is walking the repository just as surely
+    as one that writes ``rglob`` inline, but the idiom is a function call away and this
+    meta-guard used to look straight past it. Two such guards protected a class of
+    defect that had already blocked delivery once, and neither was being audited.
+    """
+    return {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and not node.name.startswith("test_")
+        and _ENUMERATION_IDIOM.search(ast.get_source_segment(text, node) or "")
+    }
+
+
+def _walks_the_repository(node: ast.FunctionDef, text: str, helpers: set[str]) -> bool:
+    """Return whether the guard enumerates, directly or through a helper."""
+    source = ast.get_source_segment(text, node) or ""
+    if _ENUMERATION_IDIOM.search(source):
+        return True
+    return any(
+        isinstance(call.func, ast.Name) and call.func.id in helpers
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+    )
+
+
+def _helpers_that_prove_their_own_walk(tree: ast.Module, enumerating: set[str]) -> set[str]:
+    """Return helpers that both enumerate and assert their own enumeration found something.
+
+    ``_chapter_readmes`` carries its floor internally, so a guard calling it is already
+    protected and does not need to repeat the assertion. Without this the meta-guard
+    would demand ceremony that adds no safety, and guards written to satisfy noise are
+    how a suite learns to ignore its own alarms.
+
+    Asserting is not enough on its own: a helper that validates a parsed value but never
+    walks the repository proves nothing about a caller's walk, and letting it vouch would
+    reopen the hole this meta-guard exists to close.
+    """
+    return {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and not node.name.startswith("test_")
+        and node.name in enumerating
+        and _asserts_something_positive(node)
+    }
+
+
+def _proves_its_walk(
+    node: ast.FunctionDef, proving_helpers: set[str]
+) -> bool:
+    """Return whether the guard proves its walk directly or through a helper."""
+    if _asserts_something_positive(node):
+        return True
+    return any(
+        isinstance(call.func, ast.Name) and call.func.id in proving_helpers
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+    )
+
+
+def _asserts_something_positive(node: ast.FunctionDef) -> bool:
+    """Return whether the function contains an assertion that its walk found something.
+
+    Structure is used rather than variable names so that the check does not quietly stop
+    applying the moment somebody picks a name that was not on a hardcoded list.
+    """
+    for statement in ast.walk(node):
+        if not isinstance(statement, ast.Assert):
+            continue
+        test = statement.test
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            continue  # ``assert not offenders`` -- the shape being guarded against.
+        if isinstance(test, ast.Compare):
+            # ``in``/``is`` comparisons are per-item content checks, not evidence that
+            # the enumeration produced any items at all.
+            if any(isinstance(op, _PROVING_COMPARISONS) for op in test.ops):
+                return True
+            continue
+        if isinstance(test, (ast.Name, ast.BinOp)):
+            return True  # ``assert workflows`` / ``assert documented - internal``
+        if isinstance(test, ast.Call) and getattr(test.func, "id", None) == "len":
+            return True
+    return False
+
+
+def test_every_walking_guard_proves_its_own_walk_happened() -> None:
+    """A guard that enumerates the repository must prove the enumeration found something.
+
+    "Collect offenders, then assert the list is empty" is the dominant shape in this
+    suite, and it fails open: an empty walk produces an empty offender list, which is
+    indistinguishable from a clean repository. This is not hypothetical here. The
+    phase-code guard once listed only the git index and reported green while 121
+    uncommitted files -- including the entire reference tree -- went unread, and the
+    Defender foundation guard globbed for a filename that a rename would have silently
+    orphaned.
+
+    Every such guard now states a floor. This meta-guard exists so the next one does
+    too, because the failure is invisible by construction: the suite stays green either
+    way, so nothing except this test will ever notice.
+    """
+    suite = Path(__file__).parent
+    sources = sorted(suite.glob("test_*.py"))
+    assert len(sources) >= 8, f"only {len(sources)} test modules found"
+
+    unproven: list[str] = []
+    audited = 0
+    by_arm = {"classic": 0, "findall": 0, "helper": 0}
+    for source in sources:
+        text = source.read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        helpers = _enumerating_helpers(tree, text)
+        proving = _helpers_that_prove_their_own_walk(tree, helpers)
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if not node.name.startswith("test_"):
+                continue
+            if not _walks_the_repository(node, text, helpers):
+                continue
+            audited += 1
+            body = ast.get_source_segment(text, node) or ""
+            if _CLASSIC_IDIOM.search(body):
+                by_arm["classic"] += 1
+            elif _FINDALL_IDIOM.search(body):
+                by_arm["findall"] += 1
+            else:
+                by_arm["helper"] += 1
+            if not _proves_its_walk(node, proving):
+                unproven.append(f"{source.name}:{node.lineno} {node.name}")
+
+    # 50 guards walk the repository today. The floor sits above the 31 that the
+    # narrower pre-round-9 detector could see, so losing the helper-aware or
+    # ``findall`` arms of the search fails here instead of quietly shrinking the
+    # audited set back to where two vacuous guards hid for four rounds.
+    assert audited >= WALKING_GUARD_FLOOR, (
+        f"only {audited} walking guards found; this meta-guard is not parsing the suite"
+    )
+    for arm, floor in (
+        ("classic", CLASSIC_ARM_FLOOR),
+        ("findall", FINDALL_ARM_FLOOR),
+        ("helper", HELPER_ARM_FLOOR),
+    ):
+        assert by_arm[arm] >= floor, (
+            f"the {arm} arm of this search reaches only {by_arm[arm]} guards "
+            f"(floor {floor}); losing an arm hides guards from auditing without "
+            f"moving the total enough to notice -- arms today: {by_arm}"
+        )
+    assert not unproven, (
+        "these guards walk the repository without proving the walk found anything, so "
+        "they pass just as happily on an empty enumeration:\n  " + "\n  ".join(unproven)
+    )
+
+
+def test_every_schema_definition_is_reachable(repo_root: Path) -> None:
+    """A frozen schema must not carry rules that nothing evaluates.
+
+    An unreferenced `$defs` entry reads exactly like a constraint that is being enforced.
+    Anyone auditing the contract sees a rule; the validator sees nothing. That gap is
+    worse than having no rule at all, because it buys false confidence in review.
+
+    This is not hypothetical. A dead `$defs/challenge` in the shared challenge schema was
+    removed once, no guard was added, and a second dead definition appeared afterwards in
+    a different file. Deleting instances without asserting the class is how the class
+    regrows.
+    """
+    schemas = sorted((repo_root / "workshop" / "contracts").glob("*.schema.json"))
+    assert len(schemas) >= 15, (
+        f"only {len(schemas)} contract schemas found -- this guard is not running"
+    )
+
+    orphans: list[str] = []
+    definitions = 0
+    for schema_path in schemas:
+        raw = schema_path.read_text(encoding="utf-8")
+        for name in json.loads(raw).get("$defs", {}):
+            definitions += 1
+            if f'"#/$defs/{name}"' not in raw:
+                orphans.append(f"{schema_path.name}: $defs/{name}")
+
+    assert definitions >= 20, (
+        f"only {definitions} schema definitions examined -- the glob is stale"
+    )
+    assert not orphans, (
+        "these schema definitions are never referenced, so they document a constraint "
+        "the validator does not apply; wire them up or delete them:\n  "
+        + "\n  ".join(orphans)
+    )
+
+
+def _github_heading_slug(heading: str) -> str:
+    """Reduce a Markdown heading to the fragment GitHub will generate for it.
+
+    GitHub lowercases, strips formatting, **deletes** punctuation rather than replacing
+    it, and maps spaces to hyphens. The deletion is the part that catches people: a
+    heading containing `go/no-go` anchors as `gono-go`, not `go-no-go`, so the spelling
+    that looks correct is the one that is broken.
+    """
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading.strip())
+    text = re.sub(r"[`*_]", "", text)
+    return re.sub(r"[^\w\s-]", "", text).strip().lower().replace(" ", "-")
+
+
+def test_every_cross_document_anchor_resolves(repo_root: Path) -> None:
+    """A link to a heading that does not exist fails silently, at the worst moment.
+
+    A broken *file* link 404s and someone notices. A broken *fragment* silently lands the
+    reader at the top of a long document, which reads as "the section moved" rather than
+    "the link is wrong" -- and these links are the navigation between a facilitator's
+    preflight and the gate it depends on. The one this guard was written for pointed at
+    `#facilitator-go-no-go-matrix`, which is the spelling a human writes and not the one
+    GitHub generates.
+    """
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    documents = [path for path in listing.split("\0") if path]
+    assert len(documents) >= 50, (
+        f"only {len(documents)} Markdown documents enumerated -- this guard is not running"
+    )
+
+    slugs: dict[str, set[str]] = {}
+    for relative in documents:
+        try:
+            content = (repo_root / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        slugs[relative] = {
+            _github_heading_slug(match.group(1))
+            for match in re.finditer(r"^#{1,6}\s+(.*)$", content, re.MULTILINE)
+        }
+
+    broken: list[str] = []
+    checked = 0
+    for relative, headings in slugs.items():
+        source = repo_root / relative
+        content = source.read_text(encoding="utf-8")
+        for match in re.finditer(r"\[[^\]]*\]\(([^)\s]+)\)", content):
+            target = match.group(1)
+            if target.startswith(("http://", "https://")) or "#" not in target:
+                continue
+            path_part, _, fragment = target.partition("#")
+            if not path_part:
+                available, name = headings, relative
+            else:
+                resolved = (source.parent / path_part).resolve()
+                try:
+                    name = str(resolved.relative_to(repo_root))
+                except ValueError:
+                    continue
+                if name not in slugs:
+                    continue
+                available = slugs[name]
+            checked += 1
+            if fragment not in available:
+                line = content[: match.start()].count("\n") + 1
+                broken.append(f"{relative}:{line} -> {name}#{fragment}")
+
+    assert checked >= 40, (
+        f"only {checked} cross-document anchors examined -- the link pattern is stale"
+    )
+    assert not broken, (
+        "these links point at headings that do not exist, so they land the reader at the "
+        "top of the document instead:\n  " + "\n  ".join(broken)
+    )
+
+
+def test_the_destructive_reset_boundary_matches_the_contract(repo_root: Path) -> None:
+    """The prefix that decides what may be deleted must be one value, not three copies.
+
+    `acceptanceReset` is the only operation in this repository that deletes rows from a
+    participant's database, and the single thing standing between "delete the fixture"
+    and "delete their work" is a product-id prefix. The contract declares that boundary
+    twice -- `behavior-contract.json` calls it `ownedProductIdPrefix`, and
+    `database-contract.json` calls it `acceptanceFixtureProductIdPrefix` -- and the code
+    that performs the delete hard-codes a third copy as a string literal.
+
+    Nothing read either declaration. A repository whose thesis is contract-first had its
+    most safety-critical constant living as a magic string, where narrowing the contract
+    would leave the code deleting more than the contract permits and no test would say so.
+    """
+    behavior = json.loads(
+        (repo_root / "workshop" / "contracts" / "behavior-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    database = json.loads(
+        (repo_root / "workshop" / "contracts" / "database-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    declared = {
+        "behavior-contract.json import.acceptanceReset.ownedProductIdPrefix": behavior[
+            "import"
+        ]["acceptanceReset"]["ownedProductIdPrefix"],
+        "database-contract.json common.acceptanceFixtureProductIdPrefix": database[
+            "common"
+        ]["acceptanceFixtureProductIdPrefix"],
+    }
+
+    source = (repo_root / "tests" / "acceptance" / "catalog_acceptance" / "database.py").read_text(
+        encoding="utf-8"
+    )
+    enforced = re.findall(r'product_id\.startswith\(\s*"([^"]+)"\s*\)', source)
+    assert enforced, (
+        "no product-id prefix check found in catalog_acceptance/database.py -- the "
+        "destructive reset has lost its boundary, or this guard is looking in the "
+        "wrong place"
+    )
+    for index, literal in enumerate(enforced):
+        declared[f"catalog_acceptance/database.py startswith[{index}]"] = literal
+
+    assert len(set(declared.values())) == 1, (
+        "the acceptance-reset boundary disagrees across the contract and the code that "
+        "enforces it, so the rows the contract protects are not the rows the delete "
+        "refuses to touch:\n  "
+        + "\n  ".join(f"{where} = {value!r}" for where, value in sorted(declared.items()))
+    )
+
+    # This episode is taught in two places, and the lesson is prose the rest of the
+    # suite cannot see: deleting either passage, or renaming a contract key out from
+    # under the passage that quotes it, would leave the teaching intact-looking and
+    # false while every other guard stayed green.
+    boundary = next(iter(set(declared.values())))
+    taught = {
+        "tests/acceptance/README.md": [
+            "acceptance-reset",
+            "ownedProductIdPrefix",
+            "acceptanceFixtureProductIdPrefix",
+            boundary,
+        ],
+        "challenges/ch01/README.md": [
+            "A contract only earns its name if something reads it",
+        ],
+    }
+    for relative, phrases in taught.items():
+        prose = (repo_root / relative).read_text(encoding="utf-8")
+        missing = [phrase for phrase in phrases if phrase not in prose]
+        assert not missing, (
+            f"{relative} no longer states the delete-boundary lesson it teaches "
+            f"({missing}); the narrative and the guard have drifted apart"
+        )
+
+
+# The leading approximation mark matters: the worked example's headline is written
+# "**\u2248 $2,579**", and a pattern that did not admit it left the single most quoted
+# figure in the document unaudited while the guard reported success on the rows around it.
+_MONEY_CELL = re.compile(r"^\*{0,2}\s*[\u2248~]?\s*\$([\d,]+(?:\.\d+)?)\*{0,2}$")
+_TOTAL_ROW = re.compile(r"\b(total|subtotal)\b", re.IGNORECASE)
+
+# Tables carrying a money total, counted when this floor was set. A floor rather than a
+# non-empty check: the parser below is the part most likely to silently stop matching.
+MONEY_TABLE_FLOOR = 8
+
+# Six money rows currently show arithmetic a reader can evaluate. A floor because
+# coverage here shrinks silently: thinning one Basis cell into prose dropped the most
+# load-bearing figure in the cost document out of guard reach without failing anything,
+# and only a critic re-deriving it by hand noticed.
+EVALUABLE_BASIS_FLOOR = 17
+
+# "the rows above are rounded to cents for display, so they visibly sum to $2,016.90"
+# explains why a column does not add up to its own total. Nothing checked it, so editing
+# a displayed cent left the explanation quietly wrong. Both occurrences are counted so
+# the check cannot end up guarding nothing.
+_VISIBLE_SUM = re.compile(r"visibly sum to \$([\d,]+(?:\.\d+)?)")
+VISIBLE_SUM_FLOOR = 2
+
+# A count cannot say *which* rows show their work: thinning one cell into prose while
+# adding an evaluable cell elsewhere holds the total and passes. These rows carry the
+# figures the cost story is built from, so each is named. Adding rows is welcome; losing
+# one of these is a regression.
+EVALUABLE_BASIS_ROWS = {
+    ("docs/CostEstimate.md", "**Azure subtotal, excluding Defender and SRE Agent**"),
+    ("docs/CostEstimate.md", "**Base subtotal**"),
+    ("docs/CostEstimate.md", "**Modernized subtotal, 50/50 split**"),
+    ("docs/CostEstimate.md", "**Legacy** — one Windows VM plus its Premium OS disk"),
+    ("docs/CostEstimate.md", "**Total**"),
+    ("docs/CostEstimate.md", "**Total, after the Challenge 0 deallocation**"),
+    ("docs/CostEstimate.md", "Bastion Basic gateway"),
+    ("docs/CostEstimate.md", "Defender for SQL, 15 participants"),
+    ("docs/CostEstimate.md", "Defender for Servers P2, over the same 113 h"),
+    ("docs/CostEstimate.md", "Defender for open-source relational databases, 15 participants"),
+    ("docs/CostEstimate.md", "Modernized workload, .NET / Azure SQL"),
+    ("docs/CostEstimate.md", "Modernized workload, Java / PostgreSQL"),
+    ("docs/CostEstimate.md", "NAT gateway"),
+    ("docs/CostEstimate.md", "Premium OS disks"),
+    ("docs/CostEstimate.md", "SRE Agent, **one shared** agent for 8 hours"),
+    ("docs/CostEstimate.md", "Standard public IPs"),
+    ("docs/CostEstimate.md", "Windows VMs"),
+}
+
+
+def _money(cell: str) -> float | None:
+    match = _MONEY_CELL.match(cell.strip())
+    return float(match.group(1).replace(",", "")) if match else None
+
+
+_BASIS_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _basis_segment_values(basis: str, forbidden: float | None = None) -> list[float]:
+    """Return every arithmetic result a Basis segment states.
+
+    A cell states its work as a chain -- ``$16.14 - 24 h @ $0.184 = $16.14 - $4.42 =
+    $11.72`` -- and each link is a claim about the same figure. Returning them all lets
+    the caller insist that every link lands, rather than accepting the cell because one
+    of them happened to.
+
+    Returning only the *first* run that parsed was a fail-open hole: in
+    ``2 x 24 h @ $0.900, roughly 4 times the 2.2075 hourly blended figure`` the prose
+    tail parses and the corrupted rate in front of it never gets evaluated at all. Two
+    numbers with no operator between them cannot belong to one expression, so the run is
+    split there and *both* sides are evaluated.
+    """
+    normalised = (
+        basis.replace("\u00d7", "*").replace("\u00f7", "/")
+        # Only U+2212 means subtraction in these documents; en and em dashes spell
+        # ranges ("5-8 hours", "$11,700-$15,900") and reading them as minus invents
+        # figures like -4200 out of a correct sentence.
+        .replace("\u2212", "-").replace("\u2013", " ").replace("\u2014", " ")
+        # "24 h @ $0.184" is a rate times a quantity. Left unread, the whole segment
+        # fails to parse and every operand inside it becomes unfalsifiable -- which is
+        # how a 5x error in a VM hourly rate survived 47% operand mutation.
+        .replace("@", "*")
+    )
+    # "$2.56/day" is a unit, not a division: reading the slash as an operator turns
+    # $2.56/day x 42.5/24 into 0.0025 and would condemn an honest cell.
+    normalised = re.sub(r"/\s*[A-Za-z]+", " ", normalised)
+    # A hyphen inside a word is spelling, not subtraction. "vCore-hours ... auto-pause"
+    # otherwise tokenises to "8 - - 24" and invents the value 32 out of prose.
+    normalised = re.sub(r"(?<=[A-Za-z])-(?=[A-Za-z])", " ", normalised)
+    # An unspaced hyphen between digits is a date, a version or a GUID -- "2020-01-01",
+    # "18.6-1". Arithmetic in these cells is always spaced, so this cannot swallow a
+    # real subtraction, and a spaced ASCII minus still reads as one.
+    normalised = re.sub(r"(?<=\d)-(?=\d)", " ", normalised)
+    # A cell is free to spell its operator: "24 h @ $0.184, plus $21.68/month x 24/730"
+    # adds two terms, and dropping the word silently discards the first one.
+    for word, symbol in (("plus", "+"), ("minus", "-"), ("times", "*")):
+        normalised = re.sub(rf"\b{word}\b", symbol, normalised, flags=re.IGNORECASE)
+
+    # An equals sign ends one step and starts the next, so "15 x ($12.90 + $4.53) =
+    # $261.45" is an expression and its answer, not one run to be welded together.
+    blocks: list[list[str]] = []
+    for step in re.split(r"[=\u2248]", normalised):
+        tokens = re.findall(r"\d[\d,]*(?:\.\d+)?|[-+*/()]", step.replace("$", ""))
+        # Split where two numbers sit side by side: that junction is prose, not
+        # arithmetic, and welding across it produced figures such as 1515 x 17.43 that
+        # no document states. Each side is a candidate expression in its own right.
+        blocks.append([])
+        for previous, token in zip([None, *tokens], tokens):
+            if previous is not None and previous[0].isdigit() and token[0].isdigit():
+                blocks.append([])
+            blocks[-1].append(token)
+
+    values: list[float] = []
+    for block in blocks:
+        # Prose sits around the numbers, so trim leading fragments until the remainder
+        # evaluates -- an unmatched bracket or a trailing operator is not arithmetic.
+        for offset in range(len(block)):
+            run = block[offset:]
+            # A run without an operator is the answer restating itself, which is the
+            # one thing that must never count as its own evidence.
+            if not any(token in "+-*/" for token in run):
+                continue
+            # An operand that *is* the answer proves nothing: "$261.45 x 1", "+ 0" and
+            # "/ 1" satisfy the operator rule while leaving the figure its own evidence.
+            if forbidden is not None and any(
+                token[0].isdigit()
+                and abs(float(token.replace(",", "")) - forbidden)
+                <= max(0.005, abs(forbidden) * 0.0005)
+                for token in run
+            ):
+                continue
+            candidate = "".join(token.replace(",", "") for token in run)
+            if not re.fullmatch(r"[\d.+\-*/()]+", candidate):
+                continue
+            try:
+                value = eval(candidate, {"__builtins__": {}}, {})  # noqa: S307
+            except (SyntaxError, ZeroDivisionError, TypeError, NameError):
+                continue
+            if isinstance(value, (int, float)):
+                values.append(float(value))
+                break
+    return values
+
+
+def _lands_on(value: float, claimed: float) -> bool:
+    """Return whether an evaluated step arrives at a figure the row states."""
+    tolerance = max(0.02, abs(claimed) * 0.005)
+    if abs(value - claimed) <= tolerance:
+        return True
+    return abs(claimed - round(claimed)) < 0.005 and round(value) == round(claimed)
+
+
+def _basis_strays(basis: str, claims: list[float]) -> list[float]:
+    """Return figures a Basis states that arrive nowhere the cell or the row accounts for.
+
+    Accepting a cell because *one* of its steps landed let every other step be wrong: with
+    ``$16.14 - 24 h @ $0.184 = $16.14 - $4.42 = $11.72``, a five-fold error in the hourly
+    rate left the second step intact and the cell passed. So every step is evaluated.
+
+    But a correct cell may show its work in stages, and an intermediate result is not
+    supposed to equal the row's figure -- ``2 x $32.84 = $65.68 for both VMs, halved after
+    deallocation = $32.84`` is exactly the two-stage derivation the document is trying to
+    teach. A step is therefore acceptable when it lands on one of the row's figures *or*
+    when the cell itself carries that value forward into another step.
+    """
+    parts = re.split(r"([=\u2248])", basis)
+    segments = parts[::2]
+    # The separator that introduces each segment, "" for the first.
+    openers = ["", *parts[1::2]]
+    computed = [_basis_segment_values(segment) for segment in segments]
+    numbers = [
+        {float(token.replace(",", "")) for token in re.findall(r"\d[\d,]*(?:\.\d+)?", segment)}
+        for segment in segments
+    ]
+
+    def accounted(value: float, source: int) -> bool:
+        if any(_lands_on(value, claim) for claim in claims):
+            return True
+        # Chain closure: an intermediate is legitimate precisely because a later step
+        # picks it up. Only another step counts, or the value would vouch for itself.
+        return any(
+            any(_lands_on(value, seen) for seen in numbers[index])
+            for index in range(len(segments))
+            if index != source
+        )
+
+    strays: list[float] = []
+    for index, values in enumerate(computed):
+        strays.extend(value for value in values if not accounted(value, index))
+    # A step that computes nothing but sits immediately after one that does is the cell
+    # restating its answer, and it must not contradict the figure beside it. Read the
+    # figure the step opens with: the real cells carry trailing asides such as
+    # "= $11.72. That VM's compute stops". A figure further from the arithmetic is prose
+    # -- a stated alternative or a rounding aside -- and is not the cell's answer.
+    for index in range(1, len(segments)):
+        # "~" says "the same quantity, rounded", so it must agree with what came before
+        # even at the end of a restatement chain: "$3.4177 + $9.48 = $12.8977 ~ $12.90"
+        # leaves the segment before the rounded figure computing nothing, and requiring
+        # the *immediate* predecessor to compute let a five-fold error in it survive.
+        # "=" is weaker -- it also introduces a separately labelled quantity, as in
+        # "= $34.83; whole-month billing = $225.00" -- so it keeps the stricter rule.
+        reached = any(computed[:index]) if openers[index] == "\u2248" else bool(computed[index - 1])
+        if computed[index] or not reached:
+            continue
+        opening = re.match(r"\s*\$?\s*([\d,]+(?:\.\d+)?)", segments[index])
+        if opening is None:
+            continue
+        restated = float(opening.group(1).replace(",", ""))
+        if not any(_lands_on(restated, claim) for claim in claims) and not any(
+            _lands_on(restated, value) for values in computed for value in values
+        ):
+            strays.append(restated)
+    return strays
+
+
+def _basis_reproduces(basis: str, claimed: float) -> bool | None:
+    """Return whether a Basis cell's own arithmetic evaluates to the figure beside it.
+
+    An earlier version accepted a cell that merely *restated* its answer, which meant
+    ``15 x ($99.99 + $4.53) = $261.45`` passed: the answer was acting as its own
+    evidence and the operands were never checked. ``None`` means the cell states no
+    arithmetic, which is reported separately rather than treated as a pass.
+    """
+    values = _basis_segment_values(basis, forbidden=claimed)
+    if not values:
+        return None
+    return any(_lands_on(value, claimed) for value in values)
+
+
+def _markdown_tables(text: str) -> list[list[list[str]]]:
+    """Group contiguous pipe-delimited lines into tables of split cells."""
+    tables, current = [], []
+    for line in text.splitlines():
+        if line.strip().startswith("|"):
+            current.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    return tables
+
+
+def test_every_money_total_reconciles_with_the_rows_a_reader_can_see(repo_root: Path) -> None:
+    """A subtotal row promises to total the rows above it, and a reader will check.
+
+    ``docs/CostEstimate.md`` is the one document here read adversarially, by someone
+    deciding whether to spend money. It labels nearly every line **Derived**, which is a
+    promise of reproducibility, and the natural act of verification is to add the column.
+
+    Three columns did not add. Two were single pennies -- rows rounded to cents, totals
+    computed from unrounded bases. The third was $0.33 and reconciled by neither route:
+    not the visible column sum, and not thirty times the displayed per-participant
+    figure. The operand that would explain it appeared nowhere on the page. A penny
+    reads as rounding; a third of a dollar that reconciles by nothing reads as an error,
+    and it spends the credibility that the honest lines earned.
+
+    So a gap wider than rounding explains is allowed only where the row shows its
+    arithmetic. Rounding drift is bounded at a cent per row summed, because that is the
+    most that rounding each row to cents can accumulate.
+    """
+    audited = 0
+    evaluable = 0
+    visible_sums = 0
+    evaluated_rows: set[tuple[str, str]] = set()
+    offenders: list[str] = []
+    documents = [
+        line
+        for line in subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if line
+    ]
+
+    for relative in documents:
+        text = (repo_root / relative).read_text(encoding="utf-8", errors="ignore")
+        for table in _markdown_tables(text):
+            segment: dict[int, list[float]] = {}
+            for cells in table:
+                if not cells or set(cells[0]) <= set("-: "):
+                    continue
+                # A summable column checks the figure but never the explanation, and
+                # an ordinary row is checked by nothing at all -- so a basis could
+                # state arithmetic that lands nowhere near any figure beside it and
+                # no other check would object. Every money row that shows work has
+                # that work evaluated. The cell is often shared by two currency
+                # columns, so arriving at either is enough; arriving at neither is not.
+                row_columns = [c for c, cell in enumerate(cells) if _money(cell) is not None]
+                # The work is not always in the last cell. A "Quantity" column carries
+                # "2 x 24 h @ $0.184" while the Basis beside it says only "Derived", so
+                # reading the last cell alone left a whole column of arithmetic -- and
+                # every rate inside it -- unfalsifiable.
+                working_cells = [
+                    cell.strip()
+                    for c, cell in enumerate(cells)
+                    if c and c not in row_columns and cell.strip()
+                ]
+                if row_columns and working_cells:
+                    row_claims = [_money(cells[c]) for c in row_columns]
+                    for row_basis in working_cells:
+                        verdicts = [_basis_reproduces(row_basis, claim) for claim in row_claims]
+                        if any(v is not None for v in verdicts):
+                            evaluable += 1
+                            evaluated_rows.add((relative, cells[0].strip()))
+                        if any(v is not None for v in verdicts) and not any(verdicts):
+                            offenders.append(
+                                f"{relative}: '{cells[0]}' shows arithmetic in its basis "
+                                f"({row_basis!r}) that arrives at none of the figures it "
+                                f"states ({row_claims})"
+                            )
+                        for stray in _basis_strays(row_basis, row_claims):
+                            offenders.append(
+                                f"{relative}: '{cells[0]}' states a step in its basis "
+                                f"({row_basis!r}) that works out to {stray:,.4f}, which "
+                                f"is none of the figures on the row ({row_claims})"
+                            )
+                if _TOTAL_ROW.search(cells[0]):
+                    money_columns = {
+                        column
+                        for column, cell in enumerate(cells)
+                        if _money(cell) is not None
+                    }
+                    for column in sorted(money_columns):
+                        claimed = _money(cells[column])
+                        values = segment.get(column, [])
+                        audited += 1
+                        # The trailing cell is where this table explains itself.
+                        basis = cells[-1].strip() if len(cells) > column + 1 else ""
+                        # Fewer than two rows to add means the reader has no column to
+                        # sum, which is not innocence -- it is a total that cannot be
+                        # reproduced from the page at all unless the row shows its work.
+                        unsummable = len(values) < 2
+                        gap = abs(sum(values) - claimed)
+                        # The claim names its column in prose ("makes the .NET column
+                        # visibly sum to $6.68"), which is not machine-readable, so it is
+                        # enough that some column above really does add to the figure.
+                        if column == min(money_columns):
+                            for shown in _VISIBLE_SUM.findall(basis):
+                                visible_sums += 1
+                                stated = float(shown.replace(",", ""))
+                                if not any(
+                                    abs(stated - sum(segment.get(other, []))) <= 0.01
+                                    for other in money_columns
+                                ):
+                                    offenders.append(
+                                        f"{relative}: '{cells[0]}' says the rows above "
+                                        f"visibly sum to ${stated:,.2f}, but no column "
+                                        "above it adds to that"
+                                    )
+                        if (unsummable or gap > 0.01 * len(values)) and basis:
+                            # The row claims to show its work, so the work is checked.
+                            verdict = _basis_reproduces(basis, claimed)
+                            if verdict is False:
+                                offenders.append(
+                                    f"{relative}: '{cells[0]}' column {column} claims "
+                                    f"${claimed:,.2f} but its own stated basis "
+                                    f"({basis!r}) does not arrive at that figure"
+                                )
+                            elif verdict is None and unsummable:
+                                # Prose is not arithmetic. A total with no column to
+                                # add is exactly the row that has to show numbers.
+                                offenders.append(
+                                    f"{relative}: '{cells[0]}' column {column} claims "
+                                    f"${claimed:,.2f} with no summable rows above it, "
+                                    f"and its basis ({basis!r}) states no arithmetic a "
+                                    "reader could follow to that figure"
+                                )
+                            continue
+                        if (unsummable or gap > 0.01 * len(values)) and not basis:
+                            offenders.append(
+                                f"{relative}: '{cells[0]}' column {column} claims "
+                                f"${claimed:,.2f}, the {len(values)} rows above it total "
+                                f"${sum(values):,.2f} (off by ${gap:,.2f}), and the row "
+                                "shows no arithmetic"
+                                if not unsummable
+                                else (
+                                    f"{relative}: '{cells[0]}' column {column} claims "
+                                    f"${claimed:,.2f} with no summable rows above it and "
+                                    "no arithmetic in its Basis cell, so a reader cannot "
+                                    "reproduce it from anything on the page"
+                                )
+                            )
+                    segment = {}
+                    continue
+                for column, cell in enumerate(cells):
+                    value = _money(cell)
+                    if value is not None:
+                        segment.setdefault(column, []).append(value)
+
+    assert visible_sums >= VISIBLE_SUM_FLOOR, (
+        f"only {visible_sums} display-rounding explanations were checked, below "
+        f"{VISIBLE_SUM_FLOOR}; the wording changed and the check now guards nothing"
+    )
+    missing = sorted(EVALUABLE_BASIS_ROWS - evaluated_rows)
+    assert not missing, (
+        "these rows no longer show arithmetic a reader can check, so the figures beside "
+        f"them are now unfalsifiable: {missing}"
+    )
+    assert evaluable >= EVALUABLE_BASIS_FLOOR, (
+        f"only {evaluable} money rows state arithmetic a reader could follow, below "
+        f"{EVALUABLE_BASIS_FLOOR}; a Basis cell has been thinned into prose and its "
+        f"figure is no longer checked by anything"
+    )
+    assert audited >= MONEY_TABLE_FLOOR, (
+        f"only {audited} money totals were audited; the table parser has stopped "
+        "matching and this guard is reporting on nothing"
+    )
+    assert not offenders, (
+        "these totals cannot be reproduced from the rows a reader can see, and do not "
+        "say why:\n  " + "\n  ".join(offenders)
+    )
+
+
+# At least this many "git ignores X" claims must be found in workshop/golden/README.md.
+# A prose regex with no floor is the same vacuous-pass bug as an unbounded filesystem
+# walk: zero matches means the loop body never runs and the guard reports on nothing.
+GOLDEN_IGNORE_CLAIM_FLOOR = 1
+
+
+def test_the_golden_bundle_instructions_still_match_the_machine(repo_root: Path) -> None:
+    """``workshop/golden/`` is empty by design, so only its README can go stale.
+
+    A facilitator reads this file at T-4 and follows it once, one to two days of work,
+    against a live subscription. Nothing they do gets checked against the repository
+    until the very end, when the validator either exits 0 or does not -- so a README
+    that has drifted from the code costs a day, not a minute.
+
+    Two claims in it are load-bearing and both were checkable. The contract's path
+    inside the bundle is a machine constant. And the promise that the rendered evidence
+    is git-ignored is a safety claim: if it is wrong, a facilitator who commits their
+    bundle publishes the resource IDs of a live environment.
+
+    That second claim *was* wrong -- the README named
+    ``workshop/golden/*/modernization-contract.json``, which git does not ignore, while
+    the actual rule ignores ``workshop/golden/*/evidence/``. The protection was real and
+    wider than the sentence describing it, so nothing leaked. But the sentence was
+    checkable against git and nobody had checked it.
+    """
+    from catalog_acceptance import golden_dryrun
+
+    readme = (repo_root / "workshop" / "golden" / "README.md").read_text(encoding="utf-8")
+
+    assert golden_dryrun.CONTRACT_RELATIVE_PATH in readme, (
+        f"the bundle layout in the README does not show {golden_dryrun.CONTRACT_RELATIVE_PATH!r}, "
+        "which is where the validator requires the contract; a facilitator following the "
+        "diagram would render into a path that can never exit 0"
+    )
+
+    stacks = sorted(
+        path.name
+        for path in (repo_root / "workshop" / "golden").iterdir()
+        if path.is_dir()
+    )
+    assert stacks, "no stack directories under workshop/golden/ -- the guard below checks nothing"
+
+    for stack in stacks:
+        rendered = f"workshop/golden/{stack}/{golden_dryrun.CONTRACT_RELATIVE_PATH}"
+        ignored = subprocess.run(
+            ["git", "check-ignore", "-q", rendered], cwd=repo_root
+        ).returncode == 0
+        assert ignored, (
+            f"{rendered} is not git-ignored, so a facilitator who renders a golden "
+            "bundle and commits publishes the resource IDs of their live environment"
+        )
+
+    # Every sentence that talks about git ignoring something, in either voice. Matching
+    # one phrasing -- "`X` is ignored by Git" -- meant a rewrite to "Git ignores `X`"
+    # silently removed the claim from the guard's view while the suite stayed green.
+    claims = {
+        path
+        for sentence in re.split(r"(?<=[.!?])\s+", readme)
+        if "ignore" in sentence.lower() and "git" in sentence.lower()
+        for path in re.findall(r"`(workshop/golden/[^`]*?)`", sentence)
+    }
+    assert len(claims) >= GOLDEN_IGNORE_CLAIM_FLOOR, (
+        f"found {len(claims)} git-ignore claims in workshop/golden/README.md, expected at "
+        f"least {GOLDEN_IGNORE_CLAIM_FLOOR}; the claim this guard exists to check has been "
+        "reworded out of its reach and the loop below is now running on nothing"
+    )
+
+    for claimed in sorted(claims):
+        for stack in stacks:
+            probe = claimed.replace("*", stack)
+            landing = probe if probe.endswith("/") else probe + "/"
+            resolved = (
+                landing + golden_dryrun.CONTRACT_RELATIVE_PATH.rsplit("/", 1)[-1]
+                if claimed.rstrip("/").endswith("evidence")
+                else probe
+            )
+            assert subprocess.run(
+                ["git", "check-ignore", "-q", resolved], cwd=repo_root
+            ).returncode == 0, (
+                f"the README says {claimed!r} is ignored by Git, but git does not ignore "
+                f"{resolved!r}; the sentence describes a protection that is not the one in place"
+            )
+
+
+# The four application trees. Everything a participant or facilitator compiles lives
+# under one of these, and anything here that git does not track does not exist for
+# anybody who clones the repository.
+PROTECTED_PATH_FLOOR = 12
+FENCED_BLOCK_FLOOR = 20
+PROVISIONER_FUNCTION_FLOOR = 12
+SOURCE_COMMIT_SENTENCE_FLOOR = 3
+TRACKED_SOURCE_FLOOR = 20
+APPLICATION_TREES = ("dotnet", "java", "solutions/reference/dotnet", "solutions/reference/java")
+
+
+def test_every_application_source_file_is_tracked_by_git(repo_root: Path) -> None:
+    """A test that is not committed is a test that only passes on the machine that wrote it.
+
+    Four test files -- ``RuntimeIdentityConfigurationTests.cs`` and
+    ``RuntimeIdentityConfigurationTest.java``, in both the legacy and reference trees --
+    sat on disk untracked for a full review round. Locally ``dotnet test`` reported 45/45
+    and ``mvn test`` reported 35/35, and both numbers were quoted as evidence. A fresh
+    clone would have compiled 42 and 32. The gap is invisible precisely because the
+    machine doing the checking is the machine holding the uncommitted files.
+
+    This is not caught by the suites themselves, which read the filesystem, nor by the
+    mirror guard, which enumerates with ``--others`` and so sees untracked files too.
+    It needs git's own view of what would survive a clone.
+    """
+    stray: list[str] = []
+    for tree in APPLICATION_TREES:
+        assert (repo_root / tree).is_dir(), (
+            f"{tree} is not a directory -- the application tree has moved and this guard "
+            "is checking nothing"
+        )
+        listing = subprocess.run(
+            ["git", "ls-files", "-z", "--others", "--exclude-standard", "--", tree],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        stray.extend(entry for entry in listing.split("\0") if entry)
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", tree],
+            cwd=repo_root, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        # Listing only untracked files means an empty answer is the pass condition,
+        # so this guard cannot tell "nothing is stray" from "the tree is gone".
+        assert len(tracked) >= TRACKED_SOURCE_FLOOR, (
+            f"{tree} has only {len(tracked)} tracked files; this guard is being "
+            "asked about a tree that is no longer there"
+        )
+
+    assert not stray, (
+        "these files exist on disk but are not tracked by git, so they are absent from "
+        "every clone and the local test counts overstate what anyone else can run:\n  "
+        + "\n  ".join(sorted(stray))
     )

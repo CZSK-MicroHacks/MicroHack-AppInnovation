@@ -389,6 +389,11 @@ invocations after those tests exist.
 
 ### Container gates
 
+These gates run on a validation workstation with a Docker daemon, never on a workshop VM.
+The VM has no daemon, and every command participants run there uses `az acr build`
+instead; `--load` and the `trivy image` scans below both require the image to be present
+in a local daemon.
+
 ```bash
 docker buildx build --platform linux/amd64 --load -f dotnet/Dockerfile -t mh-dotnet:p4 .
 docker buildx build --platform linux/amd64 --load -f java/Dockerfile -t mh-java:p4 .
@@ -425,10 +430,11 @@ for:
 What-if command shape:
 
 ```bash
+: "${RESOURCE_GROUP:?set to the resource group this what-if was run against}"
 AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
-  --parameters @<scenario-parameter-file>
+  --parameters @<your-scenario-parameter-file>
 ```
 
 No `az deployment ... create`, `azd`, `terraform apply`, image push, database import, or
@@ -493,8 +499,8 @@ workshop subscription. No deployment command is part of this validation.
 All 11 files under `infra/**/*.bicep` passed both:
 
 ```bash
-AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep lint --file <file>
-AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep build --file <file> --stdout
+AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep lint --file <your-bicep-file>
+AZURE_CONFIG_DIR="$HOME/.azure-365" az bicep build --file <your-bicep-file> --stdout
 ```
 
 The commands produced zero errors. The only diagnostics were the repository-known
@@ -505,15 +511,16 @@ Each saved sanitized scenario then passed both ARM validation and what-if agains
 resource group:
 
 ```bash
+: "${RESOURCE_GROUP:?set to the resource group these gates were run against}"
 AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group validate \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
-  --parameters @<scenario-parameter-file>
+  --parameters @<your-scenario-parameter-file>
 
 AZURE_CONFIG_DIR="$HOME/.azure-365" az deployment group what-if \
   --resource-group "$RESOURCE_GROUP" \
   --template-file infra/main.bicep \
-  --parameters @<scenario-parameter-file> \
+  --parameters @<your-scenario-parameter-file> \
   --result-format ResourceIdOnly \
   --no-pretty-print
 ```

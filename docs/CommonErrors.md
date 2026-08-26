@@ -718,6 +718,55 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Resolution:** Put the Markdown-fence regex in a literal single-quoted PowerShell string, where backticks are ordinary characters, then compile each extracted block with `[scriptblock]::Create`.
 
+## 103. Stripping single-quoted spans with a regex misreads the `'\''` idiom
+**Symptom:** A shell-variable checker reports `$principal` in `workshop/sre-agent/README.md` as unbound, when it is a jq `--arg` name inside a single-quoted program that bash never expands.
+
+**Cause:** The extractor removed quoted spans with `'[^']*'`. That pattern cannot represent the close-escape-reopen idiom used to embed a literal quote inside a single-quoted string, so it terminates the span early and stays mis-aligned for the rest of the line, exposing quoted text as if it were shell.
+
+**Resolution:** Scan for quote *state* rather than matching quoted *spans*. Walk the string tracking whether you are inside single quotes, and treat a backslash outside them as escaping the next character — which also removes the need for a hand-written exception for the correctly escaped `\$filter` OData parameter in `solutions/ch06-sre-agent/README.md`. Settle a suspected false positive by binding the name to a sentinel in a real shell and checking whether the sentinel reaches the output. Do not settle it by reading the line.
+
+## 104. A guard's trigger encodes an assumption about which tool fails
+**Symptom:** A guard passes for seven review rounds while instances of exactly the defect it describes ship in the repository.
+
+**Cause:** Its trigger is narrower than its contract. Requiring the literal string `az deployment`, and then merely loosening that to any block running `az`, asserts that only the Azure CLI can be broken by an unbound variable. `ARM_SERIALIZED_DATA` in `solutions/ch04/README.md` is expanded in a block containing nothing but `jq`, `printf` and `shasum`; unbound, it hashes the empty string and prints a digest that can never match the workbook.
+
+**Resolution:** State the contract in one sentence and scan everything it covers. If a trigger is genuinely required, name the condition that makes the defect possible, never the tool you expect to be running. Widening the threshold on a wrong trigger only makes the wrong question louder.
+
+## 105. A placeholder detector only reports on spellings its character class admits
+**Symptom:** A placeholder guard is described as the strictest check in the repository and reports nothing, while `<identityResourceId>` and `<path-to-ch00-selection.json>` sit unresolved inside its own declared scope.
+
+**Cause:** The detector matched `<[a-z][a-z0-9-]*>` — no uppercase, dot, pipe, slash, underscore or space. It could only ever find placeholders written the way its author writes them. `solutions/ch00/README.md` carried two conventions on adjacent lines and the guard saw only the conforming one.
+
+**Resolution:** Make the detector permissive and the acceptance rule strict: match any angle-bracketed token, then require that token to name who supplies the value. Verify the widening by planting each spelling you failed to anticipate — camelCase, dots, pipes, and whole English sentences in angle brackets — and confirming every one is now reported.
+
+## 106. A non-recursive glob stops covering files as the tree grows
+**Symptom:** A guard's coverage shrinks as a proportion of the repository without any test failing, and documents added later are never checked at all.
+
+**Cause:** A non-recursive pattern such as `docs/*.md` matches only the top level, so anything under a new subdirectory is invisible to it. Any hand-maintained scope list has the same failure mode after a rename, and both fail silently because finding nothing looks identical to finding no defects.
+
+**Resolution:** Derive scope from the version-control index with `git ls-files`, adding untracked-but-not-ignored files where the guard must also see work in progress, and assert a floor on how many files and blocks it actually found. A guard that silently scans less is indistinguishable from one that passes.
+
+## 107. A validator step cannot be reached by mutating the field its name mentions
+**Symptom:** Writing a defect-injection test for `golden-dryrun`'s `stack-match` step, the obvious mutation — editing `/source/stack` in the handoff — never reaches it. The run fails one step earlier, at `contract-fields`.
+
+**Cause:** The stack is not an independent field. Changing it puts it in disagreement with `sliceId`, and the schema check ordered before `stack-match` catches that disagreement first. The step's name describes the two things it *compares*, not the defect that can actually arrive at it: `_step_stack_match` compares the contract's stack against the **bundle directory name**, so the only input that reaches it is an internally consistent contract filed in the wrong stack directory.
+
+**Resolution:** When a step cannot be reached by the obvious mutation, that is information about ordering rather than evidence of a dead step. Find the input that does reach it and assert that the failure lands on *that* step and no earlier one — a defect-injection test that only checks for a non-zero exit proves nothing about which check caught it. If no reachable input exists, the step really is dead and should be removed rather than left as decoration.
+
+## 108. Introducing a variable converts only the uses you edited, not the instruction that described them
+**Symptom:** A documented command block that worked before a "safety" refactor now dies partway through. In `docs/Demo.md` step 4, binding `CICD=evidence/cicd-report.json` and switching two of the step's three `jq` blocks to `"$CICD"` left the third on the literal path: rehearsing with `CICD=workshop/contracts/cicd-evidence.example.json` resolves the first two blocks correctly and then exits `2` with `jq: error: Could not open file evidence/cicd-report.json`.
+
+**Cause:** Before the change, every read was a literal path and one instruction — "substituted for the path above" — covered the whole step. Introducing the variable for *some* reads split the step into two substitution mechanisms while leaving one instruction that now describes half of it. The document still reads correctly to an author who knows which half they edited, and the surviving literal is the *original*, correct-looking value, so nothing looks wrong on the page.
+
+**Resolution:** When you introduce a variable into a document, the unit of change is every use in its scope **plus every sentence that told the reader how to substitute the old form**. Convert all uses or none, then reword the instruction so exactly one substitution point exists. Verify by execution, setting only the variable and running the whole scope end to end — a partial conversion passes any check that reads the block you edited. This is the same class as a guard whose scope quietly stops covering the tree: the edit was right and its blast radius was one line wider.
+
+## 109. A subtotal computed from unrounded values is correct and unreproducible at the same time
+**Symptom:** A reader adds a column to check the work and it does not add. `docs/CostEstimate.md` claimed a `× 30` base subtotal of $2,017.23 where the five visible rows summed to $2,016.90 and 30 × the displayed $67.24 gave $2,017.20 — reconciling by neither route a reader has.
+
+**Cause:** Computing totals from unrounded intermediates is right, and rounding line items to cents for display is right, but doing both silently removes the operand that connects them. The true derivation was 30 × $67.2409, and "67.2409" appeared nowhere on the page. A penny reads as rounding and is forgiven; a third of a dollar that reconciles by nothing reads as an error, and it spends the credibility that the exactly-right lines earned. The reviewer who found it had detected the same gap twice in earlier rounds and ruled it benign both times, because the test applied was "is the total correct?" rather than "can the person this is written for reproduce it from what they can see?".
+
+**Resolution:** Do not re-derive the figures — the arithmetic is not what is wrong, and a numeric rewrite is a fresh chance to introduce drift. Publish the missing operand where the row already has a place for it, and state the convention once *with* the promise that anything wider than rounding shows its arithmetic in the row. A bare "totals are computed from unrounded values" disclaimer is worse than nothing: it converts an apparent slip into unverifiable-by-design. Then mechanise the rule, because the next drift will not be one anybody remembers to check by eye: assert that a claimed total sits within a cent per summed row of the rows a reader can see, or that the row explains itself. Any finding you are about to classify as a "display artifact" deserves the audience test, not the author test.
+
 ---
 **Planned Mitigations / Enhancements:**
 - Add regeneration mode (`--repair-missing-images`) to attempt image creation for still-missing entries before pruning.
