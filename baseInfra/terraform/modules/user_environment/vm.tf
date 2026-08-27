@@ -59,10 +59,19 @@ resource "azapi_resource" "vm" {
         adminUsername = var.admin_username
         adminPassword = var.admin_password
         customData    = local.provisioner_custom_data[each.key]
+        # Platform patch orchestration flips provisioningState to "Updating" during every
+        # assessment and installation pass. While the VM is "Updating", az vm run-command
+        # returns Conflict and the acceptance topology gate reports precondition-failed,
+        # even though the VM is running and healthy. On a lab VM that lives for two days
+        # that locks the attendee out of the only delivery channel for reasons unrelated to
+        # their work, so patching is left to the (current) base image instead.
         windowsConfiguration = {
-          enableAutomaticUpdates = true
-          patchSettings          = { patchMode = "AutomaticByPlatform" }
+          enableAutomaticUpdates = false
+          patchSettings          = { patchMode = "Manual" }
         }
+      }
+      diagnosticsProfile = {
+        bootDiagnostics = { enabled = true }
       }
       networkProfile = {
         networkInterfaces = [
