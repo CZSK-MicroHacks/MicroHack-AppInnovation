@@ -960,6 +960,252 @@ partial one.
 
 ---
 
+### N. The acceptance gate reports correct security code as a failure, and the only change that makes the number go up is deleting the security control
+
+**This chapter was unfinishable as shipped.** It required a harness change by the facilitator
+before it could pass. That sentence is the honest headline and everything below is its
+justification.
+
+`catalog_acceptance` probes seven path-traversal targets and required all seven to return
+`404`. On Azure Container Apps they cannot. ACA's Envoy ingress normalises the request target
+— folding backslashes, percent-decoding, then removing dot segments — **before Kestrel ever
+sees it**. I established this with a raw TCP + TLS socket probe rather than an HTTP client, so
+that no client-side normalisation could be confused for the gateway's:
+
+```
+/images/../healthz              -> app receives /healthz
+/images\..\healthz              -> app receives /healthz
+/images/%2e%2e%2fhealthz        -> app receives /healthz
+/images/%2e%2e%5chealthz        -> app receives /healthz
+/perftest\catalog               -> app receives /perftest/catalog
+/perftest%5ccatalog             -> app receives /perftest/catalog
+/images/%252e%252e%252fhealthz  -> app receives it intact, and correctly 404s
+```
+
+Six of the seven never reach the application at all. The application's own
+`OriginalRequestTargetMiddleware` is **correct** — 8/8 against `TestServer`, where no gateway
+intervenes. The gate was failing an app that defends itself properly, deployed behind a gateway
+that defends it a second time.
+
+**Why this is the most dangerous defect I found.** Every other defect in this material
+manufactures a *false positive* — evidence that looks good and means nothing. This one is a
+**false negative**: it reports correct code as insecure, and it blames the attendee. And the
+attendee's only lever is their own source. The single edit that moves the number from 21/22 to
+22/22 is **deleting the traversal middleware** — because then `/images/../healthz` returns the
+health page instead of a 404, which is *worse* security and a *better* score.
+
+So the workshop actively teaches the wrong lesson here: it rewards removing a security control
+and punishes keeping it. I want to be plain that I considered and rejected two "fixes" —
+weakening the middleware, and hand-editing the report to say `passed`. The second is the exact
+fabrication this workshop exists to catch, and it was available to me with no reviewer present.
+
+**Remedy (facilitator's, from my report).** A `_classify_traversal` that sorts each probe into
+`rejected` (a real 404), `normalized-upstream` (byte-identical to a direct request for the
+gateway-resolved path, proving the app never saw the unsafe target), or `traversed` (anything
+else, including any `image/*` response). No assertion was deleted. My verified map:
+
+```
+raw-forward-existing       -> /healthz          normalized-upstream
+raw-backslash-existing     -> /healthz          normalized-upstream
+encoded-forward-existing   -> /healthz          normalized-upstream
+encoded-backslash-existing -> /healthz          normalized-upstream
+double-encoded-existing    -> /healthz          rejected
+raw-route-alias            -> /perftest/catalog normalized-upstream
+encoded-route-alias        -> /perftest/catalog normalized-upstream
+```
+
+**Keep both artifacts.** `evidence/f73-traversal-gate-capture.md` preserves the 21/22 failure.
+The later 22/22 is the *fix working* — it is not evidence that the defect was cosmetic. An
+attendee on the real workshop would have been hard-stopped here with no path forward.
+
+---
+
+### O. The telemetry gate can only be satisfied by an attendee whose run went badly
+
+The same class as N, from the opposite pole. N punishes correct work; this one **rewards
+invented work**.
+
+`behavior-contract.json` requires eight log signals, four of which are failure signals
+(`catalog.query.failed`, `catalog.database.failed`, `catalog.import.failed`,
+`catalog.performance.failed`). `handoff.py:270` compares with set **equality**, not superset:
+
+```python
+if set(rows) != set(expected_names) or len(rows) != len(result["rows"]):
+    raise ValueError(f"telemetry {query_id} result set is incomplete or duplicated")
+```
+
+**Nothing in `challenges/`, `solutions/ch01*/` or `docs/` induces any of those four failures.**
+A run that goes perfectly emits *none* of them and fails the gate hardest. My own run had two
+of them only because my bootstrap went badly — they were accidents, not instruction.
+
+That inverts the incentive the workshop exists to create: the attendee who did everything right
+has strictly fewer honest options than the one who struggled, so the smoothest run is the one
+under most pressure to hand-write JSON. And hand-written telemetry evidence is **undetectable**
+— `_validate_telemetry_results` only checks that the contract's signal names are a subset of
+what you *claim* in `observedAttributes`. It never cross-checks Azure.
+
+**The requirement is right; the defect is that it is never taught.** Proving the error paths are
+instrumented is arguably the most valuable thing the telemetry gate does — an app that only
+emits telemetry on the happy path is exactly the app that goes dark during an incident. So the
+fix is to teach fault injection as an explicit, reversible, documented step. I wrote that
+procedure and it is now shipped as `docs/TelemetryFaultInjection.md`; my working copy is
+`evidence/f74-fault-injection-procedure.md`. Three traps in it are worth repeating here:
+
+1. **Table routing.** `LogError(exception, …)` routes to `AppExceptions`, not `AppTraces`. All
+   four failure signals are therefore absent from the table an attendee would naturally query,
+   and the material gives **no KQL guidance at all**. This alone looks exactly like missing
+   instrumentation. It is a fifth hard stop hiding behind this one.
+2. **The coarse fault cannot reach `catalog.query.failed`.** Revoking `db_datareader` wholesale
+   does *not* work: `Pages/Index.razor` resolves the **category** list before calling
+   `ListAsync`, so the request dies *outside* the instrumented `try`. Only a single-table
+   `DENY SELECT ON OBJECT::dbo.Figures`, leaving `Categories` readable, drives execution into
+   the catch. Nobody would derive that from the material; I got it from the exception table.
+3. **Steps must not overlap.** Combined faults exhaust the connection pool, and the failure
+   becomes `InvalidOperationException: Timeout expired…`, which is **not** a `DbException`, so
+   the `if (exception is DbException)` guard at `FigureCatalogService.cs:53` silently stops
+   emitting `catalog.database.failed`. Injecting two faults at once produces *worse* evidence
+   than injecting one.
+
+---
+
+### P. `/readyz` reports the database ready while every catalog read returns 500
+
+Found while inducing the faults above, and it is a defect in the application, not the material —
+so I am reporting it against my own work.
+
+With `SELECT` denied on `dbo.Figures`, every catalog page returned `500`, while `/readyz`
+continued to return `200` with `database: ready`. The readiness probe opens a connection and
+runs a trivial statement, so it is blind to a data-plane authorization failure on the tables the
+application actually reads. A load balancer would keep routing traffic to an application that
+cannot serve a single request.
+
+A readiness probe should exercise a representative read. As written it answers "can I reach the
+server", not "can I serve", and those diverge precisely during the incidents readiness exists to
+detect.
+
+---
+
+### Q. The topology gate reads a control-plane property and calls a running, healthy VM "not provisioned"
+
+`_require_resource_state` (`catalog_migrate/azure.py:59-82`) requires
+`properties.provisioningState == "Succeeded"` and otherwise raises
+`Azure resource is not provisioned`. That check runs inside `validate_migration_topology`, which
+gates `export`, `import`, `images copy`, `verify` **and `render-handoff`**.
+
+`provisioningState` describes the **control plane**. What the gate actually cares about is
+whether the VM is *running*. During routine platform extension re-application the VM sits at
+`provisioningState: Updating` with `PowerState: VM running` — perfectly healthy, serving fine —
+and the gate fails with a message that says the resource does not exist in a usable form.
+
+**Two failures at once, from one cause.** The same condition returns
+`Conflict: Run command extension execution is in progress` from `az vm run-command`, which in a
+delivery without Bastion is the *only* scriptable channel to the machine. So the attendee is
+simultaneously locked out of the delivery channel **and** failed by the validator, for reasons
+with no relationship to their work, with no diagnostic anywhere that says "wait". Observed
+windows here ran to roughly 70 minutes. That makes it chapter-blocking-by-timeout.
+
+It is not per-VM: the .NET and Java VMs were observed in this state simultaneously. On a real
+delivery the platform takes out every attendee's control channel at once, while the workshop
+tells all of them their resource is "not provisioned".
+
+**One measurement I could not explain, recorded as observed rather than diagnosed.** At
+21:28:11 the VM's own managed identity read `Updating` — three API versions, `get-instance-view`,
+and `az rest` straight to `management.azure.com`, all agreeing. Eight seconds later my laptop
+read `Succeeded` for the same resource, also stable across a multi-minute window. I could not
+determine which view was authoritative, and later both agreed on `Updating`. Whatever the
+mechanism, the practical consequence stands: **the machine that is required to run the gate is
+the one that reads the failing value**, and a facilitator checking from elsewhere may see the
+opposite and conclude the attendee is wrong.
+
+`az vm run-command` is also **single-flight per VM**, so `Conflict` has two unrelated causes with
+opposite remedies — `Updating` means a platform window, `Succeeded` means someone else is simply
+on the channel and nothing is wrong. The expensive remedy for the first (deallocate + start) is
+destructive if applied to the second. Checking `provisioningState` first is the only way to tell
+them apart, and nothing in the material says so.
+
+---
+
+### R. The VM image ships machine-level `CATALOG_*` variables that hard-stop acceptance, and can silently point it at the wrong database
+
+My first acceptance run on the VM died before contacting anything:
+
+```
+ValidationError: 1 validation error for AcceptanceSettings
+  Value error, managed Azure SQL verification forbids username and password
+```
+
+I passed no username and no password. The cause is persisted at **Machine** scope on the
+supplied VM image:
+
+```
+CATALOG_DATABASE_HOST = localhost      CATALOG_DATABASE_NAME = LegoCatalog
+CATALOG_DATABASE_PORT = 1433           CATALOG_DATABASE_USERNAME = catalog
+CATALOG_BASE_URL = http://localhost:5000
+```
+
+`cli.py:73` defaults `--database-username` from `CATALOG_DATABASE_USERNAME`, and
+`contracts.py:370` then rejects the run. **The error names an argument the attendee never passed,
+from a variable the material never mentions, in a shell they never polluted.** Blame-inverting,
+and it hard-stops managed acceptance on the shipped image. The one-line fix is to clear the
+variable first — `solutions/ch01-manual/dotnet/README.md:342-343` does exactly that, but at
+*teardown*, so the codebase knows about the variable and simply never clears it *before*
+acceptance.
+
+**The half that matters more.** Those same variables are the defaults for `--database-host`
+(`cli.py:53`) and `--database-name` (`cli.py:68`), and they name the **legacy source** SQL
+Express, which holds the same canonical 198 figures / 20 categories. Any invocation that supplies
+a password but omits host and name verifies the **source** database while reporting on the Azure
+migration — counts match, `status: passed`, Azure SQL never touched.
+
+*Scope:* I observed the hard stop and I observed the defaults resolving to
+`localhost` / `LegoCatalog` / `catalog` on the VM. I did **not** run the silent-wrong-database
+case end to end, because I do not hold the source database password. It is stated from those two
+observations plus the two `cli.py` lines, not from an observed run.
+
+---
+
+### S. One challenge's deployment silently invalidated another challenge's evidence
+
+A **Challenge 4** workbook deployment (`obs-workbook-dotnet-ch4`) redeployed the container app
+with an **empty revision suffix**. That created two new revisions and **deactivated both the
+baseline and release revisions** Challenge 1 had just produced — while leaving the application
+healthy, serving correctly, on the correct image digest. Nothing looked wrong.
+
+It matters because `handoff.py:709-715` requires
+`revisionName == f"{applicationRevisionRole}-{sourceCommit[:12]}"`, and `:1239-1244` requires the
+telemetry, observability and application revisions to agree. So every telemetry signal emitted
+after that deployment was attributed to a revision the handoff will reject, and the *only*
+symptom was a revision name in a JSON file. Challenges are not as independent as the material
+presents them, and Challenge 1's evidence has a lifetime nobody states.
+
+Recovering it surfaced two Azure Container Apps traps worth documenting:
+
+- **`az containerapp revision list` hides inactive revisions** unless `--all` is passed. A
+  `--revision-suffix` collision therefore reports "a revision with that suffix already exists"
+  for a revision you cannot see in the list you just ran.
+- **A failed revision update wedges every later write.** After that error the app sits in
+  `provisioningState: Failed`, and *every* subsequent PATCH — including a pure
+  `ingress traffic set`, and a minimal ARM `az rest` PATCH that returns exit 0 and silently
+  no-ops — fails with the same stale-suffix error. The only exit I found was to provision once
+  with a fresh unique suffix, then activate the intended revision and re-pin traffic.
+
+---
+
+### T. There is no per-attendee identity, so no evidence is attributable to anyone
+
+Checking who created a hand-made role assignment, I found that my principal, the facilitator's
+principal and the other arm's principal are **the same Azure identity**
+(`admin@MngEnvMCAP372348.onmicrosoft.com`). Every `createdBy` in the subscription resolves to it
+by construction.
+
+I could confirm I had made that change only from my own written record, not from Azure. For a
+workshop whose entire premise is evidence provenance — and which asks attendees to record commit
+SHAs, image digests and revision names precisely so claims can be checked — the environment
+itself cannot answer "who did this". That undercuts the lesson at the infrastructure level, and
+it also means a facilitator cannot distinguish an attendee's change from their own.
+
+---
+
 ## Defects that fail loudly (lower value, but real)
 
 - **Toolchain host pins are unreachable.** `workshop/toolchain.lock.json` pins SDK
