@@ -85,6 +85,9 @@ param performanceApiKey string = ''
 
 param location string = 'swedencentral'
 
+@description('Set true when the subscription blocks public IP creation (for example the Microsoft.Network/AllowBringYourOwnPublicIpAddress feature is not registered). An internal Container Apps environment is fronted by an internal load balancer and never allocates a public IP, so the catalog is then reachable only from inside the peered virtual network.')
+param containerAppsEnvironmentInternal bool = false
+
 var isApplication = deploymentStage == 'application'
 var isJava = stack == 'java-postgresql'
 var sourceCommitNonHex = replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(sourceCommit, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')
@@ -146,6 +149,7 @@ module environment 'modules/environment.bicep' = {
     postgresqlApplicationPassword: postgresqlApplicationPassword
     performanceApiKey: performanceApiKey
     location: location
+    containerAppsEnvironmentInternal: containerAppsEnvironmentInternal
   }
 }
 

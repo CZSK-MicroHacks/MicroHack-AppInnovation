@@ -25,6 +25,9 @@ param postgresqlApplicationPassword string
 param performanceApiKey string
 param location string
 
+@description('Set true when the subscription blocks public IP creation (for example the Microsoft.Network/AllowBringYourOwnPublicIpAddress feature is not registered). An internal Container Apps environment is fronted by an internal load balancer and never allocates a public IP, so the catalog is then reachable only from inside the peered virtual network.')
+param containerAppsEnvironmentInternal bool = false
+
 var isApplication = deploymentStage == 'application'
 var isJava = stack == 'java-postgresql'
 var isBlob = imageProvider == 'azure-blob'
@@ -420,7 +423,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-10-02-
     }
     vnetConfiguration: {
       infrastructureSubnetId: containerAppsSubnet.id
-      internal: false
+      internal: containerAppsEnvironmentInternal
     }
     zoneRedundant: false
   }
