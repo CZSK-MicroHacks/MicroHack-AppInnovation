@@ -579,8 +579,12 @@ baseline revision is `Healthy`, inactive, and contains the same digest reference
 ## 7. Release evidence and rollback
 
 Run native tests and preserve the Surefire JUnit XML. Create
-`evidence/runtime-test-report.json` with the real artifact path and fourteen identities
-from `workshop/contracts/runtime-test-evidence.schema.json`.
+`evidence/runtime-test-report.json` by copying the `java-postgresql` object from
+`workshop/contracts/runtime-test-evidence.template.json` and editing only
+`sourceCommit`, `artifact`, and `command`. The fourteen test identities are already
+correct in the template, so do not transcribe them from
+`workshop/contracts/runtime-test-evidence.schema.json`; validate against that schema
+once the three fields are filled.
 
 ```powershell
 $AcceptanceReport = Join-Path (Get-Location) `
@@ -643,6 +647,24 @@ finally { Pop-Location }
 
 Exercise successful, rejected-import, dependency-failure, and performance paths. Query
 the Application Insights resource with the four KQL queries in
+**Do not hand-author the telemetry files.** Record what you observed into a capture
+manifest and let the renderer normalize it:
+
+```powershell
+uv run python -m catalog_acceptance.telemetry_evidence_cli `
+  --capture evidence/telemetry-capture.json `
+  --output evidence/telemetry-report.json
+```
+
+The capture manifest holds `workspaceId`, `capturedAt`, `service`
+(`mh-catalog-java`), `resourceAttributes`, and one entry per query
+(`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
+its `recordCount`, `observedAttributes`, and `measurements` or `observations`. The
+renderer supplies each metric `unit` from the behavior contract, stamps provenance into
+every result file, writes all four `evidence/telemetry/*.json` plus the report, and
+**reports every unmet requirement at once** instead of one per handoff attempt. It will
+not invent a signal you did not capture.
+
 `workshop/contracts/telemetry-evidence.example.json`; normalize actual nonempty results
 to `evidence/telemetry/resources.json`, `traces.json`, `metrics.json`, and `logs.json`
 against `workshop/contracts/telemetry-query-result.schema.json`. Write

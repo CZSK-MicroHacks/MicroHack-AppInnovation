@@ -199,10 +199,16 @@ Challenge 3 checks the application source out of your repository at exactly this
 builds `java/Dockerfile` from that checkout. A commit that never left this VM would fail
 that checkout, so do not continue until the push succeeds.
 
-Create `evidence/runtime-test-report.json` for the preserved Surefire XML under
-`evidence/runtime-tests/` by following
-`workshop/contracts/runtime-test-evidence.schema.json`. It must bind all
-fourteen exact frozen test identities to `$SourceCommit`.
+Copy the `java-postgresql` object from
+`workshop/contracts/runtime-test-evidence.template.json` to
+`evidence/runtime-test-report.json` and edit only three fields: `sourceCommit` to
+`$SourceCommit`, `artifact` to the preserved Surefire XML under
+`evidence/runtime-tests/`, and `command` to the command you ran. The fourteen frozen
+test identities are already correct in the template, so do not retype them. Validate
+the result against `workshop/contracts/runtime-test-evidence.schema.json`.
+
+This step needs no Azure resources, so you can produce and validate it before you
+deploy; a failure here then costs minutes instead of surfacing after a migration.
 
 ## 4. Build the immutable container
 
@@ -520,6 +526,24 @@ if ($AcceptanceExit -ne 0) { throw 'full acceptance failed' }
 }
 finally { Pop-Location }
 ```
+
+**Do not hand-author the telemetry files.** Record what you observed into a capture
+manifest and let the renderer normalize it:
+
+```powershell
+uv run python -m catalog_acceptance.telemetry_evidence_cli `
+  --capture evidence/telemetry-capture.json `
+  --output evidence/telemetry-report.json
+```
+
+The capture manifest holds `workspaceId`, `capturedAt`, `service`
+(`mh-catalog-java`), `resourceAttributes`, and one entry per query
+(`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
+its `recordCount`, `observedAttributes`, and `measurements` or `observations`. The
+renderer supplies each metric `unit` from the behavior contract, stamps provenance into
+every result file, writes all four `evidence/telemetry/*.json` plus the report, and
+**reports every unmet requirement at once** instead of one per handoff attempt. It will
+not invent a signal you did not capture.
 
 Exercise normal, import, performance, and controlled failure paths. Query Azure
 Monitor and store normalized nonempty results in

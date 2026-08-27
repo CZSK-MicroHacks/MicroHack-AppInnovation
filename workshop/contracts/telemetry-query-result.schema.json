@@ -7,7 +7,10 @@
   "required": [
     "schemaVersion",
     "queryId",
-    "rows"
+    "rows",
+    "workspaceId",
+    "capturedAt",
+    "queryText"
   ],
   "properties": {
     "schemaVersion": {
@@ -113,6 +116,21 @@
           }
         }
       }
+    },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Log Analytics workspace ID or resource ID the rows were read from."
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp at which the query was executed."
+    },
+    "queryText": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Verbatim query executed to produce these rows."
     }
   },
   "allOf": [

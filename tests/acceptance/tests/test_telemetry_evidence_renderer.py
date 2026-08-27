@@ -1,0 +1,341 @@
+"""End-to-end coverage for the telemetry evidence renderer (F-89).
+
+The load-bearing test renders a bundle and submits it to the *real* handoff gate,
+``_validate_telemetry_results``. The gate re-reads the behavior contract itself, so
+acceptance is not self-consistency between the renderer and its own fixture.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from catalog_acceptance.handoff import _validate_telemetry_results
+from catalog_acceptance.telemetry_evidence import (
+    TelemetryCaptureError,
+    render_telemetry_evidence,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CONTRACTS = REPO_ROOT / "workshop" / "contracts"
+
+ROUTE_ATTRS = {
+    "http.request.method": "GET",
+    "http.route": "/figure/{id}",
+    "http.response.status_code": 200,
+    "server.address": "localhost",
+}
+
+
+def _behavior() -> dict[str, Any]:
+    return json.loads((CONTRACTS / "behavior-contract.json").read_text())["telemetry"]
+
+
+def _capture() -> dict[str, Any]:
+    """Build a capture manifest describing a fully exercised application."""
+    behavior = _behavior()
+    resource_attributes = {
+        name: "observed" for name in behavior["requiredResourceAttributes"]
+    }
+
+    def signals(spec: dict[str, list[str]], kind: str) -> dict[str, Any]:
+        built: dict[str, Any] = {}
+        for name, attributes in spec.items():
+            entry: dict[str, Any] = {
+                "recordCount": 7,
+                "observedAttributes": list(attributes),
+            }
+            payload = {"attributes": {a: "observed" for a in attributes}}
+            if kind == "metrics":
+                entry["measurements"] = [{"value": 1.5, **payload}]
+            else:
+                entry["observations"] = [payload]
+            built[name] = entry
+        return built
+
+    traces = signals(behavior["traces"], "traces")
+    metrics = signals(behavior["metrics"], "metrics")
+    logs = signals(behavior["logs"], "logs")
+
+    # The route probe the gate demands, in each of its three carriers.
+    traces["http.server"]["observations"].append({"attributes": dict(ROUTE_ATTRS)})
+    logs["http.server.request"]["observations"].append({"attributes": dict(ROUTE_ATTRS)})
+    metrics["http.server.request.duration"]["measurements"].append(
+        {"value": 0.02, "attributes": dict(ROUTE_ATTRS)}
+    )
+    # The rejected-import aggregate, which only exists after a real rejection.
+    metrics["catalog.import.records"]["measurements"].append(
+        {"value": 3, "attributes": {"catalog.import.outcome": "rejected"}}
+    )
+
+    return {
+        "schemaVersion": "1.0.0",
+        "workspaceId": "/subscriptions/s/resourceGroups/r/providers/"
+        "Microsoft.OperationalInsights/workspaces/w",
+        "capturedAt": "2026-08-27T22:05:00Z",
+        "service": "mh-catalog-java",
+        "resourceAttributes": resource_attributes,
+        "queries": {
+            "resources": {
+                "query": "AppDependencies | where TimeGenerated > ago(30m)",
+                "signals": {
+                    "resource": {
+                        "recordCount": 1,
+                        "observedAttributes": list(
+                            behavior["requiredResourceAttributes"]
+                        ),
+                    }
+                },
+            },
+            "traces": {"query": "AppDependencies | project Name", "signals": traces},
+            "metrics": {"query": "AppMetrics | project Name", "signals": metrics},
+            "logs": {"query": "AppTraces | project Message", "signals": logs},
+        },
+    }
+
+
+def _render(root: Path, capture: dict[str, Any]) -> dict[str, Any]:
+    capture_path = root / "evidence" / "telemetry-capture.json"
+    capture_path.parent.mkdir(parents=True, exist_ok=True)
+    capture_path.write_text(json.dumps(capture))
+    return render_telemetry_evidence(
+        capture_path, CONTRACTS, root / "evidence" / "telemetry-report.json", root
+    )
+
+
+def test_rendered_bundle_is_accepted_by_the_real_handoff_gate(tmp_path: Path) -> None:
+    """The deliverable, not the diff: render then submit to the gate that judges it."""
+    _render(tmp_path, _capture())
+    report = json.loads((tmp_path / "evidence" / "telemetry-report.json").read_text())
+    _validate_telemetry_results(report, CONTRACTS, tmp_path)
+
+
+def test_renderer_supplies_metric_units_so_they_are_never_hand_typed(
+    tmp_path: Path,
+) -> None:
+    """`{record}` is contract data, not something an attendee should retype."""
+    capture = _capture()
+    for signal in capture["queries"]["metrics"]["signals"].values():
+        assert "unit" not in signal
+    _render(tmp_path, capture)
+    metrics = json.loads((tmp_path / "evidence" / "telemetry" / "metrics.json").read_text())
+    units = {row["signalName"]: row["unit"] for row in metrics["rows"]}
+    assert units["catalog.import.records"] == "{record}"
+    assert units["http.server.request.duration"] == "s"
+
+
+def test_renderer_stamps_provenance_into_every_result_file(tmp_path: Path) -> None:
+    """F-89's point: evidence must be able to say where it came from."""
+    capture = _capture()
+    _render(tmp_path, capture)
+    for query_id in ("resources", "traces", "metrics", "logs"):
+        document = json.loads(
+            (tmp_path / "evidence" / "telemetry" / f"{query_id}.json").read_text()
+        )
+        assert document["workspaceId"] == capture["workspaceId"]
+        assert document["capturedAt"] == capture["capturedAt"]
+        assert len(document["queryText"]) >= 10
+
+
+def test_missing_signal_is_reported_and_never_invented(tmp_path: Path) -> None:
+    """A signal that was never observed must fail, not be defaulted into existence."""
+    capture = _capture()
+    del capture["queries"]["logs"]["signals"]["catalog.database.failed"]
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    assert any("catalog.database.failed" in p for p in error.value.problems)
+    assert not (tmp_path / "evidence" / "telemetry" / "logs.json").exists()
+
+
+def test_every_problem_is_reported_in_one_run(tmp_path: Path) -> None:
+    """The gate raises one ValueError at a time; the renderer must not."""
+    capture = _capture()
+    del capture["queries"]["logs"]["signals"]["exception"]
+    del capture["queries"]["traces"]["signals"]["db.client"]
+    capture["queries"]["metrics"]["signals"]["catalog.import.records"]["measurements"] = [
+        {"value": 5, "attributes": {"catalog.import.outcome": "inserted"}}
+    ]
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    problems = "\n".join(error.value.problems)
+    assert len(error.value.problems) >= 3
+    assert "exception" in problems
+    assert "db.client" in problems
+    assert "rejected" in problems
+
+
+def test_missing_route_probe_is_reported_with_actionable_guidance(
+    tmp_path: Path,
+) -> None:
+    """The three-carrier route probe is the least discoverable gate rule."""
+    capture = _capture()
+    capture["queries"]["traces"]["signals"]["http.server"]["observations"] = [
+        {"attributes": {a: "observed" for a in _behavior()["traces"]["http.server"]}}
+    ]
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    joined = "\n".join(error.value.problems)
+    assert "route-template probe" in joined
+    assert "/figure/{id}" in joined
+
+
+@pytest.mark.parametrize(
+    "value", [0, -3, 2.5, float("inf")], ids=["zero", "negative", "fractional", "infinite"]
+)
+def test_rejected_import_aggregate_must_be_positive_and_integral(
+    tmp_path: Path, value: float
+) -> None:
+    """Mirror the gate's arithmetic so it is caught locally, not at handoff.
+
+    ``ValueError`` rather than ``TelemetryCaptureError`` because the infinite case is
+    caught even earlier: ``artifact_io`` refuses to parse the non-standard ``Infinity``
+    constant, so a non-finite aggregate cannot survive being written to a capture file.
+    """
+    capture = _capture()
+    capture["queries"]["metrics"]["signals"]["catalog.import.records"]["measurements"] = [
+        {"value": value, "attributes": {"catalog.import.outcome": "rejected"}}
+    ]
+    with pytest.raises(ValueError):
+        _render(tmp_path, capture)
+
+
+def test_absent_rejection_points_at_the_fault_injection_runbook(tmp_path: Path) -> None:
+    """F-74 compounds F-89, so the error must name the way out."""
+    capture = _capture()
+    capture["queries"]["metrics"]["signals"]["catalog.import.records"]["measurements"] = [
+        {"value": 5, "attributes": {"catalog.import.outcome": "inserted"}}
+    ]
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    assert any("TelemetryFaultInjection" in p for p in error.value.problems)
+
+
+def test_signal_outside_the_frozen_contract_is_rejected(tmp_path: Path) -> None:
+    """Set equality, not superset: an extra signal is a capture error."""
+    capture = _capture()
+    capture["queries"]["traces"]["signals"]["made.up.signal"] = {
+        "recordCount": 1,
+        "observedAttributes": ["x"],
+        "observations": [{"attributes": {"x": "y"}}],
+    }
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    assert any("made.up.signal" in p for p in error.value.problems)
+
+
+def test_unobserved_signal_with_zero_records_is_rejected(tmp_path: Path) -> None:
+    """recordCount 0 means the signal never fired; that is not evidence."""
+    capture = _capture()
+    capture["queries"]["traces"]["signals"]["db.client"]["recordCount"] = 0
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    assert any("never emitted" in p for p in error.value.problems)
+
+
+def test_missing_manifest_field_fails_before_any_file_is_written(
+    tmp_path: Path,
+) -> None:
+    """A capture without provenance cannot produce evidence at all."""
+    capture = _capture()
+    del capture["workspaceId"]
+    with pytest.raises(TelemetryCaptureError) as error:
+        _render(tmp_path, capture)
+    assert any("workspaceId" in p for p in error.value.problems)
+    assert not (tmp_path / "evidence" / "telemetry").exists()
+
+
+def test_cli_reports_problems_as_json_and_exits_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Failures stay machine-readable, matching the sibling evidence CLIs."""
+    from catalog_acceptance.telemetry_evidence_cli import render_main
+
+    capture = _capture()
+    del capture["queries"]["metrics"]["signals"]["catalog.query.duration"]
+    path = tmp_path / "evidence" / "telemetry-capture.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(capture))
+
+    code = render_main(
+        [
+            "--capture",
+            "evidence/telemetry-capture.json",
+            "--repository-root",
+            str(tmp_path),
+            "--contracts",
+            str(CONTRACTS),
+        ]
+    )
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    assert any("catalog.query.duration" in p for p in payload["problems"])
+
+
+def test_cli_renders_and_reports_inventory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The success path prints what it wrote, including provenance."""
+    from catalog_acceptance.telemetry_evidence_cli import render_main
+
+    path = tmp_path / "evidence" / "telemetry-capture.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_capture()))
+
+    code = render_main(
+        [
+            "--capture",
+            "evidence/telemetry-capture.json",
+            "--repository-root",
+            str(tmp_path),
+            "--contracts",
+            str(CONTRACTS),
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "rendered"
+    assert payload["signalCounts"] == {
+        "resources": 1,
+        "traces": 6,
+        "metrics": 5,
+        "logs": 8,
+    }
+    assert payload["workspaceId"].endswith("/workspaces/w")
+
+
+RENDERER_DOCUMENTS = (
+    "challenges/ch01-copilot-modernization/README.md",
+    "challenges/ch01-copilot-rewrite/README.md",
+    "challenges/ch01-manual/README.md",
+    "solutions/ch01-copilot-modernization/dotnet/README.md",
+    "solutions/ch01-copilot-modernization/java/README.md",
+    "solutions/ch01-copilot-rewrite/dotnet/README.md",
+    "solutions/ch01-copilot-rewrite/java/README.md",
+    "solutions/ch01-manual/dotnet/README.md",
+    "solutions/ch01-manual/java/README.md",
+)
+
+
+@pytest.mark.parametrize("relative", RENDERER_DOCUMENTS)
+def test_every_document_that_directs_telemetry_work_names_the_renderer(
+    relative: str,
+) -> None:
+    """F-86's lesson, applied before shipping rather than after.
+
+    A producer that no runbook mentions is a half-landed fix: participants execute
+    runbooks, not briefs, and a tool nobody is told about leaves the hand-authoring
+    path in place.
+    """
+    text = (REPO_ROOT / relative).read_text()
+    assert "telemetry_evidence_cli" in text, f"{relative} never names the renderer"
+
+
+def test_renderer_document_list_cannot_silently_shrink() -> None:
+    """Vacuity floor: the guard above is worthless if the list is trimmed."""
+    assert len(RENDERER_DOCUMENTS) >= 9
+    for relative in RENDERER_DOCUMENTS:
+        assert (REPO_ROOT / relative).is_file(), relative

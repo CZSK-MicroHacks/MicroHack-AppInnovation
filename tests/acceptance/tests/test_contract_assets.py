@@ -1195,6 +1195,9 @@ def test_handoff_bundle_cross_file_consistency(
                     "schemaVersion": "1.0.0",
                     "queryId": query_id,
                     "rows": rows,
+                    "workspaceId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.OperationalInsights/workspaces/w",
+                    "capturedAt": "2026-08-27T22:05:00Z",
+                    "queryText": "AppTraces | summarize count() by OperationName",
                 }
             ),
             encoding="utf-8",

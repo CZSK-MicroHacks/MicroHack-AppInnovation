@@ -475,6 +475,12 @@ def _golden_telemetry(
             "schemaVersion": "1.0.0",
             "queryId": query_id,
             "rows": rows,
+            "workspaceId": (
+                "/subscriptions/s/resourceGroups/r/providers/"
+                "Microsoft.OperationalInsights/workspaces/w"
+            ),
+            "capturedAt": "2026-08-27T22:05:00Z",
+            "queryText": "AppTraces | summarize count() by OperationName",
         }
     return report, results
 

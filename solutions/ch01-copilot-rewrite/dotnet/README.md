@@ -503,12 +503,34 @@ release output and describes exactly one application container at
 ## 6. Full evidence and handoff checkpoint
 
 Run the native suite after the final diff and retain its TRX under `evidence/`.
-Create `evidence/runtime-test-report.json` against
-`workshop/contracts/runtime-test-evidence.schema.json`; it must reference that
-native TRX and its fourteen real passing test identities. Run full shared acceptance
+Create `evidence/runtime-test-report.json` by copying the `dotnet-sqlserver` object
+from `workshop/contracts/runtime-test-evidence.template.json` and editing only
+`sourceCommit`, `artifact`, and `command`; the fourteen real test identities are
+already correct in the template, so do not retype them. A bounded rewrite that
+preserves test display names and class or method identities satisfies the frozen
+mapping unchanged. Validate against
+`workshop/contracts/runtime-test-evidence.schema.json`. Run full shared acceptance
 against the release and write
 `evidence/acceptance-report.json`. Collect real trace, metric, log, and resource
 query results into `evidence/telemetry-report.json`; never synthesize telemetry.
+
+**Do not hand-author the telemetry files.** Record what you observed into a capture
+manifest and let the renderer normalize it:
+
+```powershell
+uv run python -m catalog_acceptance.telemetry_evidence_cli `
+  --capture evidence/telemetry-capture.json `
+  --output evidence/telemetry-report.json
+```
+
+The capture manifest holds `workspaceId`, `capturedAt`, `service`
+(`mh-catalog-dotnet`), `resourceAttributes`, and one entry per query
+(`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
+its `recordCount`, `observedAttributes`, and `measurements` or `observations`. The
+renderer supplies each metric `unit` from the behavior contract, stamps provenance into
+every result file, writes all four `evidence/telemetry/*.json` plus the report, and
+**reports every unmet requirement at once** instead of one per handoff attempt. It will
+not invent a signal you did not capture.
 
 Complete:
 

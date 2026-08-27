@@ -291,6 +291,14 @@ The shared handoff bundle is also required:
 - `evidence/modernization-contract.json`
 - `evidence/rollback-runbook.md`
 
+> **Telemetry evidence has a renderer — do not hand-author it.** Record your Azure
+> Monitor observations into a capture manifest, then run
+> `uv run python -m catalog_acceptance.telemetry_evidence_cli --capture
+> evidence/telemetry-capture.json`. It normalizes all four `evidence/telemetry/*.json`
+> files and the report, supplies each metric `unit` from the behavior contract, stamps
+> `workspaceId`/`capturedAt`/`queryText` provenance, and lists **every** unmet
+> requirement in one run rather than one per handoff attempt.
+
 Finish only when:
 
 1. every approved task has a reviewed diff and passing stack validation, all
