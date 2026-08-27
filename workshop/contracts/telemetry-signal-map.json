@@ -1,0 +1,104 @@
+{
+  "$comment": "Where each behavior-contract signal is actually stored in Application Insights. Only the five metric names match the contract verbatim; every other group needs a table plus a selector. Querying a trace signal by its contract name returns zero rows rather than an error, so the natural reading of a wrong query is 'the application is not emitting this' and the natural remedy is to instrument an application that is already correct. Measured against a live workspace over a 30-day window; observation counts are what one run saw, not contract minimums.",
+  "schemaVersion": "1.0.0",
+  "note": "Filter every query to the revision under test with `| where AppRoleInstance startswith \"<revision>\"`, and record that revision in the capture manifest. See docs/TelemetryFaultInjection.md.",
+  "resourceAttributes": {
+    "table": "AppMetrics",
+    "selector": "Name == '_APPRESOURCEPREVIEW_'",
+    "column": "Properties",
+    "joinsToSignalsVia": "_MS.ResourceAttributeId",
+    "attributes": [
+      "service.name",
+      "service.namespace",
+      "service.version",
+      "deployment.environment",
+      "service.instance.id",
+      "azure.containerapps.revision.name"
+    ],
+    "$comment": "All six exist only on this synthetic row. On real application metrics Properties['azure.containerapps.revision.name'] is the empty string. Every provisioned revision emits this row indefinitely because Container Apps health-probes them all, so `| take 1` returns an idle revision more often than the one serving traffic."
+  },
+  "traces": {
+    "$comment": "The contract name is never a literal value for the first two. `AppDependencies | where Name in ('db.client','http.server')` returns count 0.",
+    "http.server": {
+      "table": "AppRequests",
+      "selector": "table membership only"
+    },
+    "db.client": {
+      "table": "AppDependencies",
+      "selector": "DependencyType == 'SQL'"
+    },
+    "catalog.query": {
+      "table": "AppDependencies",
+      "selector": "Name == 'catalog.query' and DependencyType == 'InProc'"
+    },
+    "catalog.performance": {
+      "table": "AppDependencies",
+      "selector": "Name == 'catalog.performance' and DependencyType == 'InProc'"
+    },
+    "catalog.import": {
+      "table": "AppDependencies",
+      "selector": "Name == 'catalog.import' and DependencyType == 'InProc'"
+    },
+    "exception": {
+      "table": "AppExceptions",
+      "selector": "table membership only"
+    }
+  },
+  "metrics": {
+    "$comment": "The only group whose names match the contract verbatim.",
+    "table": "AppMetrics",
+    "column": "Name",
+    "signals": [
+      "http.server.request.duration",
+      "db.client.operation.duration",
+      "catalog.query.duration",
+      "catalog.performance.duration",
+      "catalog.import.records"
+    ]
+  },
+  "logs": {
+    "$comment": "The signal is the message-template prefix of the logging call, not an EventId or EventName. The same call is stored interpolated in AppTraces and uninterpolated in AppExceptions, so `Message == 'catalog.import.completed'` returns zero rows. Match with has/startswith.",
+    "http.server.request": {
+      "table": "AppTraces",
+      "column": "Message",
+      "form": "exact-prefix"
+    },
+    "catalog.import.completed": {
+      "table": "AppTraces",
+      "column": "Message",
+      "form": "interpolated",
+      "example": "catalog.import.completed inserted=0 skipped=1"
+    },
+    "catalog.performance.completed": {
+      "table": "AppTraces",
+      "column": "Message",
+      "form": "interpolated"
+    },
+    "catalog.database.failed": {
+      "table": "AppExceptions",
+      "column": "Properties['OriginalFormat']",
+      "form": "exact-prefix"
+    },
+    "exception": {
+      "table": "AppExceptions",
+      "column": "Properties['OriginalFormat']",
+      "form": "exact-prefix"
+    },
+    "catalog.import.failed": {
+      "table": "AppExceptions",
+      "column": "Properties['OriginalFormat']",
+      "form": "raw-template",
+      "example": "catalog.import.failed rejected={Rejected}"
+    },
+    "catalog.query.failed": {
+      "table": "AppExceptions",
+      "column": "Properties['OriginalFormat']",
+      "form": "raw-template"
+    },
+    "catalog.performance.failed": {
+      "table": "AppExceptions",
+      "column": "Properties['OriginalFormat']",
+      "form": "raw-template"
+    }
+  }
+}

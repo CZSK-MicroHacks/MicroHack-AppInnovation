@@ -66,6 +66,9 @@ error. Identity is table membership plus a type discriminator:
 | `http.server` | `AppRequests` |
 | `db.client` | `AppDependencies` where `DependencyType == 'SQL'` |
 
+The full measured mapping for all 25 contract signals — table, selector, and storage
+form for each — is `workshop/contracts/telemetry-signal-map.json`.
+
 Only the five metric names match verbatim. Every wrong query here returns zero rows
 rather than failing, so the natural reading is "the application is not emitting this"
 and the natural next step is instrumenting code that is already correct.
