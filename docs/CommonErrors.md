@@ -926,3 +926,13 @@ addition, while participant work necessarily adds the same path to the legacy tr
 participant-path validation. Continue to run the native suite and applicable contract
 checks, and record the intentional reconciliation mismatch instead of deleting the required
 participant Dockerfile.
+
+## ACR Tasks rejects Dockerfile platform selectors
+
+**Symptom:** A Dockerfile builds successfully with local BuildKit but `az acr build` rejects
+`FROM --platform=$BUILDPLATFORM` or a literal `FROM --platform=linux/amd64`.
+
+**Cause:** ACR Tasks does not accept the BuildKit platform selector on `FROM`.
+
+**Fix:** Remove `--platform` from every `FROM` instruction and pass the target platform to
+the remote builder with `az acr build --platform linux/amd64`.

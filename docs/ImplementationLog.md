@@ -4,6 +4,8 @@
   external `/app/images` boundary.
 - Documented local image build and inspection commands in `dotnet/README.md`.
 - Generated schema-bound native runtime evidence from the passing 42-test TRX artifact.
+- Removed platform selectors from both Dockerfile stages because the locally valid syntax
+  is remotely rejected by ACR Tasks; the target platform is now supplied to `az acr build`.
 - Kept the exercise at the authorized no-deploy boundary and recorded measured local
   timings, ambiguities, immutable baseline provenance, and the subscription public-IP
   policy limitation in `evidence/manual-dotnet-control-feedback.md`.

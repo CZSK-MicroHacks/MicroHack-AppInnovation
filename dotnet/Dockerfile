@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/sdk:8.0.424-bookworm-slim-amd64@sha256:237133a0ea20cffcfaa92588e1c8a56d58fe99f44da72dcff35aeb017119abcf AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0.424-bookworm-slim-amd64@sha256:237133a0ea20cffcfaa92588e1c8a56d58fe99f44da72dcff35aeb017119abcf AS build
 WORKDIR /src
 COPY dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj dotnet/src/LegoCatalog.App/
 RUN dotnet restore dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj \
@@ -13,7 +13,7 @@ RUN dotnet publish dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj \
     --self-contained false \
     --output /out
 
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:8.0.22-bookworm-slim-amd64@sha256:405899493453fb0a64b1ac5a1d869f928817a9b47bdc2ea22407ab6c2bfbdf63
+FROM mcr.microsoft.com/dotnet/aspnet:8.0.22-bookworm-slim-amd64@sha256:405899493453fb0a64b1ac5a1d869f928817a9b47bdc2ea22407ab6c2bfbdf63
 WORKDIR /app
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \

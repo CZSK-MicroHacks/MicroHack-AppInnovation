@@ -79,6 +79,13 @@ dotnet test LegoCatalog.sln --logger trx --results-directory evidence
 ## Build the container
 
 The workshop VM has no Docker daemon, so its required build command remains `az acr build`.
+ACR Tasks rejects BuildKit platform selectors on `FROM`, so keep platform selection out of
+the Dockerfile and pass it to the remote build:
+
+```powershell
+az acr build --platform linux/amd64 --registry $AcrName --image "${Repository}:$SourceCommit" --file dotnet\Dockerfile .
+```
+
 On a development workstation with a Docker daemon, run the equivalent local build from
 the repository root because the Dockerfile copies both `dotnet/` and the canonical seed
 under `data/`:
