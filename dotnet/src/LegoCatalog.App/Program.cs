@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.Exporter;
 using LegoCatalog.App.Configuration;
 using LegoCatalog.App.Data;
 using LegoCatalog.App.Endpoints;
@@ -50,6 +51,15 @@ var hasOtlpExporter = new[]
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
 }.Any(key => !string.IsNullOrWhiteSpace(builder.Configuration[key]));
 
+// Kept independent of hasOtlpExporter on purpose. The deployment sets
+// APPLICATIONINSIGHTS_CONNECTION_STRING and no OTLP endpoint, so folding the
+// two together would leave Azure Monitor silently unconfigured while the app
+// still started and reported healthy.
+var applicationInsightsConnectionString =
+    builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+var hasAzureMonitorExporter =
+    !string.IsNullOrWhiteSpace(applicationInsightsConnectionString);
+
 builder.Services
     .AddOpenTelemetry()
     .ConfigureResource(
@@ -78,6 +88,13 @@ builder.Services
             {
                 metrics.AddOtlpExporter();
             }
+
+            if (hasAzureMonitorExporter)
+            {
+                metrics.AddAzureMonitorMetricExporter(
+                    options => options.ConnectionString =
+                        applicationInsightsConnectionString);
+            }
         })
     .WithTracing(
         tracing =>
@@ -92,6 +109,13 @@ builder.Services
             {
                 tracing.AddOtlpExporter();
             }
+
+            if (hasAzureMonitorExporter)
+            {
+                tracing.AddAzureMonitorTraceExporter(
+                    options => options.ConnectionString =
+                        applicationInsightsConnectionString);
+            }
         });
 
 builder.Logging.AddOpenTelemetry(
@@ -102,6 +126,13 @@ builder.Logging.AddOpenTelemetry(
         if (hasOtlpExporter)
         {
             logging.AddOtlpExporter();
+        }
+
+        if (hasAzureMonitorExporter)
+        {
+            logging.AddAzureMonitorLogExporter(
+                options => options.ConnectionString =
+                    applicationInsightsConnectionString);
         }
     });
 
