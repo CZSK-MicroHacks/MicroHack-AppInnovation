@@ -339,3 +339,171 @@ def test_renderer_document_list_cannot_silently_shrink() -> None:
     assert len(RENDERER_DOCUMENTS) >= 9
     for relative in RENDERER_DOCUMENTS:
         assert (REPO_ROOT / relative).is_file(), relative
+
+
+def test_every_rendered_document_satisfies_the_result_schema(tmp_path: Path) -> None:
+    """The gap that let F-91 ship: nothing validated output against the contract.
+
+    The three sibling renderers all import ``jsonschema`` and validate against
+    checked-in schemas. This one did not, and fifteen tests never noticed.
+    """
+    from jsonschema import Draft202012Validator, FormatChecker
+
+    _render(tmp_path, _capture())
+    schema = json.loads((CONTRACTS / "telemetry-query-result.schema.json").read_text())
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    directory = tmp_path / "evidence" / "telemetry"
+    rendered = sorted(path.name for path in directory.glob("*.json"))
+    assert rendered == ["logs.json", "metrics.json", "resources.json", "traces.json"]
+    for path in directory.glob("*.json"):
+        errors = list(validator.iter_errors(json.loads(path.read_text())))
+        assert not errors, f"{path.name}: {[error.message for error in errors]}"
+
+
+def test_empty_observations_are_refused_at_render_time_not_at_the_handoff_gate(
+    tmp_path: Path,
+) -> None:
+    """F-91, reported by the .NET modernization arm and reproduced here.
+
+    A non-carrier signal with no observations passed every renderer check and
+    produced a document violating ``minItems: 1``. The attendee would have met
+    it as one ``ValidationError`` at the end of the chapter.
+    """
+    capture = _capture()
+    victim = next(
+        name
+        for name in capture["queries"]["traces"]["signals"]
+        if name != "http.server"
+    )
+    capture["queries"]["traces"]["signals"][victim]["observations"] = []
+
+    with pytest.raises(TelemetryCaptureError) as caught:
+        _render(tmp_path, capture)
+
+    message = str(caught.value)
+    assert "traces" in message
+    assert "observations" in message
+    assert "non-empty" in message or "minItems" in message
+
+
+def test_an_output_outside_the_repository_is_a_handled_error(tmp_path: Path) -> None:
+    """Was a raw ``relative_to`` traceback; symlinked scratch dirs hit it routinely."""
+    root = tmp_path / "repo"
+    (root / "evidence").mkdir(parents=True)
+    capture_path = root / "evidence" / "telemetry-capture.json"
+    capture_path.write_text(json.dumps(_capture()))
+
+    with pytest.raises(TelemetryCaptureError) as caught:
+        render_telemetry_evidence(
+            capture_path, CONTRACTS, tmp_path / "outside" / "report.json", root
+        )
+    assert "--output must be inside the repository" in str(caught.value)
+
+
+def test_renderer_validates_against_the_same_schema_the_gate_uses(tmp_path: Path) -> None:
+    """Guard the guard: the module must carry real schema machinery, not literals.
+
+    ``telemetry_evidence.py`` previously contained the string ``schema`` only in
+    the ``schemaVersion`` values it wrote out.
+    """
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "catalog_acceptance"
+        / "telemetry_evidence.py"
+    ).read_text()
+    assert "Draft202012Validator" in source
+    assert "telemetry-query-result.schema.json" in source
+
+
+def test_capture_example_validates_against_the_capture_schema() -> None:
+    """Telemetry shipped neither a capture schema nor an example; the other three did.
+
+    Reported by the .NET modernization arm as part of F-91: the manifest shape
+    had to be reverse-engineered from renderer source, which is the same burden
+    F-89 was about, moved from the output format to the input format.
+    """
+    from jsonschema import Draft202012Validator, FormatChecker
+
+    schema = json.loads(
+        (CONTRACTS / "telemetry-evidence-capture.schema.json").read_text()
+    )
+    example = json.loads(
+        (CONTRACTS / "telemetry-evidence-capture.example.json").read_text()
+    )
+    errors = list(
+        Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(example)
+    )
+    assert not errors, [error.message for error in errors]
+
+
+def test_capture_example_renders_a_bundle_the_handoff_gate_accepts(
+    tmp_path: Path,
+) -> None:
+    """The example is only worth shipping if it actually works end to end."""
+    example = json.loads(
+        (CONTRACTS / "telemetry-evidence-capture.example.json").read_text()
+    )
+    _render(tmp_path, example)
+    report = json.loads((tmp_path / "evidence" / "telemetry-report.json").read_text())
+    _validate_telemetry_results(report, CONTRACTS, tmp_path)
+
+
+def test_capture_manifest_is_validated_against_its_schema(tmp_path: Path) -> None:
+    """An unknown key must be refused here, not silently ignored into the bundle."""
+    capture = _capture()
+    capture["queries"]["traces"]["signals"]["http.server"]["typo"] = True
+    with pytest.raises(TelemetryCaptureError) as caught:
+        _render(tmp_path, capture)
+    assert "telemetry-evidence-capture.schema.json" in str(caught.value)
+
+
+def test_workspace_provenance_is_cross_checked_against_the_deployed_target(
+    tmp_path: Path,
+) -> None:
+    """Provenance nothing reads is decoration; give it a failure mode.
+
+    Proposed by the .NET modernization arm alongside F-91. Entirely offline,
+    between two artifacts the attendee already holds.
+    """
+    (tmp_path / "evidence").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "evidence" / "azure-target-output.json").write_text(
+        json.dumps(
+            {
+                "observability": {
+                    "logAnalyticsWorkspaceResourceId": (
+                        "/subscriptions/s/resourceGroups/g/providers/"
+                        "Microsoft.OperationalInsights/workspaces/log-real-workspace"
+                    )
+                }
+            }
+        )
+    )
+    capture = _capture()
+    capture["workspaceId"] = "log-some-other-workspace"
+
+    with pytest.raises(TelemetryCaptureError) as caught:
+        _render(tmp_path, capture)
+    message = str(caught.value)
+    assert "log-real-workspace" in message
+    assert "Two workspaces exist" in message
+
+
+def test_matching_workspace_provenance_renders_cleanly(tmp_path: Path) -> None:
+    """The cross-check must not obstruct an attendee who measured correctly."""
+    (tmp_path / "evidence").mkdir(parents=True, exist_ok=True)
+    capture = _capture()
+    (tmp_path / "evidence" / "azure-target-output.json").write_text(
+        json.dumps(
+            {
+                "observability": {
+                    "logAnalyticsWorkspaceResourceId": (
+                        "/subscriptions/s/resourceGroups/g/providers/"
+                        f"Microsoft.OperationalInsights/workspaces/{capture['workspaceId']}"
+                    )
+                }
+            }
+        )
+    )
+    _render(tmp_path, capture)
+    report = json.loads((tmp_path / "evidence" / "telemetry-report.json").read_text())
+    _validate_telemetry_results(report, CONTRACTS, tmp_path)

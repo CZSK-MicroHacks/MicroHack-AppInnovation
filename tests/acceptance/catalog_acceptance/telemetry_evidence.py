@@ -20,6 +20,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator, FormatChecker
+
 from catalog_acceptance.artifact_io import load_json_object
 
 QUERY_IDS = ("resources", "traces", "metrics", "logs")
@@ -157,6 +159,77 @@ def _normalize_query(
     return document
 
 
+def _schema_problems_for(
+    schema_path: Path, label: str, document: dict[str, Any]
+) -> list[str]:
+    """Report every way ``document`` violates ``schema_path``, never just the first."""
+    validator = Draft202012Validator(
+        load_json_object(schema_path), format_checker=FormatChecker()
+    )
+    problems = []
+    for error in sorted(validator.iter_errors(document), key=lambda item: list(item.path)):
+        location = "/".join(str(part) for part in error.path) or "(document root)"
+        problems.append(
+            f"{label} violates {schema_path.name} at {location}: {error.message}"
+        )
+    return problems
+
+
+def _schema_problems(schema_path: Path, query_id: str, document: dict[str, Any]) -> list[str]:
+    """Report every way ``document`` violates the checked-in result schema.
+
+    The renderer's own checks cannot stand in for the contract. A document that
+    satisfies every rule here and still fails the schema would surface at the
+    handoff gate as a single error at the end of the chapter, which is the
+    failure mode this module exists to remove.
+    """
+    validator = Draft202012Validator(
+        load_json_object(schema_path), format_checker=FormatChecker()
+    )
+    problems = []
+    for error in sorted(validator.iter_errors(document), key=lambda item: list(item.path)):
+        location = "/".join(str(part) for part in error.path) or "(document root)"
+        problems.append(
+            f"rendered '{query_id}' document violates "
+            f"telemetry-query-result.schema.json at {location}: {error.message}"
+        )
+    return problems
+
+
+def _check_workspace_provenance(
+    output_path: Path, workspace_id: str, problems: list[str]
+) -> None:
+    """Bind the capture's workspace to the one the attendee actually deployed.
+
+    Provenance that nothing reads is decoration. ``azure-target-output.json``
+    already names the real Log Analytics workspace, so this cross-check is
+    entirely offline, between two artifacts the attendee already holds. It does
+    not make fabrication impossible -- nothing offline can -- but it gives
+    provenance a failure mode, which is the difference between a recorded value
+    and an asserted one.
+    """
+    target = output_path.parent / "azure-target-output.json"
+    if not target.exists():
+        return
+    try:
+        observability = load_json_object(target).get("observability") or {}
+    except ValueError:
+        return
+    resource_id = observability.get("logAnalyticsWorkspaceResourceId")
+    if not isinstance(resource_id, str) or not resource_id:
+        return
+    deployed = resource_id.rsplit("/", 1)[-1]
+    # Either form is legitimate evidence, so compare the workspace name.
+    if workspace_id.rsplit("/", 1)[-1].casefold() == deployed.casefold():
+        return
+    problems.append(
+        f"capture workspaceId '{workspace_id}' does not name the workspace this "
+        f"release deployed to ('{deployed}', from evidence/azure-target-output.json). "
+        f"Two workspaces exist in this environment; resolve yours by name and re-run "
+        f"the queries against it."
+    )
+
+
 def render_telemetry_evidence(
     capture_path: Path,
     contracts_directory: Path,
@@ -167,7 +240,24 @@ def render_telemetry_evidence(
 
     Returns a machine-readable inventory of what was written.
     """
+    repository_root = Path(repository_root).resolve()
+    output_path = Path(output_path).resolve()
+    if not output_path.is_relative_to(repository_root):
+        raise TelemetryCaptureError(
+            [
+                f"--output must be inside the repository ({repository_root}); "
+                f"got {output_path}. Symlinked scratch directories resolve elsewhere: "
+                f"on macOS /tmp resolves to /private/tmp."
+            ]
+        )
     capture = load_json_object(capture_path)
+    capture_problems = _schema_problems_for(
+        contracts_directory / "telemetry-evidence-capture.schema.json",
+        "capture manifest",
+        capture,
+    )
+    if capture_problems:
+        raise TelemetryCaptureError(capture_problems)
     behavior = json.loads((contracts_directory / "behavior-contract.json").read_text())[
         "telemetry"
     ]
@@ -186,6 +276,8 @@ def render_telemetry_evidence(
         problems.append(
             f"resourceAttributes is missing: {', '.join(sorted(missing_resource))}"
         )
+
+    _check_workspace_provenance(output_path, capture["workspaceId"], problems)
 
     result_dir = output_path.parent / "telemetry"
     queries: dict[str, Any] = {}
@@ -220,6 +312,14 @@ def render_telemetry_evidence(
             _check_rejected_measurements(rows["catalog.import.records"], problems)
         if query_id in ROUTE_PROBE_CARRIER:
             _check_route_probe(query_id, rows, problems)
+
+        problems.extend(
+            _schema_problems(
+                contracts_directory / "telemetry-query-result.schema.json",
+                query_id,
+                document,
+            )
+        )
 
         relative = (result_dir / f"{query_id}.json").relative_to(repository_root)
         queries[query_id] = {
