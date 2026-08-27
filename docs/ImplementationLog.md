@@ -1,3 +1,13 @@
+### 2026-08-27 (Challenge 1 - manual .NET control arm)
+- Added the manual-path `dotnet/Dockerfile` with digest-pinned .NET 8 build/runtime images,
+  numeric non-root user `1654`, read-only canonical seed, port `8080`, health check, and
+  external `/app/images` boundary.
+- Documented local image build and inspection commands in `dotnet/README.md`.
+- Generated schema-bound native runtime evidence from the passing 42-test TRX artifact.
+- Kept the exercise at the authorized no-deploy boundary and recorded measured local
+  timings, ambiguities, immutable baseline provenance, and the subscription public-IP
+  policy limitation in `evidence/manual-dotnet-control-feedback.md`.
+
 ### 2025-08-28 (Infrastructure - network redesign with Bastion)
 - Adjusted per-user VNet to /22 CIDR with dedicated `vms` /24 and `AzureBastionSubnet` /26.
 - Removed public IP from VM NIC; Standard Public IP now attached to Azure Bastion (Basic SKU) for secure RDP.

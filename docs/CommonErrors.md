@@ -902,3 +902,27 @@ prompt: `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` must return `9`.
 **Do not** work around this by relaxing `Set-ProtectedAcl` globally. `C:\MicroHack\secrets`
 holds the database passwords and must stay administrators-only; an acceptance guard fails if
 that call ever acquires a `-ReadPrincipal`.
+
+## A container health check invokes a missing client
+
+**Symptom:** A container image uses `curl` in `HEALTHCHECK`, but running `command -v curl`
+against the pinned ASP.NET runtime image exits `127`.
+
+**Cause:** The `bookworm-slim` ASP.NET runtime image does not include `curl`.
+
+**Fix:** Install `curl` in the runtime stage with `--no-install-recommends`, remove the apt
+package lists in the same layer, and verify the final health command rather than assuming a
+diagnostic client exists in the base image.
+
+## A participant Dockerfile conflicts with repository reconciliation
+
+**Symptom:** Contract reconciliation fails after the manual path adds `dotnet/Dockerfile`,
+even though authoring that file is explicitly required by Challenge 1.
+
+**Cause:** The maintainer guard freezes `Dockerfile` as a reference-only modernization
+addition, while participant work necessarily adds the same path to the legacy tree.
+
+**Fix:** Treat this specific topology assertion as a maintainer baseline guard, not as
+participant-path validation. Continue to run the native suite and applicable contract
+checks, and record the intentional reconciliation mismatch instead of deleting the required
+participant Dockerfile.

@@ -76,6 +76,21 @@ dotnet restore LegoCatalog.sln
 dotnet test LegoCatalog.sln --logger trx --results-directory evidence
 ```
 
+## Build the container
+
+The workshop VM has no Docker daemon, so its required build command remains `az acr build`.
+On a development workstation with a Docker daemon, run the equivalent local build from
+the repository root because the Dockerfile copies both `dotnet/` and the canonical seed
+under `data/`:
+
+```bash
+docker build --platform linux/amd64 --file dotnet/Dockerfile --tag catalog-dotnet:local .
+docker inspect catalog-dotnet:local --format '{{json .Config.User}} {{json .Config.Healthcheck.Test}}'
+```
+
+The image listens on port `8080`, runs as numeric user `1654`, contains a read-only seed
+at `/app/data/catalog.json`, and expects externally managed images at `/app/images`.
+
 The native suite includes all fourteen degraded-state, conformance, and telemetry tests
 under the exact class-qualified identities consumed by the shared handoff validator. To
 run implementation-neutral HTTP and database acceptance:

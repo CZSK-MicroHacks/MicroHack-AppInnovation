@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.1.0",
+  "stack": "dotnet-sqlserver",
+  "sourceCommit": "4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af",
+  "status": "passed",
+  "artifactFormat": "trx",
+  "artifact": "evidence/manual-dotnet-local.trx",
+  "command": "dotnet test dotnet/LegoCatalog.sln --logger \"trx;LogFileName=manual-dotnet-local.trx\" --results-directory evidence",
+  "tests": [
+    {
+      "id": "liveness-database-outage",
+      "testName": "Contract.Health.LivenessSurvivesDatabaseOutage",
+      "testIdentity": "LegoCatalog.App.Tests.HealthContractTests.LivenessSurvivesDatabaseOutage"
+    },
+    {
+      "id": "readiness-database-outage",
+      "testName": "Contract.Health.ReadinessFailsDuringDatabaseOutage",
+      "testIdentity": "LegoCatalog.App.Tests.HealthContractTests.ReadinessFailsDuringDatabaseOutage"
+    },
+    {
+      "id": "readiness-import-failure",
+      "testName": "Contract.Health.ReadinessReportsImportFailure",
+      "testIdentity": "LegoCatalog.App.Tests.HealthContractTests.ReadinessReportsImportFailure"
+    },
+    {
+      "id": "performance-database-failure",
+      "testName": "Contract.Performance.DatabaseFailureIsControlled",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.DatabaseFailureIsControlled"
+    },
+    {
+      "id": "performance-timeout",
+      "testName": "Contract.Performance.TimeoutIsControlled",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.TimeoutIsControlled"
+    },
+    {
+      "id": "performance-missing-key",
+      "testName": "Contract.Performance.MissingKeyReturnsUnauthorized",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.MissingKeyReturnsUnauthorized"
+    },
+    {
+      "id": "performance-invalid-key",
+      "testName": "Contract.Performance.InvalidKeyReturnsUnauthorized",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.InvalidKeyReturnsUnauthorized"
+    },
+    {
+      "id": "work-factor-default",
+      "testName": "Contract.Performance.MissingWorkFactorUsesDefault",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.MissingWorkFactorUsesDefault"
+    },
+    {
+      "id": "work-factor-bounds",
+      "testName": "Contract.Performance.BoundsAreAccepted",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.BoundsAreAccepted"
+    },
+    {
+      "id": "work-factor-invalid",
+      "testName": "Contract.Performance.InvalidWorkFactorsFailStartup",
+      "testIdentity": "LegoCatalog.App.Tests.PerformanceContractTests.InvalidWorkFactorsFailStartup"
+    },
+    {
+      "id": "normalization-conformance",
+      "testName": "Contract.Conformance.NormalizationVectors",
+      "testIdentity": "LegoCatalog.App.Tests.ConformanceVectorTests.CategorySlugMatchesSharedVectors"
+    },
+    {
+      "id": "text-validation-conformance",
+      "testName": "Contract.Conformance.TextValidationVectors",
+      "testIdentity": "LegoCatalog.App.Tests.ConformanceVectorTests.TextValidationMatchesSharedVectors"
+    },
+    {
+      "id": "final-response-status",
+      "testName": "Contract.Telemetry.FinalResponseStatus",
+      "testIdentity": "LegoCatalog.App.Tests.TelemetryContractTests.RequestLogUsesMatchedRouteAndFinalStatus"
+    },
+    {
+      "id": "rejected-document-increments-once",
+      "testName": "Contract.Telemetry.RejectedDocumentIncrementsOnce",
+      "testIdentity": "LegoCatalog.App.Tests.TelemetryContractTests.RejectedDocumentRecordsExactlyOneRejectedUnit"
+    }
+  ]
+}
