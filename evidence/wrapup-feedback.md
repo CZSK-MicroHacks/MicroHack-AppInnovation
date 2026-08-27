@@ -497,3 +497,28 @@ rollback/autoscaler/tracing/security/SRE — but in *this* delivery 8/11 rows ha
 all. For a partial or non-deploy attendee, that sentence is a confident false positive — exactly
 the artifact the workshop teaches distrust of. The fix is one sentence up front: *a mostly
 "not measured" card is the expected, honest shape of a governed-tenant run.*
+
+---
+
+## Addendum 3 (2026-08-28 ~00:05 CEST) — F-85/86/87 runtime-evidence template does NOT clear F-A
+
+Facilitator landed `e4d5954`/`a52ae11`/`1f66269` (F-85/86/87): attendees now copy their stack's
+object from `workshop/contracts/runtime-test-evidence.template.json` and edit three fields
+instead of hand-writing 42 runtime-test values. Checked whether this touches my CRITICAL
+transitive-gate finding (F-A). It does not, on three verified points:
+
+1. **The wrap-up README does not reference `runtime-test-evidence`** (grep: no hits). So the
+   template landing changes nothing in the wrap-up's own artifact references.
+2. **F-85/86/87 fix a *different* sub-gate of `validate_handoff` than F-74.** The runtime-evidence
+   template feeds `_validate_runtime_results` (`handoff.py:211`, the frozen-test mapping / "42
+   values"). **F-74 is the *telemetry* gate** at `_validate_telemetry_results` (`:234`→`:270`,
+   `set(rows) != set(expected_names)` + `if not rejected: raise`). Both live inside
+   `validate_handoff`, so clearing the runtime gate still leaves the telemetry gate rejecting a
+   clean run. **F-A stands until F-74 specifically is fixed.**
+3. **The template-copy remedy is itself the W-2 pattern, now sanctioned.** Converting
+   "hand-write 42 values" into "copy the template, edit 3 fields" reduces effort but
+   institutionalises copy-a-fixture-and-edit as the *approved* path — the exact move that makes
+   fabricated evidence indistinguishable from measured evidence. It's a reasonable usability fix,
+   but it widens, not narrows, the gap between "looks green" and "was measured." Worth a sentence
+   in the report: the runtime gate is now *satisfiable*, but satisfiable by templating, not by
+   measuring.
