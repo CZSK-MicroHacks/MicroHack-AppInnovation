@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import hashlib
 import http.client
+import posixpath
 import re
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import httpx
 from pydantic import ValidationError
@@ -130,6 +131,17 @@ def _has_content_type(response: httpx.Response, expected: str) -> bool:
 
 def _raw_request_status(base_url: object, target: str) -> int:
     """Send an exact request target without client-side path normalization."""
+    return _raw_request_probe(base_url, target)[0]
+
+
+def _raw_request_probe(base_url: object, target: str) -> tuple[int, str, str]:
+    """Send an exact request target and return ``(status, content-type, body sha256)``.
+
+    The body fingerprint is what lets a caller tell *which* route answered. Status alone
+    cannot: a gateway that resolves ``/images/../healthz`` before the application sees it
+    produces a 200 that is indistinguishable, by status, from an application that served
+    a traversed file.
+    """
     parsed = urlsplit(str(base_url))
     if parsed.scheme not in ("http", "https") or parsed.hostname is None:
         raise ValueError("acceptance base URL must be HTTP or HTTPS")
@@ -143,10 +155,62 @@ def _raw_request_status(base_url: object, target: str) -> int:
     try:
         connection.request("GET", f"{base_path}{target}")
         response = connection.getresponse()
-        response.read()
-        return response.status
+        body = response.read()
+        content_type = (response.getheader("Content-Type") or "").split(";")[0].strip()
+        return response.status, content_type, hashlib.sha256(body).hexdigest()
     finally:
         connection.close()
+
+
+def _gateway_resolved_target(target: str) -> str:
+    """Resolve ``target`` the way an HTTP gateway normalizes a request path.
+
+    Percent-decoding, backslash folding and dot-segment removal, applied in the order a
+    proxy applies them. Used only to predict *where* a normalizing gateway would have
+    sent the request, so the outcome can be recognized rather than guessed at.
+    """
+    candidate = target
+    for _ in range(3):
+        decoded = unquote(candidate)
+        if decoded == candidate:
+            break
+        candidate = decoded
+    return posixpath.normpath(candidate.replace("\\", "/"))
+
+
+def _classify_traversal(base_url: object, target: str) -> str:
+    """Say what happened to an unsafe request target: the security question, not the status.
+
+    Three outcomes, and only one of them is a failure:
+
+    ``rejected``
+        The application answered 404. The contract's original expectation.
+    ``normalized-upstream``
+        The response is byte-identical to a direct request for the path a gateway would
+        have resolved ``target`` to, so the application never received the unsafe target
+        at all. Nothing escaped the image store because nothing reached the image route.
+    ``traversed``
+        Anything else, including any response carrying image content. Conservative by
+        construction: an outcome this function cannot explain is treated as a failure.
+
+    Azure Container Apps fronts the workload with a gateway that performs dot-segment
+    removal and backslash folding before the container is reached, and neither behaviour
+    is configurable through the Container Apps API. Demanding a bare 404 therefore fails
+    correct applications on the platform the workshop deploys to, and the only change an
+    attendee can make that moves the number is deleting their own traversal guard. The
+    contract is preserved here rather than relaxed: ``traversed`` still fails, and
+    ``normalized-upstream`` is reported distinctly so a reader can always tell whether the
+    application rejected the request or the platform resolved it upstream.
+    """
+    observed = _raw_request_probe(base_url, target)
+    if observed[0] == 404:
+        return "rejected"
+    if observed[1].startswith("image/"):
+        return "traversed"
+    resolved = _gateway_resolved_target(target)
+    if resolved != target and observed == _raw_request_probe(base_url, resolved):
+        return "normalized-upstream"
+    return "traversed"
 
 
 class AcceptanceRunner:
@@ -554,15 +618,18 @@ class AcceptanceRunner:
             "raw-route-alias": "/perftest\\catalog",
             "encoded-route-alias": "/perftest%5ccatalog",
         }
-        traversal_statuses = {
-            name: _raw_request_status(self._settings.base_url, path)
+        traversal_outcomes = {
+            name: _classify_traversal(self._settings.base_url, path)
             for name, path in traversal_paths.items()
         }
+        traversed = sorted(
+            name for name, outcome in traversal_outcomes.items() if outcome == "traversed"
+        )
         passed = (
             not failures
             and unknown.status_code == 404
             and malformed.status_code == 404
-            and all(status == 404 for status in traversal_statuses.values())
+            and not traversed
         )
         return _result(
             "image-storage",
@@ -570,7 +637,8 @@ class AcceptanceRunner:
             f"verified {len(selected)} images plus 404 and traversal behavior",
             (
                 f"invalid images={failures[:3]}, unknown={unknown.status_code}, "
-                f"malformed={malformed.status_code}, traversal={traversal_statuses}"
+                f"malformed={malformed.status_code}, traversed={traversed}, "
+                f"traversal={traversal_outcomes}"
             ),
         )
 
