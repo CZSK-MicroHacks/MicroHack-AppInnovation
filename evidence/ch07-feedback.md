@@ -98,3 +98,29 @@ All cross-links in all three chapters resolve after the merge:
 Ch07 (both variants) is completable and honest as design-only. The temptation to fabricate
 is **low** here because there is no green light to chase — the review is the grade. The
 opposite is true of the wrap-up (see `wrapup-feedback.md`).
+
+## Answering the facilitator's Ch7-specific asks (instruction quality / invented / knew-Azure)
+
+- **Instruction quality:** Ch7 is the best-specified chapter I touched — it grades on a review
+  rubric, not a green check, so there is no automation to satisfy and nothing to game. Both
+  variants state their deliverable clearly. The one real gap is **D-2**: the enterprise variant
+  consumes `evidence/modernization-contract.json` as an unstated precondition — and (see
+  `wrapup-feedback.md`, F-73) that file is *never emitted on the honest path* because the Ch1
+  handoff gate hard-stops on Envoy-normalised traversal probes. So Ch7-enterprise's input
+  literally cannot exist for an attendee who did Ch1 by the book. I proceeded design-only, which
+  is legitimate for this chapter, but a stricter reading of the enterprise variant is blocked
+  upstream.
+- **Ambiguities:** the `-k` acceptance selector (D-1) matches **zero** tests, which reads as "no
+  coverage" but is actually "design-only, nothing to run." Mildly confusing; not a defect.
+- **Anything I had to invent:** nothing. Both artifacts are grounded in real reads (`az` for
+  identity/roles, `data/catalog.json` for the corpus). Where I *tried* to shortcut from memory,
+  I was **wrong twice** (a citation phrase that lives in `imagePrompt` not the index; two
+  role-definition GUIDs) — both caught only by round-tripping through the real source. That is
+  the honest signal: the chapter is safe *because* it forces you to ground claims, and unsafe
+  the moment you trust recall.
+- **Anything that only worked because I already knew Azure:** the enterprise variant assumes
+  fluency in RBAC role-definition names, managed-identity vs. service-principal semantics, and
+  RBAC-vs-access-policy Key Vault. An attendee without that background could hand-wave a
+  plausible-but-wrong identity matrix and nothing in Ch7 would catch it — the review is the only
+  gate. F-48 (KV object `PERFTEST-API-KEY` vs env `PERFTEST_API_KEY`) is a live trap that only
+  surfaces if you know KV names cannot contain underscores.

@@ -331,3 +331,113 @@ make the scorecard reward the central milestone explicitly and to state up front
 "not measured" card is the honest, expected shape of this delivery — so the honest attendee's
 card and the careless one's remain distinguishable *by design intent*, even though no
 validator will ever tell them apart.
+
+---
+
+## Addendum (2026-08-27 ~22:30 CEST) — F-73/F-74, deliverability judgement, and a resolved contradiction
+
+The facilitator published the shared tree (`4bf59f7` → `b7fc289`, plus harness `e070393`) and
+supplied two findings that belong in any honest wrap-up. I corroborated both against the code
+in my own merged tree (the pre-fix shipped state a real attendee would have hit). I could not
+independently confirm `b7fc289` from my worktree — no `upstream` remote/access here — so that
+commit id is **facilitator-attested**; the *findings themselves* I verified directly.
+
+### A contradiction I resolved with data (and it is itself a workshop lesson)
+The facilitator's evidence rule stated the app "ships `activeRevisionsMode: Single`." My
+read-only `az` shows the **.NET** app `ca-mh-user001-dotnet` is **`Multiple`**; only the two
+**Java** apps are `Single` (and `cae-…-java` is the *environment*, not an app). So the asserted
+state did not match the verified state for the specific resource being cited. This is a
+micro-instance of the exact failure this workshop teaches — *an asserted control-plane fact
+nobody re-verified* (the same shape as false-alarm #7 itself). It changes nothing in my
+scorecard because I cite the **digest**, never the revision name — and `Multiple` is the *more*
+misattribution-prone mode, so citing the digest was doubly right, not merely compliant.
+
+### F-73 and F-74 — two poles of one class: *evidence gates the workshop cannot satisfy by its own instructions*
+Both verified at the cited lines:
+
+- **F-73 (punishes correct work).** `handoff.py:1180-1181`:
+  `if report.profile != "full" or report.status != "passed": inconsistencies.append("acceptance evidence must be a full passing report")`.
+  Because Azure Container Apps fronts every app with Envoy — which normalises `..` and `\`
+  *before the container* — six of seven `image-storage` traversal probes can never return 404,
+  so the report can never be "full passed", so `evidence/modernization-contract.json` is never
+  emitted, so Ch2–6 (which consume it) hard-stop. The application was already correct (8/8 unit
+  tests green against Kestrel directly). **The only edit that would have moved the number is
+  deleting a security control.** Fixed correctly by making the check topology-aware, not by
+  relaxing it.
+- **F-74 (rewards invented work).** `handoff.py:270`:
+  `if set(rows) != set(expected_names)` — *set equality* against eight signals, and the metrics
+  branch further requires `if not rejected: raise` — i.e. it demands at least one **`rejected`**
+  import measurement, a signal emitted only from inside a failure path. Nothing in the material
+  ever induces one. **The telemetry contract can only be satisfied by an attendee whose run
+  went badly; a flawless run produces strictly less evidence and fails the gate harder.** The
+  only edit that moves the number is writing evidence by hand.
+
+These two are the sharpest artifacts the workshop produces, because in both a *competent,
+honest* attendee has **no legitimate path forward** and the illegitimate path (delete a
+control / hand-write evidence) is the obvious one. They are the platonic form of the whole
+delivery's lesson and should headline the wrap-up. My scorecard's 8/11 "not measured" is the
+downstream shadow of exactly this: rows 1–8 depend on `modernization-contract.json` (F-73) and
+on telemetry evidence (F-74) that the honest path never produces.
+
+### Do NOT let the fixes erase the findings
+Challenge 1 **was unfinishable as shipped** and required a facilitator harness change *mid-run*;
+the .NET arm hit **three independent hard stops** before the handoff. A wrap-up that reads "all
+challenges completed" without that context is precisely the false-positive artifact this
+workshop exists to teach people to distrust. The honest closing statement is: *one stack
+completed the central challenge, on a platform that had to be fixed underneath it while it ran.*
+
+### My independent judgement: is this workshop deliverable as-is?
+**No — not against a governed tenant, not on the stated two-day schedule, without the harness
+fixes that landed today.** With `e070393`+`b7fc289` it becomes *deliverable but fragile*. I have
+the most end-to-end view of any track and this is my judgement, not a restatement of the
+facilitator's:
+
+**Minimum fix set before running with real attendees:**
+1. **Ship the topology-aware handoff (F-73) and a telemetry gate that a clean run can satisfy
+   (F-74).** These are non-negotiable — without them a correct attendee cannot finish and the
+   only "progress" is cheating. (Largely done today; must be *in the shipped tree*, not local.)
+2. **Decouple Ch2–6 from a perfect Ch1.** Provide a pre-seeded reference deployment so a team
+   that loses day one to Ch1 can still measure *something*. Today, Ch1 is a single point of
+   failure for 8 of 11 scorecard rows.
+3. **Author-vs-delivery topology parity.** ~68 defects, a large fraction environmental, all
+   trace to authoring against a permissive subscription and delivering into a governed one. The
+   workshop needs a "governed-tenant preflight" that asserts: no public IPs, internal-only
+   Container Apps env, RBAC-only Key Vault, VM identity (not User) for automation roles.
+4. **Make the scorecard reward the central milestone.** Deploy+migrate+verify — the thing .NET
+   actually achieved — is not a row. Add it, and state up front that a mostly-"not measured"
+   card is the *expected, honest* shape of a governed-tenant run.
+5. **Replace fixture-round-trip and one-byte `pathEvidence` validation** (W-2) with something an
+   auditor can trust, or move the scorecard explicitly outside automation and say so.
+
+### Time estimate per challenge (JUDGEMENT, not measured — flagged as the facilitator asked)
+I measured only Ch7 (below, real). All others are judgement for a *competent* attendee in *this
+governed tenant*, and I mark them so because I did not run them.
+
+| Challenge | Estimate | Basis |
+| --- | --- | --- |
+| Ch0 (pain) | 30–45 min | judgement |
+| Ch1 (lift + migrate) | **≥ 1 full day, realistically the whole first day** | judgement, but anchored to the observed fact that .NET hit 3 hard stops and Ch1 needed a mid-run harness fix |
+| Ch2 (load) | 45–60 min *if* Ch1 done | judgement |
+| Ch3 (CI/CD) | 60–90 min | judgement |
+| Ch4 (observability) | 60 min | judgement |
+| Ch5 (security/Defender) | 45 min | judgement |
+| Ch6 (MTTR/SRE) | 60–90 min | judgement; several arms found it unproducible → could be a hard stop |
+| **Ch7 (both variants)** | **~90 min measured** (enterprise ~50, innovation ~40) | **measured** — my own run, design-only |
+| Wrap-up | 30–45 min | judgement |
+
+**Which cannot fit the stated schedule:** Ch1 alone plausibly consumes day one in a governed
+tenant, which pushes Ch2–6 into day two and leaves Ch7+wrap-up squeezed. As delivered, a
+two-day schedule is unrealistic for anyone who hits even a quarter of the ~68 defects. Ch7 and
+the wrap-up are the only two I am confident fit their slots — because they are design/reflective
+and do not depend on the deploy path.
+
+### What I could not do (blocked-and-said-so, a first-class result)
+- Could not **measure** Ch2–Ch6 for any stack — no load/cicd/observability/defender/mttr
+  evidence exists anywhere; 8/11 scorecard rows stay "not measured". Not a failing of my track;
+  those chapters never produced their evidence in this delivery.
+- Could not **corroborate .NET live serving** from my host (`/readyz` → `000`); serving is
+  facilitator-attested, digest/commit/revision are my `az` reads.
+- Could not **independently confirm `b7fc289`** on the remote from my worktree (no upstream
+  access); facilitator-attested.
+- Did not attempt browser screenshots — reported unobtainable in this topology by other arms;
+  I will not fabricate one.
