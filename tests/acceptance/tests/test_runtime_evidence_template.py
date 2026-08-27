@@ -225,3 +225,68 @@ def test_documented_three_field_edit_is_accepted_by_the_real_validator(
     report["command"] = "recorded by the participant"
 
     _validate_runtime_results(report, artifact)
+
+
+TEST_TREES = {
+    "java-postgresql": ("java/src/test", "*.java"),
+    "dotnet-sqlserver": ("dotnet/tests", "*.cs"),
+}
+
+
+@pytest.mark.parametrize("stack", sorted(REQUIRED_RUNTIME_TESTS))
+def test_template_identities_resolve_into_the_frozen_test_tree(stack: str) -> None:
+    """Anchor the frozen identities to the real test sources, not to themselves.
+
+    The end-to-end guard above synthesizes its native artifact *from the template it
+    is testing*, so both sides of that comparison share one source. It proves the
+    validator and the template agree; it cannot prove either matches what ``mvn test``
+    or ``dotnet test`` actually emits. If a ``testName`` drifted from the real display
+    name, the synthesizer would simply generate XML containing the drifted string,
+    the guard would stay green, and the participant's real build would fail at handoff.
+
+    Both test trees are frozen, so correspondence can be checked statically without a
+    build: every display name must appear literally in the sources, and every identity
+    must name a class that exists as a file. This is the non-circular half, and it
+    fails loudly on exactly the drift the synthesized artifact is blind to.
+
+    Recipe contributed by the Java rewrite arm, which is the only arm to have run real
+    Surefire output through the validator and could therefore see that the template is
+    correct today while nothing in the suite holds it there.
+    """
+    repository_root = CONTRACTS.parents[1]
+    directory, pattern = TEST_TREES[stack]
+    sources = {
+        path.stem: path.read_text(encoding="utf-8")
+        for path in (repository_root / directory).rglob(pattern)
+        if "obj" not in path.parts and "bin" not in path.parts
+    }
+    assert len(sources) >= 8, (
+        f"only {len(sources)} test sources found under {directory}; "
+        "this guard is not reading the frozen test tree"
+    )
+    corpus = "\n".join(sources.values())
+
+    expected = REQUIRED_RUNTIME_TESTS[stack]
+    missing_names = sorted(
+        {name for name, _ in expected.values() if name not in corpus}
+    )
+
+    def declaring_class(identity: str) -> str:
+        # Java identities are "package.Class#displayName"; .NET identities are
+        # "Namespace.Class.Method", so the class is the last dotted segment before
+        # the member in each case.
+        if "#" in identity:
+            return identity.split("#", 1)[0].rsplit(".", 1)[-1]
+        return identity.rsplit(".", 2)[-2]
+
+    missing_classes = sorted(
+        {declaring_class(identity) for _, identity in expected.values()}
+        - set(sources)
+    )
+    assert not missing_names, (
+        f"template display names absent from {directory}: {missing_names}"
+    )
+    assert not missing_classes, (
+        f"template identities name classes with no source file in {directory}: "
+        f"{missing_classes}"
+    )
