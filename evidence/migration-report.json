@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.1.0",
+  "runId": "ffab2e54-4c44-4bf7-96e8-d54608bafcf9",
+  "status": "passed",
+  "startedAt": "2026-08-27T19:03:04.158913Z",
+  "completedAt": "2026-08-27T19:03:07.566687Z",
+  "sourceCommit": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
+  "stack": "dotnet-sqlserver",
+  "migrationExecution": {
+    "host": "source-vm",
+    "hostVmResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "sourceVirtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001",
+    "sourceSubnetResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001/subnets/vms",
+    "sourceToTargetPeering": {
+      "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001/virtualNetworkPeerings/to-vnet-mh-user001-dotnet",
+      "remoteVirtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-mh-user001-dotnet",
+      "provisioningState": "Succeeded",
+      "peeringState": "Connected"
+    },
+    "targetToSourcePeering": {
+      "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-mh-user001-dotnet/virtualNetworkPeerings/to-vnet-user001",
+      "remoteVirtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001",
+      "provisioningState": "Succeeded",
+      "peeringState": "Connected"
+    },
+    "privateDnsZoneLinks": [
+      {
+        "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/migration-source-pkjpzftb",
+        "virtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001",
+        "provisioningState": "Succeeded",
+        "registrationEnabled": false
+      },
+      {
+        "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/migration-source-pkjpzftb",
+        "virtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001",
+        "provisioningState": "Succeeded",
+        "registrationEnabled": false
+      }
+    ],
+    "topologyValidated": true
+  },
+  "sourceDatabase": {
+    "family": "sqlserver",
+    "server": ".\\SQLEXPRESS",
+    "database": "LegoCatalog",
+    "engineVersion": "2022"
+  },
+  "targetDatabase": {
+    "applicationPrincipal": {
+      "kind": "managed-identity",
+      "name": "id-mh-user001-dotnet",
+      "principalId": "92355f34-9b47-461c-afe8-bfa26c020bb1"
+    },
+    "authentication": "managed-identity",
+    "database": "catalog",
+    "entraAdministratorPrincipal": null,
+    "family": "azure-sql",
+    "localAdministratorPrincipal": null,
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Sql/servers/sql-mh-user001-dotnet-kurep3z6/databases/catalog",
+    "server": "sql-mh-user001-dotnet-kurep3z6.database.windows.net"
+  },
+  "databaseArtifact": {
+    "format": "bacpac",
+    "exportTool": {
+      "name": "SqlPackage",
+      "version": "170.4.83"
+    },
+    "importTool": {
+      "name": "SqlPackage",
+      "version": "170.4.83"
+    },
+    "sha256": "44fffb08267998e032a69d472f804cec866f704337c00dfc4580983f17c10fcf",
+    "bytes": 30203
+  },
+  "databaseVerification": {
+    "migrationHistory": [
+      "202608180001_ContractBaseline|8.0.22"
+    ],
+    "schemaVerified": true,
+    "constraintsVerified": true,
+    "indexesVerified": true,
+    "seedManifestVersion": "1.0.0",
+    "verifiedRowCounts": {
+      "figures": 198,
+      "categories": 20
+    }
+  },
+  "images": {
+    "authentication": "managed-identity",
+    "location": "catalog-images",
+    "provider": "azure-blob",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Storage/storageAccounts/stuser001dotnekurep3z6/blobServices/default/containers/catalog-images",
+    "verification": {
+      "imageCount": 198,
+      "imageBytes": 323011386,
+      "imageSetSha256": "c706eda9b7d74a2b578b02487e6527e707819bc3cdd09adc59e3cb62ffcba7be",
+      "seedManifestVersion": "1.0.0"
+    }
+  }
+}

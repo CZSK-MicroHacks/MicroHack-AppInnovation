@@ -829,6 +829,46 @@ on any of this. `sql.bicep:89` hardcodes `output authentication string = 'manage
 line 21 disables password auth outright. The .NET stack has no fallback at all. Counting A, B,
 C, I and L, that is five defects in this chapter that a green Java run cannot see.
 
+**The security consequence, which is worse than the functional one.** `database.py:554-566` builds
+the drop and the create as a *single* statement under `SET XACT_ABORT ON` inside one explicit
+transaction:
+
+```sql
+SET XACT_ABORT ON; BEGIN TRANSACTION;
+IF EXISTS (… WHERE name = N'catalog') BEGIN
+  IF IS_ROLEMEMBER(N'db_owner', N'catalog') = 1 ALTER ROLE [db_owner] DROP MEMBER [catalog];
+  DROP USER [catalog]; END;
+CREATE USER [id-…] FROM EXTERNAL PROVIDER WITH OBJECT_ID='…';
+ALTER ROLE db_datareader ADD MEMBER [id-…];
+ALTER ROLE db_datawriter ADD MEMBER [id-…];
+COMMIT TRANSACTION;
+```
+
+Atomicity is the right instinct, but it means the failure of `CREATE USER … FROM EXTERNAL PROVIDER`
+also **rolls back the removal of the legacy `catalog` principal — which is `db_owner`.** So the
+post-failure state is:
+
+- the catalog data fully imported (SqlPackage ran before the transaction and is not transactional
+  with it),
+- the legacy privileged SQL-auth principal still present and still `db_owner`,
+- the managed identity principal absent,
+- exit code 4, and no report explaining any of it.
+
+That is the *exact* security posture the modernization exists to eliminate — a `db_owner` password
+principal on a production catalog — silently preserved by a rollback whose purpose was to keep
+things safe. `verify` does catch it (`database.py:836-851`, "Azure SQL retains the privileged legacy
+catalog principal"), which is genuinely good design, but only if the attendee gets as far as
+`verify`; the natural reading of exit code 4 is "the import failed, nothing happened", and the
+natural response is to fix something and retry — which the non-idempotent precondition then blocks.
+
+I completed the drop separately after creating the app principal by SID, and confirmed the end
+state: `catalog` gone, `id-mh-user001-dotnet` present with exactly `db_datareader,db_datawriter`.
+
+**Recommendation, sharpened.** Split the statement into two transactions and run the *create*
+first: creating the new principal before removing the old one is both idempotent-friendly and
+fail-safe, whereas the current order makes a partial failure leave behind the one thing the chapter
+is trying to remove.
+
 **Recommended:** assign a system-assigned identity to the SQL server in `sql.bicep`; switch the
 tool's `CREATE USER` to the `WITH SID … TYPE = E` form so Directory Readers is never needed;
 create a principal for the migration identity rather than requiring the single admin slot to be
