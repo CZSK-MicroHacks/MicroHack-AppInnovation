@@ -1335,7 +1335,96 @@ Recovering it surfaced two Azure Container Apps traps worth documenting:
 
 ---
 
+### V. Aborting `az vm run-command` locally does not cancel it remotely, and silently holds the only channel to the VM
+
+This cost me over half an hour and it is the third distinct cause of `Conflict` from
+`az vm run-command`, alongside the two already catalogued (platform patch orchestration;
+single-flight contention with a *live* caller). It is the worst of the three, because the
+holder is invisible and there is nothing to wait for that any tool will show you.
+
+**What I observed.** From 21:59 onward, every `az vm run-command invoke` against
+`vm-dotnet-user001` returned `Conflict: Run command extension execution is in progress`,
+continuously, for 35+ minutes. Concurrently:
+
+| Probe | Result |
+| --- | --- |
+| `az vm get-instance-view` → `provisioningState` | `Updating` |
+| `az vm get-instance-view` → extension runtime status | `CustomScriptExtension`, **status `null`, message `null`** |
+| `az vm extension list` → `provisioningState` | **`Succeeded`** |
+| VM power state | `running`, healthy |
+| Activity log, 12 h, excluding `runCommand/action` | **zero operations** |
+| Activity log, 6 h, `status == Succeeded` | **zero** |
+| Activity log, my own attempts | `Started` → `Failed`/`Conflict`, every time, instantly |
+
+So: nothing was being patched, no extension operation was in progress, no ARM operation
+of any kind had touched the VM in twelve hours, and the one extension present reported
+`Succeeded` at the resource level while reporting no runtime status at all.
+
+**The leading explanation, stated as a hypothesis with its evidence.** Shortly before the
+wall began I had started an `az vm run-command invoke` that hung — it was running
+`az cache purge`, `az account clear` and `az login --identity` on the VM — and I killed
+the **local** `az` process. Killing the local client does not cancel the remote
+invocation: the extension keeps executing on the VM until it finishes or hits the
+service-side execution limit, and it holds the single-flight channel for that whole
+period. Everything above is consistent with an orphaned invocation that no longer has a
+client.
+
+I cannot *prove* that specific invocation is the holder, because there is no way to
+enumerate in-flight run-commands — which is itself the finding. I record it as the
+explanation that fits every observation, not as a demonstrated fact.
+
+**Why it matters more than the other two `Conflict` causes:**
+
+1. **The `provisioningState` check does not discriminate here.** The published guidance is
+   that `Updating` means a patch window (wait) and `Succeeded` means a live caller holds
+   the channel (wait, benign). This case reads `Updating` — so it is diagnosed as a patch
+   window, and the attendee is told to wait for something that is not happening. The
+   discriminator that works for the first two causes silently misclassifies the third.
+2. **It defeats the F-82 fix.** That fix retries, bounded, over transient provisioning
+   states. This state is not transient in any useful sense — it is held by an orphan with
+   its own timeout, unrelated to anything the retry can observe. A bounded retry will
+   exhaust its bound and fail, having correctly concluded nothing.
+3. **It makes the destructive remedy look correct.** The standing advice is that
+   deallocate + start is justified once a VM is wedged beyond ~20 minutes. This condition
+   trips that threshold routinely and *looks* exactly like a genuine wedge: nothing
+   running, nothing progressing, half an hour gone. Deallocating would destroy whatever
+   the orphaned command was doing — which, since it is usually the attendee's own
+   long-running job, is precisely the work they are trying to protect.
+4. **There is no observability whatsoever.** No `az vm run-command list` for in-flight
+   invocations, no cancel, no timeout visible, no correlation ID surfaced in the
+   `Conflict` message. The error names the condition and nothing about the holder. With
+   boot diagnostics off and Bastion interactive-only, there is no independent channel to
+   go and look.
+
+**Practical guidance that should be in the material:** if `run-command` returns `Conflict`
+and the activity log shows **no non-`runCommand` operation** in the recent past, you are
+almost certainly holding your own orphaned invocation. **Wait it out. Do not deallocate.**
+And never `Ctrl-C` a long `az vm run-command invoke` expecting it to stop — it does not.
+If you must abandon one, expect the channel to stay locked for the remainder of its
+server-side execution limit.
+
+**A cheap structural fix.** The pattern I adopted for long jobs — have `run-command` do
+nothing but register a scheduled task, write progress to a log file, and return
+immediately — avoids this entirely, because no invocation is ever long-lived. Every
+invocation completes in seconds and the channel is never held. That pattern is worth
+putting in the runbooks regardless of everything else here; it also solves the 4096-byte
+output cap.
+
+---
+
 ### T. There is no per-attendee identity, so no evidence is attributable to anyone
+
+Checking who created a hand-made role assignment, I found that my principal, the facilitator's
+principal and the other arm's principal are **the same Azure identity**
+(`admin@MngEnvMCAP372348.onmicrosoft.com`). Every `createdBy` in the subscription resolves to it
+by construction.
+
+I could confirm I had made that change only from my own written record, not from Azure. For a
+workshop whose entire premise is evidence provenance — and which asks attendees to record commit
+SHAs, image digests and revision names precisely so claims can be checked — the environment
+itself cannot answer "who did this". That undercuts the lesson at the infrastructure level, and
+it also means a facilitator cannot distinguish an attendee's change from their own.
+
 
 Checking who created a hand-made role assignment, I found that my principal, the facilitator's
 principal and the other arm's principal are **the same Azure identity**
