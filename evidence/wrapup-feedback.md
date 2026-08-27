@@ -441,3 +441,59 @@ and do not depend on the deploy path.
   access); facilitator-attested.
 - Did not attempt browser screenshots — reported unobtainable in this topology by other arms;
   I will not fabricate one.
+
+---
+
+## Addendum 2 (2026-08-27 ~23:00 CEST) — the chapter-ending finding: the wrap-up is transitively gated on `validate_handoff`
+
+The facilitator asked the exact right question: *does the wrap-up depend on Challenge 1
+handoff artifacts?* I traced it in code. The answer is precise:
+
+**Not directly — transitively, and the transitive gate is worse than a direct one.**
+
+- The wrap-up README references **no** Ch1 handoff artifact by name (no `modernization-contract.json`).
+  Its scorecard cells cite `evidence/ch00-pain-<stack>.json` (Ch0) and the Ch2–6 evidence files.
+- **But 8 of 11 "after" cells come from Ch2–6**, and every one of those chapters' evidence
+  validators calls the same function: `validate_handoff` (`handoff.py:1010`) — confirmed callers
+  `load_evidence.py:485` (Ch2), `defender_evidence.py:3167` (Ch5), `sre_evidence.py` (Ch6),
+  `golden_dryrun.py:152`, `handoff_cli.py:23`.
+- **Both F-73 and F-74 are gates *inside that one function*:** F-73 at `handoff.py:1180`
+  (`report.profile != "full" or report.status != "passed"`), and F-74 reached at
+  `handoff.py:1145` → `_validate_telemetry_results` → `:270`
+  (`set(rows) != set(expected_names)`, plus the metrics branch's `if not rejected: raise`).
+
+So the wrap-up's after-column is **transitively blocked for every attendee** whose run must pass
+`validate_handoff` — which is every attendee on the deploy path. This is a **chapter-ending
+finding**, not a Challenge 1 one: it makes the workshop's *final deliverable* unreachable in its
+measured half, no matter how well the attendee did.
+
+### Why F-73's fix is necessary but NOT sufficient (the sharp bit)
+The facilitator's `e354ce3` resolved list is **F-65, F-67, F-68, F-70, F-73, F-76, F-75/F-77**.
+**F-74 is not on it.** Both gates share `validate_handoff`. Fixing F-73 (topology-aware
+traversal) removes one gate; the F-74 telemetry-set-equality gate at `:1145`→`:270` **remains**,
+and a *clean* run cannot satisfy it (it demands a `rejected` import signal only a failed run
+emits). **Therefore, unless `e354ce3` also fixed F-74 under an unlisted number, `validate_handoff`
+still rejects a flawless run, Ch2/5/6 evidence still can't validate, and the wrap-up after-column
+is still transitively blocked.** I cannot fetch `e354ce3` from my worktree (no upstream access) to
+confirm — flagging this for the facilitator to verify against the shipped tree. If F-74 is fixed
+there, mark this resolved; if not, it is the single highest-severity finding in my track.
+
+### Cross-path assumption (facilitator's #4 — invisible to single-run attendees)
+The scorecard is parameterised by **`<stack>`** (`dotnet`/`java`) but **not by Challenge 1
+*path***. Its after-column artifacts — `cicd-report.json`, `load-test-report.json`,
+`defender-report.json`, `ch06-mttr.json` — are produced *only* by the full deploy+CI/CD+
+observability+security+SRE arc. **A manual-rebuild or Copilot-rewrite attendee never produces
+them**, yet the scorecard presents them as *the* result columns. The only defence is the
+`:22-23` golden-handoff clause ("mark the rest as *not measured*"), and the reflection question at
+`:75` does acknowledge the three paths — but the *table itself* assumes the modernization path's
+artifacts. An attendee who ran one path once would not see the assumption. **Severity: medium**
+(weakly caveated, not uncaught).
+
+### Does the wrap-up land as a closing experience?
+Rhetorically, yes — the "boundary/what-this-is-not" section (`:96-105`) and the `:49-69` caveats
+are the best writing in the workshop. **Materially, the closing over-claims for any run that
+isn't the full golden path:** `:113` asserts "you have the evidence to show each one" of pipeline/
+rollback/autoscaler/tracing/security/SRE — but in *this* delivery 8/11 rows had no evidence at
+all. For a partial or non-deploy attendee, that sentence is a confident false positive — exactly
+the artifact the workshop teaches distrust of. The fix is one sentence up front: *a mostly
+"not measured" card is the expected, honest shape of a governed-tenant run.*
