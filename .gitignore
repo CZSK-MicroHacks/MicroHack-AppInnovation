@@ -60,3 +60,16 @@ global.json
 # IDs and an image digest that go stale the moment that environment is torn down.
 # Build your own with catalog-migrate render-handoff. See workshop/golden/README.md.
 workshop/golden/*/evidence/
+
+# Terraform - state and plans contain the VM administrator password, generated database
+# passwords, performance API keys, and per-user Entra passwords. Never commit them.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+backend.hcl
+backend_override.tf

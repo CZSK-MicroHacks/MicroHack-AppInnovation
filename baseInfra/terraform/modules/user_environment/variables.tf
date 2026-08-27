@@ -109,3 +109,30 @@ Facilitator Entra ID object ID written into this environment's protected deploym
 parameter files as `facilitatorPrincipalObjectId`. Validated by the root module.
 EOT
 }
+
+variable "enable_public_ip_resources" {
+  type        = bool
+  default     = true
+  description = <<EOT
+Controls whether this environment provisions public IP addresses and the resources that
+require them (Azure Bastion Basic and the NAT Gateway).
+
+Leave at the default `true` for a normal delivery. Set to `false` only when the target
+subscription is governed such that public IP addresses cannot be created at all -- some
+managed/sandbox tenants revoke `Microsoft.Network/AllowBringYourOwnPublicIpAddress` and
+continuously revert attempts to re-register it.
+
+When `false`:
+  * VM outbound internet relies on Azure default outbound access instead of the NAT
+    Gateway. This is verified working in the delivery subscription: both participant VMs
+    downloaded a 327 MB archive and the container app pulled from MCR with no NAT Gateway
+    and no public IP anywhere in the resource group. The retirement of default outbound
+    access applies to virtual networks created after 2026-03-31, and only when the subnet
+    sets `defaultOutboundAccess`, which this module never does.
+  * Azure Bastion downgrades from Basic to the Developer SKU, which needs no public IP and
+    no AzureBastionSubnet. Interactive RDP through the portal still works, so the challenge
+    0 instruction to connect through Bastion stays accurate. The Developer SKU serves one
+    VM per session, offers no native `az network bastion rdp` client, and cannot reach
+    peered virtual networks; the challenge 0 flow needs none of those.
+EOT
+}

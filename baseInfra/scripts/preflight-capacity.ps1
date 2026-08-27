@@ -151,6 +151,28 @@ $null = Invoke-AzureCliJson -Arguments @(
     $SubscriptionId
 )
 
+# Subscription capability gate. Quota alone is not enough: some tenants withhold the
+# Microsoft.Network/AllowBringYourOwnPublicIpAddress feature, and without it every public IP
+# allocation is refused regardless of available quota. That breaks Bastion and NAT here in the
+# base infrastructure, and it also breaks the Challenge 1 target, where an external Container
+# Apps managed environment fails roughly eight minutes into the deployment after ~21 other
+# resources have already been created. Surface it here, in seconds, instead of there.
+$PublicIpFeature = Invoke-AzureCliJson -Arguments @(
+    'feature',
+    'show',
+    '--namespace',
+    'Microsoft.Network',
+    '--name',
+    'AllowBringYourOwnPublicIpAddress',
+    '--subscription',
+    $SubscriptionId
+)
+$PublicIpFeatureState = (@($PublicIpFeature.properties.state) -join '')
+$PublicIpAllocationBlocked = $PublicIpFeatureState -ne 'Registered'
+if ($PublicIpAllocationBlocked) {
+    Write-Warning ("Subscription {0} reports Microsoft.Network/AllowBringYourOwnPublicIpAddress as '{1}' rather than 'Registered'. Public IP allocation will be refused, which blocks the Bastion host, the NAT gateway, and the external Container Apps environment used by Challenge 1. Register the feature, or deploy the Challenge 1 target with containerAppsEnvironmentInternal=true and reach the catalog from inside the peered virtual network." -f $SubscriptionId, $PublicIpFeatureState)
+}
+
 # Per participant: one Bastion host, one NAT gateway, one Bastion public IP, one NAT public IP.
 $PublicIpsPerParticipant = 2
 $NatGatewaysPerParticipant = 1
@@ -240,8 +262,10 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
     $VmQuota = $Usage |
         Where-Object { $_.name.value -eq 'virtualMachines' } |
         Select-Object -First 1
+    # Azure renamed this metric; older regions still report the legacy name, so accept both
+    # rather than failing preflight on a metric that is present under a different key.
     $DiskQuota = $Usage |
-        Where-Object { $_.name.value -eq 'PremiumStorageManagedDisks' } |
+        Where-Object { $_.name.value -in @('PremiumStorageManagedDisks', 'PremiumDiskCount') } |
         Select-Object -First 1
     if ($null -eq $RegionalQuota -or $null -eq $FamilyQuota -or
         $null -eq $VmQuota -or $null -eq $DiskQuota) {
@@ -320,7 +344,9 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
         throw "$Location requires $RequiredBastionHosts Azure Bastion hosts but only $BastionHostsAvailable of the $BastionHostsPerRegionLimit regional limit remain ($ExistingBastionHostsInRegion already deployed)."
     }
 
-    $ArmLocation = [string]$Sku[0].locations[0]
+    # The Retail Prices API matches armRegionName case-sensitively and publishes it in
+    # lowercase, while az vm list-skus returns the mixed-case ARM form.
+    $ArmLocation = ([string]$Sku[0].locations[0]).ToLowerInvariant()
     $VmPrice = Get-RetailPrice -Filter (
         "serviceName eq 'Virtual Machines' and armRegionName eq '$ArmLocation' " +
         "and armSkuName eq '$VmSize' and priceType eq 'Consumption' " +
@@ -418,6 +444,8 @@ $Result = [pscustomobject]@{
     bastionHosts                 = $TotalBastionHostCount
     natGateways                  = $TotalNatGatewayCount
     publicIpAddresses            = $TotalPublicIpCount
+    publicIpFeatureState         = $PublicIpFeatureState
+    publicIpAllocationBlocked    = $PublicIpAllocationBlocked
     perParticipantFootprint      = [pscustomobject]@{
         virtualMachines   = 2
         osDisks           = 2

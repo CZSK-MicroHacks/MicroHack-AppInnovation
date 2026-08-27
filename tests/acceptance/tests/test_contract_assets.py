@@ -1542,6 +1542,35 @@ def _lock(repo_root: Path) -> dict:
     return load_json(repo_root / "workshop" / "toolchain.lock.json")
 
 
+def _committed_text(repo_root: Path, relative: str) -> str:
+    """Return a file's contents as committed at ``HEAD``, ignoring the working tree.
+
+    Guards that watch the *shipped* baseline for maintainer drift have to read what the
+    repository ships, not what is currently on disk. The working tree under `java/` and
+    `dotnet/` is precisely where a participant does Challenge 1, so a baseline guard
+    that reads from disk stops describing the workshop and starts failing the exercise.
+    """
+    return subprocess.run(
+        ["git", "show", f"HEAD:{relative}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _committed_paths(repo_root: Path, directory: str) -> list[str]:
+    """Return repository-relative paths committed at ``HEAD`` under ``directory``."""
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", "--name-only", "HEAD", f"{directory}/"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [entry for entry in listing.split("\0") if entry]
+
+
 def test_legacy_dotnet_tree_stays_on_the_locked_source_sdk(repo_root: Path) -> None:
     """Fail if `dotnet/` drifts off the legacy baseline participants must start from.
 
@@ -1550,16 +1579,28 @@ def test_legacy_dotnet_tree_stays_on_the_locked_source_sdk(repo_root: Path) -> N
     that premise *and* the VM, which pins the source SDK with `rollForward: disable`.
     The expected framework is derived from the lock rather than hard-coded so the two
     can never disagree.
+
+    Read from ``HEAD`` rather than from disk, because the drift this guards against is
+    the maintainer's and the working tree belongs to the participant. Challenge 1 asks
+    every path to retarget the application -- on the rewrite path that is the first
+    slice -- and the runbook re-runs this suite after each one. Reading the working tree
+    turned a guard on what the workshop ships into a guard on the participant doing the
+    exercise, red from slice one onward, with a message about a drifted baseline that
+    names neither the challenge nor any way forward.
     """
     source_sdk = _lock(repo_root)["runtimes"]["dotnet"]["sourceSdk"]
     expected = f"net{source_sdk.split('.')[0]}.0"
 
-    projects = sorted((repo_root / "dotnet").rglob("*.csproj"))
+    projects = sorted(
+        path
+        for path in _committed_paths(repo_root, "dotnet")
+        if path.endswith(".csproj")
+    )
     assert projects, "the legacy .NET tree has no projects"
     for project in projects:
-        text = project.read_text(encoding="utf-8")
+        text = _committed_text(repo_root, project)
         assert f"<TargetFramework>{expected}</TargetFramework>" in text, (
-            f"{project.relative_to(repo_root)} is not on the locked source SDK "
+            f"{project} is not on the locked source SDK "
             f"{expected}; the legacy baseline has drifted"
         )
 
@@ -1567,12 +1608,17 @@ def test_legacy_dotnet_tree_stays_on_the_locked_source_sdk(repo_root: Path) -> N
 def test_legacy_java_tree_stays_on_the_locked_source_spring_boot(
     repo_root: Path,
 ) -> None:
-    """Fail if `java/` drifts off the legacy Spring Boot and JDK baseline."""
+    """Fail if `java/` drifts off the legacy Spring Boot and JDK baseline.
+
+    Read from ``HEAD`` for the same reason as the .NET guard above: this watches the
+    shipped baseline for maintainer drift, and the working tree is where the participant
+    does the exercise.
+    """
     java = _lock(repo_root)["runtimes"]["java"]
     boot = java["sourceSpringBoot"]
     jdk_major = java["sourceRuntime"].split(".")[0]
 
-    pom = (repo_root / "java" / "pom.xml").read_text(encoding="utf-8")
+    pom = _committed_text(repo_root, "java/pom.xml")
     assert f"<version>{boot}</version>" in pom, (
         f"java/pom.xml is not on the locked source Spring Boot {boot}"
     )
@@ -2135,14 +2181,20 @@ def test_ci_declares_an_sdk_for_every_framework_a_participant_can_ship(
 
     source_tfms = {
         match.group(1)
-        for path in (repo_root / "dotnet").rglob("*.csproj")
-        for match in [re.search(r"<TargetFramework>net(\d+)\.0<", path.read_text())]
+        for path in _committed_paths(repo_root, "dotnet")
+        if path.endswith(".csproj")
+        for match in [
+            re.search(r"<TargetFramework>net(\d+)\.0<", _committed_text(repo_root, path))
+        ]
         if match
     }
     target_tfms = {
         match.group(1)
-        for path in (repo_root / "solutions" / "reference" / "dotnet").rglob("*.csproj")
-        for match in [re.search(r"<TargetFramework>net(\d+)\.0<", path.read_text())]
+        for path in _committed_paths(repo_root, "solutions/reference/dotnet")
+        if path.endswith(".csproj")
+        for match in [
+            re.search(r"<TargetFramework>net(\d+)\.0<", _committed_text(repo_root, path))
+        ]
         if match
     }
     required = source_tfms | target_tfms
@@ -3456,6 +3508,70 @@ def test_every_repository_walk_uses_the_enumeration_that_sees_uncommitted_work()
     )
 
 
+PARTICIPANT_WRITABLE_ROOTS = ("dotnet", "java", "evidence")
+
+_PARTICIPANT_LITERAL_PATH = re.compile(
+    r"/\s*[\"'](?:" + "|".join(PARTICIPANT_WRITABLE_ROOTS) + r")[\"']"
+)
+
+# The two sites that legitimately compose such a path: a pytest `tmp_path` scratch
+# directory and the golden-fixture root. Neither asserts anything about what the
+# workshop ships.
+PARTICIPANT_LITERAL_EXEMPT_SITES = 2
+
+
+def test_no_new_shipped_baseline_assertion_reads_the_working_tree() -> None:
+    """Stop the fifth instance of a defect class this file produced four times.
+
+    Four tests asserted a property the workshop *ships* -- a locked SDK, a pinned Spring
+    Boot, the shape of the reference tree, the frameworks CI must declare -- while
+    resolving that assertion against `dotnet/`, `java/` or `evidence/`, which is exactly
+    where a participant is told to work. Challenge 1 mandates retargeting the runtime and
+    authoring a Dockerfile, so each guard turned from a statement about the workshop into
+    a failure of doing the workshop. Three went red with messages that named no cause; the
+    fourth silently stopped requiring the source framework of CI, which is worse.
+
+    The route in never mattered. Two used `git ls-files`, two used `rglob` and
+    `read_text`, so an audit that searched for a *mechanism* cleared the file while two
+    instances were still in it. This searches for the *question* instead: a literal
+    participant-writable segment composed into a path. Verified against the pre-fix tree,
+    where it catches the SDK-pin guard's hardcoded reach into the .NET stack at authorship.
+
+    Composing the path from a variable is fine and deliberately not matched -- the
+    reference-shape guard's `repo_root / stack` feeds `_committed_files_under`, which
+    reads `HEAD`. What is being caught is the hardcoded reach into a participant's tree.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert len(source) >= 100_000, (
+        f"only {len(source)} characters read from this module; the scan did not happen "
+        "and an empty read would report no offenders"
+    )
+    hits = _PARTICIPANT_LITERAL_PATH.findall(source)
+    assert len(hits) <= PARTICIPANT_LITERAL_EXEMPT_SITES, (
+        f"{len(hits)} sites compose a path with a literal participant-writable segment "
+        f"({', '.join(PARTICIPANT_WRITABLE_ROOTS)}), above the "
+        f"{PARTICIPANT_LITERAL_EXEMPT_SITES} exempt scratch and fixture sites. If this is "
+        "an assertion about what the workshop ships, read the committed tree with "
+        "_committed_paths, _committed_text or _committed_files_under instead -- otherwise "
+        "it will fail the participant for doing the exercise. If it genuinely asks about "
+        f"the working tree, raise the ceiling and say which category it is. Hits: {hits}"
+    )
+
+
+def test_participant_writable_roots_cover_every_stack_the_workshop_teaches() -> None:
+    """Keep the guard above honest when a third stack is added.
+
+    `PARTICIPANT_WRITABLE_ROOTS` is a hand-maintained tuple, so a new stack would be
+    modernized by participants while the guard quietly declined to watch it.
+    """
+    missing = sorted(set(MODERNIZATION_SURFACE) - set(PARTICIPANT_WRITABLE_ROOTS))
+    assert not missing, (
+        f"these stacks are modernized by participants but are not listed in "
+        f"PARTICIPANT_WRITABLE_ROOTS, so shipped-baseline assertions against them are "
+        f"unguarded: {missing}"
+    )
+
+
 def test_no_build_phase_codes_reach_a_reader(repo_root: Path) -> None:
     """Nothing a participant or facilitator reads refers to a build phase by number.
 
@@ -3715,6 +3831,20 @@ def test_every_challenge_keeps_the_microhack_teaching_contract(repo_root: Path) 
 # is one nobody runs, and one nobody runs is one nobody has proved works.
 PROVISIONING_SCRIPT_COUNT = 5
 
+# Build output and tool caches are untracked, so including them makes the walk
+# non-deterministic: a developer checkout finds documents a clean clone cannot.
+WALK_EXCLUDED_DIRECTORIES = {
+    ".git",
+    ".venv",
+    "node_modules",
+    ".terraform",
+    "bin",
+    "obj",
+    "target",
+    "__pycache__",
+    ".pytest_cache",
+}
+
 
 def test_every_provisioning_script_is_reachable_from_a_document(repo_root: Path) -> None:
     """A script no document names is a script no facilitator will ever run.
@@ -3754,9 +3884,9 @@ def test_every_provisioning_script_is_reachable_from_a_document(repo_root: Path)
         for path in repo_root.rglob("*")
         if path.suffix in {".md", ".ps1", ".json", ".yml", ".yaml"}
         and path.is_file()
-        and not set(path.relative_to(repo_root).parts) & {".git", ".venv", "node_modules"}
+        and not set(path.relative_to(repo_root).parts) & WALK_EXCLUDED_DIRECTORIES
     ]
-    assert len(readable) >= 200, (
+    assert len(readable) >= 150, (
         f"only {len(readable)} documents searched; the walk is not running"
     )
 
@@ -3790,7 +3920,6 @@ MODERNIZATION_SURFACE = {
         "src/LegoCatalog.App/LegoCatalog.App.csproj",
         "src/LegoCatalog.App/Program.cs",
         "src/LegoCatalog.App/Services/LocalImageStore.cs",
-        "src/LegoCatalog.App/Services/StartupImportHostedService.cs",
         "tests/LegoCatalog.App.Tests/ImageSecurityTests.cs",
         "tests/LegoCatalog.App.Tests/LegoCatalog.App.Tests.csproj",
     },
@@ -3853,6 +3982,65 @@ def _files_under(root: Path) -> set[str]:
     return {entry for entry in listing.split("\0") if entry}
 
 
+def _committed_files_under(root: Path) -> set[str]:
+    """The same listing restricted to what is committed at ``HEAD``.
+
+    Tree *shape* is a property of what the workshop ships, so the guards that compare
+    the legacy and reference trees have to read the committed tree and nothing else.
+    Reading the working tree instead made those guards fire on the participant rather
+    than on the maintainer: Challenge 1 requires every path to author ``<stack>/
+    Dockerfile``, that file is not ignored, and the moment it exists the legacy side
+    gains a name the reference side already declares as an addition. The set difference
+    shrinks, the declaration no longer matches, and the assertion fails with both of its
+    diagnostic lists empty -- because nothing is undeclared and nothing is absent, the
+    two trees have simply stopped having the shape the comparison assumes. The only
+    escape the message leaves is editing the declaration, which the challenge forbids as
+    read-only. Committed listings make the guards invariant to participant work while
+    still catching the maintainer drift they exist to catch.
+    """
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", "--name-only", "HEAD", "."],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return {entry for entry in listing.split("\0") if entry}
+
+
+def _tree_shape_mismatch(
+    declared: set[str],
+    expected_in: set[str],
+    expected_out: set[str],
+) -> str:
+    """Describe every way ``expected_in - expected_out`` can stop matching ``declared``.
+
+    Four states break that equality and the callers used to report two of them. The two
+    that went unreported are the ones a participant provokes rather than a maintainer,
+    so the failure a participant actually saw printed two empty lists and explained
+    nothing: Challenge 1 requires authoring ``<stack>/Dockerfile``, and committing it
+    puts a name the reference tree declares as an addition into the legacy tree as well.
+    The difference shrinks without leaving anything undeclared and without removing
+    anything from the reference tree.
+
+    Reading ``HEAD`` keeps the comparison invariant to a participant's *working* tree,
+    but the workshop goes on to ask for a commit, and the guard fires again the moment
+    they comply. Naming the state is what lets the reader tell "I am looking at
+    maintainer drift" apart from "I am looking at my own homework".
+
+    Only non-empty states are rendered, so a real difference can never be reported as an
+    empty explanation.
+    """
+    states = (
+        ("present but undeclared", (expected_in - expected_out) - declared),
+        ("declared, but now present on both sides", declared & expected_in & expected_out),
+        ("declared, but only on the opposite side", (declared & expected_out) - expected_in),
+        ("declared, but in neither tree", declared - expected_in - expected_out),
+    )
+    return "".join(f"\n  {label}: {sorted(names)}" for label, names in states if names)
+
+
+
 def test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches(
     repo_root: Path,
 ) -> None:
@@ -3879,22 +4067,24 @@ def test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches(
 
         mirrored = 0
         drifted: list[str] = []
-        legacy_files = _files_under(legacy)
-        reference_files = _files_under(reference)
+        legacy_files = _committed_files_under(legacy)
+        reference_files = _committed_files_under(reference)
 
         assert reference_files - legacy_files == MODERNIZATION_ADDITIONS[stack], (
             f"{stack}: the files the modernization adds are not the ones declared. "
             "Walking only the legacy tree made these invisible, so a new file could "
-            "appear in the reference solution and no test would mention it:\n  "
-            f"undeclared additions: {sorted(reference_files - legacy_files - MODERNIZATION_ADDITIONS[stack])}\n  "
-            f"declared but absent:  {sorted(MODERNIZATION_ADDITIONS[stack] - reference_files)}"
+            "appear in the reference solution and no test would mention it:"
+            + _tree_shape_mismatch(
+                MODERNIZATION_ADDITIONS[stack], reference_files, legacy_files
+            )
         )
         assert legacy_files - reference_files == MODERNIZATION_DELETIONS[stack], (
             f"{stack}: the files the modernization removes are not the ones declared. "
             "A deletion used to require no declaration at all -- the comparison simply "
-            "skipped any file missing from one side:\n  "
-            f"undeclared deletions: {sorted(legacy_files - reference_files - MODERNIZATION_DELETIONS[stack])}\n  "
-            f"declared but present: {sorted(MODERNIZATION_DELETIONS[stack] & reference_files)}"
+            "skipped any file missing from one side:"
+            + _tree_shape_mismatch(
+                MODERNIZATION_DELETIONS[stack], legacy_files, reference_files
+            )
         )
 
         for relative in sorted(legacy_files & reference_files):

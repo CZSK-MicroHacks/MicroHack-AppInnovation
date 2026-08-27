@@ -121,6 +121,35 @@ function Assert-AuthenticodePublisher {
     }
 }
 
+function Get-NativeCommandOutput {
+    <#
+    .SYNOPSIS
+    Runs a native executable and returns its merged stdout and stderr as an array of lines.
+
+    .DESCRIPTION
+    java.exe, code.cmd, SqlPackage.exe and sqlcmd all report version banners or warnings on
+    stderr. Redirecting stderr into the success stream turns those lines into error records,
+    which this script's file-wide 'Stop' preference then promotes to terminating errors, so
+    every such version check aborts provisioning instead of returning a string. Demoting the
+    preference for the duration of the call is what makes the merged output readable.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [string[]]$Arguments = @()
+    )
+
+    $PreviousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return @(& $Path @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    }
+    finally {
+        $ErrorActionPreference = $PreviousPreference
+    }
+}
+
 function Invoke-LockedInstaller {
     param(
         [Parameter(Mandatory)]
@@ -449,10 +478,9 @@ function Install-CommonTools {
             Publisher = 'Microsoft Corporation'
         }
         Uv = @{
-            Version   = '0.8.22'
-            Uri       = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'
-            Hash      = '5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12'
-            Publisher = 'Astral Software Inc.'
+            Version = '0.8.22'
+            Uri     = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'
+            Hash    = '5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12'
         }
         Git = @{
             Version   = '2.55.0.windows.5'
@@ -527,8 +555,11 @@ function Install-CommonTools {
 
     $UvRoot = 'C:\Program Files\uv'
     $UvCommand = Join-Path $UvRoot 'uv.exe'
+    # `uv --version` reports `uv 0.8.22 (ade2bdbd2 2025-09-23)`, so the build hash and date
+    # have to be dropped as well as the `uv ` prefix before comparing with the pinned version.
+    $UvVersionPattern = '^uv\s+(?<version>\S+)'
     $InstalledUvVersion = if (Test-Path $UvCommand) {
-        ((& $UvCommand --version) -replace '^uv\s+', '').Trim()
+        if ((& $UvCommand --version) -match $UvVersionPattern) { $Matches.version } else { $null }
     }
     else {
         $null
@@ -545,13 +576,15 @@ function Install-CommonTools {
         if ($null -eq $ExtractedUv) {
             throw 'The verified uv archive did not contain uv.exe.'
         }
-        Assert-AuthenticodePublisher -Path $ExtractedUv.FullName -Publisher $Artifacts.Uv.Publisher
+        # Astral ships uv unsigned, so the pinned SHA-256 of the release archive verified by
+        # Invoke-VerifiedDownload above is the integrity gate for this artifact.
         New-Item -ItemType Directory -Path $UvRoot -Force | Out-Null
         Copy-Item -Path (Join-Path $ExtractedUv.Directory.FullName '*.exe') `
             -Destination $UvRoot -Force
     }
     Add-MachinePath -Path $UvRoot
-    if (((& $UvCommand --version) -replace '^uv\s+', '').Trim() -ne $Artifacts.Uv.Version) {
+    if (-not ((& $UvCommand --version) -match $UvVersionPattern) -or
+        $Matches.version -ne $Artifacts.Uv.Version) {
         throw 'uv version verification failed.'
     }
 
@@ -638,10 +671,27 @@ function Install-CommonTools {
     $ExtensionRoot = 'C:\ProgramData\MicroHack\vscode-extensions'
     New-Item -ItemType Directory -Path $ExtensionRoot -Force | Out-Null
     [Environment]::SetEnvironmentVariable('VSCODE_EXTENSIONS', $ExtensionRoot, 'Machine')
+    # Visual Studio Code 1.133.0 ships GitHub Copilot and Copilot Chat as built-in extensions
+    # at versions newer than the pins below and refuses to downgrade a built-in. A newer
+    # built-in still satisfies the workshop, so that specific refusal is accepted and the
+    # extension is dropped from the exact-version verification that follows.
+    $BuiltInExtensions = @()
     foreach ($Extension in $Extensions.GetEnumerator()) {
-        & $CodeCommand --install-extension "$($Extension.Key)@$($Extension.Value)" `
-            --force --extensions-dir $ExtensionRoot
+        # The refusal message is joined onto one line because VS Code wraps it, and a wrapped
+        # message would not match the check below.
+        $Output = (Get-NativeCommandOutput -Path $CodeCommand -Arguments @(
+                '--install-extension', "$($Extension.Key)@$($Extension.Value)",
+                '--force', '--extensions-dir', $ExtensionRoot
+            )) -join ' '
         if ($LASTEXITCODE -ne 0) {
+            if ($Output -match 'is a built-in extension') {
+                Write-ProvisionLog -Message (
+                    "$($Extension.Key) is built into Visual Studio Code at a newer version " +
+                    "than the pinned $($Extension.Value); keeping the built-in."
+                )
+                $BuiltInExtensions += $Extension.Key
+                continue
+            }
             throw "Visual Studio Code failed to install $($Extension.Key)@$($Extension.Value)."
         }
     }
@@ -649,6 +699,9 @@ function Install-CommonTools {
         & $CodeCommand --list-extensions --show-versions --extensions-dir $ExtensionRoot
     )
     foreach ($Extension in $Extensions.GetEnumerator()) {
+        if ($BuiltInExtensions -contains $Extension.Key) {
+            continue
+        }
         if ($InstalledExtensions -notcontains "$($Extension.Key)@$($Extension.Value)") {
             throw "Visual Studio Code extension verification failed for $($Extension.Key)."
         }
@@ -716,7 +769,22 @@ NPENABLED="0"
 BROWSERSVCSTARTUPTYPE="Automatic"
 IACCEPTSQLSERVERLICENSETERMS="True"
 "@
+            # SQLEXPR_x64_ENU.exe is a self-extracting bootstrapper, not setup itself. It does
+            # not understand /ConfigurationFile and, given only that, it raises its extraction
+            # dialog and waits for a click that never arrives on a headless VM. Extracting
+            # quietly first and then running the real setup.exe is the only unattended path.
+            $ExtractRoot = Join-Path $DownloadRoot 'sqlexpress-setup'
+            if (Test-Path $ExtractRoot) {
+                Remove-Item -Path $ExtractRoot -Recurse -Force
+            }
             Invoke-LockedInstaller -Path $Installer -Arguments @(
+                '/Q', "/X:`"$ExtractRoot`""
+            )
+            $SetupExecutable = Join-Path $ExtractRoot 'setup.exe'
+            if (-not (Test-Path $SetupExecutable)) {
+                throw 'The SQL Server Express package did not extract a setup.exe.'
+            }
+            Invoke-LockedInstaller -Path $SetupExecutable -Arguments @(
                 "/ConfigurationFile=`"$SetupConfiguration`""
             )
         }
@@ -782,14 +850,24 @@ IACCEPTSQLSERVERLICENSETERMS="True"
     if ([string]::IsNullOrWhiteSpace($SqlCmdCommand) -or -not (Test-Path $SqlCmdCommand)) {
         throw 'The pinned go-sqlcmd client was not found after installation.'
     }
-    if ((& $SqlCmdCommand --version 2>&1) -notmatch '1\.7\.0') {
+    # -notmatch against an array filters it rather than returning a boolean, and sqlcmd
+    # prints its version inside a multi-line banner, so the lines are joined before matching.
+    if (((Get-NativeCommandOutput -Path $SqlCmdCommand -Arguments '--version') -join ' ') `
+            -notmatch '1\.7\.0') {
         throw 'go-sqlcmd version verification failed.'
     }
 
     $SqlPackageRoot = 'C:\Program Files\SqlPackage'
     $SqlPackageCommand = Join-Path $SqlPackageRoot 'SqlPackage.exe'
+    # Without the else branch this assignment yields an empty collection rather than $null,
+    # and an empty collection -notmatch anything is an empty array, which is false. That
+    # silently skipped the install below and left SqlPackage.exe missing.
     $SqlPackageVersion = if (Test-Path $SqlPackageCommand) {
-        (& $SqlPackageCommand /Version 2>&1 | Select-Object -First 1)
+        (Get-NativeCommandOutput -Path $SqlPackageCommand -Arguments '/Version' |
+            Select-Object -First 1)
+    }
+    else {
+        ''
     }
     if ($SqlPackageVersion -notmatch '^170\.4\.83\.3$') {
         $Archive = Join-Path $DownloadRoot 'sqlpackage-win-x64-en-170.4.83.3.zip'
@@ -805,28 +883,41 @@ IACCEPTSQLSERVERLICENSETERMS="True"
         }
         Assert-AuthenticodePublisher -Path $StagedSqlPackage `
             -Publisher $SqlPackage.Publisher
-        if ((& $StagedSqlPackage /Version 2>&1 | Select-Object -First 1) -notmatch
-            '^170\.4\.83\.3$') {
+        if ((Get-NativeCommandOutput -Path $StagedSqlPackage -Arguments '/Version' |
+                Select-Object -First 1) -notmatch '^170\.4\.83\.3$') {
             throw 'SqlPackage staged version verification failed.'
         }
         Install-StagedDirectory -StagingPath $SqlPackageStaging `
             -DestinationPath $SqlPackageRoot
     }
     Add-MachinePath -Path $SqlPackageRoot
-    if ((& $SqlPackageCommand /Version 2>&1 | Select-Object -First 1) -notmatch
-        '^170\.4\.83\.3$') {
+    if ((Get-NativeCommandOutput -Path $SqlPackageCommand -Arguments '/Version' |
+            Select-Object -First 1) -notmatch '^170\.4\.83\.3$') {
         throw 'SqlPackage version verification failed.'
     }
 
     $env:SQLCMDPASSWORD = $DatabasePassword
+    # SERVERPROPERTY returns sql_variant, which CONCAT refuses to convert implicitly, and
+    # sqlcmd reports that as a Msg 257 on stdout while still exiting 0 -- so the cast is what
+    # keeps this check from silently matching nothing. -b makes a future failure loud.
+    $SqlIdentityQuery = @(
+        'SET NOCOUNT ON;'
+        "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS nvarchar(128))"
+        "+ '|' + CAST(SERVERPROPERTY('Edition') AS nvarchar(128));"
+    ) -join ' '
+    $SqlIdentityOutput = Get-NativeCommandOutput -Path $SqlCmdCommand -Arguments @(
+        '-S', 'localhost,1433', '-U', 'sa', '-b', '-h', '-1', '-W', '-Q', $SqlIdentityQuery
+    )
     $SqlIdentity = (
-        & $SqlCmdCommand -S 'localhost,1433' -U sa -h -1 -W `
-            -Q "SET NOCOUNT ON; SELECT CONCAT(SERVERPROPERTY('ProductMajorVersion'), '|', SERVERPROPERTY('Edition'));" |
+        $SqlIdentityOutput |
             Where-Object { $_ -match '^\s*16\|.*Express' } |
             Select-Object -First 1
     )
     if ([string]::IsNullOrWhiteSpace($SqlIdentity)) {
-        throw 'The local database is not SQL Server 2022 Express.'
+        throw (
+            'The local database is not SQL Server 2022 Express. sqlcmd returned: ' +
+            ((@($SqlIdentityOutput) -join ' ') -replace '\s+', ' ')
+        )
     }
 
     $EscapedPassword = $DatabasePassword.Replace("'", "''")
@@ -834,20 +925,29 @@ IACCEPTSQLSERVERLICENSETERMS="True"
     try {
         Save-ProtectedText -Path $SqlInput -Value @"
 IF DB_ID(N'LegoCatalog') IS NULL CREATE DATABASE [LegoCatalog];
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.sql_logins WHERE name = N'catalog')
     CREATE LOGIN [catalog] WITH PASSWORD = N'$EscapedPassword', CHECK_POLICY = ON;
 ELSE
     ALTER LOGIN [catalog] WITH PASSWORD = N'$EscapedPassword';
+GO
 USE [LegoCatalog];
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'catalog')
 BEGIN
     CREATE USER [catalog] FOR LOGIN [catalog];
     ALTER ROLE [db_owner] ADD MEMBER [catalog];
 END;
+GO
 "@
-        & $SqlCmdCommand -S 'localhost,1433' -U sa -b -i $SqlInput | Out-Null
+        $SqlLoginOutput = Get-NativeCommandOutput -Path $SqlCmdCommand -Arguments @(
+            '-S', 'localhost,1433', '-U', 'sa', '-b', '-i', $SqlInput
+        )
         if ($LASTEXITCODE -ne 0) {
-            throw 'SQL Server database and login provisioning failed.'
+            throw (
+                'SQL Server database and login provisioning failed: ' +
+                (($SqlLoginOutput -join ' ') -replace '\s+', ' ')
+            )
         }
     }
     finally {
@@ -878,7 +978,10 @@ function Install-JavaDatabase {
 
     $JavaRoot = 'C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot'
     $JavaCommand = Join-Path $JavaRoot 'bin\java.exe'
-    $InstalledJava = if (Test-Path $JavaCommand) { (& $JavaCommand -version 2>&1) -join "`n" } else { '' }
+    $InstalledJava = if (Test-Path $JavaCommand) {
+        (Get-NativeCommandOutput -Path $JavaCommand -Arguments '-version') -join "`n"
+    }
+    else { '' }
     if ($InstalledJava -notmatch 'build 17\.0\.20\+8') {
         $Installer = Join-Path $DownloadRoot 'microsoft-jdk-17.0.20-windows-x64.msi'
         Invoke-VerifiedDownload -Uri $Java.Uri -Destination $Installer `
@@ -904,7 +1007,7 @@ function Install-JavaDatabase {
     [Environment]::SetEnvironmentVariable('JAVA_HOME', $JavaRoot, 'Machine')
     $env:JAVA_HOME = $JavaRoot
     Add-MachinePath -Path (Join-Path $JavaRoot 'bin')
-    if (((& $JavaCommand -version 2>&1) -join "`n") -notmatch 'build 17\.0\.20\+8') {
+    if (((Get-NativeCommandOutput -Path $JavaCommand -Arguments '-version') -join "`n") -notmatch 'build 17\.0\.20\+8') {
         throw 'Microsoft OpenJDK version verification failed.'
     }
 
@@ -962,8 +1065,11 @@ superpassword=$DatabasePassword
         }
     }
     $EscapedPassword = $DatabasePassword.Replace("'", "''")
-    $RoleExists = (& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
-            "SELECT 1 FROM pg_roles WHERE rolname = 'catalog'").Trim()
+    # psql -tAc emits nothing when the query matches no rows. An empty pipeline is not $null
+    # but AutomationNull, which a [string] cast leaves null instead of turning into '', so the
+    # result is collected into an array and joined to get a string that can be trimmed.
+    $RoleExists = (@(& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
+                "SELECT 1 FROM pg_roles WHERE rolname = 'catalog'") -join '').Trim()
     $RoleInput = Join-Path $SecretRoot 'postgresql-role.sql'
     try {
         $RoleSql = if ($RoleExists -ne '1') {
@@ -983,8 +1089,8 @@ superpassword=$DatabasePassword
         Remove-ProtectedFile -Path $RoleInput
         $RoleSql = $null
     }
-    $DatabaseExists = (& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
-            "SELECT 1 FROM pg_database WHERE datname = 'catalog'").Trim()
+    $DatabaseExists = (@(& $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
+                "SELECT 1 FROM pg_database WHERE datname = 'catalog'") -join '').Trim()
     if ($DatabaseExists -ne '1') {
         & $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 `
             -c 'CREATE DATABASE catalog OWNER catalog' | Out-Null
@@ -1140,8 +1246,13 @@ function Assert-CanonicalData {
     $CategoriesPath = Join-Path $SourceRoot 'data\categories.json'
     $ImagesPath = Join-Path $SourceRoot 'data\images'
     $Manifest = Get-Content -Path $ManifestPath -Raw | ConvertFrom-Json
-    $Catalog = @(Get-Content -Path $CatalogPath -Raw | ConvertFrom-Json)
-    $Categories = @(Get-Content -Path $CategoriesPath -Raw | ConvertFrom-Json)
+    # ConvertFrom-Json writes the decoded array to the pipeline as a single object without
+    # enumerating it, so @(Get-Content ... | ConvertFrom-Json) counts 1 rather than 198.
+    # Assigning first and wrapping the variable is what makes the count meaningful.
+    $CatalogJson = Get-Content -Path $CatalogPath -Raw | ConvertFrom-Json
+    $CategoriesJson = Get-Content -Path $CategoriesPath -Raw | ConvertFrom-Json
+    $Catalog = @($CatalogJson)
+    $Categories = @($CategoriesJson)
     $Images = @(Get-ChildItem -Path $ImagesPath -File -Filter '*.png')
 
     if ($Manifest.counts.figures -ne 198 -or
@@ -1779,7 +1890,8 @@ function Invoke-StackSmokeCheck {
         }
     } -Attempts 120
 
-    $Catalog = @(Get-Content (Join-Path $SourceRoot 'data\catalog.json') -Raw | ConvertFrom-Json)
+    $CatalogJson = Get-Content (Join-Path $SourceRoot 'data\catalog.json') -Raw | ConvertFrom-Json
+    $Catalog = @($CatalogJson)
     $ImageName = [string]$Catalog[0].filename
     if ($ImageName -cnotmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$') {
         throw 'The canonical smoke image is not a lowercase UUID PNG path.'
@@ -1796,29 +1908,29 @@ function Invoke-StackSmokeCheck {
 
     if ($Stack -eq 'dotnet') {
         $env:SQLCMDPASSWORD = $DatabasePassword
-        $FigureCount = (
-            & $NativeClient -S 'localhost,1433' -U catalog `
-                -d LegoCatalog -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM Figures;' |
-                Where-Object { $_ -match '^\s*\d+\s*$' } |
-                Select-Object -First 1
-        ).Trim()
-        $CategoryCount = (
-            & $NativeClient -S 'localhost,1433' -U catalog `
-                -d LegoCatalog -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM Categories;' |
-                Where-Object { $_ -match '^\s*\d+\s*$' } |
-                Select-Object -First 1
-        ).Trim()
+        $FigureCount = (@(
+            Get-NativeCommandOutput -Path $NativeClient -Arguments @(
+                '-S', 'localhost,1433', '-U', 'catalog', '-d', 'LegoCatalog', '-b',
+                '-h', '-1', '-W', '-Q', 'SET NOCOUNT ON; SELECT COUNT(*) FROM Figures;'
+            ) | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1
+        ) -join '').Trim()
+        $CategoryCount = (@(
+            Get-NativeCommandOutput -Path $NativeClient -Arguments @(
+                '-S', 'localhost,1433', '-U', 'catalog', '-d', 'LegoCatalog', '-b',
+                '-h', '-1', '-W', '-Q', 'SET NOCOUNT ON; SELECT COUNT(*) FROM Categories;'
+            ) | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1
+        ) -join '').Trim()
     }
     else {
         $env:PGPASSWORD = $DatabasePassword
-        $FigureCount = (
+        $FigureCount = (@(
             & $NativeClient -h localhost -p 5432 -U catalog -d catalog -tAc `
                 'SELECT COUNT(*) FROM figures'
-        ).Trim()
-        $CategoryCount = (
+        ) -join '').Trim()
+        $CategoryCount = (@(
             & $NativeClient -h localhost -p 5432 -U catalog -d catalog -tAc `
                 'SELECT COUNT(*) FROM categories'
-        ).Trim()
+        ) -join '').Trim()
     }
     if ($FigureCount -ne '198' -or $CategoryCount -ne '20') {
         throw "Native database smoke check returned $FigureCount figures and $CategoryCount categories."

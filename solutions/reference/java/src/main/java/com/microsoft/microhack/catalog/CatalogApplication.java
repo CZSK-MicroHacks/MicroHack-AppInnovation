@@ -42,14 +42,21 @@ public class CatalogApplication {
 
     /** Initializes one direct Azure Monitor or local OTLP telemetry pipeline. */
     @Bean(destroyMethod = "close")
-    OpenTelemetrySdk openTelemetry(CatalogRuntimeOptions options) {
+    OpenTelemetrySdk openTelemetry(CatalogRuntimeOptions options, Environment environment) {
         System.setProperty(
                 "otel.resource.attributes",
                 CatalogResourceIdentity.asOtelProperty(options));
         AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
                 AutoConfiguredOpenTelemetrySdk.builder();
         if (options.azureMonitorEnabled()) {
-            AzureMonitorAutoConfigure.customize(sdkBuilder);
+            // The connection string is passed explicitly rather than relying on the
+            // single-argument overload. That overload resolves the value through the
+            // OpenTelemetry ConfigProperties, which exposes only the otel.* namespace, so
+            // APPLICATIONINSIGHTS_CONNECTION_STRING never reaches the exporter builder and
+            // Statsbeat startup fails with a null connection string before Tomcat binds.
+            AzureMonitorAutoConfigure.customize(
+                    sdkBuilder,
+                    environment.getProperty("APPLICATIONINSIGHTS_CONNECTION_STRING"));
         } else {
             System.setProperty("otel.exporter.otlp.endpoint", options.otlpEndpoint());
         }

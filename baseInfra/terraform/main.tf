@@ -41,6 +41,7 @@ module "user_environment" {
   facilitator_principal_object_id = var.facilitator_principal_object_id
   assigned_user_object_id         = var.manage_entra_users ? lookup(module.entra_users, tostring(each.value)).object_id : null
   create_role_assignment          = var.manage_entra_users
+  enable_public_ip_resources      = var.enable_public_ip_resources
 
   depends_on = [module.resource_providers]
 }

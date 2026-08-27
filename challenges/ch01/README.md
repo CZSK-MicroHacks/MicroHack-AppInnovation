@@ -210,12 +210,22 @@ else {
 }
 git push --set-upstream origin workshop
 $SourceCommit = (git rev-parse HEAD).Trim()
+if ($SourceCommit -eq (Get-Content C:\MicroHack\source\.source-commit -Raw).Trim()) {
+  throw "sourceCommit equals the archive provenance SHA. You captured the baseline you were handed instead of the work you just pushed; nothing downstream can detect this."
+}
 ```
 
 The first push opens a browser sign-in through Git Credential Manager; sign in as the
 account that owns the repository. `$SourceCommit` is what the handoff records as
 `source.commitSha`, and re-running the block is safe if a later fix changes a tracked
 file — just recapture `$SourceCommit` before the next command that consumes it.
+
+That guard exists because nothing downstream can catch the mistake it prevents. Both
+values are forty hexadecimal characters, both live under `C:\MicroHack\source`, and the
+deployment only checks the *shape* of `sourceCommit` — so the archive SHA deploys
+successfully, tags an image, and produces a handoff that passes schema validation. The
+failure surfaces a chapter later in Challenge 3, which builds your `Dockerfile` from a
+checkout at that SHA and finds no `Dockerfile`, because writing it was this challenge.
 
 Every path produces the same seven shared evidence artifacts plus the four specific to
 your path. The final handoff must name the path you took, reference a real rollback

@@ -84,9 +84,16 @@ def _run_client(
 ) -> str:
     """Run a database client and return stdout without exposing credentials.
 
+    PostgreSQL is pinned to UTF-8 because ``psql`` emits the server encoding
+    verbatim; decoding it through the Windows locale silently mojibakes any
+    non-ASCII row and makes comparison against the catalog impossible. The
+    sqlcmd path is deliberately left on the interpreter default, which is what
+    it has always been validated against.
+
     Raises:
         RuntimeError: If the client is missing, fails, or times out.
     """
+    decoding = {"encoding": "utf-8", "errors": "strict"} if client_name == "psql" else {}
     try:
         result = subprocess.run(
             command,
@@ -95,6 +102,7 @@ def _run_client(
             text=True,
             timeout=60,
             env=environment,
+            **decoding,
         )
     except FileNotFoundError as error:
         raise RuntimeError(f"{client_name} is required for database verification") from error
@@ -613,16 +621,24 @@ def _migration_rows(
     environment: dict[str, str],
     executor: ClientExecutor = _run_client,
 ) -> tuple[str, ...]:
-    """Read the complete ordered migration history."""
+    """Read the complete ordered migration history.
+
+    SQL Server's history table also carries ``ProductVersion``, the version of the EF
+    tooling that wrote each row, and it is deliberately not read here. It describes the
+    tools rather than the schema, and Challenge 1 exists to retarget the application, so
+    comparing it would freeze the participant on the source-era EF forever: a modernized
+    app migrating a fresh database writes its own version and can never match. Flyway
+    records no equivalent, so the Java side never had this problem, and that asymmetry is
+    what gives the game away.
+    """
     query = (
-        "SELECT MigrationId, ProductVersion FROM dbo.__EFMigrationsHistory "
-        "ORDER BY MigrationId;"
+        "SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;"
         if kind == "sqlserver"
         else "SELECT version, description, type, script, "
         "CASE success WHEN true THEN 'true' ELSE 'false' END "
         "FROM public.flyway_schema_history ORDER BY installed_rank;"
     )
-    width = 2 if kind == "sqlserver" else 5
+    width = 1 if kind == "sqlserver" else 5
     return tuple(
         "|".join(row)
         for row in _parse_rows(
@@ -721,6 +737,29 @@ def verify_database(
     )
 
 
+def _row_difference(
+    actual: tuple[tuple[str, ...], ...],
+    expected: tuple[tuple[str, ...], ...],
+    limit: int = 3,
+) -> str:
+    """Summarise how observed rows diverge from the canonical corpus.
+
+    Rows are reported with ``repr`` deliberately. A frequent cause of a
+    single-row divergence on Windows is a client/interpreter codepage mismatch
+    that mangles one non-ASCII character, and such a row is indistinguishable
+    from the expected one when printed plainly.
+    """
+    missing = [row for row in expected if row not in set(actual)]
+    unexpected = [row for row in actual if row not in set(expected)]
+    lines = [f" (observed {len(actual)} rows, expected {len(expected)})"]
+    for label, rows in (("missing", missing), ("unexpected", unexpected)):
+        if not rows:
+            continue
+        lines.append(f"; {len(rows)} {label}, first {min(limit, len(rows))}:")
+        lines.extend(f" {label}={row!r}" for row in rows[:limit])
+    return "".join(lines)
+
+
 def verify_database_connection(
     *,
     kind: DatabaseKind,
@@ -739,9 +778,15 @@ def verify_database_connection(
         executor,
     )
     if state.figures != _expected_rows(items):
-        raise ValueError("database figure rows differ from the canonical corpus")
+        raise ValueError(
+            "database figure rows differ from the canonical corpus"
+            f"{_row_difference(state.figures, _expected_rows(items))}"
+        )
     if state.categories != _expected_categories(expected_categories):
-        raise ValueError("database categories differ from the canonical corpus")
+        raise ValueError(
+            "database categories differ from the canonical corpus"
+            f"{_row_difference(state.categories, _expected_categories(expected_categories))}"
+        )
 
     contract = load_json(
         repository_root() / "workshop" / "contracts" / "database-contract.json"
@@ -765,16 +810,34 @@ def verify_database_connection(
         sorted(_index_rows(kind, connection, environment, executor))
     ) != tuple(sorted(contract["indexes"])):
         raise ValueError("database indexes differ from contract")
-    if _migration_rows(kind, connection, environment, executor) != tuple(
-        contract["migration"]["orderedHistory"]
-    ):
-        raise ValueError("database migration history differs from contract")
+    actual = _migration_rows(kind, connection, environment, executor)
+    expected = tuple(contract["migration"]["orderedHistory"])
+    if actual != expected:
+        raise ValueError(_migration_history_diagnostic(kind, actual, expected))
     tls_detail = _tls_detail(kind, connection, environment, target, executor)
     return DatabaseVerification(
         figure_count=len(state.figures),
         category_count=len(state.categories),
         tls_detail=tls_detail,
     )
+
+
+def _migration_history_diagnostic(
+    kind: DatabaseKind,
+    actual: tuple[str, ...],
+    expected: tuple[str, ...],
+) -> str:
+    """Report which migrations differ, rather than only that the histories differ."""
+    missing = [row for row in expected if row not in actual]
+    unexpected = [row for row in actual if row not in expected]
+    detail = []
+    if missing:
+        detail.append(f"missing {missing}")
+    if unexpected:
+        detail.append(f"unexpected {unexpected}")
+    if not detail:
+        detail.append(f"ordering differs: expected {list(expected)}, found {list(actual)}")
+    return "database migration history differs from contract: " + "; ".join(detail)
 
 
 def delete_acceptance_fixture(

@@ -166,10 +166,17 @@ KEY_VAULT_NAME=$(jq -er '.keyVaultName.value' <<<"$PERF_OUTPUTS")
 
 az keyvault secret set \
   --vault-name "$KEY_VAULT_NAME" \
-  --name PERFTEST_API_KEY \
+  --name PERFTEST-API-KEY \
   --value "$PERFTEST_API_KEY" \
   --output none
 ```
+
+The secret is named `PERFTEST-API-KEY` with hyphens even though the environment variable
+it feeds is `PERFTEST_API_KEY` with underscores. Key Vault object names accept only
+alphanumerics and hyphens, so an underscore is rejected by the service with
+`(BadParameter) The request URI contains an invalid name`. The two names are independent:
+the vault stores `PERFTEST-API-KEY`, and `az load test create` binds that secret to the
+`PERFTEST_API_KEY` alias the JMeter plan resolves through `${__GetSecret(...)}`.
 
 `KEY_VAULT_NAME` is the `keyVaultName` output of the deployment above, so the secret
 lands in the vault that deployment just created. `PERFTEST_API_KEY` is the only value
@@ -179,7 +186,7 @@ default would publish a known key into a vault the workflow identity can read.
 
 Challenge 2 reads two values from this deployment: `loadTestResourceId` becomes
 `LOAD_TEST_RESOURCE_ID`, and the secret identifier
-`<keyVaultUri>secrets/PERFTEST_API_KEY` becomes `PERFTEST_API_KEY_SECRET_URI`.
+`<keyVaultUri>secrets/PERFTEST-API-KEY` becomes `PERFTEST_API_KEY_SECRET_URI`.
 
 The vault uses RBAC authorization with soft delete enabled and a seven-day retention
 window. Because soft delete is on, a redeployment after a delete requires either a
@@ -192,6 +199,21 @@ volume implementation. The storage key is passed only to the environment
 storage resource and is never output. The approved validation subscription
 denies shared-key storage, so this compatibility mode requires a policy
 exemption or a different workshop subscription.
+
+## The image store is private by design, so there is no public blob URL
+
+`environment.bicep` gives the catalog images account `publicNetworkAccess: 'Disabled'`
+and `allowBlobPublicAccess: false`, reaches it through a private endpoint, resolves it
+through the `privatelink.blob.core.windows.net` zone, and reads it with a managed
+identity. Every one of those is deliberate, and together they mean the container reads
+images over the virtual network and nothing else can read them at all.
+
+Say this to attendees before they go looking, because the posture is easy to mistake for
+a misconfiguration. A tenant policy that forces public network access off is not
+fighting this template, it is agreeing with it, so there is nothing to work around and
+no exemption to request. Pasting a blob URL into a browser is expected to fail, and an
+attendee who assumes otherwise will read a correct deployment as a broken one and start
+debugging infrastructure that is behaving exactly as designed.
 
 ## Rollback boundary
 

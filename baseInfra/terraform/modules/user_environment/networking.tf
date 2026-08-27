@@ -4,6 +4,7 @@
 
 # Public IP for Bastion
 resource "azapi_resource" "public_ip" {
+  count     = var.enable_public_ip_resources ? 1 : 0
   type      = "Microsoft.Network/publicIPAddresses@2023-04-01"
   name      = local.pip_name
   location  = var.location
@@ -16,6 +17,7 @@ resource "azapi_resource" "public_ip" {
 
 # Public IP for NAT Gateway
 resource "azapi_resource" "nat_public_ip" {
+  count     = var.enable_public_ip_resources ? 1 : 0
   type      = "Microsoft.Network/publicIPAddresses@2023-04-01"
   name      = local.nat_pip_name
   location  = var.location
@@ -28,6 +30,7 @@ resource "azapi_resource" "nat_public_ip" {
 
 # NAT Gateway
 resource "azapi_resource" "nat_gw" {
+  count     = var.enable_public_ip_resources ? 1 : 0
   type      = "Microsoft.Network/natGateways@2023-04-01"
   name      = local.nat_gateway_name
   location  = var.location
@@ -36,7 +39,7 @@ resource "azapi_resource" "nat_gw" {
     sku = { name = "Standard" }
     properties = {
       idleTimeoutInMinutes = 4
-      publicIpAddresses    = [{ id = azapi_resource.nat_public_ip.id }]
+      publicIpAddresses    = [{ id = azapi_resource.nat_public_ip[0].id }]
     }
   }
   depends_on = [azapi_resource.nat_public_ip]
@@ -79,18 +82,20 @@ resource "azapi_resource" "vnet" {
       subnets = [
         {
           name = local.vms_subnet_name
-          properties = {
-            addressPrefix        = local.vms_subnet_cidr
-            networkSecurityGroup = { id = azapi_resource.nsg.id }
-            natGateway           = { id = azapi_resource.nat_gw.id }
-          }
+          properties = merge(
+            {
+              addressPrefix        = local.vms_subnet_cidr
+              networkSecurityGroup = { id = azapi_resource.nsg.id }
+            },
+            var.enable_public_ip_resources ? { natGateway = { id = azapi_resource.nat_gw[0].id } } : {}
+          )
         },
         {
           name = local.bastion_subnet_name
-          properties = {
-            addressPrefix = local.derived_bastion_cidr
-            natGateway    = { id = azapi_resource.nat_gw.id }
-          }
+          properties = merge(
+            { addressPrefix = local.derived_bastion_cidr },
+            var.enable_public_ip_resources ? { natGateway = { id = azapi_resource.nat_gw[0].id } } : {}
+          )
         }
       ]
     }
@@ -118,5 +123,9 @@ resource "azapi_resource" "nic" {
       enableAcceleratedNetworking = false
     }
   }
-  depends_on = [azapi_resource.vnet]
+
+  # azapi only populates `output` for explicitly exported paths, and the module's
+  # private_ip_addresses output reads the allocated address back off the NIC.
+  response_export_values = ["properties.ipConfigurations"]
+  depends_on             = [azapi_resource.vnet]
 }

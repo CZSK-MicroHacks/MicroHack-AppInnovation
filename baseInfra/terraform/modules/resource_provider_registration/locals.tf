@@ -68,7 +68,8 @@ locals {
     "Microsoft.AppConfiguration", # Azure App Configuration
     "Microsoft.Cache",            # Azure Cache for Redis
     "Microsoft.SignalRService",   # Azure SignalR Service
-    "Microsoft.ChangeAnalysis",   # Azure Change Analysis
+    # Microsoft.ChangeAnalysis was retired by Azure and is no longer an accepted
+    # registration namespace; its capability now lives in Azure Monitor.
 
     # DevOps
     "Microsoft.DevOpsInfrastructure", # Managed DevOps Pools
