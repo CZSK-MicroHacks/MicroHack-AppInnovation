@@ -117,11 +117,22 @@ two kinds of orphan and they are not equally bad. A command started with
 deleted. A command started with `az vm run-command invoke` is not, and cannot.
 
 ```powershell
-az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --show-details `
-  --query "[].{name:name, prov:provisioningState, exec:instanceView.executionState, start:instanceView.startTime}" -o table
+az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --query "[].name" -o tsv
 ```
 
-- **A row with `exec: Pending` and an empty `start`** → a named run-command was registered
+- **Empty output** → no named command is involved. Continue to the probe below; you are in
+  the `invoke` case, which is the unrecoverable one.
+- **Any name listed** → check that command's execution state. `list` does **not** carry it:
+  the list endpoint returns `instanceView: null` even with `--expand instanceView`, so you
+  have to ask for each command by name.
+
+  ```powershell
+  az vm run-command show -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-stuck-command-name> --instance-view `
+    --query "{name:name, prov:provisioningState, exec:instanceView.executionState, start:instanceView.startTime}"
+  ```
+
+- **`exec: Pending` with an empty `start`** → that named run-command was registered
   and never ran. It holds the channel **indefinitely — it does not self-clear.** Delete it:
 
   ```powershell
@@ -132,8 +143,8 @@ az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --show-
   This is non-destructive: it removes only the stuck registration, not the VM and not the
   CustomScript extension. In a measured occurrence the very next `invoke` succeeded with
   **no wait at all**.
-- **Empty output** → no named command is involved. Continue to the probe below; you are in
-  the `invoke` case, which is the unrecoverable one.
+- **`exec: Succeeded`** → that command is finished and is not your blocker. Continue to the
+  probe below.
 
 Note that `provisioningState` on the *command* reads `Succeeded` even while `executionState`
 is `Pending`, and the **VM's** `provisioningState` reads `Succeeded` too. Neither field

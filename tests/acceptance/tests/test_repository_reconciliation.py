@@ -389,3 +389,29 @@ def test_run_command_conflict_documents_both_orphan_classes() -> None:
         "Facilitator.md no longer tells facilitators to delete named run-commands they "
         "leave on participant VMs, which is how the pilot's blockage was caused"
     )
+
+
+def test_run_command_docs_never_project_instance_view_from_a_list() -> None:
+    """Keep the documented orphan check executable against the real Azure CLI.
+
+    `az vm run-command list` has no `--show-details` flag, and its response carries
+    `instanceView: null` even when asked with `--expand instanceView`. A documented
+    command that projects `instanceView.executionState` out of a *list* therefore either
+    errors with `unrecognized arguments` or silently renders an empty column -- and the
+    execution state is the only field that distinguishes the recoverable orphan from the
+    unrecoverable one. `show --instance-view` is the call that carries it.
+    """
+    offenders: list[str] = []
+    for name in ("Troubleshooting.md", "DayOfCard.md", "Facilitator.md"):
+        text = (ROOT / "docs" / name).read_text(encoding="utf-8")
+        for block in text.split("```")[1::2]:
+            if "run-command list" not in block:
+                continue
+            if "--show-details" in block:
+                offenders.append(f"{name}: `run-command list --show-details` is not a flag")
+            if "instanceView" in block and "run-command show" not in block:
+                offenders.append(f"{name}: `run-command list` cannot project instanceView")
+    assert not offenders, (
+        "documented run-command orphan checks cannot run as written: "
+        + "; ".join(sorted(set(offenders)))
+    )

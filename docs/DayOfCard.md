@@ -99,14 +99,22 @@ holds the channel forever without ever running. The participant sees
 field on the VM still reads `Succeeded`.
 
 ```powershell
-az vm run-command list -g rg-user007 --vm-name vm-java-user007 --show-details `
-  --query "[].{name:name, exec:instanceView.executionState}" -o table
+az vm run-command list -g rg-user007 --vm-name vm-java-user007 --query "[].name" -o tsv
 ```
 
-A row reading `exec: Pending` is the blockage. Delete it and the participant's next command
+Any name that comes back is a candidate. `list` cannot tell you whether it ran — the list
+endpoint returns `instanceView: null` even with `--expand instanceView` — so ask for it by name:
+
+```powershell
+az vm run-command show -g rg-user007 --vm-name vm-java-user007 `
+  --run-command-name <your-stuck-command-name> --instance-view --query "instanceView.executionState"
+```
+
+`Pending` is the blockage. Delete it and the participant's next command
 works immediately; see [Facilitator](Facilitator.md#clean-up-after-yourself-on-a-participant-vm).
-Empty output means you are in the orphaned-`invoke` case instead, which clears on its own in
-about an hour — [Troubleshooting](Troubleshooting.md#az-vm-run-command-returns-conflict-run-command-extension-execution-is-in-progress)
+Empty output from the `list` means you are in the orphaned-`invoke` case instead, which clears
+on its own in about an hour —
+[Troubleshooting](Troubleshooting.md#az-vm-run-command-returns-conflict-run-command-extension-execution-is-in-progress)
 has both. In the pilot this cost one participant two days, because nothing on their side could
 show them the cause.
 

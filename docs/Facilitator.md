@@ -1031,8 +1031,15 @@ indication that a facilitator action caused it. This happened during the pilot a
 participant an hour before the cause was found.
 
 ```bash
-az vm run-command list -g rg-user007 --vm-name vm-java-user007 --show-details \
-  --query "[].{name:name, exec:instanceView.executionState}" -o table
+# 1. enumerate — `list` carries names only, never an execution state
+az vm run-command list -g rg-user007 --vm-name vm-java-user007 --query "[].name" -o tsv
+
+# 2. ask each one by name; `--expand instanceView` on `list` returns null, so `show` is required
+az vm run-command show -g rg-user007 --vm-name vm-java-user007 \
+  --run-command-name <your-stuck-command-name> --instance-view \
+  --query "{exec:instanceView.executionState, start:instanceView.startTime}"
+
+# 3. delete the one reading Pending
 az vm run-command delete -g rg-user007 --vm-name vm-java-user007 \
   --run-command-name <your-stuck-command-name> --yes
 ```
