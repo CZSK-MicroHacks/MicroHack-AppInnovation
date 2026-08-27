@@ -1369,7 +1369,7 @@ and the error names six roles without saying which principal lacks them or on wh
 **Workaround:**
 
 ```bash
-az role assignment create --assignee-object-id <vm-mi-principal-id> \
+az role assignment create --assignee-object-id <your-vm-mi-principal-id> \
   --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" \
   --scope /subscriptions/…/storageAccounts/stuser001dotnekurep3z6
 ```
