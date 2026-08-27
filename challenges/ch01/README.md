@@ -286,6 +286,11 @@ container → deploy the same digest twice, as a baseline and as a release → c
 runtime, acceptance, and telemetry evidence → write the rollback runbook → render and
 validate the handoff.
 
+Telemetry evidence has a step in it that is easy to miss: four of the eight required log
+signals only appear when the application fails, so you have to induce those failures on
+purpose and put things back afterwards. See
+[inducing the telemetry failure signals](../../docs/TelemetryFaultInjection.md).
+
 Every migration command wants the same three things: the exact target resource ID
 repeated as a confirmation argument, `--source-commit` bound to your published commit,
 and `--execute`. They refuse to overwrite a non-empty target, which is a feature.
@@ -314,7 +319,8 @@ one failure mode this workshop treats as fatal.
 | A deployment is rejected before a single resource is created, naming a required parameter it was not given | `sourceCommit` — and, at the application stages, `imageDigest` — are deliberately absent from the protected parameter files | Append `--parameters sourceCommit=$SourceCommit` (and `imageDigest=$ImageDigest`) after the `@file` argument. Absent by design, not a broken file — see the bullet in [Before you start](#before-you-start). |
 | A migration command refuses to run, saying the target is not empty | You already imported once, or the facilitator pre-seeded the target | Do not force it. Confirm which import succeeded, and re-run only `catalog-migrate verify`. |
 | The handoff validator reports a digest mismatch | You deployed by tag, or you rebuilt the image after resolving the digest | Resolve the tag to a `sha256:` digest once, then use that digest for both deployments and for the handoff. |
-| The handoff validator reports a missing telemetry signal | The application deployed before Application Insights was wired, so no traces exist for the release revision | Confirm the connection string reached the container, generate some traffic against the release revision, and re-collect telemetry. |
+| The handoff validator reports a missing telemetry signal | Four of the eight required signals are *failure* signals, emitted only from `catch` blocks. A correctly working application never produces them, so no amount of extra traffic will | Induce the failures deliberately, then restore: [inducing the telemetry failure signals](../../docs/TelemetryFaultInjection.md). Also check you are querying `AppExceptions` and not only `AppTraces` — records logged with an exception go to the former. |
+| The handoff validator reports a missing telemetry signal and the application was deployed before Application Insights was wired | No traces exist for the release revision at all | Confirm the connection string reached the container, generate traffic against the release revision, and re-collect telemetry. |
 | Acceptance passes locally but fails against Azure | You are testing the VM application, not the Container Apps revision | Check the base URL your acceptance run is bound to. |
 
 Everything else: [troubleshooting](../../docs/Troubleshooting.md).
