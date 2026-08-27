@@ -17,7 +17,10 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from catalog_acceptance.handoff import REQUIRED_RUNTIME_TESTS
+from catalog_acceptance.handoff import (
+    REQUIRED_RUNTIME_TESTS,
+    _validate_runtime_results,
+)
 
 CONTRACTS = Path(__file__).resolve().parents[3] / "workshop" / "contracts"
 TEMPLATE_PATH = CONTRACTS / "runtime-test-evidence.template.json"
@@ -164,3 +167,61 @@ def test_every_document_that_demands_the_report_names_the_template() -> None:
         "documents demand evidence/runtime-test-report.json without naming "
         f"the template that supplies its fixed entries: {offenders}"
     )
+
+
+@pytest.mark.parametrize("stack", sorted(REQUIRED_RUNTIME_TESTS))
+def test_documented_three_field_edit_is_accepted_by_the_real_validator(
+    template: dict, stack: str, tmp_path
+) -> None:
+    """Perform the edit the runbooks document, then run the gate that judges it.
+
+    Every other guard here compares the template to a constant, which verifies the
+    diff rather than the deliverable. The rewrite arm that exercised this template for
+    real made the point sharply: the half-landed reference was found by *attempting the
+    artifact*, not by reading the change. So this test does what a participant does --
+    copy the stack's object, replace only ``sourceCommit``, ``artifact`` and
+    ``command`` -- and then submits the result to ``_validate_runtime_results``, the
+    function that actually accepts or rejects it at handoff.
+
+    The native artifact is synthesized to report exactly the frozen identities as
+    passing, so a failure here means the documented procedure cannot produce an
+    accepted artifact, which is the only claim the runbooks make.
+    """
+    report = json.loads(json.dumps(template[stack]))
+    identities = [
+        (test["testName"], test["testIdentity"]) for test in report["tests"]
+    ]
+
+    if report["artifactFormat"] == "trx":
+        definitions = "".join(
+            f'<UnitTest id="t{index}" name="{name}">'
+            f'<TestMethod className="{identity.rsplit(".", 1)[0]}" '
+            f'name="{identity.rsplit(".", 1)[1]}" /></UnitTest>'
+            for index, (name, identity) in enumerate(identities)
+        )
+        results = "".join(
+            f'<UnitTestResult testId="t{index}" testName="{name}" outcome="Passed" />'
+            for index, (name, _) in enumerate(identities)
+        )
+        artifact = tmp_path / "runtime-tests.trx"
+        artifact.write_text(
+            f"<TestRun><TestDefinitions>{definitions}</TestDefinitions>"
+            f"<Results>{results}</Results></TestRun>",
+            encoding="utf-8",
+        )
+    else:
+        cases = "".join(
+            f'<testcase name="{name}" classname="{identity.split("#", 1)[0]}" />'
+            for name, identity in identities
+        )
+        artifact = tmp_path / "surefire-reports"
+        artifact.mkdir()
+        (artifact / "TEST-contract.xml").write_text(
+            f"<testsuite>{cases}</testsuite>", encoding="utf-8"
+        )
+
+    report["sourceCommit"] = "a" * 40
+    report["artifact"] = str(artifact)
+    report["command"] = "recorded by the participant"
+
+    _validate_runtime_results(report, artifact)
