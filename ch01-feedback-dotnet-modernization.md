@@ -718,6 +718,206 @@ result is discarded into a display string). And treat "the client's diagnostics 
 same stream as its data" as a systemic property of this harness rather than three separate
 bugs — every `_parse_rows` call site inherits it.
 
+### L. The SQL logical server has no managed identity, so the import always fails *after* it has already imported the data
+
+This is the most consequential finding in the chapter, and its failure mode is the worst kind:
+the command reports failure after it has already made an irreversible change, and the state it
+leaves behind cannot be recovered by re-running it.
+
+`catalog-migrate sql import` does two things in sequence. First it runs SqlPackage to import the
+bacpac. Then it grants the application's managed identity access
+(`tests/acceptance/catalog_migrate/database.py:551-580`):
+
+```sql
+CREATE USER [id-mh-user001-dotnet] FROM EXTERNAL PROVIDER
+  WITH OBJECT_ID='92355f34-9b47-461c-afe8-bfa26c020bb1';
+ALTER ROLE db_datareader ADD MEMBER [id-mh-user001-dotnet];
+ALTER ROLE db_datawriter ADD MEMBER [id-mh-user001-dotnet];
+```
+
+`FROM EXTERNAL PROVIDER` makes the logical server resolve the principal against Microsoft Entra.
+That requires the server to have a managed identity, and that identity to hold the Entra
+**Directory Readers** role. `infra/modules/sql.bicep` has no `identity:` block at all — the
+server is created without one:
+
+```
+{"command": "sql import", "error": {"code": "tool-failed", "message":
+ "external tool failed: sqlcmd: Msg 33134 … Principal '92355f34-…' could not be resolved.
+  Error message: 'Server identity is not configured. …'"}, "exitCode": 4}
+```
+
+I assigned a system-assigned identity to the server myself (`262348b2-…`) and the error moved on
+to the second half of the prerequisite:
+
+```
+Msg 37353, Level 16, State 1
+Server identity does not have the Microsoft Entra Directory Readers permission.
+```
+
+Granting Directory Readers needs Privileged Role Administrator. The delivery account holds
+Global Reader, so:
+
+```
+Authorization_RequestDenied: Insufficient privileges to complete the operation.
+```
+
+**Neither half of the prerequisite is created by the template, and neither is mentioned in any
+document.** The template threads `workloadIdentityName` and `workloadIdentityPrincipalId`
+through three module boundaries (`sql.bicep:6-7`) purely to echo them into
+`output applicationPrincipal` — the value the import later tries, and fails, to turn into a real
+grant.
+
+**Why the failure mode is the dangerous part.** SqlPackage runs first and succeeds. I confirmed
+from the VM, after the command reported `exitCode: 4`:
+
+```
+sys.tables      → __EFMigrationsHistory, Categories, Figures
+COUNT(*) Figures    → 198
+COUNT(*) Categories → 20
+```
+
+The migration is *done*. All 198 figures and 20 categories are in Azure SQL. The tool says it
+failed. And the command is not idempotent — re-running it now aborts on its own
+not-empty precondition, so the documented recovery ("fix the error, run it again") cannot work.
+An attendee is left with a populated target database, a red exit code, no
+`evidence/migration-report.json`, and no instruction that covers the state they are actually in.
+The plausible response — dropping and recreating the database to get a clean run — destroys a
+correct migration to chase an error in a step that has nothing to do with the data.
+
+**The workaround, and why it is worth recording.** A contained user for a managed identity does
+not need a directory lookup if you supply the SID yourself. The SID is the identity's *client*
+ID in little-endian GUID byte order — `2b4a56de-7d44-4725-921f-0b0a26b8be17` becomes
+`0xDE564A2B447D2547921F0B0A26B8BE17`:
+
+```sql
+CREATE USER [id-mh-user001-dotnet] WITH SID = 0xDE564A2B447D2547921F0B0A26B8BE17, TYPE = E;
+ALTER ROLE db_datareader ADD MEMBER [id-mh-user001-dotnet];
+ALTER ROLE db_datawriter ADD MEMBER [id-mh-user001-dotnet];
+```
+
+Verified afterwards:
+
+```
+id-mh-user001-dotnet  db_datareader
+id-mh-user001-dotnet  db_datawriter
+```
+
+That is byte-for-byte the end state the tool intends, reached without Directory Readers and
+without any elevated Entra role. **The template should use this form**, or the tool should fall
+back to it — it removes an entire class of tenant-permission dependency from the workshop, and
+the client ID is already in `targetOutput.workloadIdentity.clientId`.
+
+**A second, separate access gap.** The migration must run on `vm-dotnet-user001` (finding F), so
+it authenticates as *that* VM's managed identity — which is also not a database principal, and
+which the template also never grants. `sql.bicep:15-22` configures exactly one Entra
+administrator, `principalType: 'User'`, the facilitator, with `azureADOnlyAuthentication: true`
+so there is no password fallback. Azure SQL permits one administrator, so making the VM identity
+usable means **displacing** the facilitator:
+
+```bash
+az sql server ad-admin update -g rg-user001 -s sql-mh-user001-dotnet-kurep3z6 \
+  --display-name vm-dotnet-user001 --object-id 8cc6db41-36da-4d9c-8134-2b5e70284db6
+```
+
+I did that, completed the migration, and restored the original administrator afterwards. It is a
+destructive workaround for a missing grant and no attendee should be improvising it.
+
+**Stack asymmetry, again.** `postgresql.bicep` has the same missing workload-identity grant, but
+it also emits `localAdministratorPrincipal` with password authentication and takes
+`authentication` as a parameter, so the Java stack retains a credential path that does not depend
+on any of this. `sql.bicep:89` hardcodes `output authentication string = 'managed-identity'` and
+line 21 disables password auth outright. The .NET stack has no fallback at all. Counting A, B,
+C, I and L, that is five defects in this chapter that a green Java run cannot see.
+
+**Recommended:** assign a system-assigned identity to the SQL server in `sql.bicep`; switch the
+tool's `CREATE USER` to the `WITH SID … TYPE = E` form so Directory Readers is never needed;
+create a principal for the migration identity rather than requiring the single admin slot to be
+hijacked; and — independent of all of the above — **split the import into two commands, or make
+the principal grant idempotent and re-runnable**, so that a failure in the grant step cannot
+strand a successful data import behind a non-idempotent precondition.
+
+---
+
+### M. The migration's storage grant is made to a principal that the migration cannot run as
+
+`catalog-migrate images copy` failed with:
+
+```
+external tool failed: az: ERROR: You do not have the required permissions needed to perform this
+operation. Depending on your operation, you may need to be assigned one of the following roles:
+"Storage Blob Data Owner" "Storage Blob Data Contributor" "Storage Blob Data Reader" ...
+```
+
+The template is not careless here — it anticipates this exactly. `environment.bicep:373-381`
+declares a role assignment literally named `facilitatorBlobMigration`:
+
+```bicep
+resource facilitatorBlobMigration 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (isBlob) {
+  scope: blobContainer
+  properties: {
+    principalId: facilitatorPrincipalObjectId
+    principalType: 'User'
+    roleDefinitionId: blobDataContributorRole
+  }
+}
+```
+
+Data-plane write access on the image container, granted to a **`principalType: 'User'`**, purely so
+the migration can run. The application's own identity gets only `blobDataReaderRole`
+(`:363-371`) — correctly, since it only reads. The separation is deliberate and right.
+
+**The problem is that finding F makes that principal unusable.** `validate_migration_topology`
+requires the migration to execute *on* `vm-dotnet-user001`, verified through IMDS with
+`trust_env=False`. On that VM, in a delivery with no Bastion and no desktop, the only non-interactive
+credential available is `az login --identity` — the VM's own system-assigned managed identity. And
+the template grants that identity nothing.
+
+So the two constraints are individually reasonable and jointly unsatisfiable:
+
+| Constraint | Source | Requires |
+| --- | --- | --- |
+| Must run on the source VM | `catalog_migrate/azure.py:208-210` | IMDS host identity match |
+| Must have blob data-plane write | `environment.bicep:373` | the *facilitator user* principal |
+
+The only way to satisfy both simultaneously is an **interactive** `az login` on the VM desktop as the
+facilitator user — which is precisely the capability this delivery does not have, and which
+`challenges/ch01/README.md` never identifies as load-bearing. It reads as a convenience ("you'll be
+signed in already"), not as the sole route through a hard gate.
+
+**And `sql.bicep` makes the identical assumption.** Its single Entra administrator is
+`principalType: 'User'`, the same facilitator object ID. Findings L and M are therefore one design
+decision seen twice: **the migration is designed to be performed by a signed-in human on the VM
+desktop.** Remove the desktop and the entire migration identity model collapses — both stores, both
+independently.
+
+**Why this costs so much time to diagnose.** The VM's managed identity is **Owner on
+`rg-user001`**, so the natural conclusion — "the identity is Owner, it can do anything" — is wrong
+in the most expensive possible way. Owner carries `Microsoft.Storage/storageAccounts/*` at the
+control plane and **no blob data-plane permission at all**; Azure's data-plane RBAC is a disjoint
+role set. Every control-plane probe you run while diagnosing succeeds. `az storage account show`
+works. `az storage container list --auth-mode key` works. Only the specific data-plane call fails,
+and the error names six roles without saying which principal lacks them or on which resource.
+
+**Workaround:**
+
+```bash
+az role assignment create --assignee-object-id <vm-mi-principal-id> \
+  --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" \
+  --scope /subscriptions/…/storageAccounts/stuser001dotnekurep3z6
+```
+
+That requires **User Access Administrator or Owner at the scope** — a right the facilitator has
+already established attendees do not hold (it is why the Challenge 2 prerequisites had to be
+facilitator-deployed). The workaround for the missing grant needs the same elevated permission the
+workshop assumes is unavailable. An attendee hitting this alone is stopped.
+
+**Recommendation.** `migrationSourceVmResourceId` is already a required parameter, so the VM's
+managed identity principal is derivable at deploy time with a single `existing` reference. Grant
+**that** principal Storage Blob Data Contributor alongside the facilitator user, and add it as a
+database principal alongside the Entra admin. It costs four lines, removes the desktop dependency
+from the migration entirely, and makes `az login --identity` a complete answer rather than a
+partial one.
+
 ---
 
 ## Defects that fail loudly (lower value, but real)
