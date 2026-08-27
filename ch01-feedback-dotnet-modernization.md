@@ -613,6 +613,55 @@ landed in `ce491f7` is the right place for it — a `--discover` mode that emits
 manifest from the workspace would remove the whole problem, and the queries are already
 written here.
 
+### 14. The provenance cross-check silently disables itself, so a skipped check is indistinguishable from a passing one
+
+`46f2a1f` implements the offline workspace cross-check I proposed: the capture's
+`workspaceId` is compared against `logAnalyticsWorkspaceResourceId` in
+`azure-target-output.json`. The comparison itself is correct and the failure message is
+good. **The problem is how it decides whether to run.**
+
+`telemetry_evidence.py:211-220` locates the sibling artifact as
+`output_path.parent / "azure-target-output.json"` and returns silently on three separate
+conditions: the file is absent, it fails to parse, or the field is missing or not a string.
+None of the three produces any output. **A skipped provenance check and a passing
+provenance check look exactly the same** — `"status": "rendered"`, exit 0.
+
+Measured, same renderer and same capture, twice:
+
+| `--output` | sibling artifact present | result |
+| --- | --- | --- |
+| `./_f91out` | no | **exit 0, `"status": "rendered"`** |
+| `./_f91out` | yes (copied to repo root) | **exit 1**, workspace mismatch reported |
+
+The capture in both runs was `telemetry-evidence-capture.example.json` unmodified, whose
+`workspaceId` names workspace `w` — against a deployment whose real workspace is
+`log-mh-user001-dotnet`. The first run rendered a complete, green bundle carrying a
+placeholder workspace ID from a contract example file.
+
+There is a second, smaller inconsistency that makes it harder to notice: the code resolves
+the sibling relative to `--output`, but the failure message hardcodes
+`"from evidence/azure-target-output.json"`. Whenever `--output` is not inside `evidence/`,
+the message names a path the check did not read.
+
+**Why this matters more than its size suggests.** The documented invocation puts `--output`
+in `evidence/`, so the check does fire on the happy path, and I want to be clear that the
+fix works as intended when used as documented. But iterating on a capture — rendering to a
+scratch path to inspect the output before committing it — is the natural thing to do, and
+it silently turns the check off. The attendee sees `"rendered"` and reasonably concludes
+provenance was verified.
+
+This is the F-89 shape one level further in. F-89 was *provenance that nothing reads*. The
+fix made something read it. The residue is *a reader that can decline to read without
+saying so* — and the whole argument for the cross-check was that it "gives provenance a
+failure mode instead of leaving it decorative". A check that no-ops silently is decorative
+again, just harder to see.
+
+**Recommendation.** One line. When the sibling artifact is absent or unusable, either
+append a problem, or emit `"provenanceCheck": "skipped"` alongside `"status"` in the
+rendered report so the difference is visible in the artifact itself. The second is
+probably better: rendering to a scratch path is legitimate, and the attendee should be
+able to tell which of the two things happened.
+
 ---
 
 ## Defects that block the .NET stack outright
