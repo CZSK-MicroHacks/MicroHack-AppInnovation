@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "1.0.0",
+  "profile": "full",
+  "status": "failed",
+  "startedAt": "2026-08-27T19:45:53.306824Z",
+  "finishedAt": "2026-08-27T19:46:18.289930Z",
+  "baseUrl": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io/",
+  "databaseKind": "sqlserver",
+  "databaseTarget": "managed",
+  "subject": {
+    "sourceCommit": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
+    "imageDigest": "sha256:647e2500591da30fcedc831ea787ed682aa7b5bd4389fbebdd041f034fe089ee",
+    "revisionName": "ca-mh-user001-dotnet--release-47acf263d332"
+  },
+  "corpus": {
+    "figures": 198,
+    "categories": 20,
+    "images": 198
+  },
+  "checks": [
+    {
+      "name": "liveness",
+      "status": "passed",
+      "detail": "/healthz returned healthy",
+      "required": true
+    },
+    {
+      "name": "readiness",
+      "status": "passed",
+      "detail": "/readyz returned ready",
+      "required": true
+    },
+    {
+      "name": "catalog-order-and-count",
+      "status": "passed",
+      "detail": "root rendered all 198 canonical cards in productId order",
+      "required": true
+    },
+    {
+      "name": "name-search",
+      "status": "passed",
+      "detail": "case-insensitive literal name search returned exact results",
+      "required": true
+    },
+    {
+      "name": "name-only-search",
+      "status": "passed",
+      "detail": "a description-only term returned no figures",
+      "required": true
+    },
+    {
+      "name": "category-filter-slug",
+      "status": "passed",
+      "detail": "category slug space-explorers returned the exact ordered result set",
+      "required": true
+    },
+    {
+      "name": "category-filter-name",
+      "status": "passed",
+      "detail": "case-insensitive display-name filter returned the exact result set",
+      "required": true
+    },
+    {
+      "name": "known-figure",
+      "status": "passed",
+      "detail": "known figure detail returned HTTP 200",
+      "required": true
+    },
+    {
+      "name": "unknown-figure",
+      "status": "passed",
+      "detail": "unknown, malformed, and noncanonical figure IDs returned HTTP 404",
+      "required": true
+    },
+    {
+      "name": "image-storage",
+      "status": "failed",
+      "detail": "invalid images=[], unknown=404, malformed=404, traversal={'raw-forward-existing': 200, 'raw-backslash-existing': 200, 'encoded-forward-existing': 200, 'encoded-backslash-existing': 200, 'double-encoded-existing': 404, 'raw-route-alias': 401, 'encoded-route-alias': 401}",
+      "required": true
+    },
+    {
+      "name": "import-new-category",
+      "status": "passed",
+      "detail": "fresh figure 10000000-0000-4000-8000-000000000001 and category L\u2019\u00c9t\u00e9 \u00c1rtists published atomically",
+      "required": true
+    },
+    {
+      "name": "idempotent-import",
+      "status": "passed",
+      "detail": "duplicate import skipped the existing figure",
+      "required": true
+    },
+    {
+      "name": "invalid-import",
+      "status": "passed",
+      "detail": "mixed valid/invalid import returned HTTP 400 with no API or database publication",
+      "required": true
+    },
+    {
+      "name": "performance-authentication-missing",
+      "status": "passed",
+      "detail": "missing performance API key returned HTTP 401",
+      "required": true
+    },
+    {
+      "name": "performance-authentication-invalid",
+      "status": "passed",
+      "detail": "invalid performance API key returned HTTP 401",
+      "required": true
+    },
+    {
+      "name": "performance-contract",
+      "status": "passed",
+      "detail": "performance endpoint returned 198 canonical DTOs with work factor 10",
+      "required": true
+    },
+    {
+      "name": "database-corpus",
+      "status": "passed",
+      "detail": "verified all fields for 198 figures and 20 categories",
+      "required": true
+    },
+    {
+      "name": "database-schema",
+      "status": "passed",
+      "detail": "application table columns, types, lengths, and nullability match",
+      "required": true
+    },
+    {
+      "name": "database-constraints",
+      "status": "passed",
+      "detail": "keys, uniqueness, identity, foreign key, and checks match",
+      "required": true
+    },
+    {
+      "name": "database-indexes",
+      "status": "passed",
+      "detail": "the exact application index set matches",
+      "required": true
+    },
+    {
+      "name": "database-migrations",
+      "status": "passed",
+      "detail": "the required latest migration is applied",
+      "required": true
+    },
+    {
+      "name": "database-tls",
+      "status": "passed",
+      "detail": "encrypted=TRUE, protocol=TSQL",
+      "required": true
+    }
+  ]
+}
