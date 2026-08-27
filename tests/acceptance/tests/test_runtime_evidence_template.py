@@ -81,3 +81,52 @@ def test_template_placeholders_are_obviously_unfilled(
     handoff's provenance check rather than passing as evidence of nothing.
     """
     assert template[stack]["sourceCommit"] == "0" * 40
+
+
+@pytest.mark.parametrize("stack", sorted(REQUIRED_RUNTIME_TESTS))
+def test_template_command_references_paths_that_exist(
+    template: dict, stack: str
+) -> None:
+    """Every source path named by the template command must exist in the repository.
+
+    Regression guard: the first version of this template told .NET attendees to run
+    ``dotnet test dotnet/LegoCatalog.App.Tests``, but the project lives at
+    ``dotnet/tests/LegoCatalog.App.Tests``, so the command failed with MSB1009. The
+    validator never executes ``command``, so nothing caught it -- yet the template's
+    whole purpose is to be copied verbatim, which means a wrong command sends the
+    attendee into a failure and invites the conclusion that the evidence step is broken.
+    A template that cannot be run is worse than no template, because it is trusted.
+    """
+    repository_root = CONTRACTS.parents[1]
+    referenced = [
+        token.strip('"')
+        for token in template[stack]["command"].split()
+        if token.strip('"').startswith(("dotnet/", "java/"))
+    ]
+    assert referenced, "command names no source path, so nothing is being verified"
+    missing = [
+        token for token in referenced if not (repository_root / token).exists()
+    ]
+    assert not missing, f"template command references missing paths: {missing}"
+
+
+@pytest.mark.parametrize("stack", sorted(REQUIRED_RUNTIME_TESTS))
+def test_template_command_writes_where_the_artifact_points(
+    template: dict, stack: str
+) -> None:
+    """The command must produce results at the location ``artifact`` declares.
+
+    The .NET command originally omitted ``--results-directory``, so the TRX landed in
+    the default ``TestResults/`` while ``artifact`` pointed at ``evidence/``. The
+    handoff then failed to find results that had genuinely been produced -- a silent
+    mismatch between two fields of the same document.
+    """
+    command = template[stack]["command"]
+    artifact = template[stack]["artifact"]
+    if template[stack]["artifactFormat"] == "trx":
+        directory, _, file_name = artifact.rpartition("/")
+        assert f"--results-directory {directory}" in command
+        assert f"LogFileName={file_name}" in command
+    else:
+        # Maven writes Surefire reports under the module's target directory.
+        assert artifact.endswith("target/surefire-reports")

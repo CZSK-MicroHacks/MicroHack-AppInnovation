@@ -6,7 +6,7 @@
     "status": "passed",
     "artifactFormat": "trx",
     "artifact": "evidence/runtime-tests.trx",
-    "command": "dotnet test dotnet/LegoCatalog.App.Tests --logger \"trx;LogFileName=runtime.trx\"",
+    "command": "dotnet test dotnet/tests/LegoCatalog.App.Tests --logger \"trx;LogFileName=runtime-tests.trx\" --results-directory evidence",
     "tests": [
       {
         "id": "liveness-database-outage",
