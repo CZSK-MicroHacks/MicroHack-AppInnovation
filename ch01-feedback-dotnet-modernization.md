@@ -482,6 +482,137 @@ There is no preflight source-provenance check anywhere in the material. Given th
 defects in this list concern commit provenance being recorded wrongly, a check the attendee
 runs *before starting* is a conspicuous gap.
 
+### 11. The telemetry bundle has no internal consistency binding, so it can attest to a revision that never emitted the signals
+
+F-89 established that the telemetry bundle has no binding to the *world* — nothing checks
+that the recorded workspace is your workspace. There is a second, sharper gap: **nothing
+binds the parts of the bundle to each other.**
+
+`resources.json` names exactly one revision in `azure.containerapps.revision.name`. The
+trace, metric and log results carry no revision at all. `handoff.py:234-325` validates
+signal-name set equality, `recordCount >= 1` and the required attribute set — and never
+compares the revision named in `resources.json` against the origin of any signal, because
+the signals do not record one. **A bundle whose resource attributes name the release
+revision and whose signals were emitted by a different revision entirely is
+indistinguishable from a correct one.**
+
+This is not hypothetical on this deployment. Measured, offline:
+
+| Log signal | Revision that emitted it | Window |
+| --- | --- | --- |
+| `http.server.request`, `catalog.import.completed`, `catalog.import.failed`, `catalog.performance.completed`, `exception` | `--release-47acf263d332` | 20:55 → 22:53 |
+| `catalog.database.failed` (7) | `--0000001` | 19:59 → 20:46 |
+| `catalog.query.failed` (4) | `--0000001` | 20:46 |
+| `catalog.performance.failed` (2) | `--0000001` | 20:29 |
+
+The fault injection ran against `--0000001` and stopped at **20:46**. The release revision
+began serving at **20:55** — nine minutes later. Three of the eight required log signals
+have therefore *never* been emitted by the revision under test.
+
+The tempting move is obvious and would work: query without a revision filter, get all eight
+signals, pair them with release resource attributes, pass the gate. The result is a document
+asserting the release revision emits telemetry it demonstrably does not. **I have not built
+that bundle.** The claim here rests on the schema and on `handoff.py` containing no revision
+comparison, which is checkable without running anything.
+
+The honest alternative costs a re-run of fault injection under the release revision, which
+needs the run-command channel — unavailable for the whole window (see the F-90 section). So
+the practical position an attendee lands in is: *the correct capture is blocked, and the
+incorrect one is one omitted `where` clause away and passes.*
+
+**Recommendation.** Have the renderer stamp the revision it observed on every query result
+and have `handoff.py` reject a bundle whose signals disagree with `resources.json`. This
+needs no new measurement from the attendee — the revision is already present in
+`AppRoleInstance` on every row.
+
+### 12. Three concurrent revisions emit resource attributes, and the naive query picks the wrong one
+
+The six required resource attributes exist on exactly one record type — the synthetic
+`AppMetrics` row named `_APPRESOURCEPREVIEW_`. The obvious query is
+`... | where Name == '_APPRESOURCEPREVIEW_' | take 1`.
+
+Over the last two hours that returns one of **three** answers:
+
+| Revision | resource-attribute records | user traffic |
+| --- | --- | --- |
+| `ca-mh-user001-dotnet--0000001` | **1400** | none — placeholder revision |
+| `ca-mh-user001-dotnet--release-47acf263d332` | 1378 | all of it |
+| `ca-mh-user001-dotnet--fixup1-47acf263d332` | 1342 | none |
+
+Container Apps health-probes every *provisioned* revision, not just the active one, so
+inactive revisions keep emitting resource attributes indefinitely. The revision with the
+**plurality** is `--0000001`, which serves nothing. An attendee who deployed baseline then
+release — exactly what the runbook instructs — has a roughly one-in-three chance of
+recording the right revision, and the single most likely answer is wrong.
+
+Nothing signals this. All six attributes are present, correctly formatted, and real.
+
+**This is the third instance of one shape in this chapter.** In each case a multi-valued
+result is consumed as if it were single-valued, and the wrong element is plausible:
+
+1. `az monitor log-analytics workspace list ... [0]` returns the **Java** arm's workspace.
+2. `az containerapp revision list` without `--all` omits inactive revisions, so the
+   baseline revision looks deleted and the rollback evidence looks impossible.
+3. `_APPRESOURCEPREVIEW_ | take 1` returns whichever revision the shard yields.
+
+**Recommendation.** Treat this as one defect with three sites rather than three defects.
+Every query in the material that indexes into a list should either filter to a value the
+attendee supplies or assert the result count is 1 and fail otherwise.
+
+### 13. The telemetry signal names in the contract do not exist in the telemetry store
+
+`behavior-contract.json` freezes 25 signal names. Six are trace names, five metric names,
+eight log names, six resource attributes. The natural reading — and the one the material
+never corrects — is that these are values you can search for.
+
+For the metrics that is true: all five appear verbatim in `AppMetrics.Name`. For the other
+twenty it is false or partly false. Measured, offline, against the live workspace:
+
+**`db.client` and `http.server` appear nowhere as literal strings.**
+`AppDependencies | where Name in ('db.client','http.server')` returns **count 0**. Their
+identity is table membership plus a type discriminator, not a name:
+
+| Trace signal | Where it actually lives |
+| --- | --- |
+| `http.server` | `AppRequests` — every row, no name match |
+| `db.client` | `AppDependencies` where `DependencyType == 'SQL'` |
+| `catalog.query` / `catalog.performance` / `catalog.import` | `AppDependencies`, `DependencyType == 'InProc'`, exact `Name` |
+| `exception` | `AppExceptions` |
+
+The eight log signals are worse, because they need **four different extraction rules**, and
+the split does not follow the signal name:
+
+| Signal | Table | Column | Form |
+| --- | --- | --- | --- |
+| `http.server.request` | `AppTraces` | `Message` | exact |
+| `catalog.import.completed`, `catalog.performance.completed` | `AppTraces` | `Message` | **interpolated** — `catalog.import.completed inserted=0 skipped=1` |
+| `catalog.database.failed`, `exception` | `AppExceptions` | `Properties['OriginalFormat']` | exact |
+| `catalog.import.failed`, `catalog.query.failed`, `catalog.performance.failed` | `AppExceptions` | `Properties['OriginalFormat']` | **raw template** — `catalog.import.failed rejected={Rejected}` |
+
+The signal name is the message-template *prefix* of the `logger.LogX(...)` call, not an
+`EventId` or `EventName`. And the same logging call is stored two different ways depending
+on which table it lands in: `AppTraces` keeps the interpolated string, `AppExceptions` keeps
+the uninterpolated template. So `Message == "catalog.import.completed"` returns **zero
+rows** — you must use `has` or `startswith`, and for the exception-backed signals you must
+look in a different column of a different table.
+
+**Why this is wrong-but-plausible rather than merely hard.** Every one of these queries
+returns zero rows rather than an error. An attendee who writes the obvious query for
+`db.client` gets an empty result and the entirely reasonable conclusion that *the
+application is not emitting the signal* — and goes off to instrument code that is already
+correct. That is the same false-negative shape as the internal-URL `curl` timeout, and it
+costs more, because the "fix" is a code change to a working application.
+
+This is, I think, the concrete reason F-74 was hard to verify: the gap is not that
+telemetry is missing, it is that the contract and the store speak different vocabularies
+and nothing translates between them.
+
+**Recommendation.** Ship the mapping table above alongside `behavior-contract.json`. It is
+twenty rows and it converts the hardest part of the chapter into a lookup. The renderer
+landed in `ce491f7` is the right place for it — a `--discover` mode that emits the capture
+manifest from the workspace would remove the whole problem, and the queries are already
+written here.
+
 ---
 
 ## Defects that block the .NET stack outright
