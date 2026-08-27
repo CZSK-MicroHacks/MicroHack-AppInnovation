@@ -297,7 +297,11 @@ The shared handoff bundle is also required:
 > evidence/telemetry-capture.json`. It normalizes all four `evidence/telemetry/*.json`
 > files and the report, supplies each metric `unit` from the behavior contract, stamps
 > `workspaceId`/`capturedAt`/`queryText` provenance, and lists **every** unmet
-> requirement in one run rather than one per handoff attempt.
+> requirement in one run rather than one per handoff attempt. The manifest's shape is
+> `workshop/contracts/telemetry-evidence-capture.schema.json`, with a complete worked
+> manifest in `telemetry-evidence-capture.example.json` — copy that and replace the
+> observations with your own. Do not invent a signal you did not observe: the renderer
+> refuses a missing signal rather than defaulting it.
 
 Finish only when:
 

@@ -153,6 +153,30 @@ Then check progress with a separate, fast invocation reading
 `C:\MicroHack\logs\longjob.log`. The channel is never held, so this cannot wedge — and it
 sidesteps the 4096-byte run-command output cap as well.
 
+### `git rev-parse HEAD` on the VM does not tell you which version you are running
+
+`C:\MicroHack\source` is an archive extraction, not a clone. It carries one synthetic
+commit whose message names the baseline, and files are refreshed by copy, so **`HEAD`
+never moves.** You can have dozens of modified files and the commit will still claim the
+baseline it was built from.
+
+The consequence is worse than a missing signal. `git rev-parse HEAD` answers instantly,
+returns a stable well-formed SHA, and is the only version indicator present — so it reads
+as authoritative while being permanently wrong. Ancestry checks compound it: every
+`git merge-base --is-ancestor <fix> HEAD` returns false, because there is no shared
+history, **not** because the fix is missing. That failure direction will tell you a
+current run is stale, or a stale run is current, with equal confidence.
+
+Compare content instead of metadata. The file's hash answers the question the commit
+cannot:
+
+```powershell
+Get-FileHash C:\MicroHack\source\tests\acceptance\catalog_acceptance\runner.py -Algorithm SHA256
+```
+
+Match it against the same file in your own checkout. If they agree, the VM is running your
+code regardless of what `HEAD` says.
+
 ## 4. Application health failures
 
 Interpret the routes separately:

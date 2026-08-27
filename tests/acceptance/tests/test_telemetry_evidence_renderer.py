@@ -21,6 +21,7 @@ from catalog_acceptance.telemetry_evidence import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONTRACTS = REPO_ROOT / "workshop" / "contracts"
+REVISION = "ca-mh-catalog-user001--release-47acf263d332"
 
 ROUTE_ATTRS = {
     "http.request.method": "GET",
@@ -81,6 +82,7 @@ def _capture() -> dict[str, Any]:
         "queries": {
             "resources": {
                 "query": "AppDependencies | where TimeGenerated > ago(30m)",
+                "revision": REVISION,
                 "signals": {
                     "resource": {
                         "recordCount": 1,
@@ -90,9 +92,21 @@ def _capture() -> dict[str, Any]:
                     }
                 },
             },
-            "traces": {"query": "AppDependencies | project Name", "signals": traces},
-            "metrics": {"query": "AppMetrics | project Name", "signals": metrics},
-            "logs": {"query": "AppTraces | project Message", "signals": logs},
+            "traces": {
+                "query": "AppDependencies | project Name",
+                "revision": REVISION,
+                "signals": traces,
+            },
+            "metrics": {
+                "query": "AppMetrics | project Name",
+                "revision": REVISION,
+                "signals": metrics,
+            },
+            "logs": {
+                "query": "AppTraces | project Message",
+                "revision": REVISION,
+                "signals": logs,
+            },
         },
     }
 
@@ -507,3 +521,81 @@ def test_matching_workspace_provenance_renders_cleanly(tmp_path: Path) -> None:
     _render(tmp_path, capture)
     report = json.loads((tmp_path / "evidence" / "telemetry-report.json").read_text())
     _validate_telemetry_results(report, CONTRACTS, tmp_path)
+
+
+def test_every_renderer_document_points_at_the_capture_schema_and_example() -> None:
+    """Half of F-91 was discoverability: the manifest shape existed only in source.
+
+    A schema and an example the attendee cannot find are the same as no schema and
+    no example, which is the condition F-89 was about.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    missing = [
+        document
+        for document in RENDERER_DOCUMENTS
+        if "telemetry-evidence-capture.schema.json"
+        not in (repo_root / document).read_text(encoding="utf-8")
+        or "telemetry-evidence-capture.example.json"
+        not in (repo_root / document).read_text(encoding="utf-8")
+    ]
+    assert not missing, f"documents omit the capture schema or example: {missing}"
+    assert len(RENDERER_DOCUMENTS) >= 9
+
+
+def test_a_skipped_provenance_check_says_so_rather_than_passing_silently(
+    tmp_path: Path,
+) -> None:
+    """A check that can decline to run without saying so is decoration again.
+
+    ``azure-target-output.json`` is resolved beside ``--output``, so rendering to
+    a scratch path to inspect the bundle -- the natural iteration loop -- turned
+    the cross-check off. A skipped check and a passing check were byte-identical.
+    """
+    capture_path = tmp_path / "evidence" / "telemetry-capture.json"
+    capture_path.parent.mkdir(parents=True, exist_ok=True)
+    capture_path.write_text(json.dumps(_capture()))
+    inventory = render_telemetry_evidence(
+        capture_path, CONTRACTS, tmp_path / "scratch" / "telemetry-report.json", tmp_path
+    )
+    assert inventory["provenanceCheck"].startswith("skipped:")
+    assert "azure-target-output.json" in inventory["provenanceCheck"]
+
+
+def test_a_performed_provenance_check_is_reported_as_verified(tmp_path: Path) -> None:
+    capture = _capture()
+    evidence = tmp_path / "evidence"
+    evidence.mkdir(parents=True, exist_ok=True)
+    (evidence / "azure-target-output.json").write_text(
+        json.dumps(
+            {
+                "observability": {
+                    "logAnalyticsWorkspaceResourceId": (
+                        "/subscriptions/x/resourceGroups/y/providers/"
+                        "Microsoft.OperationalInsights/workspaces/"
+                        + capture["workspaceId"].rsplit("/", 1)[-1]
+                    )
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    inventory = _render(tmp_path, capture)
+    assert inventory["provenanceCheck"] == "verified"
+
+
+def test_a_capture_mixing_revisions_is_refused(tmp_path: Path) -> None:
+    """The failure signals came from one revision and the happy path from another.
+
+    Fault injection and traffic generation are separate steps; a release between
+    them repoints traffic silently. Nothing downstream compares revisions, so the
+    mixed capture passes the handoff gate while asserting behaviour the release
+    revision never emitted.
+    """
+    capture = _capture()
+    capture["queries"]["logs"]["revision"] = "ca-mh-catalog-user001--0000001"
+    with pytest.raises(TelemetryCaptureError) as excinfo:
+        _render(tmp_path, capture)
+    message = str(excinfo.value)
+    assert "2 different revisions" in message
+    assert "ca-mh-catalog-user001--0000001" in message
+    assert "AppRoleInstance" in message

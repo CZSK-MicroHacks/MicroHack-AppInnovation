@@ -26,7 +26,8 @@
             "azure.containerapps.revision.name"
           ]
         }
-      }
+      },
+      "revision": "ca-mh-catalog-user001--release-47acf263d332"
     },
     "traces": {
       "query": "AppDependencies | project Name",
@@ -139,7 +140,8 @@
             }
           ]
         }
-      }
+      },
+      "revision": "ca-mh-catalog-user001--release-47acf263d332"
     },
     "metrics": {
       "query": "AppMetrics | project Name",
@@ -235,7 +237,8 @@
             }
           ]
         }
-      }
+      },
+      "revision": "ca-mh-catalog-user001--release-47acf263d332"
     },
     "logs": {
       "query": "AppTraces | project Message",
@@ -372,7 +375,8 @@
             }
           ]
         }
-      }
+      },
+      "revision": "ca-mh-catalog-user001--release-47acf263d332"
     }
   }
 }
