@@ -383,6 +383,39 @@ resource facilitatorFileMigration 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
+// The migration tool runs on the source VM and authenticates as that VM's
+// system-assigned identity. Granting only the facilitator and the workload identity
+// leaves the one principal that actually performs the copy with no data-plane access,
+// so `catalog-migrate images copy` fails against a correctly deployed environment.
+// Owner on the resource group does not help: blob data actions are not control plane.
+resource migrationSourceVm 'Microsoft.Compute/virtualMachines@2024-07-01' existing = {
+  name: last(split(migrationSourceVmResourceId, '/'))
+  scope: resourceGroup(
+    split(migrationSourceVmResourceId, '/')[2],
+    split(migrationSourceVmResourceId, '/')[4]
+  )
+}
+
+resource migrationSourceBlobWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (isBlob) {
+  name: guid(blobContainer.id, migrationSourceVmResourceId, blobDataContributorRole)
+  scope: blobContainer
+  properties: {
+    principalId: migrationSourceVm.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: blobDataContributorRole
+  }
+}
+
+resource migrationSourceFileWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!isBlob) {
+  name: guid(fileShare.id, migrationSourceVmResourceId, fileDataPrivilegedContributorRole)
+  scope: fileShare
+  properties: {
+    principalId: migrationSourceVm.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: fileDataPrivilegedContributorRole
+  }
+}
+
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: workspaceName
   location: location
