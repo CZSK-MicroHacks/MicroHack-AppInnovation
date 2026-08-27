@@ -4,6 +4,34 @@
 **Method:** attempt the scorecard from the evidence that *genuinely exists* across all
 worktrees, and observe empirically what the wrap-up tooling does with the missing rows.
 
+> **UPDATE (21:45 CEST) — real delivery outcome folded in.** The facilitator delivery log
+> plus my own read-only `az` verification now show **.NET completed the central challenge**
+> and **Java is live-but-empty**. The candidate scorecard is
+> [`candidate-scorecard.md`](candidate-scorecard.md). This changes rows 9–10 for the .NET arm
+> from *design* to *real deployed outcome*; rows 1–8 remain *not measured* because no
+> Ch2–Ch6 evidence files exist anywhere. See "Real delivery outcome" below.
+
+## Real delivery outcome (verified where I could)
+
+- **.NET / Azure SQL — complete.** `ca-mh-user001-dotnet`, active revision `--0000001`,
+  digest `sha256:647e2500…` (**`az`-verified**). The ACR tag on that digest is
+  `47acf263d3320fa3bb41d5469fc3c7428a393fca` — a modernized pushed commit **distinct** from
+  the baseline `4bf59f7e…` (F-29), so the image is genuinely modernized, not a rebuilt
+  baseline. 198/20 migrated, `topologyValidated: true`, first 2xx `2026-08-27T19:21:21.921Z`
+  (**facilitator-attested**). I could not corroborate live serving from my host (`/readyz` →
+  `000`, likely scaled-to-zero or no egress).
+- **Java / PostgreSQL — partial.** Live but **empty catalog**, blocked on a migration
+  verification failure. Deploy milestone reached, data-migration milestone not.
+- **Honest headline: one of two stacks completed the workshop's central challenge.** Not
+  rounded up.
+
+Two honest sibling artifacts corroborate the "not measured" rows rather than contradict them:
+`michalmar-cautious-disco/evidence/ch06-mttr.BLOCKED.md` ("cannot be produced honestly, no
+file written") and `michalmar-psychic-memory/evidence/cicd/identity-summary.json` (self-labels
+"NOT a cicd-report.json — no workflow run occurred"). Multiple attendees independently chose
+the blocked-but-honest path over a fabricated number. That is the workshop's honesty culture
+working — but note it works because of *attendee* discipline, not because of any check.
+
 ## The single most important finding
 
 **There is no wrap-up tooling.** The wrap-up scorecard is a Markdown table the attendee
@@ -210,3 +238,96 @@ The chapter's prose is admirably honest; its mechanics do nothing to enforce tha
 and a shipped fixture sits one `cp` away from a fabricated-but-green scorecard. Held the
 line: every number above is either real (cost, scenario facts) or explicitly *not measured*.
 Nothing was invented.
+
+## Defect taxonomy (adopting the observer's classes — more useful than a flat list)
+
+The wrap-up should teach the room *why* the defects clustered, not just enumerate them. Three
+classes explain most of them:
+
+1. **Topology-dependent silent-wrong, with green control-plane probes.** The artifact ships
+   correct against Microsoft's permissive default subscription and silently wrong against a
+   tenant-governed one — and the control-plane check *passes* while the data plane fails.
+   Confirmed instances I touched or verified: public IP assumed (tenant policy forbids them,
+   F-47); public DNS assumed (internal-only Container Apps env has none); a Blob role granted
+   to `principalType: 'User'` that the automation VM identity can never be; Windows `PATHEXT`
+   (`shutil.which('az')` succeeds while `subprocess.run(['az'])` fails); interactive
+   `Read-Host -AsSecureString` under `az vm run-command` (F-58). Common property: **invisible
+   until an actor in the real delivery topology used the artifact for its stated purpose.**
+   The scorecard inherits this directly — my `az` reads confirmed the .NET *control plane*
+   (revision, digest, ingress) while I could not confirm the *data plane* (serving) from my
+   host. A scorecard row filled from a control-plane probe alone would read green and be
+   unsupported.
+2. **Diagnosability defects.** A failure message that names a set difference without emitting
+   the difference. One such message hid another real defect for ~an hour. This class is
+   *compounding* — it multiplies the time cost of every defect it wraps. W-4 is a wrap-up
+   instance in miniature: "read out the median MTTR" with no data emits silence, not an error.
+3. **Silent preservation under rollback.** A constraint whose failure path preserves the very
+   object it exists to remove — e.g. the identity cutover wrapping `DROP USER` +
+   `CREATE USER … FROM EXTERNAL PROVIDER` in one `XACT_ABORT ON` transaction, so a failed
+   create rolls back the drop and the privileged legacy principal *survives* the security
+   step, exit code reading "nothing happened." The scorecard analogue: a copied fixture
+   (W-2) preserves an unmeasured number behind a green round-trip test.
+
+## Process observations worth a slide
+
+- **~68 defects in one delivery, a large fraction environmental not code** — the workshop was
+  authored against a permissive default subscription and delivered into a governed one. This
+  is the single most important thing to tell a room: most of what broke was the gap between
+  *authoring topology* and *delivery topology*, not bugs in anyone's code.
+- **Four facilitator false alarms, all the same shape:** applying a mechanism without applying
+  the paired check. Three more were caught before firing. Worth telling the room because it is
+  what happens to *anyone* working at speed — not a personal failing. It is, in fact, the same
+  root cause as defect-class 1: a control-plane action without its data-plane verification.
+- **Screenshots may be unobtainable in this topology.** Headless Edge on Windows Server as
+  SYSTEM exits 1002 (`INVALID_SANDBOX_STATE`) even for `about:blank`, and Edge refuses
+  `--no-sandbox` when elevated. If a screenshot can't be had, the honest finding is "browser
+  screenshots are not obtainable in this delivery topology" — not a fabricated image. This is
+  itself a scorecard-integrity point: any row whose evidence is a screenshot is unfillable
+  here, and the honest response is *not measured*, not a stock image.
+
+## Whole-workshop feedback (pacing, coherence, two-day realism)
+
+- **Does it build coherently? Mostly yes, in intent.** Ch0 (pain) → Ch1 (lift + migrate) →
+  Ch2–6 (measure the improvement) → Ch7 (extend) → wrap-up (score it) is a genuinely good
+  arc, and the scorecard is a smart spine because every earlier chapter is supposed to emit
+  one row. The design is better than most workshops.
+- **But the arc is fragile: it is a chain, and Ch1 is a single point of failure for eight of
+  eleven rows.** Every measurement chapter (Ch2–6) presupposes a deployed, migrated app. In
+  this delivery only **.NET** reached that state; Java stalled at data migration; the four
+  non-deploying arms never had an app to measure. So the scorecard's 8 measurement rows are
+  gated on one milestone that half the tracks did not clear. A workshop whose final deliverable
+  is 8/11 blank unless one specific early step fully succeeds is **too tightly coupled for a
+  time-boxed event**. Consider making Ch2–6 independently reachable against a pre-seeded
+  reference deployment, so a team that loses a day to Ch1 can still measure something.
+- **Two-day framing is not realistic as delivered.** ~68 defects surfaced in one delivery,
+  most environmental. An attendee hitting even a quarter of those spends the workshop
+  debugging topology, not modernizing an app. The two-day estimate assumes the authoring
+  subscription; in a governed tenant, budget for Ch1 alone to consume most of day one.
+- **Does the wrap-up material match the workshop a real attendee experiences? Partly — and
+  this is the sharpest gap.** The wrap-up *prose* is honest and even anticipates a mostly-empty
+  scorecard (it authorises "not measured" and disclaims the ratios). But it is **written as if
+  the measurement chapters ran**: it asks the room to read out a median MTTR, compare pipeline
+  lead times, etc. For the delivery that actually happened, most of those prompts have no
+  input. The wrap-up would match reality better if it opened by acknowledging that **a partial
+  scorecard is the *expected* outcome of a governed-tenant delivery**, and treated 8/11 blank
+  as a successful honest result rather than an incomplete one.
+- **On the "Copilot made it N× faster" temptation:** the material does **not** invite it
+  (grep-verified zero hits; the only cost row is a disclaimed +30% *increase*). If anyone
+  reaches for such a ratio anyway, this delivery cannot supply one — the control arms had the
+  finished runbook and the reference implementation, so they were not controls. That is a
+  **delivery-design limitation (the facilitator's), not a material defect.** Credit to the
+  wrap-up author: `:49-69` pre-empts exactly this by disclaiming both would-be ratios as not
+  like-for-like and framing the cost increase as expected. That paragraph is the best writing
+  in the chapter and should be held up as the model for how a self-measuring workshop avoids
+  cheating.
+
+## Verdict on the wrap-up as the workshop's closer
+
+It is the right closing instrument and it is honestly written, but it measures the wrong
+thing: it weights eight rows on peripheral measurement chapters that a governed-tenant
+delivery rarely completes, while the **actual central achievement — deploy + migrate + verify,
+which .NET genuinely reached — is not a scorecard row at all.** The most valuable change is to
+make the scorecard reward the central milestone explicitly and to state up front that a mostly
+"not measured" card is the honest, expected shape of this delivery — so the honest attendee's
+card and the careless one's remain distinguishable *by design intent*, even though no
+validator will ever tell them apart.
