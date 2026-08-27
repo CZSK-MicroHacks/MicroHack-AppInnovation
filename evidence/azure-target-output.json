@@ -50,7 +50,7 @@
     "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001"
   },
   "schemaVersion": "1.2.0",
-  "sourceCommit": "9f794e2f62c69d0fb58288e56ace1bf9988e2b6f",
+  "sourceCommit": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
   "stack": "dotnet-sqlserver",
   "workloadIdentity": {
     "clientId": "2b4a56de-7d44-4725-921f-0b0a26b8be17",
