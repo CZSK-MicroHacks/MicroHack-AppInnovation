@@ -92,6 +92,24 @@ After Challenge 1 the equivalent is `uv --no-config run catalog-validate-challen
 <load|cicd|observability> <that chapter's report> --handoff evidence/modernization-contract.json
 --contracts workshop/contracts --repository-root ../..`.
 
+**If they say their commands are hanging, check this before anything else.** A VM accepts one
+run-command at a time, and a *named* one left behind — by you, from an earlier inspection —
+holds the channel forever without ever running. The participant sees
+`Conflict: Run command extension execution is in progress` and nothing else; every status
+field on the VM still reads `Succeeded`.
+
+```powershell
+az vm run-command list -g rg-user007 --vm-name vm-java-user007 --show-details `
+  --query "[].{name:name, exec:instanceView.executionState}" -o table
+```
+
+A row reading `exec: Pending` is the blockage. Delete it and the participant's next command
+works immediately; see [Facilitator](Facilitator.md#clean-up-after-yourself-on-a-participant-vm).
+Empty output means you are in the orphaned-`invoke` case instead, which clears on its own in
+about an hour — [Troubleshooting](Troubleshooting.md#az-vm-run-command-returns-conflict-run-command-extension-execution-is-in-progress)
+has both. In the pilot this cost one participant two days, because nothing on their side could
+show them the cause.
+
 ## What to cut, in what order
 
 Pull these from the top. Every one is set out in [the agenda](Agenda.md).

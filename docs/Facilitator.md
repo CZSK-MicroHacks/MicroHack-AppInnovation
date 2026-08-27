@@ -1039,8 +1039,10 @@ az vm run-command delete -g rg-user007 --vm-name vm-java-user007 \
 
 Deleting is non-destructive — it removes the registration, not the VM or its extensions — and
 the participant's next command works immediately. Prefer `az vm run-command invoke` for
-one-shot facilitator inspection: it leaves nothing behind to forget. Add the `list` above to
-your end-of-day sweep.
+one-shot facilitator inspection: it leaves nothing behind to forget. The day-of card carries
+the same check under [Is this participant healthy?](DayOfCard.md#is-this-participant-healthy),
+because the symptom reaches you as "my commands are hanging" rather than as anything you would
+think to look for.
 
 ---
 
