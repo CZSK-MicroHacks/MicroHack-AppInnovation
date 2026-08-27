@@ -117,18 +117,33 @@ asked to hand-transcribe roughly 20 normalized signal rows, with exact attribute
 units, from queries they must also invent.
 
 **Why fabrication passes.** `telemetry-query-result.schema.json` requires exactly
-`schemaVersion`, `queryId`, and `rows`. It carries **no timestamp, no workspace ID, no
-Application Insights resource ID, no operation or correlation ID, and no ingestion
-metadata.** The `query` field in the report is validated as `minLength: 10` — any string
-of eleven characters satisfies it. Nothing in the bundle records *which* workspace was
-queried, *when*, or *whether a query was run at all*.
+`schemaVersion`, `queryId`, and `rows` — and sets **`additionalProperties: false`** over
+them. It carries **no timestamp, no workspace ID, no Application Insights resource ID, no
+operation or correlation ID, and no ingestion metadata.** The `query` field in the report
+is validated as `minLength: 10` — any string of eleven characters satisfies it.
 
-So the shape is fully specified and the provenance is not specified whatsoever. Both
-inputs needed to synthesize a passing bundle — `telemetry-evidence.example.json` and
+**This is a prohibition, not an omission**, and that distinction is the whole finding.
+Because `additionalProperties: false` closes the object, an attendee who *wants* to record
+which workspace they queried and when **cannot**: the schema rejects the key. The honest
+attendee has no escape hatch. It is not merely that the format fails to ask for
+provenance; it is that the format forbids supplying it.
+
+So the shape is fully specified and the provenance is impossible to state. Both inputs
+needed to synthesize a passing bundle — `telemetry-evidence.example.json` and
 `behavior-contract.json` — are **checked into the repository the attendee already has
 open**. Producing convincing, complete, entirely fictional telemetry evidence is perhaps
 twenty minutes of careful copying, requires no Azure access, and is indistinguishable
 from the real thing in the delivered artifact.
+
+**The missing renderer is an inconsistency, not a design stance.** It would be one thing
+if this workshop had decided evidence is hand-authored throughout. It did not.
+`catalog_acceptance` ships **three dedicated evidence renderers** —
+`defender_evidence_cli.py`, `load_evidence_cli.py`, `sre_evidence_cli.py` — and two of
+them expose **both** `render_main` and `validate_main`. Challenges 2, 5 and 6 each get a
+tool that produces their evidence. Challenge 1's telemetry evidence ships **validation
+only**. The authors demonstrably knew renderers were needed and built three; telemetry is
+the single evidence domain left hand-authored, and it is also the one with the most
+intricate contract.
 
 **Why this compounds with F-74 rather than merely resembling it.** F-74 tells the
 attendee, correctly, that four signals cannot appear unless they deliberately break their
@@ -158,7 +173,10 @@ is trivially satisfiable by typing the value in.
    a time range in the result schema; have the validator check that `capturedAt` falls
    after the release revision's creation timestamp. This does not make fabrication
    impossible, but it stops being *accidental* and starts requiring deliberate intent —
-   which is the correct bar.
+   which is the correct bar. **Implementation note: this requires relaxing
+   `additionalProperties: false` first.** Anyone who adds `capturedAt` without touching
+   that keyword will watch the schema reject their honest evidence, which is a
+   particularly demoralizing way to discover the constraint.
 3. **Publish the four KQL queries**, as `docs/TelemetryFaultInjection.md` §5 already does
    for the union query. Half the difficulty here is that the attendee does not know what
    to ask for.
@@ -1283,14 +1301,37 @@ presents them, and Challenge 1's evidence has a lifetime nobody states.
 
 Recovering it surfaced two Azure Container Apps traps worth documenting:
 
-- **`az containerapp revision list` hides inactive revisions** unless `--all` is passed. A
-  `--revision-suffix` collision therefore reports "a revision with that suffix already exists"
-  for a revision you cannot see in the list you just ran.
+- **`az containerapp revision list` hides inactive revisions** unless `--all` is passed.
+  This is far more dangerous than it sounds, because of how it interacts with the handoff
+  gate. `validate_release` (`catalog_migrate/azure.py:348-426`) requires the rollback
+  revision to be named exactly `<app>--baseline-<sourceCommit[:12]>`, to **exist**, to be
+  **`active: false`**, to report `healthState: Healthy`, to have no provisioning error,
+  and to carry the release digest. So **the single revision the handoff depends on is
+  required to be inactive — and inactive revisions are exactly the ones the default
+  listing hides.** Running the obvious diagnostic shows three revisions, none of them the
+  baseline, and the correct state is indistinguishable from the destroyed state.
+
+  **I nearly acted on that myself.** Having seen a Challenge 4 deployment disturb my
+  revisions once already, I ran `az containerapp revision list`, did not see
+  `ca-mh-user001-dotnet--baseline-47acf263d332`, and concluded the handoff was
+  unrenderable. I was one command from recreating a revision that already existed — which
+  would either have collided on the suffix or produced a second baseline under a
+  different name, corrupting the rollback evidence I was trying to protect. What stopped
+  me was running `revision show` on the specific name before acting on the absence.
+  `revision show` returned it immediately, `active: false`, `Healthy`, correct digest:
+  perfectly valid, and invisible one command earlier.
+
+  The general lesson is the one this workshop teaches everywhere else and does not apply
+  here: **absence from a filtered listing is not evidence of absence.** A `--all` in the
+  runbook would cost nothing and remove the trap entirely.
+
+  A related consequence: a `--revision-suffix` collision reports "a revision with that
+  suffix already exists" for a revision you cannot see in the list you just ran.
 - **A failed revision update wedges every later write.** After that error the app sits in
   `provisioningState: Failed`, and *every* subsequent PATCH — including a pure
   `ingress traffic set`, and a minimal ARM `az rest` PATCH that returns exit 0 and silently
-  no-ops — fails with the same stale-suffix error. The only exit I found was to provision once
-  with a fresh unique suffix, then activate the intended revision and re-pin traffic.
+  no-ops — fails with the same stale-suffix error. The only exit I found was to provision
+  once with a fresh unique suffix, then activate the intended revision and re-pin traffic.
 
 ---
 
