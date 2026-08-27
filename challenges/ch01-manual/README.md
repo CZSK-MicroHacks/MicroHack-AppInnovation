@@ -222,6 +222,15 @@ those interfaces; it does not reinterpret them.
    and collect normalized Azure Monitor resource, trace, metric, and log results
    referenced by `evidence/telemetry-report.json`. A healthy response or a successful
    deployment does not prove behavior.
+
+   Start `evidence/runtime-test-report.json` from your stack's entry in
+   `workshop/contracts/runtime-test-evidence.template.json` — copy that object and
+   replace only `sourceCommit`, `artifact`, and `command`. The fourteen `tests` entries
+   are fixed by the contract and are checked for exact equality, so do not retype them.
+   The report describes results the native artifact must already contain: the handoff
+   parses that artifact and fails unless all fourteen are present and passing. Writing a
+   report the artifact does not support is caught, and is the one thing here that would
+   be worth catching.
 10. **Write and validate rollback.** `evidence/rollback-runbook.md` must name the
     retained baseline revision and immutable digest, the approval gate, the Container
     Apps single-revision activation command, health/readiness and full-acceptance checks,

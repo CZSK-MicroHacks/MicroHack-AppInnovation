@@ -282,7 +282,11 @@ The shared handoff bundle is also required:
 - `evidence/azure-target-output.json`
 - `evidence/migration-report.json`
 - `evidence/acceptance-report.json`
-- `evidence/runtime-test-report.json`
+- `evidence/runtime-test-report.json` — start from your stack's entry in
+  `workshop/contracts/runtime-test-evidence.template.json` and replace only
+  `sourceCommit`, `artifact`, and `command`. The fourteen `tests` entries are fixed by
+  the contract and checked for exact equality; the handoff also parses the native
+  artifact and fails unless all fourteen are present and passing.
 - `evidence/telemetry-report.json`
 - `evidence/modernization-contract.json`
 - `evidence/rollback-runbook.md`
