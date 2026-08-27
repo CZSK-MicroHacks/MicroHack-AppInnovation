@@ -1,0 +1,1331 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.1-experimental",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
+    "_EXPERIMENTAL_FEATURES_ENABLED": [
+      "Asserts"
+    ],
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "13983613848550511266"
+    }
+  },
+  "parameters": {
+    "deploymentStage": {
+      "type": "string"
+    },
+    "stack": {
+      "type": "string"
+    },
+    "imageProvider": {
+      "type": "string"
+    },
+    "postgresqlAuthentication": {
+      "type": "string"
+    },
+    "teamName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 20
+    },
+    "sourceCommit": {
+      "type": "string"
+    },
+    "migrationSourceVirtualNetworkResourceId": {
+      "type": "string"
+    },
+    "migrationSourceVmResourceId": {
+      "type": "string"
+    },
+    "applicationRevisionRole": {
+      "type": "string"
+    },
+    "facilitatorPrincipalName": {
+      "type": "string"
+    },
+    "facilitatorPrincipalObjectId": {
+      "type": "string"
+    },
+    "imageRepository": {
+      "type": "string"
+    },
+    "imageDigest": {
+      "type": "string"
+    },
+    "postgresqlAdministratorName": {
+      "type": "string"
+    },
+    "postgresqlApplicationName": {
+      "type": "string"
+    },
+    "postgresqlAdministratorPassword": {
+      "type": "securestring"
+    },
+    "postgresqlApplicationPassword": {
+      "type": "securestring"
+    },
+    "performanceApiKey": {
+      "type": "securestring"
+    },
+    "location": {
+      "type": "string"
+    },
+    "containerAppsEnvironmentInternal": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set true when the subscription blocks public IP creation (for example the Microsoft.Network/AllowBringYourOwnPublicIpAddress feature is not registered). An internal Container Apps environment is fronted by an internal load balancer and never allocates a public IP, so the catalog is then reachable only from inside the peered virtual network. Two consequences follow and neither is enforced here. Outbound access still has to work, because the environment pulls its image from the registry over the internet: the container-apps subnet carries no NAT gateway, firewall or route table, so it depends on the platform default outbound access that Azure applies while defaultOutboundAccess is unset. Set defaultOutboundAccess to false on that subnet, or attach a route table that forces tunnelling, and the first revision fails with ContainerStartFailure roughly ten minutes into a deployment that has already reported every other resource as succeeded. Inbound access moves inside the virtual network, so smoke tests, load tests, synthetic probes and incident-recovery checks all have to originate from a peered host such as the source virtual machine; a GitHub-hosted runner or an operator laptop cannot reach the application at all."
+      }
+    }
+  },
+  "variables": {
+    "isApplication": "[equals(parameters('deploymentStage'), 'application')]",
+    "isJava": "[equals(parameters('stack'), 'java-postgresql')]",
+    "isBlob": "[equals(parameters('imageProvider'), 'azure-blob')]",
+    "stackName": "[if(variables('isJava'), 'java', 'dotnet')]",
+    "suffix": "[take(uniqueString(resourceGroup().id, variables('stackName')), 8)]",
+    "baseName": "[format('mh-{0}-{1}', parameters('teamName'), variables('stackName'))]",
+    "compactPrefix": "[take(replace(format('{0}{1}', parameters('teamName'), variables('stackName')), '-', ''), 12)]",
+    "compactName": "[format('{0}{1}', variables('compactPrefix'), variables('suffix'))]",
+    "virtualNetworkName": "[format('vnet-{0}', variables('baseName'))]",
+    "registryName": "[take(format('acr{0}', variables('compactName')), 50)]",
+    "identityName": "[format('id-{0}', variables('baseName'))]",
+    "environmentName": "[format('cae-{0}', variables('baseName'))]",
+    "containerAppName": "[format('ca-{0}', variables('baseName'))]",
+    "storageAccountName": "[take(format('st{0}', variables('compactName')), 24)]",
+    "imageLocationName": "catalog-images",
+    "workspaceName": "[format('log-{0}', variables('baseName'))]",
+    "insightsName": "[format('appi-{0}', variables('baseName'))]",
+    "databaseName": "catalog",
+    "sqlServerName": "[take(format('sql-{0}-{1}', variables('baseName'), variables('suffix')), 63)]",
+    "postgresqlServerName": "[take(format('psql-{0}-{1}', variables('baseName'), variables('suffix')), 63)]",
+    "revisionSuffix": "[format('{0}-{1}', parameters('applicationRevisionRole'), take(parameters('sourceCommit'), 12))]",
+    "revisionName": "[format('{0}--{1}', variables('containerAppName'), variables('revisionSuffix'))]",
+    "virtualNetworkAddressPrefix": "[if(variables('isJava'), '172.21.0.0/16', '172.20.0.0/16')]",
+    "containerAppsSubnetPrefix": "[if(variables('isJava'), '172.21.0.0/23', '172.20.0.0/23')]",
+    "privateEndpointSubnetPrefix": "[if(variables('isJava'), '172.21.2.0/24', '172.20.2.0/24')]",
+    "postgresqlSubnetPrefix": "[if(variables('isJava'), '172.21.3.0/24', '172.20.3.0/24')]",
+    "migrationSourceVirtualNetworkName": "[last(split(parameters('migrationSourceVirtualNetworkResourceId'), '/'))]",
+    "sourceToTargetPeeringName": "[format('to-{0}', variables('virtualNetworkName'))]",
+    "targetToSourcePeeringName": "[format('to-{0}', variables('migrationSourceVirtualNetworkName'))]",
+    "migrationDnsLinkName": "[format('migration-source-{0}', take(uniqueString(parameters('migrationSourceVirtualNetworkResourceId')), 8))]",
+    "acrPullRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+    "blobDataReaderRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')]",
+    "blobDataContributorRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+    "fileDataPrivilegedContributorRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69566ab7-960f-475b-8e7c-b3118f30c6bd')]",
+    "blobEnvironment": "[if(variables('isBlob'), createArray(createObject('name', 'CATALOG_BLOB_SERVICE_ENDPOINT', 'value', format('https://{0}.blob.{1}', variables('storageAccountName'), environment().suffixes.storage)), createObject('name', 'CATALOG_BLOB_CONTAINER', 'value', variables('imageLocationName'))), createArray())]",
+    "imageResourceId": "[if(variables('isBlob'), resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName')), resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('imageLocationName')))]"
+  },
+  "resources": {
+    "virtualNetwork": {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('virtualNetworkName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('virtualNetworkAddressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "container-apps",
+            "properties": {
+              "addressPrefix": "[variables('containerAppsSubnetPrefix')]",
+              "delegations": [
+                {
+                  "name": "container-apps",
+                  "properties": {
+                    "serviceName": "Microsoft.App/environments"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "private-endpoints",
+            "properties": {
+              "addressPrefix": "[variables('privateEndpointSubnetPrefix')]",
+              "privateEndpointNetworkPolicies": "Disabled"
+            }
+          },
+          {
+            "name": "postgresql",
+            "properties": {
+              "addressPrefix": "[variables('postgresqlSubnetPrefix')]",
+              "delegations": [
+                {
+                  "name": "postgresql",
+                  "properties": {
+                    "serviceName": "Microsoft.DBforPostgreSQL/flexibleServers"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "targetToSourcePeering": {
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('virtualNetworkName'), variables('targetToSourcePeeringName'))]",
+      "properties": {
+        "allowForwardedTraffic": false,
+        "allowGatewayTransit": false,
+        "allowVirtualNetworkAccess": true,
+        "remoteVirtualNetwork": {
+          "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+        },
+        "useRemoteGateways": false
+      },
+      "dependsOn": [
+        "virtualNetwork"
+      ]
+    },
+    "containerAppsSubnet": {
+      "existing": true,
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('virtualNetworkName'), 'container-apps')]",
+      "dependsOn": [
+        "virtualNetwork"
+      ]
+    },
+    "privateEndpointSubnet": {
+      "existing": true,
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('virtualNetworkName'), 'private-endpoints')]",
+      "dependsOn": [
+        "virtualNetwork"
+      ]
+    },
+    "postgresqlSubnet": {
+      "existing": true,
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('virtualNetworkName'), 'postgresql')]",
+      "dependsOn": [
+        "virtualNetwork"
+      ]
+    },
+    "storagePrivateDnsZone": {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[if(variables('isBlob'), format('privatelink.blob.{0}', environment().suffixes.storage), format('privatelink.file.{0}', environment().suffixes.storage))]",
+      "location": "global"
+    },
+    "storageDnsLink": {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', if(variables('isBlob'), format('privatelink.blob.{0}', environment().suffixes.storage), format('privatelink.file.{0}', environment().suffixes.storage)), 'storage-vnet')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+        }
+      },
+      "dependsOn": [
+        "storagePrivateDnsZone",
+        "virtualNetwork"
+      ]
+    },
+    "storageMigrationDnsLink": {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', if(variables('isBlob'), format('privatelink.blob.{0}', environment().suffixes.storage), format('privatelink.file.{0}', environment().suffixes.storage)), variables('migrationDnsLinkName'))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "storagePrivateDnsZone"
+      ]
+    },
+    "sqlPrivateDnsZone": {
+      "condition": "[not(variables('isJava'))]",
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.{0}', environment().suffixes.sqlServerHostname)]",
+      "location": "global"
+    },
+    "sqlDnsLink": {
+      "condition": "[not(variables('isJava'))]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.{0}', environment().suffixes.sqlServerHostname), 'sql-vnet')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+        }
+      },
+      "dependsOn": [
+        "sqlPrivateDnsZone",
+        "virtualNetwork"
+      ]
+    },
+    "sqlMigrationDnsLink": {
+      "condition": "[not(variables('isJava'))]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.{0}', environment().suffixes.sqlServerHostname), variables('migrationDnsLinkName'))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "sqlPrivateDnsZone"
+      ]
+    },
+    "postgresqlPrivateDnsZone": {
+      "condition": "[variables('isJava')]",
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "private.postgres.database.azure.com",
+      "location": "global"
+    },
+    "postgresqlDnsLink": {
+      "condition": "[variables('isJava')]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', 'private.postgres.database.azure.com', 'postgresql-vnet')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+        }
+      },
+      "dependsOn": [
+        "postgresqlPrivateDnsZone",
+        "virtualNetwork"
+      ]
+    },
+    "postgresqlMigrationDnsLink": {
+      "condition": "[variables('isJava')]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', 'private.postgres.database.azure.com', variables('migrationDnsLinkName'))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "postgresqlPrivateDnsZone"
+      ]
+    },
+    "registry": {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-11-01-preview",
+      "name": "[variables('registryName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": false,
+        "anonymousPullEnabled": false,
+        "dataEndpointEnabled": false,
+        "publicNetworkAccess": "Enabled",
+        "zoneRedundancy": "Disabled"
+      }
+    },
+    "workloadIdentity": {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('identityName')]",
+      "location": "[parameters('location')]"
+    },
+    "acrPull": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', variables('registryName'))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('acrPullRole'))]",
+      "properties": {
+        "principalId": "[reference('workloadIdentity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('acrPullRole')]"
+      },
+      "dependsOn": [
+        "registry",
+        "workloadIdentity"
+      ]
+    },
+    "storage": {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2025-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "allowCrossTenantReplication": false,
+        "allowSharedKeyAccess": "[not(variables('isBlob'))]",
+        "defaultToOAuthAuthentication": "[variables('isBlob')]",
+        "minimumTlsVersion": "TLS1_2",
+        "publicNetworkAccess": "Disabled",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    "blobService": {
+      "condition": "[variables('isBlob')]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": false
+        }
+      },
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "blobContainer": {
+      "condition": "[variables('isBlob')]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "blobService"
+      ]
+    },
+    "fileService": {
+      "condition": "[not(variables('isBlob'))]",
+      "type": "Microsoft.Storage/storageAccounts/fileServices",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "fileShare": {
+      "condition": "[not(variables('isBlob'))]",
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "properties": {
+        "enabledProtocols": "SMB",
+        "accessTier": "TransactionOptimized",
+        "shareQuota": 512
+      },
+      "dependsOn": [
+        "fileService"
+      ]
+    },
+    "storagePrivateEndpoint": {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[format('pe-{0}-{1}', variables('storageAccountName'), if(variables('isBlob'), 'blob', 'file'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), 'private-endpoints')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[if(variables('isBlob'), 'blob', 'file')]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+              "groupIds": [
+                "[if(variables('isBlob'), 'blob', 'file')]"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "storage",
+        "virtualNetwork"
+      ]
+    },
+    "storagePrivateDnsZoneGroup": {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('pe-{0}-{1}', variables('storageAccountName'), if(variables('isBlob'), 'blob', 'file')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[if(variables('isBlob'), 'blob', 'file')]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', if(variables('isBlob'), format('privatelink.blob.{0}', environment().suffixes.storage), format('privatelink.file.{0}', environment().suffixes.storage)))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "storagePrivateDnsZone",
+        "storagePrivateEndpoint"
+      ]
+    },
+    "blobRead": {
+      "condition": "[variables('isBlob')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('blobDataReaderRole'))]",
+      "properties": {
+        "principalId": "[reference('workloadIdentity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('blobDataReaderRole')]"
+      },
+      "dependsOn": [
+        "blobContainer",
+        "workloadIdentity"
+      ]
+    },
+    "facilitatorBlobMigration": {
+      "condition": "[variables('isBlob')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName')), parameters('facilitatorPrincipalObjectId'), variables('blobDataContributorRole'))]",
+      "properties": {
+        "principalId": "[parameters('facilitatorPrincipalObjectId')]",
+        "principalType": "User",
+        "roleDefinitionId": "[variables('blobDataContributorRole')]"
+      },
+      "dependsOn": [
+        "blobContainer"
+      ]
+    },
+    "facilitatorFileMigration": {
+      "condition": "[not(variables('isBlob'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('imageLocationName')), parameters('facilitatorPrincipalObjectId'), variables('fileDataPrivilegedContributorRole'))]",
+      "properties": {
+        "principalId": "[parameters('facilitatorPrincipalObjectId')]",
+        "principalType": "User",
+        "roleDefinitionId": "[variables('fileDataPrivilegedContributorRole')]"
+      },
+      "dependsOn": [
+        "fileShare"
+      ]
+    },
+    "workspace": {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('workspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "retentionInDays": 30,
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        },
+        "sku": {
+          "name": "PerGB2018"
+        }
+      }
+    },
+    "applicationInsights": {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('insightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "Flow_Type": "Bluefield",
+        "IngestionMode": "LogAnalytics",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]",
+        "DisableIpMasking": false
+      },
+      "dependsOn": [
+        "workspace"
+      ]
+    },
+    "containerAppsEnvironment": {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-10-02-preview",
+      "name": "[variables('environmentName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference('workspace').customerId]",
+            "sharedKey": "[listKeys('workspace', '2023-09-01').primarySharedKey]"
+          }
+        },
+        "vnetConfiguration": {
+          "infrastructureSubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), 'container-apps')]",
+          "internal": "[parameters('containerAppsEnvironmentInternal')]"
+        },
+        "zoneRedundant": false
+      },
+      "dependsOn": [
+        "virtualNetwork",
+        "workspace"
+      ]
+    },
+    "environmentStorage": {
+      "condition": "[not(variables('isBlob'))]",
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}/{1}', variables('environmentName'), 'catalog-images')]",
+      "properties": {
+        "azureFile": {
+          "accessMode": "ReadOnly",
+          "accountKey": "[listKeys('storage', '2025-01-01').keys[0].value]",
+          "accountName": "[variables('storageAccountName')]",
+          "shareName": "[variables('imageLocationName')]"
+        }
+      },
+      "dependsOn": [
+        "containerAppsEnvironment",
+        "fileShare",
+        "storage"
+      ]
+    },
+    "containerApp": {
+      "condition": "[variables('isApplication')]",
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('containerAppName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')))]": {}
+        }
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "maxInactiveRevisions": 10,
+          "ingress": {
+            "allowInsecure": false,
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto"
+          },
+          "registries": [
+            {
+              "server": "[reference('registry').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+            }
+          ],
+          "secrets": "[concat(createArray(createObject('name', 'performance-api-key', 'value', parameters('performanceApiKey')), createObject('name', 'application-insights-connection-string', 'value', reference('applicationInsights').ConnectionString)), if(and(variables('isJava'), equals(parameters('postgresqlAuthentication'), 'password-secret')), createArray(createObject('name', 'database-application-password', 'value', parameters('postgresqlApplicationPassword'))), createArray()))]"
+        },
+        "template": {
+          "revisionSuffix": "[variables('revisionSuffix')]",
+          "containers": [
+            {
+              "name": "catalog",
+              "image": "[format('{0}/{1}@{2}', reference('registry').loginServer, parameters('imageRepository'), parameters('imageDigest'))]",
+              "env": "[concat(createArray(createObject('name', 'CATALOG_DATABASE_HOST', 'value', if(variables('isJava'), createObject('resourceId', reference('postgresql').outputs.databaseResourceId.value, 'family', 'postgresql-flexible', 'server', reference('postgresql').outputs.serverHost.value, 'database', reference('postgresql').outputs.databaseName.value, 'authentication', reference('postgresql').outputs.authentication.value, 'localAdministratorPrincipal', reference('postgresql').outputs.localAdministratorPrincipal.value, 'entraAdministratorPrincipal', reference('postgresql').outputs.entraAdministratorPrincipal.value, 'applicationPrincipal', reference('postgresql').outputs.applicationPrincipal.value), createObject('resourceId', reference('sql').outputs.databaseResourceId.value, 'family', 'azure-sql', 'server', reference('sql').outputs.serverHost.value, 'database', reference('sql').outputs.databaseName.value, 'authentication', reference('sql').outputs.authentication.value, 'localAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'localAdministratorPrincipal'), 'value'), 'entraAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'entraAdministratorPrincipal'), 'value'), 'applicationPrincipal', reference('sql').outputs.applicationPrincipal.value)).server), createObject('name', 'CATALOG_DATABASE_NAME', 'value', if(variables('isJava'), createObject('resourceId', reference('postgresql').outputs.databaseResourceId.value, 'family', 'postgresql-flexible', 'server', reference('postgresql').outputs.serverHost.value, 'database', reference('postgresql').outputs.databaseName.value, 'authentication', reference('postgresql').outputs.authentication.value, 'localAdministratorPrincipal', reference('postgresql').outputs.localAdministratorPrincipal.value, 'entraAdministratorPrincipal', reference('postgresql').outputs.entraAdministratorPrincipal.value, 'applicationPrincipal', reference('postgresql').outputs.applicationPrincipal.value), createObject('resourceId', reference('sql').outputs.databaseResourceId.value, 'family', 'azure-sql', 'server', reference('sql').outputs.serverHost.value, 'database', reference('sql').outputs.databaseName.value, 'authentication', reference('sql').outputs.authentication.value, 'localAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'localAdministratorPrincipal'), 'value'), 'entraAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'entraAdministratorPrincipal'), 'value'), 'applicationPrincipal', reference('sql').outputs.applicationPrincipal.value)).database), createObject('name', 'CATALOG_DATABASE_PORT', 'value', if(variables('isJava'), '5432', '1433')), createObject('name', 'CATALOG_DATABASE_AUTHENTICATION', 'value', if(variables('isJava'), parameters('postgresqlAuthentication'), 'managed-identity')), createObject('name', 'CATALOG_IMAGES_PATH', 'value', '/app/images'), createObject('name', 'CATALOG_SEED_PATH', 'value', '/app/data/catalog.json'), createObject('name', 'CATALOG_STARTUP_IMPORT_ENABLED', 'value', 'false'), createObject('name', 'CATALOG_IMAGE_PROVIDER', 'value', if(variables('isBlob'), 'azure-blob', 'local')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference('workloadIdentity').clientId), createObject('name', 'DEPLOYMENT_ENVIRONMENT', 'value', 'lab'), createObject('name', 'OTEL_SERVICE_VERSION', 'value', parameters('sourceCommit')), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'secretRef', 'application-insights-connection-string'), createObject('name', 'CONTAINER_APP_REVISION', 'value', variables('revisionName')), createObject('name', 'PERFTEST_API_KEY', 'secretRef', 'performance-api-key')), if(variables('isJava'), concat(createArray(createObject('name', 'CATALOG_DATABASE_USERNAME', 'value', if(variables('isJava'), createObject('resourceId', reference('postgresql').outputs.databaseResourceId.value, 'family', 'postgresql-flexible', 'server', reference('postgresql').outputs.serverHost.value, 'database', reference('postgresql').outputs.databaseName.value, 'authentication', reference('postgresql').outputs.authentication.value, 'localAdministratorPrincipal', reference('postgresql').outputs.localAdministratorPrincipal.value, 'entraAdministratorPrincipal', reference('postgresql').outputs.entraAdministratorPrincipal.value, 'applicationPrincipal', reference('postgresql').outputs.applicationPrincipal.value), createObject('resourceId', reference('sql').outputs.databaseResourceId.value, 'family', 'azure-sql', 'server', reference('sql').outputs.serverHost.value, 'database', reference('sql').outputs.databaseName.value, 'authentication', reference('sql').outputs.authentication.value, 'localAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'localAdministratorPrincipal'), 'value'), 'entraAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'entraAdministratorPrincipal'), 'value'), 'applicationPrincipal', reference('sql').outputs.applicationPrincipal.value)).applicationPrincipal.name), createObject('name', 'CATALOG_DATABASE_SSL_MODE', 'value', 'require')), if(equals(parameters('postgresqlAuthentication'), 'managed-identity'), createArray(createObject('name', 'CATALOG_DATABASE_JDBC_AUTH_PARAMETER', 'value', '&authenticationPluginClassName=com.azure.identity.extensions.jdbc.postgresql.AzurePostgresqlAuthenticationPlugin')), createArray(createObject('name', 'CATALOG_DATABASE_PASSWORD', 'secretRef', 'database-application-password')))), createArray()), variables('blobEnvironment'))]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/readyz",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 3
+                }
+              ],
+              "volumeMounts": "[if(not(variables('isBlob')), createArray(createObject('mountPath', '/app/images', 'volumeName', 'catalog-images')), createArray())]"
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3,
+            "rules": [
+              {
+                "name": "http",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "50"
+                  }
+                }
+              }
+            ]
+          },
+          "volumes": "[if(not(variables('isBlob')), createArray(createObject('name', 'catalog-images', 'storageName', 'catalog-images', 'storageType', 'AzureFile')), createArray())]"
+        }
+      },
+      "dependsOn": [
+        "applicationInsights",
+        "blobContainer",
+        "containerAppsEnvironment",
+        "environmentStorage",
+        "postgresql",
+        "registry",
+        "sql",
+        "storage",
+        "workloadIdentity"
+      ]
+    },
+    "containerAppsDns": {
+      "condition": "[parameters('containerAppsEnvironmentInternal')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('container-apps-dns-{0}', uniqueString(resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentDefaultDomain": {
+            "value": "[reference('containerAppsEnvironment').defaultDomain]"
+          },
+          "environmentStaticIp": {
+            "value": "[reference('containerAppsEnvironment').staticIp]"
+          },
+          "virtualNetworkResourceId": {
+            "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+          },
+          "migrationSourceVirtualNetworkResourceId": {
+            "value": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+          },
+          "migrationDnsLinkName": {
+            "value": "[variables('migrationDnsLinkName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.1-experimental",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
+            "_EXPERIMENTAL_FEATURES_ENABLED": [
+              "Asserts"
+            ],
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "8245961940962285488"
+            }
+          },
+          "parameters": {
+            "environmentDefaultDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "The environment defaultDomain, e.g. bluetree-675945f1.swedencentral.azurecontainerapps.io."
+              }
+            },
+            "environmentStaticIp": {
+              "type": "string",
+              "metadata": {
+                "description": "The private static ingress IP of the internal Container Apps environment."
+              }
+            },
+            "virtualNetworkResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The environment VNet that hosts the container apps infrastructure subnet."
+              }
+            },
+            "migrationSourceVirtualNetworkResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The migration-source VNet holding the participant VMs."
+              }
+            },
+            "migrationDnsLinkName": {
+              "type": "string",
+              "metadata": {
+                "description": "Deterministic link name for the migration-source VNet."
+              }
+            }
+          },
+          "resources": {
+            "zone": {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "[parameters('environmentDefaultDomain')]",
+              "location": "global"
+            },
+            "environmentLink": {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), 'container-apps-vnet')]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[parameters('virtualNetworkResourceId')]"
+                }
+              },
+              "dependsOn": [
+                "zone"
+              ]
+            },
+            "migrationSourceLink": {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), parameters('migrationDnsLinkName'))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+                }
+              },
+              "dependsOn": [
+                "zone"
+              ]
+            },
+            "wildcard": {
+              "type": "Microsoft.Network/privateDnsZones/A",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), '*')]",
+              "properties": {
+                "ttl": 3600,
+                "aRecords": [
+                  {
+                    "ipv4Address": "[parameters('environmentStaticIp')]"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "zone"
+              ]
+            }
+          },
+          "outputs": {
+            "privateDnsZoneResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/privateDnsZones', parameters('environmentDefaultDomain'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "containerAppsEnvironment",
+        "virtualNetwork"
+      ]
+    },
+    "sql": {
+      "condition": "[not(variables('isJava'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "sql",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "serverName": {
+            "value": "[variables('sqlServerName')]"
+          },
+          "databaseName": {
+            "value": "[variables('databaseName')]"
+          },
+          "facilitatorPrincipalName": {
+            "value": "[parameters('facilitatorPrincipalName')]"
+          },
+          "facilitatorPrincipalObjectId": {
+            "value": "[parameters('facilitatorPrincipalObjectId')]"
+          },
+          "workloadIdentityName": {
+            "value": "[variables('identityName')]"
+          },
+          "workloadIdentityPrincipalId": {
+            "value": "[reference('workloadIdentity').principalId]"
+          },
+          "dataSubnetResourceId": {
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), 'private-endpoints')]"
+          },
+          "privateDnsZoneResourceId": {
+            "value": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}', environment().suffixes.sqlServerHostname))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.1-experimental",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
+            "_EXPERIMENTAL_FEATURES_ENABLED": [
+              "Asserts"
+            ],
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "2649742858088584148"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            },
+            "facilitatorPrincipalName": {
+              "type": "string"
+            },
+            "facilitatorPrincipalObjectId": {
+              "type": "string"
+            },
+            "workloadIdentityName": {
+              "type": "string"
+            },
+            "workloadIdentityPrincipalId": {
+              "type": "string"
+            },
+            "dataSubnetResourceId": {
+              "type": "string"
+            },
+            "privateDnsZoneResourceId": {
+              "type": "string"
+            }
+          },
+          "resources": {
+            "server": {
+              "type": "Microsoft.Sql/servers",
+              "apiVersion": "2023-08-01-preview",
+              "name": "[parameters('serverName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "administrators": {
+                  "administratorType": "ActiveDirectory",
+                  "principalType": "User",
+                  "login": "[parameters('facilitatorPrincipalName')]",
+                  "sid": "[parameters('facilitatorPrincipalObjectId')]",
+                  "tenantId": "[tenant().tenantId]",
+                  "azureADOnlyAuthentication": true
+                },
+                "minimalTlsVersion": "1.2",
+                "publicNetworkAccess": "Disabled",
+                "restrictOutboundNetworkAccess": "Disabled"
+              }
+            },
+            "database": {
+              "type": "Microsoft.Sql/servers/databases",
+              "apiVersion": "2023-08-01-preview",
+              "name": "[format('{0}/{1}', parameters('serverName'), parameters('databaseName'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "GP_S_Gen5",
+                "tier": "GeneralPurpose",
+                "family": "Gen5",
+                "capacity": 1
+              },
+              "properties": {
+                "autoPauseDelay": 60,
+                "minCapacity": "[json('0.5')]",
+                "readScale": "Disabled",
+                "zoneRedundant": false
+              },
+              "dependsOn": [
+                "server"
+              ]
+            },
+            "privateEndpoint": {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pe-{0}', parameters('serverName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('dataSubnetResourceId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "sql",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Sql/servers', parameters('serverName'))]",
+                      "groupIds": [
+                        "sqlServer"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "server"
+              ]
+            },
+            "privateDnsZoneGroup": {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('pe-{0}', parameters('serverName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "sql",
+                    "properties": {
+                      "privateDnsZoneId": "[parameters('privateDnsZoneResourceId')]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "privateEndpoint"
+              ]
+            }
+          },
+          "outputs": {
+            "databaseResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Sql/servers/databases', parameters('serverName'), parameters('databaseName'))]"
+            },
+            "serverHost": {
+              "type": "string",
+              "value": "[format('{0}.{1}', parameters('serverName'), environment().suffixes.sqlServerHostname)]"
+            },
+            "databaseName": {
+              "type": "string",
+              "value": "[parameters('databaseName')]"
+            },
+            "authentication": {
+              "type": "string",
+              "value": "managed-identity"
+            },
+            "localAdministratorPrincipal": {
+              "type": "object",
+              "nullable": true,
+              "value": null
+            },
+            "entraAdministratorPrincipal": {
+              "type": "object",
+              "nullable": true,
+              "value": null
+            },
+            "applicationPrincipal": {
+              "type": "object",
+              "value": {
+                "name": "[parameters('workloadIdentityName')]",
+                "kind": "managed-identity",
+                "principalId": "[parameters('workloadIdentityPrincipalId')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "sqlPrivateDnsZone",
+        "virtualNetwork",
+        "workloadIdentity"
+      ]
+    },
+    "postgresql": {
+      "condition": "[variables('isJava')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "postgresql",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "serverName": {
+            "value": "[variables('postgresqlServerName')]"
+          },
+          "databaseName": {
+            "value": "[variables('databaseName')]"
+          },
+          "authentication": {
+            "value": "[parameters('postgresqlAuthentication')]"
+          },
+          "administratorName": {
+            "value": "[parameters('postgresqlAdministratorName')]"
+          },
+          "administratorPassword": {
+            "value": "[parameters('postgresqlAdministratorPassword')]"
+          },
+          "applicationName": {
+            "value": "[parameters('postgresqlApplicationName')]"
+          },
+          "facilitatorPrincipalName": {
+            "value": "[parameters('facilitatorPrincipalName')]"
+          },
+          "facilitatorPrincipalObjectId": {
+            "value": "[parameters('facilitatorPrincipalObjectId')]"
+          },
+          "workloadIdentityName": {
+            "value": "[variables('identityName')]"
+          },
+          "workloadIdentityPrincipalId": {
+            "value": "[reference('workloadIdentity').principalId]"
+          },
+          "delegatedSubnetResourceId": {
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), 'postgresql')]"
+          },
+          "privateDnsZoneResourceId": {
+            "value": "[resourceId('Microsoft.Network/privateDnsZones', 'private.postgres.database.azure.com')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.1-experimental",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
+            "_EXPERIMENTAL_FEATURES_ENABLED": [
+              "Asserts"
+            ],
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "2791411749539230038"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            },
+            "authentication": {
+              "type": "string"
+            },
+            "administratorName": {
+              "type": "string"
+            },
+            "administratorPassword": {
+              "type": "securestring"
+            },
+            "applicationName": {
+              "type": "string"
+            },
+            "facilitatorPrincipalName": {
+              "type": "string"
+            },
+            "facilitatorPrincipalObjectId": {
+              "type": "string"
+            },
+            "workloadIdentityName": {
+              "type": "string"
+            },
+            "workloadIdentityPrincipalId": {
+              "type": "string"
+            },
+            "delegatedSubnetResourceId": {
+              "type": "string"
+            },
+            "privateDnsZoneResourceId": {
+              "type": "string"
+            }
+          },
+          "resources": {
+            "server": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2024-08-01",
+              "name": "[parameters('serverName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_B1ms",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "version": "18",
+                "administratorLogin": "[parameters('administratorName')]",
+                "administratorLoginPassword": "[parameters('administratorPassword')]",
+                "authConfig": {
+                  "activeDirectoryAuth": "Enabled",
+                  "passwordAuth": "Enabled",
+                  "tenantId": "[tenant().tenantId]"
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "highAvailability": {
+                  "mode": "Disabled"
+                },
+                "network": {
+                  "delegatedSubnetResourceId": "[parameters('delegatedSubnetResourceId')]",
+                  "privateDnsZoneArmResourceId": "[parameters('privateDnsZoneResourceId')]",
+                  "publicNetworkAccess": "Disabled"
+                },
+                "storage": {
+                  "storageSizeGB": 32,
+                  "autoGrow": "Enabled"
+                }
+              }
+            },
+            "entraAdministrator": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', parameters('serverName'), parameters('facilitatorPrincipalObjectId'))]",
+              "properties": {
+                "principalName": "[parameters('facilitatorPrincipalName')]",
+                "principalType": "User",
+                "tenantId": "[tenant().tenantId]"
+              },
+              "dependsOn": [
+                "server"
+              ]
+            },
+            "database": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', parameters('serverName'), parameters('databaseName'))]",
+              "properties": {
+                "charset": "UTF8",
+                "collation": "en_US.utf8"
+              },
+              "dependsOn": [
+                "server"
+              ]
+            }
+          },
+          "outputs": {
+            "databaseResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('serverName'), parameters('databaseName'))]"
+            },
+            "serverHost": {
+              "type": "string",
+              "value": "[format('{0}.postgres.database.azure.com', parameters('serverName'))]"
+            },
+            "databaseName": {
+              "type": "string",
+              "value": "[parameters('databaseName')]"
+            },
+            "authentication": {
+              "type": "string",
+              "value": "[parameters('authentication')]"
+            },
+            "localAdministratorPrincipal": {
+              "type": "object",
+              "value": {
+                "name": "[parameters('administratorName')]",
+                "authentication": "password"
+              }
+            },
+            "entraAdministratorPrincipal": {
+              "type": "object",
+              "value": {
+                "name": "[parameters('facilitatorPrincipalName')]",
+                "objectId": "[parameters('facilitatorPrincipalObjectId')]",
+                "principalType": "user"
+              }
+            },
+            "applicationPrincipal": {
+              "type": "object",
+              "value": "[if(equals(parameters('authentication'), 'managed-identity'), createObject('name', parameters('workloadIdentityName'), 'kind', 'managed-identity', 'principalId', parameters('workloadIdentityPrincipalId')), createObject('name', parameters('applicationName'), 'kind', 'database-role', 'principalId', null()))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "postgresqlPrivateDnsZone",
+        "virtualNetwork",
+        "workloadIdentity"
+      ]
+    }
+  },
+  "outputs": {
+    "targetOutput": {
+      "type": "object",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "deploymentStage": "[parameters('deploymentStage')]",
+        "applicationRevisionRole": "[if(variables('isApplication'), parameters('applicationRevisionRole'), null())]",
+        "sourceCommit": "[parameters('sourceCommit')]",
+        "stack": "[parameters('stack')]",
+        "location": "[parameters('location')]",
+        "resourceGroup": {
+          "name": "[resourceGroup().name]",
+          "resourceId": "[resourceGroup().id]"
+        },
+        "network": {
+          "virtualNetworkResourceId": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
+          "migrationSourceVirtualNetworkResourceId": "[parameters('migrationSourceVirtualNetworkResourceId')]",
+          "migrationSourceVmResourceId": "[parameters('migrationSourceVmResourceId')]",
+          "migrationSourceToTargetPeeringResourceId": "[format('{0}/virtualNetworkPeerings/{1}', parameters('migrationSourceVirtualNetworkResourceId'), variables('sourceToTargetPeeringName'))]",
+          "migrationTargetToSourcePeeringResourceId": "[resourceId('Microsoft.Network/virtualNetworks/virtualNetworkPeerings', variables('virtualNetworkName'), variables('targetToSourcePeeringName'))]",
+          "migrationPrivateDnsZoneLinkResourceIds": [
+            "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', if(variables('isBlob'), format('privatelink.blob.{0}', environment().suffixes.storage), format('privatelink.file.{0}', environment().suffixes.storage)), variables('migrationDnsLinkName'))]",
+            "[if(variables('isJava'), resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'private.postgres.database.azure.com', variables('migrationDnsLinkName')), resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', format('privatelink.{0}', environment().suffixes.sqlServerHostname), variables('migrationDnsLinkName')))]"
+          ]
+        },
+        "containerRegistry": {
+          "resourceId": "[resourceId('Microsoft.ContainerRegistry/registries', variables('registryName'))]",
+          "loginServer": "[reference('registry').loginServer]"
+        },
+        "workloadIdentity": {
+          "resourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+          "clientId": "[reference('workloadIdentity').clientId]",
+          "principalId": "[reference('workloadIdentity').principalId]"
+        },
+        "containerAppsEnvironmentResourceId": "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+        "containerAppsEnvironmentDefaultDomain": "[reference('containerAppsEnvironment').defaultDomain]",
+        "database": "[if(variables('isJava'), createObject('resourceId', reference('postgresql').outputs.databaseResourceId.value, 'family', 'postgresql-flexible', 'server', reference('postgresql').outputs.serverHost.value, 'database', reference('postgresql').outputs.databaseName.value, 'authentication', reference('postgresql').outputs.authentication.value, 'localAdministratorPrincipal', reference('postgresql').outputs.localAdministratorPrincipal.value, 'entraAdministratorPrincipal', reference('postgresql').outputs.entraAdministratorPrincipal.value, 'applicationPrincipal', reference('postgresql').outputs.applicationPrincipal.value), createObject('resourceId', reference('sql').outputs.databaseResourceId.value, 'family', 'azure-sql', 'server', reference('sql').outputs.serverHost.value, 'database', reference('sql').outputs.databaseName.value, 'authentication', reference('sql').outputs.authentication.value, 'localAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'localAdministratorPrincipal'), 'value'), 'entraAdministratorPrincipal', tryGet(tryGet(reference('sql').outputs, 'entraAdministratorPrincipal'), 'value'), 'applicationPrincipal', reference('sql').outputs.applicationPrincipal.value))]",
+        "images": {
+          "resourceId": "[variables('imageResourceId')]",
+          "provider": "[parameters('imageProvider')]",
+          "location": "[variables('imageLocationName')]",
+          "authentication": "[if(variables('isBlob'), 'managed-identity', 'aca-volume-secret')]"
+        },
+        "observability": {
+          "applicationInsightsResourceId": "[resourceId('Microsoft.Insights/components', variables('insightsName'))]",
+          "logAnalyticsWorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+        },
+        "containerImage": "[if(variables('isApplication'), createObject('repository', parameters('imageRepository'), 'tag', parameters('sourceCommit'), 'digest', parameters('imageDigest')), null())]",
+        "application": "[if(variables('isApplication'), createObject('resourceId', resourceId('Microsoft.App/containerApps', variables('containerAppName')), 'url', if(variables('isApplication'), format('https://{0}.{1}', variables('containerAppName'), reference('containerAppsEnvironment').defaultDomain), ''), 'healthUrl', format('{0}/healthz', if(variables('isApplication'), format('https://{0}.{1}', variables('containerAppName'), reference('containerAppsEnvironment').defaultDomain), '')), 'readinessUrl', format('{0}/readyz', if(variables('isApplication'), format('https://{0}.{1}', variables('containerAppName'), reference('containerAppsEnvironment').defaultDomain), '')), 'containerAppName', variables('containerAppName'), 'revisionName', variables('revisionName')), null())]"
+      }
+    },
+    "virtualNetworkResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+    }
+  }
+}

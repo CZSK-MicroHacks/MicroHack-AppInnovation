@@ -94,7 +94,7 @@
     "migration": {
       "table": "__EFMigrationsHistory",
       "orderedHistory": [
-        "202608180001_ContractBaseline|8.0.22"
+        "202608180001_ContractBaseline"
       ]
     },
     "tls": {

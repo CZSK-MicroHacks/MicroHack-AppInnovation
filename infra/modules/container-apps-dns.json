@@ -1,0 +1,108 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.1-experimental",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
+    "_EXPERIMENTAL_FEATURES_ENABLED": [
+      "Asserts"
+    ],
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "8245961940962285488"
+    }
+  },
+  "parameters": {
+    "environmentDefaultDomain": {
+      "type": "string",
+      "metadata": {
+        "description": "The environment defaultDomain, e.g. bluetree-675945f1.swedencentral.azurecontainerapps.io."
+      }
+    },
+    "environmentStaticIp": {
+      "type": "string",
+      "metadata": {
+        "description": "The private static ingress IP of the internal Container Apps environment."
+      }
+    },
+    "virtualNetworkResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "The environment VNet that hosts the container apps infrastructure subnet."
+      }
+    },
+    "migrationSourceVirtualNetworkResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "The migration-source VNet holding the participant VMs."
+      }
+    },
+    "migrationDnsLinkName": {
+      "type": "string",
+      "metadata": {
+        "description": "Deterministic link name for the migration-source VNet."
+      }
+    }
+  },
+  "resources": {
+    "zone": {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[parameters('environmentDefaultDomain')]",
+      "location": "global"
+    },
+    "environmentLink": {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), 'container-apps-vnet')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('virtualNetworkResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "zone"
+      ]
+    },
+    "migrationSourceLink": {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), parameters('migrationDnsLinkName'))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('migrationSourceVirtualNetworkResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "zone"
+      ]
+    },
+    "wildcard": {
+      "type": "Microsoft.Network/privateDnsZones/A",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', parameters('environmentDefaultDomain'), '*')]",
+      "properties": {
+        "ttl": 3600,
+        "aRecords": [
+          {
+            "ipv4Address": "[parameters('environmentStaticIp')]"
+          }
+        ]
+      },
+      "dependsOn": [
+        "zone"
+      ]
+    }
+  },
+  "outputs": {
+    "privateDnsZoneResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateDnsZones', parameters('environmentDefaultDomain'))]"
+    }
+  }
+}

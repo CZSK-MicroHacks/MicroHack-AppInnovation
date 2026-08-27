@@ -74,7 +74,7 @@
   },
   "databaseVerification": {
     "migrationHistory": [
-      "202608180001_ContractBaseline|8.0.22"
+      "202608180001_ContractBaseline"
     ],
     "schemaVerified": true,
     "constraintsVerified": true,

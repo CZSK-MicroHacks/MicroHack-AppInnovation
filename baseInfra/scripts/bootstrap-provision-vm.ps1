@@ -55,6 +55,8 @@ function Remove-BootstrapFile {
     if (-not (Test-Path -LiteralPath $Path)) {
         return
     }
+    # The guest agent sets ReadOnly on CustomData.bin; Windows enforces it ahead of the DACL.
+    Set-ItemProperty -LiteralPath $Path -Name IsReadOnly -Value $false
     $Length = (Get-Item -LiteralPath $Path).Length
     if ($Length -gt 0) {
         [IO.File]::WriteAllBytes($Path, (New-Object byte[] $Length))

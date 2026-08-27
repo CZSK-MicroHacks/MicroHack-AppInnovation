@@ -110,8 +110,17 @@ resource "azapi_resource" "vm_setup" {
       type                    = "CustomScriptExtension"
       typeHandlerVersion      = "1.10"
       autoUpgradeMinorVersion = false
-      forceUpdateTag          = "${local.provisioner_sha256}-${var.source_commit}"
-      protectedSettings = {
+      # Azure caps forceUpdateTag at 50 characters. The provisioner hash (64 hex) and the
+      # source commit (40 hex) together are 105, so re-hash the pair instead of concatenating
+      # it. Any change to either input still produces a different tag, which is the only
+      # property the extension needs in order to re-run.
+      forceUpdateTag = substr(sha256("${local.provisioner_sha256}-${var.source_commit}"), 0, 32)
+      # The command carries only the gzipped bootstrapper, the stack name, the source commit
+      # and the archive digest - all public. Every secret travels in osProfile.customData
+      # instead. Keeping it in `settings` rather than `protectedSettings` is what makes a
+      # failed bootstrap legible: protected commands are reported as `SecureCommand_0` with an
+      # empty formattedMessage, so the extension looks identical whether it worked or threw.
+      settings = {
         commandToExecute = local.provisioner_command_to_execute[each.key]
       }
     }

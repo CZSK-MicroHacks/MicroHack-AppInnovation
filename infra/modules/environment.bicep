@@ -25,6 +25,9 @@ param postgresqlApplicationPassword string
 param performanceApiKey string
 param location string
 
+@description('Set true when the subscription blocks public IP creation (for example the Microsoft.Network/AllowBringYourOwnPublicIpAddress feature is not registered). An internal Container Apps environment is fronted by an internal load balancer and never allocates a public IP, so the catalog is then reachable only from inside the peered virtual network. Two consequences follow and neither is enforced here. Outbound access still has to work, because the environment pulls its image from the registry over the internet: the container-apps subnet carries no NAT gateway, firewall or route table, so it depends on the platform default outbound access that Azure applies while defaultOutboundAccess is unset. Set defaultOutboundAccess to false on that subnet, or attach a route table that forces tunnelling, and the first revision fails with ContainerStartFailure roughly ten minutes into a deployment that has already reported every other resource as succeeded. Inbound access moves inside the virtual network, so smoke tests, load tests, synthetic probes and incident-recovery checks all have to originate from a peered host such as the source virtual machine; a GitHub-hosted runner or an operator laptop cannot reach the application at all.')
+param containerAppsEnvironmentInternal bool = false
+
 var isApplication = deploymentStage == 'application'
 var isJava = stack == 'java-postgresql'
 var isBlob = imageProvider == 'azure-blob'
@@ -420,9 +423,25 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-10-02-
     }
     vnetConfiguration: {
       infrastructureSubnetId: containerAppsSubnet.id
-      internal: false
+      internal: containerAppsEnvironmentInternal
     }
     zoneRedundant: false
+  }
+}
+
+// An internal Container Apps environment publishes its ingress only on the private
+// static IP, and Azure does not create a resolvable DNS zone for it. Without this
+// module the application URL this template emits resolves from nowhere: not from the
+// participant laptop (the environment is internal) and not from the migration-source
+// VMs (peering carries packets, not name resolution).
+module containerAppsDns 'container-apps-dns.bicep' = if (containerAppsEnvironmentInternal) {
+  name: 'container-apps-dns-${uniqueString(containerAppsEnvironment.id)}'
+  params: {
+    environmentDefaultDomain: containerAppsEnvironment.properties.defaultDomain
+    environmentStaticIp: containerAppsEnvironment.properties.staticIp
+    virtualNetworkResourceId: virtualNetwork.id
+    migrationSourceVirtualNetworkResourceId: migrationSourceVirtualNetworkResourceId
+    migrationDnsLinkName: migrationDnsLinkName
   }
 }
 

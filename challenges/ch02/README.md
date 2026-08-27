@@ -64,7 +64,7 @@ PowerShell prints an empty line.
   | Environment variable | Where the value comes from |
   | --- | --- |
   | `LOAD_TEST_RESOURCE_ID` | The `loadTestResourceId` output of the `infra/perf-testing.bicep` deployment — the **Azure Load Testing** resource (`Microsoft.LoadTestService/loadTests`) |
-  | `PERFTEST_API_KEY_SECRET_URI` | `<keyVaultUri>secrets/PERFTEST_API_KEY` — the vault comes from the same deployment, and the facilitator sets the secret **value** once with `az keyvault secret set` |
+  | `PERFTEST_API_KEY_SECRET_URI` | `<keyVaultUri>secrets/PERFTEST-API-KEY` — the vault comes from the same deployment, and the facilitator sets the secret **value** once with `az keyvault secret set`. The secret name uses hyphens because Key Vault rejects underscores in object names; the environment variable it feeds is still `PERFTEST_API_KEY` |
 
   The template also grants the workflow identity `Load Test Contributor` on the load test
   and `Key Vault Secrets User` on the vault, and grants the load test's own managed
@@ -128,7 +128,7 @@ trying to demonstrate — it means Azure reacted too late to have absorbed the s
 Read the stack, revision, URLs, and database resource ID out of the validated handoff —
 never out of a portal search. Export `LOAD_TEST_RESOURCE_ID` and
 `PERFTEST_API_KEY_SECRET_URI` from the `infra/perf-testing.bicep` deployment outputs
-(`loadTestResourceId`, and `<keyVaultUri>secrets/PERFTEST_API_KEY`).
+(`loadTestResourceId`, and `<keyVaultUri>secrets/PERFTEST-API-KEY`).
 
 The same procedure covers all six modernization outcomes; only the database signal
 differs:
@@ -291,7 +291,7 @@ Every command, with its fail-closed assertions, is in
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `az load` says the resource does not exist, or `PERFTEST_API_KEY_SECRET_URI` is unset | `infra/perf-testing.bicep` has not been deployed, or the `PERFTEST_API_KEY` secret value was never set in the vault it creates | Deploy the template and set the secret — see [infra/README.md](../../infra/README.md). Do not improvise a substitute resource |
+| `az load` says the resource does not exist, or `PERFTEST_API_KEY_SECRET_URI` is unset | `infra/perf-testing.bicep` has not been deployed, or the `PERFTEST-API-KEY` secret value was never set in the vault it creates | Deploy the template and set the secret — see [infra/README.md](../../infra/README.md). Do not improvise a substitute resource |
 | The run finishes with a nonzero error count | The sampler got a 3xx or a 4xx — usually a missing or wrong `x-api-key`, or a URL that redirects | Confirm the Key Vault secret holds the catalog's performance-test key and that the Load Testing resource's identity can read it. Redirects are intentionally not followed |
 | Replicas never exceed one | The app absorbed 40 users below the `concurrentRequests` `50` threshold, or you filtered on the wrong revision | Check that the `revisionName` filter matches the handoff revision exactly, and confirm the run really executed against your host |
 | Replicas rise only after `LOAD_END` | Metric lag, or the load window was taken from your polling clock instead of the engine timestamps | Use `executionStartDateTime`/`executionEndDateTime` from the run response and re-pull the metric |

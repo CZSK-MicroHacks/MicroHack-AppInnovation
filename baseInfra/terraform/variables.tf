@@ -360,3 +360,16 @@ EOT
     error_message = "facilitator_principal_object_id must be a GUID, for example 00000000-0000-0000-0000-000000000000."
   }
 }
+
+variable "enable_public_ip_resources" {
+  type        = bool
+  default     = true
+  description = <<EOT
+Provision public IP addresses and the resources that depend on them (Azure Bastion and the
+NAT Gateway) in every participant environment.
+
+Keep the default `true`. Set to `false` only as a documented deviation when the target
+subscription is governed such that public IP creation is blocked outright. See the module
+variable of the same name in modules/user_environment for the consequences.
+EOT
+}

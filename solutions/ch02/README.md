@@ -12,7 +12,7 @@ never builds evidence on top of a silent failure.
 resource-group-scope template that must be deployed before a participant starts: an
 Azure Load Testing resource (`LOAD_TEST_RESOURCE_ID`, from the `loadTestResourceId`
 output) and an RBAC-authorized Key Vault holding the catalog performance-test API key
-(`PERFTEST_API_KEY_SECRET_URI`, `<keyVaultUri>secrets/PERFTEST_API_KEY`). Deploy it after
+(`PERFTEST_API_KEY_SECRET_URI`, `<keyVaultUri>secrets/PERFTEST-API-KEY`). Deploy it after
 `infra/github-cicd.bicep`, passing that template's `identityPrincipalId` output as
 `workflowIdentityPrincipalId`. The template creates the vault but deliberately not the
 secret **value** — set it once with `az keyvault secret set` using an identity holding
@@ -83,12 +83,12 @@ PERF_OUTPUTS=$(az deployment group show \
   --output json)
 
 export LOAD_TEST_RESOURCE_ID=$(jq -er '.loadTestResourceId.value' <<<"$PERF_OUTPUTS")
-export PERFTEST_API_KEY_SECRET_URI="$(jq -er '.keyVaultUri.value' <<<"$PERF_OUTPUTS")secrets/PERFTEST_API_KEY"
+export PERFTEST_API_KEY_SECRET_URI="$(jq -er '.keyVaultUri.value' <<<"$PERF_OUTPUTS")secrets/PERFTEST-API-KEY"
 ```
 
 The `keyVaultUri` output already ends in `/`, so the concatenation yields a valid secret
 identifier. If `az keyvault secret show --vault-name "$(jq -er '.keyVaultName.value'
-<<<"$PERF_OUTPUTS")" --name PERFTEST_API_KEY` returns nothing, the one-time
+<<<"$PERF_OUTPUTS")" --name PERFTEST-API-KEY` returns nothing, the one-time
 `az keyvault secret set` step has not been run yet.
 
 ```bash
@@ -511,8 +511,8 @@ changed raw data, or changed assets fail closed.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `LOAD_TEST_RESOURCE_ID` or `PERFTEST_API_KEY_SECRET_URI` is unset, or `az resource show` cannot find the resource | `infra/perf-testing.bicep` has not been deployed to this resource group | Deploy it and set the `PERFTEST_API_KEY` secret value, then re-run step 1. See [infra/README.md](../../infra/README.md) |
-| `az load test create --secret` cannot resolve the secret | The load test's system-assigned identity lacks `Key Vault Secrets User`, or the secret value was never set | Redeploy `infra/perf-testing.bicep` (it creates that role assignment) and confirm `az keyvault secret show --name PERFTEST_API_KEY` returns a value |
+| `LOAD_TEST_RESOURCE_ID` or `PERFTEST_API_KEY_SECRET_URI` is unset, or `az resource show` cannot find the resource | `infra/perf-testing.bicep` has not been deployed to this resource group | Deploy it and set the `PERFTEST-API-KEY` secret value, then re-run step 1. See [infra/README.md](../../infra/README.md) |
+| `az load test create --secret` cannot resolve the secret | The load test's system-assigned identity lacks `Key Vault Secrets User`, or the secret value was never set | Redeploy `infra/perf-testing.bicep` (it creates that role assignment) and confirm `az keyvault secret show --name PERFTEST-API-KEY` returns a value |
 | The run ends with `errorCount` above zero | The sampler received a 3xx or 4xx — usually a wrong or unreadable `x-api-key` | Confirm the Key Vault secret holds the catalog performance-test key and the Load Testing identity can read it. Redirects are intentionally not followed, so a 3xx fails the `200` assertion |
 | The replica jq assertion fails on time-series length | The metric query was issued without the `revisionName` filter, or against the wrong resource | Re-issue with `--filter "revisionName eq '$APP_REVISION'"` against `APP_RESOURCE_ID` |
 | Replicas never return to one inside 900 seconds | The recovery poll started before the engine finished deprovisioning, or traffic is still arriving | Confirm the run is `DONE` and nothing else is calling the app, then re-run the recovery loop |
