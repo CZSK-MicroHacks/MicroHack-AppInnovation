@@ -65,7 +65,110 @@ undocumented. That inversion is the single most valuable observation from this r
 
 ## Defects that produce wrong-but-plausible results
 
-Ranked by how easily an attendee ships them.
+Ranked by how easily an attendee ships them. (Finding U was written last and outranks
+finding 1; the numbering below is left as originally recorded.)
+
+### U. Telemetry evidence has no provenance binding, so the entire artifact can be hand-authored
+
+**Severity: highest in the chapter. This one does not merely permit fabrication — it
+rewards it.**
+
+Every other fabrication surface in this material is a *shortcut*: the honest path and the
+dishonest path both work, and the dishonest one is faster. This one inverts that. The
+honest path is hard, undocumented, and unsupported by any tooling; the dishonest path is
+straightforward and reliably passes. An attendee who fabricates finishes the chapter. An
+attendee who does not, very likely does not finish.
+
+**What the validator demands.** `catalog_acceptance/handoff.py:234-325` requires four
+normalized result files whose contents satisfy, in aggregate:
+
+- exact set equality of signal names against `behavior-contract.json` — 1 resource
+  signal, 6 trace signals, 5 metric signals, 8 log signals, with no extras and no
+  duplicates (`:270`);
+- for every signal, an `observedAttributes` array that is a **superset** of that signal's
+  frozen attribute list (`:281-286`);
+- exact `unit` strings per metric — `s`, `s`, `{record}`, `s`, `s` (`:287-292`);
+- at least one `catalog.import.records` measurement carrying
+  `catalog.import.outcome == "rejected"` whose value is a **positive, finite, integral**
+  number (`:293-309`);
+- and a route probe — `http.request.method: GET`, `http.route: /figure/{id}`,
+  `http.response.status_code: 200` — present independently in **three** of the four files,
+  under a different key in each: `observations` for traces, `measurements` for metrics,
+  `observations` again for logs (`:310-325`).
+
+None of that is written down anywhere an attendee reads. It is discoverable only by
+reading the validator.
+
+**What the material provides to get there.** The chapter brief says "collect runtime,
+acceptance, and telemetry evidence" (`challenges/ch01/README.md:286`). The reference
+solution — the fallback for someone already behind — gives it three sentences
+(`solutions/ch01-copilot-modernization/dotnet/README.md:493-499`):
+
+> Exercise normal, import, performance, and controlled failure paths. Query Azure Monitor
+> and write normalized nonempty results to `evidence/telemetry/*.json`. Build
+> `evidence/telemetry-report.json` exactly from
+> `workshop/contracts/telemetry-evidence.schema.json`.
+
+No KQL. No worked example of a single row. No description of the normalization. And
+**no tool.** `catalog-migrate` exposes `sql export|import`, `postgresql export|import`,
+`images copy`, `verify`, and `render-handoff` — there is no `collect-telemetry`, and
+nothing anywhere converts a Log Analytics result into the required shape. The attendee is
+asked to hand-transcribe roughly 20 normalized signal rows, with exact attribute sets and
+units, from queries they must also invent.
+
+**Why fabrication passes.** `telemetry-query-result.schema.json` requires exactly
+`schemaVersion`, `queryId`, and `rows`. It carries **no timestamp, no workspace ID, no
+Application Insights resource ID, no operation or correlation ID, and no ingestion
+metadata.** The `query` field in the report is validated as `minLength: 10` — any string
+of eleven characters satisfies it. Nothing in the bundle records *which* workspace was
+queried, *when*, or *whether a query was run at all*.
+
+So the shape is fully specified and the provenance is not specified whatsoever. Both
+inputs needed to synthesize a passing bundle — `telemetry-evidence.example.json` and
+`behavior-contract.json` — are **checked into the repository the attendee already has
+open**. Producing convincing, complete, entirely fictional telemetry evidence is perhaps
+twenty minutes of careful copying, requires no Azure access, and is indistinguishable
+from the real thing in the delivered artifact.
+
+**Why this compounds with F-74 rather than merely resembling it.** F-74 tells the
+attendee, correctly, that four signals cannot appear unless they deliberately break their
+own working application. Now published guidance (`docs/TelemetryFaultInjection.md`) makes
+that achievable — but it ends at "confirm all eight signal names are present". The
+remaining work, turning observations into the normalized bundle, is the larger half and is
+still entirely unsupported. An attendee who has just been told that the correct behaviour
+of their application is what is blocking them, and who then finds no tooling for the next
+step, is being led toward the conclusion that the evidence is a formality to be satisfied
+rather than a measurement to be taken.
+
+**Why I can speak to this specifically.** I did the honest version. Reconstructing these
+requirements took reading the validator source, the behavior contract, and two JSON
+schemas, and produced constraints — the `{record}` unit, the positive-integral rejected
+measurement, the `/figure/{id}` probe needed in three files under two different key
+names — that I would not have guessed and that no attendee will guess. Every one of them
+is trivially satisfiable by typing the value in.
+
+**Recommended fixes, in order of value:**
+
+1. **Ship a `catalog-migrate collect-telemetry` command** that runs the queries, resolves
+   the workspace **by name** (see finding on the two-workspace trap), and emits all five
+   files. This removes the fabrication incentive and the transcription burden together,
+   and is the only fix that addresses the real problem: the honest path currently costs
+   more than the dishonest one.
+2. **Bind the evidence to its source.** Require `workspaceId`, `capturedAt` per query, and
+   a time range in the result schema; have the validator check that `capturedAt` falls
+   after the release revision's creation timestamp. This does not make fabrication
+   impossible, but it stops being *accidental* and starts requiring deliberate intent —
+   which is the correct bar.
+3. **Publish the four KQL queries**, as `docs/TelemetryFaultInjection.md` §5 already does
+   for the union query. Half the difficulty here is that the attendee does not know what
+   to ask for.
+
+**Related: an attendee cannot self-check any of this.** Every constraint above surfaces
+only as a `ValueError` from `handoff_cli`, at the very end of the chapter, one at a time.
+There is no `--dry-run`, no schema-only mode, no way to validate a telemetry bundle before
+the handoff gate. The feedback loop is a single boolean arriving after all the work is
+done — which is precisely the condition under which people start editing evidence to
+satisfy validators rather than re-measuring.
 
 ### 1. The injected environment-variable contract is documented nowhere the attendee reads
 
