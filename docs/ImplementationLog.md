@@ -1854,3 +1854,27 @@ second-order defect created by our own fix is still our defect, and this entry c
   track had to exclude it and gets 28/34. No document states which number is expected, so a
   participant cannot tell a real regression from a environment difference. The reference
   Dockerfile also builds on JDK 21 while the baseline pins JDK 17.
+
+## The runtime evidence template landed, but not on the path that needed it
+
+- **The template works, proved rather than assumed.** `runtime-test-evidence.template.json`
+  was exercised for `java-postgresql` on a real build: copy the stack object, replace
+  `sourceCommit`, `artifact` and `command`, and stop. **Three fields edited, zero of the
+  fourteen `tests` entries retyped.** The result passed both gates — schema validation
+  against `runtime-test-evidence.schema.json`, and `_validate_runtime_results`, which parses
+  the native Surefire XML and requires all fourteen identities present and passing. The
+  template is correct and it removes the hand transcription it was meant to remove.
+
+- **It was announced in the documents that describe the work and missed the documents that
+  direct it.** Two of three challenge briefs named the template; **none of the six runbooks
+  did**, and the runbooks are what participants execute. All six still said to create the
+  file "against `runtime-test-evidence.schema.json`" — and a schema constrains values, it
+  does not supply them, so that instruction is precisely the one that produces hand
+  transcription. Following the rewrite runbook as written would have reproduced the original
+  defect on a seventh arm. Swept across all six runbooks upstream once the distinction was
+  named; the rewrite brief also now enumerates the six shared files inline instead of
+  deferring the list to `challenge-paths.json`.
+
+- **Worth recording for sequencing: this artifact needs no Azure.** The runtime report is
+  produced entirely from a local build and test run, so it can be generated and validated
+  before any deployment exists. It was generated here on a no-deploy arm.
