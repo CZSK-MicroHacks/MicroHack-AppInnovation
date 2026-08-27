@@ -10,7 +10,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "13983613848550511266"
+      "templateHash": "6030714187165815718"
     }
   },
   "parameters": {
@@ -526,6 +526,46 @@
       },
       "dependsOn": [
         "fileShare"
+      ]
+    },
+    "migrationSourceVm": {
+      "existing": true,
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2024-07-01",
+      "subscriptionId": "[split(parameters('migrationSourceVmResourceId'), '/')[2]]",
+      "resourceGroup": "[split(parameters('migrationSourceVmResourceId'), '/')[4]]",
+      "name": "[last(split(parameters('migrationSourceVmResourceId'), '/'))]"
+    },
+    "migrationSourceBlobWrite": {
+      "condition": "[variables('isBlob')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('imageLocationName')), parameters('migrationSourceVmResourceId'), variables('blobDataContributorRole'))]",
+      "properties": {
+        "principalId": "[reference('migrationSourceVm', '2024-07-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('blobDataContributorRole')]"
+      },
+      "dependsOn": [
+        "blobContainer",
+        "migrationSourceVm"
+      ]
+    },
+    "migrationSourceFileWrite": {
+      "condition": "[not(variables('isBlob'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('imageLocationName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('imageLocationName')), parameters('migrationSourceVmResourceId'), variables('fileDataPrivilegedContributorRole'))]",
+      "properties": {
+        "principalId": "[reference('migrationSourceVm', '2024-07-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('fileDataPrivilegedContributorRole')]"
+      },
+      "dependsOn": [
+        "fileShare",
+        "migrationSourceVm"
       ]
     },
     "workspace": {

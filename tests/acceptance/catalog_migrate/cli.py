@@ -109,7 +109,11 @@ def _add_target_guard(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target-output", required=True, type=Path)
     parser.add_argument("--target-resource-id", required=True)
     parser.add_argument("--confirm-target-resource-id", required=True)
-    parser.add_argument("--execute", required=True, action="store_true")
+    # Deliberately not required: omitting it validates the target output, the source
+    # commit and the resource-ID confirmation, then stops in guard_target before any
+    # mutation. That gives a rehearsal mode and a specific error instead of argparse's
+    # generic "the following arguments are required".
+    parser.add_argument("--execute", action="store_true")
 
 
 def _add_import(parser: argparse.ArgumentParser) -> None:
