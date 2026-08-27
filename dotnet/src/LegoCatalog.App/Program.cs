@@ -32,7 +32,10 @@ builder.Services.AddSingleton<StartupState>();
 builder.Services.AddSingleton<CatalogDocumentParser>();
 builder.Services.AddScoped<IFigureRepository, FigureRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-builder.Services.AddScoped<IImageStore, LocalImageStore>();
+builder.Services.AddScoped<IImageStore>(
+    provider => runtime.ImageProvider == CatalogImageProvider.AzureBlob
+        ? new AzureBlobImageStore(runtime)
+        : new LocalImageStore(runtime));
 builder.Services.AddScoped<ICatalogDatabaseHealth, CatalogDatabaseHealth>();
 builder.Services.AddScoped<FigureCatalogService>();
 builder.Services.AddScoped<ImportService>();
