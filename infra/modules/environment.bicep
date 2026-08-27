@@ -61,6 +61,13 @@ var migrationSourceVirtualNetworkName = last(split(migrationSourceVirtualNetwork
 var sourceToTargetPeeringName = 'to-${virtualNetworkName}'
 var targetToSourcePeeringName = 'to-${migrationSourceVirtualNetworkName}'
 var migrationDnsLinkName = 'migration-source-${take(uniqueString(migrationSourceVirtualNetworkResourceId), 8)}'
+
+// The blob private DNS zone name is a fixed string, so both stacks deployed
+// into one resource group share the same zone. The link name has to vary with
+// the linked network or the second stack fails with "Virtual network
+// associated with the link cannot be changed". The migration link above
+// already uniquifies for the same reason.
+var stackDnsLinkSuffix = take(uniqueString(virtualNetworkName), 8)
 var acrPullRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var blobDataReaderRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
 var blobDataContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
@@ -152,7 +159,7 @@ resource storagePrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = 
 
 resource storageDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
   parent: storagePrivateDnsZone
-  name: 'storage-vnet'
+  name: 'storage-vnet-${stackDnsLinkSuffix}'
   location: 'global'
   properties: {
     registrationEnabled: false
@@ -176,13 +183,13 @@ resource storageMigrationDnsLink 'Microsoft.Network/privateDnsZones/virtualNetwo
 }
 
 resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = if (!isJava) {
-  name: 'privatelink.${environment().suffixes.sqlServerHostname}'
+  name: 'privatelink${environment().suffixes.sqlServerHostname}'
   location: 'global'
 }
 
 resource sqlDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (!isJava) {
   parent: sqlPrivateDnsZone
-  name: 'sql-vnet'
+  name: 'sql-vnet-${stackDnsLinkSuffix}'
   location: 'global'
   properties: {
     registrationEnabled: false
