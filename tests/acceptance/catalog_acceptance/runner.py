@@ -201,6 +201,15 @@ def _classify_traversal(base_url: object, target: str) -> str:
     contract is preserved here rather than relaxed: ``traversed`` still fails, and
     ``normalized-upstream`` is reported distinctly so a reader can always tell whether the
     application rejected the request or the platform resolved it upstream.
+
+    A body fingerprint is the right discriminator only when the resolved target answers
+    deterministically. Some do not: an authentication rejection commonly carries a
+    correlation id, so two requests for the same path differ in the body and could never
+    compare equal. Instability is therefore *proven* by probing the resolved target twice
+    rather than assumed, and only then does the comparison fall back to status and content
+    type. That fallback cannot mask an escape, because any response carrying image bytes
+    has already been classified ``traversed`` above and a real traversal would answer with
+    the status of the file it served rather than the status of the resolved route.
     """
     observed = _raw_request_probe(base_url, target)
     if observed[0] == 404:
@@ -208,7 +217,14 @@ def _classify_traversal(base_url: object, target: str) -> str:
     if observed[1].startswith("image/"):
         return "traversed"
     resolved = _gateway_resolved_target(target)
-    if resolved != target and observed == _raw_request_probe(base_url, resolved):
+    if resolved == target:
+        return "traversed"
+    first = _raw_request_probe(base_url, resolved)
+    if observed == first:
+        return "normalized-upstream"
+    second = _raw_request_probe(base_url, resolved)
+    body_is_unstable = first[2] != second[2]
+    if body_is_unstable and observed[:2] == first[:2] == second[:2]:
         return "normalized-upstream"
     return "traversed"
 
