@@ -467,7 +467,10 @@ function uv {
   $Present = @($Names | Where-Object { Test-Path "Env:$_" })
   Add-Content -LiteralPath $env:UV_INVOCATION_LOG `
     -Value ("{0}|{1}" -f $Command, ($Present -join ','))
-  if ($env:FAIL_COMMAND -and $Command.Contains($env:FAIL_COMMAND)) {
+  $FailureProbe = @(
+    $args | ForEach-Object { "$_" } | Where-Object { $_ -notmatch '[\\/]' }
+  ) -join ' '
+  if ($env:FAIL_COMMAND -and $FailureProbe.Contains($env:FAIL_COMMAND)) {
     throw 'injected command failure'
   }
   $global:LASTEXITCODE = 0
