@@ -148,6 +148,14 @@ registry is:
 - `evidence/telemetry-report.json`
 - `evidence/rollback-runbook.md`
 
+> **Telemetry evidence has a renderer — do not hand-author it.** Record your Azure
+> Monitor observations into a capture manifest, then run
+> `uv run python -m catalog_acceptance.telemetry_evidence_cli --capture
+> evidence/telemetry-capture.json`. It normalizes all four `evidence/telemetry/*.json`
+> files and the report, supplies each metric `unit` from the behavior contract, stamps
+> `workspaceId`/`capturedAt`/`queryText` provenance, and lists **every** unmet
+> requirement in one run rather than one per handoff attempt.
+
 Preserve all of those plus `evidence/characterization.md`, `evidence/bounded-plan.md`,
 `evidence/review-checklist.md`, and `evidence/decision-log.md`.
 

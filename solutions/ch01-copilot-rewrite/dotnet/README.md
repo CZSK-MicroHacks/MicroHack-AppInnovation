@@ -514,6 +514,24 @@ against the release and write
 `evidence/acceptance-report.json`. Collect real trace, metric, log, and resource
 query results into `evidence/telemetry-report.json`; never synthesize telemetry.
 
+**Do not hand-author the telemetry files.** Record what you observed into a capture
+manifest and let the renderer normalize it:
+
+```powershell
+uv run python -m catalog_acceptance.telemetry_evidence_cli `
+  --capture evidence/telemetry-capture.json `
+  --output evidence/telemetry-report.json
+```
+
+The capture manifest holds `workspaceId`, `capturedAt`, `service`
+(`mh-catalog-dotnet`), `resourceAttributes`, and one entry per query
+(`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
+its `recordCount`, `observedAttributes`, and `measurements` or `observations`. The
+renderer supplies each metric `unit` from the behavior contract, stamps provenance into
+every result file, writes all four `evidence/telemetry/*.json` plus the report, and
+**reports every unmet requirement at once** instead of one per handoff attempt. It will
+not invent a signal you did not capture.
+
 Complete:
 
 - `evidence/decision-log.md` with accepted/rejected design choices and an explicit

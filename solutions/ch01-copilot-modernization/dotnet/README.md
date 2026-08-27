@@ -496,6 +496,24 @@ if ($AcceptanceExit -ne 0) { throw 'full acceptance failed' }
 finally { Pop-Location }
 ```
 
+**Do not hand-author the telemetry files.** Record what you observed into a capture
+manifest and let the renderer normalize it:
+
+```powershell
+uv run python -m catalog_acceptance.telemetry_evidence_cli `
+  --capture evidence/telemetry-capture.json `
+  --output evidence/telemetry-report.json
+```
+
+The capture manifest holds `workspaceId`, `capturedAt`, `service`
+(`mh-catalog-dotnet`), `resourceAttributes`, and one entry per query
+(`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
+its `recordCount`, `observedAttributes`, and `measurements` or `observations`. The
+renderer supplies each metric `unit` from the behavior contract, stamps provenance into
+every result file, writes all four `evidence/telemetry/*.json` plus the report, and
+**reports every unmet requirement at once** instead of one per handoff attempt. It will
+not invent a signal you did not capture.
+
 Exercise normal, import, performance, and controlled failure paths. Query Azure
 Monitor and write normalized nonempty results to
 `evidence/telemetry/resources.json`, `traces.json`, `metrics.json`, and

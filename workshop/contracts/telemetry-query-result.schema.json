@@ -7,7 +7,10 @@
   "required": [
     "schemaVersion",
     "queryId",
-    "rows"
+    "rows",
+    "workspaceId",
+    "capturedAt",
+    "queryText"
   ],
   "properties": {
     "schemaVersion": {

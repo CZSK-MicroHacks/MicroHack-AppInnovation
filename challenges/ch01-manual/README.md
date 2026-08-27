@@ -262,6 +262,14 @@ those interfaces; it does not reinterpret them.
     `evidence/managed-database-separation.json`, `evidence/container-build.json`, and
     `evidence/iac-review.md`.
 
+> **Telemetry evidence has a renderer — do not hand-author it.** Record your Azure
+> Monitor observations into a capture manifest, then run
+> `uv run python -m catalog_acceptance.telemetry_evidence_cli --capture
+> evidence/telemetry-capture.json`. It normalizes all four `evidence/telemetry/*.json`
+> files and the report, supplies each metric `unit` from the behavior contract, stamps
+> `workspaceId`/`capturedAt`/`queryText` provenance, and lists **every** unmet
+> requirement in one run rather than one per handoff attempt.
+
 Keep raw native tests and normalized telemetry query results at the repository-relative
 paths named by their evidence documents. Generated migration archives and deployment
 parameter files are transient protected artifacts, not repository evidence.

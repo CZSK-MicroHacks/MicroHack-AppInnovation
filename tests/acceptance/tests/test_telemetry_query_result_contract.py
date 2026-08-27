@@ -28,6 +28,10 @@ def _minimal_result(query_id: str = "resources") -> dict:
     return {
         "schemaVersion": "1.0.0",
         "queryId": query_id,
+        "workspaceId": "/subscriptions/s/resourceGroups/r/providers/"
+        "Microsoft.OperationalInsights/workspaces/w",
+        "capturedAt": "2026-08-27T22:05:00Z",
+        "queryText": "AppTraces | summarize count() by OperationName",
         "rows": [
             {
                 "signalName": "resource",
@@ -51,25 +55,31 @@ def test_minimal_result_validates() -> None:
 
 
 @pytest.mark.parametrize("field", PROVENANCE_FIELDS)
-def test_provenance_fields_are_expressible(field: str) -> None:
-    """F-89: an attendee who wants to record where evidence came from must be able to.
+def test_provenance_is_required_not_merely_permitted(field: str) -> None:
+    """F-89: evidence must state where it came from.
 
-    Before this fix ``additionalProperties: false`` rejected every provenance key, so
-    the honest attendee had no way to bind the artifact to its source even voluntarily.
+    Before ``9c17c6d`` the schema's ``additionalProperties: false`` *forbade* every
+    provenance key, so an honest attendee could not bind the artifact to its source even
+    voluntarily. Permitting it was only the precondition. Requiring it is what makes a
+    fabricated bundle a deliberate act rather than the default one, and it costs the
+    honest attendee nothing because the renderer populates all three fields.
     """
-    values = {
-        "workspaceId": "/subscriptions/x/resourceGroups/y/providers/"
-        "Microsoft.OperationalInsights/workspaces/z",
-        "capturedAt": "2026-08-27T22:05:00Z",
-        "queryText": "AppTraces | summarize count() by OperationName",
+    document = _minimal_result()
+    del document[field]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(document, _schema())
+
+
+def test_provenance_fields_are_all_required() -> None:
+    """Guard the whole required set so a later edit cannot quietly drop one."""
+    assert set(_schema()["required"]) == {
+        "schemaVersion",
+        "queryId",
+        "rows",
+        "workspaceId",
+        "capturedAt",
+        "queryText",
     }
-    document = _minimal_result() | {field: values[field]}
-    jsonschema.validate(document, _schema())
-
-
-def test_provenance_remains_optional_so_existing_bundles_still_validate() -> None:
-    """The fix is additive: no previously valid artifact may become invalid."""
-    assert set(_schema()["required"]) == {"schemaVersion", "queryId", "rows"}
     jsonschema.validate(_minimal_result(), _schema())
 
 
