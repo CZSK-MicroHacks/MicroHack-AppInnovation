@@ -1499,9 +1499,127 @@ to "claim that can be contradicted".
 
 ---
 
+## Every hand-fix this run required that the material never mentions
+
+Each of these was necessary to make a documented step work. None appears in any runbook,
+README or troubleshooting table. I have separated the ones I found myself from the ones a
+facilitator handed me, because the second group would have blocked me indefinitely without
+out-of-band help — which an attendee does not have.
+
+**Found and fixed by me, on the spot:**
+
+| # | Hand-fix | What breaks without it |
+| --- | --- | --- |
+| 1 | Remove `--platform` from `FROM` in `dotnet/Dockerfile`, and exclude blob images from the build context | `az acr build` fails on an arm64 host; the image otherwise carries a 200 MB image directory that the blob store has just replaced |
+| 2 | Correct the SQL hostname suffix and uniquify the private-DNS VNet link name per stack | The second stack's deployment collides with the first on a shared link name |
+| 3 | `Remove-Item Env:CATALOG_DATABASE_USERNAME` / `…_PASSWORD` before every migration command | Machine-level variables baked into the VM image override managed-identity auth; acceptance then fails, or worse, silently targets a different database (finding R) |
+| 4 | Grant `Storage Blob Data Contributor` on the target storage account to the source VM's system-assigned identity | `catalog-migrate images copy` cannot authenticate. Owner at the resource group is control plane and confers no blob data access (finding M / F-83) |
+| 5 | Add the source VM's identity as SQL Entra admin | The logical server has no identity that can execute the import (finding L) |
+| 6 | `--all` on `az containerapp revision list` | The rollback baseline is inactive by design, and inactive revisions are hidden by default — so the one revision the handoff depends on is exactly the one you cannot see (finding S) |
+| 7 | gzip + base64 chunking for anything read back from `run-command` | Output is truncated at ~4096 bytes with no error and no marker |
+| 8 | Register a scheduled task from `run-command` and poll a log file, instead of running long commands inline | Inline long commands hold the single-flight channel and, if abandoned, keep holding it invisibly (finding V) |
+
+**Handed to me by the facilitator, and load-bearing:**
+
+| # | Hand-fix | What breaks without it |
+| --- | --- | --- |
+| 9 | Patch `internal: false` → parameterised in `environment.bicep` and `main.bicep`, pass `containerAppsEnvironmentInternal=true` | Public IP allocation is denied subscription-wide; the bootstrap deployment fails outright (F-47) |
+| 10 | `export AZURE_CONFIG_DIR="$HOME/.azure-365"` in **every** shell | `catalog_migrate/database.py:35` hardcodes that path; a mismatch splits credentials across two profiles and fails confusingly |
+| 11 | `uv --no-config` on every invocation | The machine's `uv.toml` uses a key the installed uv rejects |
+| 12 | `git rm .github/workflows/**` in a commit on top before pushing | The token lacks `workflow` scope; the REST Contents API returns a 404 that masks the denial (F-45) |
+| 13 | A `PATHEXT`/`az` shim directory on the VM | `az` was unresolvable from the job context (F-65) — **since fixed upstream and confirmed no longer needed** |
+
+**The pattern worth naming.** Eight of the thirteen are authentication or identity problems,
+and every one of those failed with an error that pointed somewhere else: a control-plane
+role that looks sufficient, a stale environment variable that looks like configuration, a
+hidden revision that looks deleted. The workshop teaches managed identity as a *goal* and
+never as a *failure mode*, and the failure modes are where all the time goes.
+
+**On item 4 specifically, since it was asked.** I checked rather than recalled. The
+assignment on `stuser001dotnekurep3z6` was created `2026-08-27T18:24:35Z`; my commit
+writing up that exact problem (`2c26e8a`, "findings L and M") landed `2026-08-27T18:29:51Z`,
+five minutes and sixteen seconds later. That is a record, not a memory. Azure's own
+`createdBy` cannot confirm it, because every principal in this subscription is the same
+identity (finding T).
+
+## What this run did not measure
+
+Listed so nothing here is inferred from what is present. Several of these are the *most*
+important things about Path 1C, and I could not reach any of them.
+
+**The path itself, as designed:**
+
+- **VS Code and the three pinned extensions were never used.** There is no GUI in this
+  delivery. I did the modernization as the Copilot CLI agent in a terminal. Everything I
+  produced is labelled accordingly. Whether the extension-driven path is better, worse or
+  equivalent is **not measured** — I can only report that the work was completable without
+  it, which is a different claim.
+- **The Bastion route was never exercised**, because no Bastion host exists here.
+- **The 15:15 golden rejoin path was never exercised**, because
+  `workshop/golden/dotnet-sqlserver/` is empty.
+- **Wall-clock timings for the intended environment are unmeasured.** My numbers describe a
+  macOS laptop driving a Windows VM through `run-command`, which is not the intended
+  delivery and is slower in ways that are mine, not the workshop's.
+
+**Evidence I did not produce:**
+
+- **Zero screenshots.** Not "few" — none. No portal capture, no terminal capture, no
+  application capture. There is no GUI, and `run-command`'s output cap plus the channel
+  contention make image capture impractical. I would rather report zero than imply
+  otherwise.
+- **`evidence/modernization-contract.json` does not exist.** `render-handoff` is IMDS-gated
+  to the source VM and the channel has been unavailable.
+- **Telemetry under the release revision was not captured.** Every signal I have was
+  emitted under `--0000001`, before the release deployment.
+- **The published `docs/TelemetryFaultInjection.md` was not executed verbatim.** I ran my
+  own draft, which the facilitator then published with edits. The shipped text remains
+  formally unverified, and its step 1 supplies no actual command, which would block a
+  literal execution regardless.
+- **`evidence/ide-extensions.txt` was deliberately not written.** See the honesty note
+  above: it is unvalidated and trivially forgeable, and writing one would have been the
+  single most convincing false artifact available to me.
+
+**Claims I deliberately did not try to strengthen:**
+
+- **I did not fabricate a telemetry bundle to demonstrate F-89.** The schema text is
+  sufficient and the demonstration would have been the wrong thing to leave in the record.
+  My claim is the weaker, provable one: the gate cannot distinguish a real bundle from a
+  hand-authored one. I have not run a fabricated bundle through the gate and I do not
+  assert what would happen if I did.
+- **Finding V's mechanism is a hypothesis, not a demonstration.** I cannot enumerate
+  in-flight `run-command` invocations, so I cannot prove the orphan I describe is the one
+  holding the channel. Every observation is consistent with it; none confirms it.
+- **Whether `run-command` exclusivity is per-VM, per-extension or a subscription throttle
+  is not measured.** Wording and timing point to per-VM. That is inference.
+- **The source SQL Express seeding was not independently re-counted by me.** I used the
+  VM's pre-seeded database and verified the *migrated* counts (198 / 20 / 198) against the
+  canonical figures. The claim that the source was correct before I touched it rests on the
+  verifier's row-content comparison, not on a separate count.
+
+**Out of scope entirely:** the Java/PostgreSQL stack, and Challenges 2 through 6. Where I
+have referred to them it is because a facilitator relayed it, and it is second-hand.
+
 ## Summary recommendation
 
-If only one change is made to Challenge 1, publish the environment-variable contract in the
-challenge README. It is the difference between a modernization that works and one that
-merely deploys — and today, nothing in the attendee-facing material lets you tell those two
-outcomes apart.
+**If only one change is made, make the telemetry evidence bindable to provenance
+(finding U).** It is the only defect here where an attendee who does everything right and
+an attendee who invents the file produce byte-identical artifacts, and the gate cannot tell
+them apart. Everything else in this document costs time; this one costs the workshop its
+premise, because Challenge 1 exists to teach that evidence must be checkable. Note that the
+fix requires relaxing `additionalProperties: false` on `telemetry-query-result.schema.json`
+first — otherwise the schema rejects the provenance keys you add. No digest guard pins that
+schema, so no contract version bump is needed.
+
+**If a second change is possible, publish the environment-variable contract in the challenge
+README.** It is the difference between a modernization that works and one that merely
+deploys, and today nothing in the attendee-facing material lets you tell those two outcomes
+apart.
+
+**And a structural suggestion that would have caught more than any single fix.** Two of the
+sharpest findings in this run — the wrong source tree I started from, and the telemetry
+provenance hole — are the same defect wearing different clothes: nothing verifies that the
+thing you are working from is the thing you think you are working from. A source-provenance
+check the attendee runs *before* starting, and a provenance field the evidence schema
+*requires* rather than forbids, are the two ends of one guard. I lost time to the first and
+found the second only by reading the validator source. An attendee will do neither.
+
