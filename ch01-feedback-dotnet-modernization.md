@@ -227,7 +227,95 @@ workspace or claims a capture from before the revision existed. It would not sto
 determined forger — nothing offline will — but it converts provenance from decoration into
 something with a failure mode.
 
-### 1. The injected environment-variable contract is documented nowhere the attendee reads
+### W. The F-89 renderer reports success while writing a document its own gate rejects
+
+**Found by testing the fix, not by reading it.** This is a defect *in* the remedy for
+finding U, and it reintroduces the exact failure mode that remedy exists to remove.
+
+**What happens.** `catalog_acceptance.telemetry_evidence_cli` validates neither its input
+capture manifest nor its rendered output against any schema. For `traces` and `logs` it
+copies `observations` straight through:
+
+```python
+if query_id in ("traces", "logs"):
+    row["observations"] = list(signal.get("observations", []))
+```
+
+Nothing requires that list to be non-empty. The only observation check is
+`_check_route_probe`, and it inspects **one** carrier signal per query — `http.server` for
+traces, `http.server.request` for logs. Every other signal may carry an empty list.
+
+But `telemetry-query-result.schema.json` requires `observations` with `minItems: 1` for
+exactly those two query IDs. So the renderer writes a document that violates the contract
+it is rendering to, and reports success:
+
+```
+RENDERER_EXIT=0
+{ "status": "rendered", "signalCounts": { "resources": 1, "traces": 6, "metrics": 5, "logs": 8 } }
+```
+
+while the file it just wrote fails validation:
+
+```
+traces: SCHEMA VIOLATION
+   path: ['rows', 1, 'observations']
+   msg : [] should be non-empty
+```
+
+**Where the attendee finds out.** `handoff.py:263-264` validates every telemetry query
+result against that schema. So the failure surfaces at the handoff gate, at the end of the
+chapter, as a single `jsonschema.ValidationError` — which is, verbatim, the feedback loop
+the renderer's own docstring says it was built to eliminate:
+
+> *It reports every problem at once. The handoff gate raises one `ValueError` at the end
+> of the chapter. Iterating against that is what pushes people toward editing evidence
+> instead of re-measuring.*
+
+The renderer had every piece of information needed to report this up front and did not.
+
+**How I established it.** I built a synthetic capture manifest satisfying every check the
+renderer performs, set `db.client`'s `observations` to `[]`, rendered, then validated the
+output with `Draft202012Validator` plus `FormatChecker` — the same configuration
+`handoff.py:140` uses. The renderer exited `0`; `traces.json` failed. I did **not** run the
+full handoff gate end to end, because that needs a complete evidence tree; the claim is
+that the emitted document violates the schema the gate validates against, proven with the
+gate's own validator, and that is what I assert. The synthetic manifest was clearly marked
+`SYNTHETIC-NOT-EVIDENCE`, kept outside the repository, and deleted.
+
+**Why it happened, and it is the same cause as finding U.** The three sibling renderers —
+`defender_evidence.py`, `load_evidence.py`, `sre_evidence.py` — all import `jsonschema` and
+validate against checked-in schemas. `telemetry_evidence.py` imports no schema machinery at
+all; its only `schema` references are the literal `"schemaVersion": "1.0.0"` strings it
+writes into output. The new renderer ships **fifteen** tests and not one validates rendered
+output against `telemetry-query-result.schema.json`. The contract that was fabricable
+because nobody tested it now has a producer that is unchecked against it for the same
+reason.
+
+**The input side has the same gap, one level down.** Challenges 5 and 6 each ship
+`*-evidence-capture.schema.json` *and* `*-evidence-capture.example.json`. Telemetry ships
+**neither**. The capture manifest's shape is enforced only by ad-hoc
+`if not capture.get(field)` checks, and is documented nowhere — so the attendee must
+reverse-engineer it from `telemetry_evidence.py`. That is the same reverse-engineering
+burden finding U was about, moved from the output format to the input format.
+
+**Two smaller things found in the same session, both real:**
+
+1. **An out-of-repository `--output` crashes with a raw traceback**, not a handled error:
+   `ValueError: '/tmp/.../resources.json' is not in the subpath of '<root>'` from
+   `relative_to` at `telemetry_evidence.py:224`. The CLI documents the flag as
+   "repository-relative", so this is user error — but it should be a message, not a stack
+   trace.
+2. **`--repository-root` is `resolve()`d while `--output` is not**, so any path crossing a
+   symlink fails the same way. On macOS `/tmp` is a symlink to `/private/tmp`, so this
+   fires on the most obvious scratch directory on the platform.
+
+**The fix is small and the pattern already exists in the tree.** Validate each rendered
+document against `telemetry-query-result.schema.json` before writing, fold any violations
+into `problems`, and let the existing accumulate-and-report-everything path carry them.
+Then add a capture schema and example to match the other three renderers. Both are what
+`defender_evidence.py` already does.
+
+
 
 **Severity: highest. This is the defect most likely to be shipped undetected.**
 
