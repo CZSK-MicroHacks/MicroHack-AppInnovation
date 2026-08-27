@@ -1,9 +1,20 @@
 {
-  "application": null,
-  "applicationRevisionRole": null,
+  "application": {
+    "containerAppName": "ca-mh-user001-dotnet",
+    "healthUrl": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io/healthz",
+    "readinessUrl": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io/readyz",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.App/containerApps/ca-mh-user001-dotnet",
+    "revisionName": "ca-mh-user001-dotnet--release-47acf263d332",
+    "url": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io"
+  },
+  "applicationRevisionRole": "release",
   "containerAppsEnvironmentDefaultDomain": "gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io",
   "containerAppsEnvironmentResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.App/managedEnvironments/cae-mh-user001-dotnet",
-  "containerImage": null,
+  "containerImage": {
+    "digest": "sha256:647e2500591da30fcedc831ea787ed682aa7b5bd4389fbebdd041f034fe089ee",
+    "repository": "catalog-dotnet",
+    "tag": "47acf263d3320fa3bb41d5469fc3c7428a393fca"
+  },
   "containerRegistry": {
     "loginServer": "acruser001dotnekurep3z6.azurecr.io",
     "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.ContainerRegistry/registries/acruser001dotnekurep3z6"
@@ -22,7 +33,7 @@
     "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Sql/servers/sql-mh-user001-dotnet-kurep3z6/databases/catalog",
     "server": "sql-mh-user001-dotnet-kurep3z6.database.windows.net"
   },
-  "deploymentStage": "bootstrap",
+  "deploymentStage": "application",
   "images": {
     "authentication": "managed-identity",
     "location": "catalog-images",
