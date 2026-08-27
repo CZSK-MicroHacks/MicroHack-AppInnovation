@@ -194,10 +194,16 @@ Challenge 3 checks the application source out of your repository at exactly this
 builds `dotnet/Dockerfile` from that checkout. A commit that never left this VM would fail
 that checkout, so do not continue until the push succeeds.
 
-Create `evidence/runtime-test-report.json` for the native TRX by following
-`workshop/contracts/runtime-test-evidence.schema.json`. It must reference the
-TRX containing all fourteen exact frozen test identities and bind
-`sourceCommit` to `$SourceCommit`.
+Create `evidence/runtime-test-report.json` for the native TRX by copying the
+`dotnet-sqlserver` object from
+`workshop/contracts/runtime-test-evidence.template.json` and editing only three
+fields: `sourceCommit` to `$SourceCommit`, `artifact` to the TRX path, and `command`
+to the command you ran. The fourteen frozen test identities are already correct in
+the template, so do not retype them. Validate the result against
+`workshop/contracts/runtime-test-evidence.schema.json`.
+
+This step needs no Azure resources, so you can produce and validate it before you
+deploy; a failure here then costs minutes instead of surfacing after a migration.
 
 ## 4. Build the immutable container
 

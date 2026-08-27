@@ -568,8 +568,12 @@ revision is `Healthy`, inactive, and contains exactly the same digest reference.
 ## 7. Release evidence and rollback
 
 Run the native suite again and retain its TRX. Create
-`evidence/runtime-test-report.json` with the actual artifact path and the fourteen test
-identities defined by `workshop/contracts/runtime-test-evidence.schema.json`.
+`evidence/runtime-test-report.json` by copying the `dotnet-sqlserver` object from
+`workshop/contracts/runtime-test-evidence.template.json` and editing only
+`sourceCommit`, `artifact`, and `command`. The fourteen test identities are already
+correct in the template, so do not transcribe them from
+`workshop/contracts/runtime-test-evidence.schema.json`; validate against that schema
+once the three fields are filled.
 
 ```powershell
 $AcceptanceReport = Join-Path (Get-Location) `

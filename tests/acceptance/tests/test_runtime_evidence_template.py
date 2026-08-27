@@ -130,3 +130,37 @@ def test_template_command_writes_where_the_artifact_points(
     else:
         # Maven writes Surefire reports under the module's target directory.
         assert artifact.endswith("target/surefire-reports")
+
+
+def test_every_document_that_demands_the_report_names_the_template() -> None:
+    """Any document asking for the runtime report must point at the template.
+
+    The template was added to remove hand transcription of twenty-eight constants, but
+    it was first referenced only from the challenge briefs while all six solution
+    runbooks still said to build the file "against
+    ``runtime-test-evidence.schema.json``". A schema constrains values; it does not
+    supply them. Participants execute the runbooks, so the fix reached the documents
+    that describe the work and missed the documents that direct it, and an arm
+    following its runbook verbatim still hand-typed forty-two values.
+
+    This binds the two together: naming the artifact obliges you to name its source.
+    """
+    repository_root = CONTRACTS.parents[1]
+    offenders = []
+    examined = []
+    for directory in ("challenges", "solutions"):
+        for document in sorted((repository_root / directory).rglob("*.md")):
+            text = document.read_text(encoding="utf-8")
+            if "runtime-test-report" not in text:
+                continue
+            examined.append(document)
+            if "runtime-test-evidence.template.json" not in text:
+                offenders.append(str(document.relative_to(repository_root)))
+    assert len(examined) >= 9, (
+        f"only {len(examined)} documents demand the runtime report; the three challenge "
+        "briefs and six solution runbooks all do, so this guard is not finding them"
+    )
+    assert not offenders, (
+        "documents demand evidence/runtime-test-report.json without naming "
+        f"the template that supplies its fixed entries: {offenders}"
+    )

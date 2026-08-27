@@ -539,9 +539,14 @@ release output and describes exactly one application container at
 ## 6. Full evidence and handoff checkpoint
 
 Run the native suite after the final diff and retain the native Surefire JUnit XML
-under `evidence/`. Create `evidence/runtime-test-report.json` against
-`workshop/contracts/runtime-test-evidence.schema.json`; it must reference those
-native reports and their fourteen real passing test identities. Run full shared
+under `evidence/`. Create `evidence/runtime-test-report.json` by copying the
+`java-postgresql` object from
+`workshop/contracts/runtime-test-evidence.template.json` and editing only
+`sourceCommit`, `artifact`, and `command`; the fourteen real test identities are
+already correct in the template, so do not retype them. A bounded rewrite that
+preserves test display names and class or method identities satisfies the frozen
+mapping unchanged. Validate against
+`workshop/contracts/runtime-test-evidence.schema.json`. Run full shared
 acceptance against the release and write
 `evidence/acceptance-report.json`. Collect real trace, metric, log, and resource
 query results into `evidence/telemetry-report.json`; never synthesize telemetry.

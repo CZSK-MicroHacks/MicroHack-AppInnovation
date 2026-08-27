@@ -131,8 +131,24 @@ The completed rewrite must preserve all of these boundaries:
 
 ## Steps
 
-Create `evidence/` at the repository root. Preserve the shared evidence required by the
-registry plus `evidence/characterization.md`, `evidence/bounded-plan.md`,
+Create `evidence/` at the repository root. The shared evidence required by the
+registry is:
+
+- `evidence/azure-target-output.json`
+- `evidence/migration-report.json`
+- `evidence/acceptance-report.json`
+- `evidence/runtime-test-report.json` — start from your stack's entry in
+  `workshop/contracts/runtime-test-evidence.template.json` and replace only
+  `sourceCommit`, `artifact`, and `command`. The fourteen `tests` entries are fixed by
+  the contract and checked for exact equality; the handoff also parses the native
+  artifact and fails unless all fourteen are present and passing. A bounded rewrite
+  that preserves test display names and class or method identities satisfies the
+  mapping unchanged, so this file needs no Azure resources and can be produced and
+  validated before you deploy.
+- `evidence/telemetry-report.json`
+- `evidence/rollback-runbook.md`
+
+Preserve all of those plus `evidence/characterization.md`, `evidence/bounded-plan.md`,
 `evidence/review-checklist.md`, and `evidence/decision-log.md`.
 
 Use these checkpoints in order:

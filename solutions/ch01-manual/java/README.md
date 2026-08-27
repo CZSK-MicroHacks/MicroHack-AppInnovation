@@ -579,8 +579,12 @@ baseline revision is `Healthy`, inactive, and contains the same digest reference
 ## 7. Release evidence and rollback
 
 Run native tests and preserve the Surefire JUnit XML. Create
-`evidence/runtime-test-report.json` with the real artifact path and fourteen identities
-from `workshop/contracts/runtime-test-evidence.schema.json`.
+`evidence/runtime-test-report.json` by copying the `java-postgresql` object from
+`workshop/contracts/runtime-test-evidence.template.json` and editing only
+`sourceCommit`, `artifact`, and `command`. The fourteen test identities are already
+correct in the template, so do not transcribe them from
+`workshop/contracts/runtime-test-evidence.schema.json`; validate against that schema
+once the three fields are filled.
 
 ```powershell
 $AcceptanceReport = Join-Path (Get-Location) `
