@@ -56,6 +56,50 @@ AppMetrics
 | summarize by svc
 ```
 
+**Two of the four trace signals do not exist as literal strings.** `db.client` and
+`http.server` are OpenTelemetry span names that Application Insights maps onto its own
+tables, so `AppDependencies | where Name == 'db.client'` returns **count 0** — not an
+error. Identity is table membership plus a type discriminator:
+
+| Contract signal | Where it actually is |
+| --- | --- |
+| `http.server` | `AppRequests` |
+| `db.client` | `AppDependencies` where `DependencyType == 'SQL'` |
+
+Only the five metric names match verbatim. Every wrong query here returns zero rows
+rather than failing, so the natural reading is "the application is not emitting this"
+and the natural next step is instrumenting code that is already correct.
+
+**Filter every query to one revision, and to the revision under test.** Container Apps
+health-probes every *provisioned* revision, so revisions serving no traffic keep emitting
+resource attributes indefinitely. Measured over two hours on one environment:
+
+| Revision | Resource-attribute records | User traffic |
+| --- | --- | --- |
+| `--0000001` (placeholder) | 1400 | none |
+| `--release-<digest>` | 1378 | all of it |
+| `--fixup1-<digest>` | 1342 | none |
+
+`| take 1` is therefore not merely unreliable — the plurality answer is the placeholder
+revision, with all six attributes present and correctly formatted. Resolve the revision
+first and filter on it:
+
+```bash
+az containerapp revision list -g <your-resource-group> -n <your-container-app> \
+  --query "[?properties.trafficWeight>\`0\`].name" -o tsv
+```
+
+```kusto
+| where AppRoleInstance startswith "<the revision that carries traffic>"
+```
+
+This matters most across steps rather than within one. Fault injection and traffic
+generation happen minutes apart, and a release in between repoints traffic silently: the
+happy-path signals come from the new revision and the failure signals from the old one.
+The result is internally consistent and asserts behaviour the release never emitted. The
+capture manifest records a `revision` per query for exactly this reason, and the renderer
+refuses a capture whose four queries disagree.
+
 ## 1. `catalog.import.failed`
 
 POST a catalog file that is valid JSON but violates the import contract. Two requests are
