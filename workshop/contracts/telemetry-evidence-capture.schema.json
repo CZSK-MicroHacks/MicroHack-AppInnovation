@@ -70,6 +70,7 @@
       "additionalProperties": false,
       "required": [
         "query",
+        "revision",
         "signals"
       ],
       "properties": {
@@ -85,6 +86,11 @@
             "$ref": "#/$defs/signal"
           },
           "description": "Keyed by signal name. The set must match the contract exactly: no extras, no omissions. A signal you did not observe is a signal to go and measure, not one to invent."
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Container App revision these rows came from (the AppRoleInstance value). All four queries must name the same revision: telemetry captured from a revision other than the one under test does not describe the release."
         }
       }
     },

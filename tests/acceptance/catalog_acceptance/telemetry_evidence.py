@@ -196,9 +196,42 @@ def _schema_problems(schema_path: Path, query_id: str, document: dict[str, Any])
     return problems
 
 
+def _check_single_revision(capture: dict[str, Any], problems: list[str]) -> str | None:
+    """Refuse a capture that mixes revisions.
+
+    Fault injection and traffic generation are separate steps, often minutes
+    apart, and a release in between silently repoints traffic. The result is a
+    capture whose happy-path signals come from the release and whose failure
+    signals come from whatever was serving earlier -- internally consistent,
+    accepted by the handoff gate, and asserting behaviour the release revision
+    demonstrably never emitted. The revision is on every row as
+    ``AppRoleInstance``, so this costs the attendee one column.
+    """
+    seen: dict[str, list[str]] = {}
+    for query_id in QUERY_IDS:
+        query = capture.get("queries", {}).get(query_id)
+        if not isinstance(query, dict):
+            continue
+        revision = query.get("revision")
+        if isinstance(revision, str) and revision:
+            seen.setdefault(revision, []).append(query_id)
+    if len(seen) <= 1:
+        return next(iter(seen), None)
+    detail = "; ".join(
+        f"{revision} ({', '.join(sorted(ids))})" for revision, ids in sorted(seen.items())
+    )
+    problems.append(
+        f"queries name {len(seen)} different revisions: {detail}. Telemetry from a "
+        f"revision other than the one under test does not describe this release -- "
+        f"re-run every query with a 'where AppRoleInstance startswith \"<revision>\"' "
+        f"filter naming the revision the release deployed."
+    )
+    return None
+
+
 def _check_workspace_provenance(
     output_path: Path, workspace_id: str, problems: list[str]
-) -> None:
+) -> str:
     """Bind the capture's workspace to the one the attendee actually deployed.
 
     Provenance that nothing reads is decoration. ``azure-target-output.json``
@@ -209,25 +242,27 @@ def _check_workspace_provenance(
     and an asserted one.
     """
     target = output_path.parent / "azure-target-output.json"
+    where = target.as_posix()
     if not target.exists():
-        return
+        return f"skipped: no azure-target-output.json beside the output at {where}"
     try:
         observability = load_json_object(target).get("observability") or {}
     except ValueError:
-        return
+        return f"skipped: {where} is not readable JSON"
     resource_id = observability.get("logAnalyticsWorkspaceResourceId")
     if not isinstance(resource_id, str) or not resource_id:
-        return
+        return f"skipped: {where} names no logAnalyticsWorkspaceResourceId"
     deployed = resource_id.rsplit("/", 1)[-1]
     # Either form is legitimate evidence, so compare the workspace name.
     if workspace_id.rsplit("/", 1)[-1].casefold() == deployed.casefold():
-        return
+        return "verified"
     problems.append(
         f"capture workspaceId '{workspace_id}' does not name the workspace this "
-        f"release deployed to ('{deployed}', from evidence/azure-target-output.json). "
+        f"release deployed to ('{deployed}', from {where}). "
         f"Two workspaces exist in this environment; resolve yours by name and re-run "
         f"the queries against it."
     )
+    return "failed"
 
 
 def render_telemetry_evidence(
@@ -277,7 +312,10 @@ def render_telemetry_evidence(
             f"resourceAttributes is missing: {', '.join(sorted(missing_resource))}"
         )
 
-    _check_workspace_provenance(output_path, capture["workspaceId"], problems)
+    revision = _check_single_revision(capture, problems)
+    provenance = _check_workspace_provenance(
+        output_path, capture["workspaceId"], problems
+    )
 
     result_dir = output_path.parent / "telemetry"
     queries: dict[str, Any] = {}
@@ -353,4 +391,6 @@ def render_telemetry_evidence(
         "signalCounts": {q: len(documents[q]["rows"]) for q in QUERY_IDS},
         "workspaceId": capture["workspaceId"],
         "capturedAt": capture["capturedAt"],
+        "provenanceCheck": provenance,
+        "revision": revision,
     }

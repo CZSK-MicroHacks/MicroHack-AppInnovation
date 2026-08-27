@@ -505,6 +505,11 @@ uv run python -m catalog_acceptance.telemetry_evidence_cli `
   --output evidence/telemetry-report.json
 ```
 
+The manifest's shape is checked against
+`workshop/contracts/telemetry-evidence-capture.schema.json`, and a complete worked
+manifest ships as `telemetry-evidence-capture.example.json` — copy it and replace the
+observations with your own.
+
 The capture manifest holds `workspaceId`, `capturedAt`, `service`
 (`mh-catalog-dotnet`), `resourceAttributes`, and one entry per query
 (`resources`, `traces`, `metrics`, `logs`) carrying the `query` text and, per signal,
