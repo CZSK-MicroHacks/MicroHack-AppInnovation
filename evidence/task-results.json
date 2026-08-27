@@ -1,0 +1,127 @@
+{
+  "schemaNote": "No task-results schema is published in workshop/contracts/, so this structure follows the fields enumerated in solutions/ch01-copilot-modernization/dotnet/README.md:141-144 (name, supported capability, files changed, human decision, command, exit code, artifact paths). Nothing downstream validates this file.",
+  "generatedBy": {
+    "tool": "GitHub Copilot CLI",
+    "notThePinnedExtension": true,
+    "note": "This delivery had no VS Code and therefore no vscjava.migrate-java-to-azure. Every task below was performed by the Copilot CLI agent in a terminal, reviewed as a diff, and validated by build plus the full test suite. The 'supportedCapability' values name the capability the pinned extension advertises for that transformation, not a capability that was actually invoked here."
+  },
+  "sourceOfTruth": {
+    "archiveProvenance": "4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af",
+    "archiveProvenanceNote": "The immutable workshop baseline this modernization started from. This is NOT the sourceCommit deployment parameter; challenges/ch01/README.md:195-197 states the two are never interchangeable.",
+    "startingCommit": "4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af"
+  },
+  "toolchain": {
+    "sdk": "10.0.101",
+    "aspNetCoreRuntime": "10.0.1",
+    "baselineSdk": "8.0.424",
+    "baselineAspNetCoreRuntime": "8.0.30",
+    "note": "workshop/toolchain.lock.json pins SDK 10.0.400 / runtime 10.0.11. Neither is obtainable; the highest published .NET 10 SDK is 10.0.101. The pins are unreachable for the host toolchain, though both pinned container base digests still resolve."
+  },
+  "baseline": {
+    "tests": { "total": 42, "passed": 42, "failed": 0, "skipped": 0 },
+    "targetFramework": "net8.0",
+    "artifact": "evidence/dotnet-baseline-net8.trx",
+    "note": "Captured on the pinned SDK 8.0.424 with ASP.NET Core 8.0.30 installed privately. DOTNET_ROLL_FORWARD=Major was explicitly rejected as a way to obtain this baseline: it would have run the 'before' suite on the .NET 10 runtime, making the baseline and the post-upgrade run share a runtime and silently voiding the comparison."
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "name": "Target .NET 10",
+      "supportedCapability": "framework-version-upgrade",
+      "commit": "95a842f",
+      "filesChanged": [
+        "dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj",
+        "dotnet/tests/LegoCatalog.App.Tests/LegoCatalog.App.Tests.csproj"
+      ],
+      "humanDecision": "Accepted. Two build failures were fixed at root cause rather than suppressed. NU1510: Microsoft.AspNetCore.Components.Web is part of the .NET 10 shared framework, so the explicit PackageReference was removed. NU1903: EF Core 10.0.1 still resolves a vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11, so a direct pin to 2.1.13 was added to the test project. Suppressing NU1903 via NoWarn was considered and rejected.",
+      "command": "dotnet build dotnet/LegoCatalog.sln && dotnet test dotnet/LegoCatalog.sln",
+      "exitCode": 0,
+      "validation": { "build": "clean", "tests": "42/42 passed on net10.0", "vulnerablePackages": 0 },
+      "artifacts": ["evidence/dotnet-modernization.trx"]
+    },
+    {
+      "id": 2,
+      "name": "Authenticate to Azure SQL with managed identity",
+      "supportedCapability": "managed-identity-configuration",
+      "commit": "52da88a",
+      "filesChanged": [
+        "dotnet/src/LegoCatalog.App/Configuration/CatalogRuntimeOptions.cs",
+        "dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj"
+      ],
+      "humanDecision": "Accepted after a correction. The first attempt inferred intent from the database hostname suffix and used SqlAuthenticationMethod.ActiveDirectoryDefault. That was discarded in favour of an explicit CATALOG_DATABASE_AUTHENTICATION switch after reading infra/modules/environment.bicep:499-588, which is the authoritative and otherwise undocumented list of environment variables the deployment injects. Inference would have produced an app that appeared to work and matched no contract.",
+      "command": "dotnet build dotnet/LegoCatalog.sln && dotnet test dotnet/LegoCatalog.sln",
+      "exitCode": 0,
+      "validation": {
+        "build": "clean",
+        "tests": "42/42 passed",
+        "noPasswordLiteralInTrackedSource": true,
+        "guards": [
+          "managed-identity refuses CATALOG_DATABASE_USERNAME/PASSWORD",
+          "managed-identity refuses a non-Azure SQL host rather than silently falling back to a local connection",
+          "AZURE_CLIENT_ID is required, not optional"
+        ]
+      },
+      "artifacts": ["evidence/dotnet-modernization.trx"]
+    },
+    {
+      "id": 3,
+      "name": "Read catalog images from Azure Blob Storage",
+      "supportedCapability": "storage-abstraction-migration",
+      "commit": "1be996d",
+      "filesChanged": [
+        "dotnet/src/LegoCatalog.App/Services/AzureBlobImageStore.cs",
+        "dotnet/src/LegoCatalog.App/Services/LocalImageStore.cs",
+        "dotnet/src/LegoCatalog.App/Endpoints/CatalogEndpoints.cs",
+        "dotnet/src/LegoCatalog.App/Program.cs",
+        "dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj"
+      ],
+      "humanDecision": "Accepted, with one interface change outside the narrowest possible scope. IImageStore.TryResolvePath returned a filesystem path, which Blob Storage has no equivalent for, so it was replaced by ReadAsync returning bytes. The /images/{fileName} HTTP contract is unchanged. The canonical-key check is re-applied inside AzureBlobImageStore deliberately.",
+      "command": "dotnet build dotnet/LegoCatalog.sln && dotnet test dotnet/LegoCatalog.sln",
+      "exitCode": 0,
+      "validation": { "build": "clean", "tests": "42/42 passed", "vulnerablePackages": 0 },
+      "residualRisk": "ImageSecurityTests exercises LocalImageStore.IsCanonicalImageKey only as a static method, and never through IImageStore. A blob implementation that omitted the traversal check would leave all six security tests green. The test suite cannot detect that regression, so the control is held by code review alone.",
+      "artifacts": ["evidence/dotnet-modernization.trx"]
+    },
+    {
+      "id": 4,
+      "name": "Export telemetry to Azure Monitor",
+      "supportedCapability": "observability-integration",
+      "commit": "00013da",
+      "filesChanged": [
+        "dotnet/src/LegoCatalog.App/Program.cs",
+        "dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj"
+      ],
+      "humanDecision": "Accepted. The Azure Monitor exporter is gated on APPLICATIONINSIGHTS_CONNECTION_STRING independently of the pre-existing hasOtlpExporter flag. Folding the two together was rejected: the deployment sets the connection string and no OTLP endpoint, so a shared gate would leave Azure Monitor unconfigured while the app started and reported healthy.",
+      "command": "dotnet build dotnet/LegoCatalog.sln && dotnet test dotnet/LegoCatalog.sln",
+      "exitCode": 0,
+      "validation": { "build": "clean", "tests": "42/42 passed" },
+      "residualRisk": "Telemetry absence has no failing signal. No test asserts that an exporter is registered, and the application is fully healthy with telemetry silently disabled. Verified by code review only; not verified against a live Application Insights resource at the time of writing.",
+      "artifacts": ["evidence/dotnet-modernization.trx"]
+    },
+    {
+      "id": 5,
+      "name": "Containerize the catalog application",
+      "supportedCapability": "containerization",
+      "commit": "4332474",
+      "filesChanged": ["dotnet/Dockerfile", ".dockerignore"],
+      "humanDecision": "Accepted. Both stages are pinned by digest rather than tag, after verifying that the tags recorded in workshop/toolchain.lock.json no longer resolve to the locked digests. curl presence in the runtime base was verified by running the image before the HEALTHCHECK was written to depend on it; the base also defaults to uid 0, so the USER instruction is load-bearing rather than decorative.",
+      "command": "docker run --rm --platform=linux/amd64 --entrypoint sh mcr.microsoft.com/dotnet/aspnet@sha256:d21a49ce9556f5e50afc5a33cc45ec7a40b5739f10397368810193666e559a79 -c 'command -v curl; id'",
+      "exitCode": 0,
+      "validation": {
+        "baseImageDigestsResolve": true,
+        "runsAsNonRoot": "uid 1654",
+        "listensOn": 8080,
+        "imageBuilt": false
+      },
+      "notMeasured": "The image itself has NOT been built or run at the time this file was written. The host is macOS arm64 and both bases are amd64-only, and nuget.org egress is blocked on this host so restore cannot complete locally. The build is performed in Azure Container Registry via az acr build, which is also what the runbook mandates.",
+      "artifacts": ["dotnet/Dockerfile"]
+    }
+  ],
+  "deliberateOmissions": [
+    {
+      "artifact": "evidence/ide-extensions.txt",
+      "reason": "Not written. This delivery had no VS Code, no Bastion and no desktop, so no extension inventory exists to record. The three pinned version strings are published in workshop/toolchain.lock.json, so a convincing file is a two-minute transcription by someone who never opened an IDE, and workshop/contracts/challenge-paths.json lists this file in neither requiredEvidence nor pathEvidence, so nothing downstream would ever contradict it. An evidence artifact that cannot fail is not evidence. Writing a plausible one was the single easiest way to produce meaningless-but-convincing output in this entire chapter, which is exactly why it was refused.",
+      "consequence": "solutions/ch01-copilot-modernization/dotnet/README.md:162-164 includes this path in its git add command. That command therefore fails with 'pathspec did not match any files' for anyone who does not create the file. Refusing to forge the artifact breaks the documented commit step."
+    }
+  ]
+}
