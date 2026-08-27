@@ -17,7 +17,7 @@
 | `docker` is "not recognized" on the VM | No Docker daemon — deliberate; builds run in ACR | [Workshop VM failures](#3-workshop-vm-failures) |
 | A commit SHA does not match what a validator expects | Two different SHAs exist on the VM | [Workshop VM failures](#3-workshop-vm-failures) |
 | A command needs a resource that does not exist | Facilitator prerequisite not provisioned | Ask your facilitator; see [`Facilitator.md`](Facilitator.md) |
-| `az vm run-command` returns `Conflict: Run command extension execution is in progress` | One command at a time per VM — possibly your own orphaned invocation. **Do not deallocate before reading this** | [Workshop VM failures](#3-workshop-vm-failures) |
+| `az vm run-command` returns `Conflict: Run command extension execution is in progress` | One command at a time per VM — possibly your own orphaned invocation. **List named run-commands first; do not deallocate** | [Workshop VM failures](#3-workshop-vm-failures) |
 
 ## How to think about a failure
 
@@ -108,11 +108,39 @@ action.
 **An orphaned run-command is the case that catches people.** Stopping the local `az`
 process — `Ctrl-C`, closing the terminal, losing the Bastion session — **does not cancel
 the invocation on the VM.** It keeps executing until it finishes or hits the service-side
-execution limit, holding the channel the whole time with nothing attached to it. This has
-been observed blocking a VM for over 35 minutes.
+execution limit, holding the channel the whole time with nothing attached to it. A measured
+occurrence held a VM for **60 minutes 48 seconds**.
 
-The only way to tell the two `Updating` cases apart is to ask whether anything other than
-run-command has actually touched the VM:
+**First, check for a stuck *named* run-command — this one is instantly fixable.** There are
+two kinds of orphan and they are not equally bad. A command started with
+`az vm run-command create` is a tracked resource with a name, so it can be listed and
+deleted. A command started with `az vm run-command invoke` is not, and cannot.
+
+```powershell
+az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --show-details `
+  --query "[].{name:name, prov:provisioningState, exec:instanceView.executionState, start:instanceView.startTime}" -o table
+```
+
+- **A row with `exec: Pending` and an empty `start`** → a named run-command was registered
+  and never ran. It holds the channel **indefinitely — it does not self-clear.** Delete it:
+
+  ```powershell
+  az vm run-command delete -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-stuck-command-name> --yes
+  ```
+
+  This is non-destructive: it removes only the stuck registration, not the VM and not the
+  CustomScript extension. In a measured occurrence the very next `invoke` succeeded with
+  **no wait at all**.
+- **Empty output** → no named command is involved. Continue to the probe below; you are in
+  the `invoke` case, which is the unrecoverable one.
+
+Note that `provisioningState` on the *command* reads `Succeeded` even while `executionState`
+is `Pending`, and the **VM's** `provisioningState` reads `Succeeded` too. Neither field
+reveals this. `executionState` is the one that does.
+
+If the list came back empty, the only remaining way to tell the two `Updating` cases apart
+is to ask whether anything other than run-command has actually touched the VM:
 
 ```powershell
 az monitor activity-log list -g <your-resource-group> --offset 12h `
@@ -120,7 +148,7 @@ az monitor activity-log list -g <your-resource-group> --offset 12h `
 ```
 
 - **Output is empty** → nothing is operating on the VM. You are waiting on your own
-  orphaned command. **Wait for it. Do not deallocate.**
+  orphaned `invoke`. **Wait for it. Do not deallocate.**
 
   The wait is bounded. One measured occurrence ran **60 minutes 48 seconds** — 57
   consecutive `Conflict` responses with `provisioningState: Updating` — and then cleared to

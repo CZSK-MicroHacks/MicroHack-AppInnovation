@@ -349,3 +349,43 @@ def test_reconciled_navigation_has_no_broken_local_links() -> None:
         "finding navigation that this guard is supposed to be protecting"
     )
     assert not broken, "\n".join(broken)
+
+
+def test_run_command_conflict_documents_both_orphan_classes() -> None:
+    """Keep the cheap, recoverable orphan check ahead of the unrecoverable one.
+
+    Two different failures produce the same `Conflict` message. A *named* run-command
+    stuck in `Pending` is listable and deletable and clears instantly; an orphaned
+    `invoke` is neither and must be waited out. Documenting only the second -- which is
+    what the page did before the pilot found the first -- sends a reader who could have
+    been unblocked in one command into an hour of waiting instead.
+    """
+    troubleshooting = (ROOT / "docs" / "Troubleshooting.md").read_text(encoding="utf-8")
+
+    named_check = troubleshooting.find("az vm run-command list")
+    invoke_probe = troubleshooting.find("az monitor activity-log list")
+    assert named_check != -1, (
+        "Troubleshooting.md no longer tells a blocked reader to list named run-commands; "
+        "the recoverable orphan class has become invisible"
+    )
+    assert invoke_probe != -1, "the activity-log probe for the invoke orphan is missing"
+    assert named_check < invoke_probe, (
+        "the listable, instantly-fixable orphan check must come before the probe for the "
+        "one that can only be waited out -- a reader stops at the first thing that applies"
+    )
+
+    for required in (
+        "az vm run-command delete",
+        "executionState",
+        "does not self-clear",
+    ):
+        assert required in troubleshooting, (
+            f"Troubleshooting.md no longer contains {required!r}, which the named-orphan "
+            "remedy depends on"
+        )
+
+    facilitator = (ROOT / "docs" / "Facilitator.md").read_text(encoding="utf-8")
+    assert "az vm run-command delete" in facilitator, (
+        "Facilitator.md no longer tells facilitators to delete named run-commands they "
+        "leave on participant VMs, which is how the pilot's blockage was caused"
+    )
