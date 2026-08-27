@@ -17,6 +17,7 @@
 | `docker` is "not recognized" on the VM | No Docker daemon — deliberate; builds run in ACR | [Workshop VM failures](#3-workshop-vm-failures) |
 | A commit SHA does not match what a validator expects | Two different SHAs exist on the VM | [Workshop VM failures](#3-workshop-vm-failures) |
 | A command needs a resource that does not exist | Facilitator prerequisite not provisioned | Ask your facilitator; see [`Facilitator.md`](Facilitator.md) |
+| `az vm run-command` returns `Conflict: Run command extension execution is in progress` | One command at a time per VM — possibly your own orphaned invocation. **Do not deallocate before reading this** | [Workshop VM failures](#3-workshop-vm-failures) |
 
 ## How to think about a failure
 
@@ -92,6 +93,65 @@ Only one stack marker/log set exists on each VM. A missing marker means provisio
 not complete its native database, health, readiness, image, and corpus checks. The
 facilitator owns repair or replacement. Participants must not reseed, install alternate
 tool versions, expose a public IP, or bypass Bastion.
+
+### `az vm run-command` returns `Conflict: Run command extension execution is in progress`
+
+A VM accepts **one** run-command at a time. Three different situations produce this
+message, and **two of them look identical**, so read this before taking any recovery
+action.
+
+| `provisioningState` | Situation | What to do |
+| --- | --- | --- |
+| `Succeeded` | Another run-command, or an extension update, is genuinely in flight | Wait; retry with backoff |
+| `Updating` | Either a platform operation **or an orphaned run-command** — not distinguishable from this field alone | Run the probe below |
+
+**An orphaned run-command is the case that catches people.** Stopping the local `az`
+process — `Ctrl-C`, closing the terminal, losing the Bastion session — **does not cancel
+the invocation on the VM.** It keeps executing until it finishes or hits the service-side
+execution limit, holding the channel the whole time with nothing attached to it. This has
+been observed blocking a VM for over 35 minutes.
+
+The only way to tell the two `Updating` cases apart is to ask whether anything other than
+run-command has actually touched the VM:
+
+```powershell
+az monitor activity-log list -g <your-resource-group> --offset 12h `
+  --query "[?contains(to_string(resourceId),'<your-vm-name>') && !contains(operationName.value,'runCommand')].operationName.value" -o tsv
+```
+
+- **Output is empty** → nothing is operating on the VM. You are waiting on your own
+  orphaned command. **Wait for it. Do not deallocate.**
+- **Output lists operations** → a real platform operation is in progress. Wait and retry.
+
+Scope the query to the VM as shown. Filtering only on `operationName` will also match your
+PostgreSQL server and Azure Policy evaluations in the same resource group, which makes an
+orphan look like a busy platform. `to_string(resourceId)` is required, or the query errors
+on entries where that field is null.
+
+**Why deallocating the VM is the wrong reflex.** Deallocation clears a genuinely wedged
+extension, but it also **kills whatever the orphaned command was doing** — which is
+normally your own long-running job, the work you were trying to rescue. An orphan looks
+exactly like a wedge (nothing progressing, many minutes elapsed), so deallocate feels
+correct and is destructive. Run the probe first.
+
+**Avoid the situation entirely for anything long-running.** Do not invoke a multi-minute
+command inline. Have run-command register a scheduled task and return immediately, then
+poll the log file:
+
+```powershell
+az vm run-command invoke -g <your-resource-group> -n <your-vm-name> `
+  --command-id RunPowerShellScript --scripts @'
+  $a = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument '-NoProfile -File C:\MicroHack\scripts\longjob.ps1'
+  Register-ScheduledTask -TaskName 'MicroHack-LongJob' -Action $a `
+    -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName 'MicroHack-LongJob'
+'@
+```
+
+Then check progress with a separate, fast invocation reading
+`C:\MicroHack\logs\longjob.log`. The channel is never held, so this cannot wedge — and it
+sidesteps the 4096-byte run-command output cap as well.
 
 ## 4. Application health failures
 
