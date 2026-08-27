@@ -902,3 +902,72 @@ prompt: `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` must return `9`.
 **Do not** work around this by relaxing `Set-ProtectedAcl` globally. `C:\MicroHack\secrets`
 holds the database passwords and must stay administrators-only; an acceptance guard fails if
 that call ever acquires a `-ReadPrincipal`.
+
+## `pytest -q tests/test_contract_assets.py` fails on the rewrite path with two empty lists
+
+**Symptom.** You are on Challenge 1 Path 1B. You have edited a Java or .NET source file, or
+you have just authored the `Dockerfile` that checkpoint 4 asks for, and
+`test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches` fails. In the
+Dockerfile case both diagnostic lines print `[]`, so the failure names nothing at all. The
+test suggests adding your file to `MODERNIZATION_SURFACE`.
+
+**Cause.** That guard protects *repository authoring* integrity, not your application. It
+compares `java/` (or `dotnet/`) against `solutions/reference/…` and permits differences only
+in the nine files the **modernization** path teaches — a set derived from a different path
+than the one you are walking. On the rewrite path, 42 of 50 Java source files are outside
+that set. Separately, the guard asserts that the reference tree's *added* files are exactly
+its declared additions, and `Dockerfile` is one of them; creating your own `java/Dockerfile`
+removes it from the difference and empties both sides of the comparison, which is why the
+diagnostics are blank.
+
+**Fix.** Run the file with that one test deselected, which is what both rewrite runbooks now
+prescribe:
+
+```bash
+cd tests/acceptance
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
+cd ../..
+```
+
+**Do not** follow the test's own advice and edit `MODERNIZATION_SURFACE`. `tests/acceptance`
+is a frozen interface for participants; changing the oracle to fit the code is the exact
+move the challenge's review checklist exists to prevent. Everything else in the file is a
+real gate and must stay green.
+
+## `RuntimeError: psql is required` from the full acceptance profile
+
+**Symptom.** `catalog_acceptance --profile full` aborts partway through. The smoke profile is
+unaffected.
+
+**Cause.** The full profile shells out to `psql` for its database checks. macOS ships no
+PostgreSQL client, and installing the *server* is unnecessary.
+
+**Fix.** `brew install libpq`, then put it on `PATH` — Homebrew deliberately keg-onlys it:
+
+```bash
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+```
+
+The crash is safe to recover from: it happens before any write, and the corpus was verified
+still at 198 figures afterwards. Re-run the profile from the start.
+
+## `brew install --cask microsoft-openjdk@17` fails when you are not at an interactive terminal
+
+**Symptom.** The cask aborts with a sudo/password error. Common in an agent session, a CI
+step, or any non-TTY shell.
+
+**Cause.** The cask runs a `.pkg` installer, which needs an interactive `sudo` prompt.
+
+**Fix.** Use the tarball, which needs no elevation at all:
+
+```bash
+mkdir -p ~/.local/jdk && cd ~/.local/jdk
+curl -sSL -o msjdk17.tar.gz \
+  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
+tar xzf msjdk17.tar.gz
+export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
+```
+
+This yields exactly the pinned 17.0.20+8. Check `java -version` before building: an older
+system JDK earlier on `PATH` produces a Maven failure that does not mention the JDK.

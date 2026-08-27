@@ -67,7 +67,8 @@ dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=characterization.trx" \
   --results-directory "$PWD/.workshop-tmp/dotnet-characterization"
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 cd ../..
 ```
 
@@ -130,7 +131,8 @@ dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=$SLICE_NAME.trx" \
   --results-directory "$PWD/.workshop-tmp/dotnet-$SLICE_NAME"
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 uv --no-config run python -m catalog_acceptance \
   --profile smoke \
   --base-url "$CATALOG_BASE_URL" \
