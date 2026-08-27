@@ -121,6 +121,11 @@ az monitor activity-log list -g <your-resource-group> --offset 12h `
 
 - **Output is empty** → nothing is operating on the VM. You are waiting on your own
   orphaned command. **Wait for it. Do not deallocate.**
+
+  The wait is bounded. One measured occurrence ran **60 minutes 48 seconds** — 57
+  consecutive `Conflict` responses with `provisioningState: Updating` — and then cleared to
+  `Succeeded` on its own. Budget an hour, not indefinitely. If you are past that and the
+  probe is still empty, escalate to your facilitator rather than deallocating.
 - **Output lists operations** → a real platform operation is in progress. Wait and retry.
 
 Scope the query to the VM as shown. Filtering only on `operationName` will also match your
