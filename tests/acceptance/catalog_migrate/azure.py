@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -56,13 +57,16 @@ def _metadata_resource_id() -> str:
     return resource_id
 
 
-def _require_resource_state(
+_TRANSIENT_PROVISIONING_STATES = frozenset({"Creating", "Migrating", "Updating"})
+
+
+def _resource_provisioning_state(
     runner: CommandRunner,
     resource_id: str,
     subscription_id: str,
-) -> None:
-    """Require one live Azure resource to have completed provisioning."""
-    state = runner.run(
+) -> str:
+    """Read one live Azure resource's provisioning state."""
+    return runner.run(
         [
             "az",
             "resource",
@@ -78,8 +82,46 @@ def _require_resource_state(
         ],
         environment=azure_environment(),
     ).stdout.strip()
-    if state != "Succeeded":
-        raise PreconditionError(f"Azure resource is not provisioned: {resource_id}")
+
+
+def _require_resource_state(
+    runner: CommandRunner,
+    resource_id: str,
+    subscription_id: str,
+    *,
+    attempts: int = 5,
+    retry_seconds: float = 20.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Require one live Azure resource to have completed provisioning.
+
+    A resource under platform maintenance reports ``Updating`` while remaining
+    entirely healthy: Azure flips a virtual machine's provisioning state for the
+    duration of every guest patch assessment, and nothing about that state says the
+    machine is the wrong host or that its network topology has changed, which is all
+    this validation is asking. A single point-in-time read therefore fails a correct
+    migration for a reason unrelated to what it verifies, and it does so at second
+    zero of an operation that takes many minutes. Known-transient states are retried
+    for a bounded window; a terminal state such as ``Failed`` still fails at once.
+
+    The observed state is named in the failure. "Is not provisioned" describes a
+    resource that was never created, which is almost never what actually happened,
+    and a caller who cannot see the difference between ``Updating`` and ``Failed``
+    cannot tell "wait" apart from "stop".
+    """
+    state = ""
+    for attempt in range(max(attempts, 1)):
+        state = _resource_provisioning_state(runner, resource_id, subscription_id)
+        if state == "Succeeded":
+            return
+        if state not in _TRANSIENT_PROVISIONING_STATES:
+            break
+        if attempt + 1 < max(attempts, 1):
+            sleep(retry_seconds)
+    raise PreconditionError(
+        f"Azure resource is not provisioned: {resource_id} "
+        f"(provisioningState={state or 'unavailable'})"
+    )
 
 
 def _load_json_output(value: str, description: str) -> dict[str, Any]:
