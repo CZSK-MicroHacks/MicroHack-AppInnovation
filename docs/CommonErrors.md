@@ -1060,13 +1060,35 @@ git grep -lin 'copilot-rewrite' 4bf59f7 || echo "no matches"   # prints "no matc
 git grep -li  'copilot-rewrite' 4bf59f7 | wc -l     # 28. the true answer, exit 0
 ```
 
-The discriminator is the exit code, and for `git grep` it is unambiguous:
+The discriminator is the exit code, and for `git grep` it separates a broken *invocation*
+from a real negative:
 
 | exit | meaning | rows printed |
 | --- | --- | --- |
 | `0` | ran, found matches | some |
-| `1` | ran, matched nothing — **a real negative** | none |
+| `1` | matched nothing — **or the pathspec matched no file at all** | none |
 | `129` | usage error, **never searched** | none |
+
+**The `1` row is not safe on its own, and this is the one case exit codes cannot rescue.**
+Scope a search to a path that does not exist and `git grep` reports **exit 1, silently** —
+byte-identical to a genuine negative, no error on stdout or stderr:
+
+```bash
+git grep -li 'handoff' 4bf59f7 -- 'workshop/catalog_migrate/handoff.py'   # exit 1, no output
+git grep -li 'handoff' 4bf59f7 -- 'tests/acceptance/catalog_migrate/handoff.py'  # exit 0, a hit
+```
+
+The first path does not exist at that commit; the second is the real one. Neither
+`set -o pipefail` nor `${PIPESTATUS[0]}` helps here, because the exit status is *genuinely*
+`1` — the query ran, over nothing. **So assert the file exists before claiming it is silent:**
+
+```bash
+path='tests/acceptance/catalog_migrate/handoff.py'
+git cat-file -e "4bf59f7:$path" 2>/dev/null || { echo "no such file at that rev: $path"; exit 1; }
+```
+
+Plain `grep` is kinder — a missing file exits `2` and says so — but only until a pipeline
+swallows stderr, at which point it prints `0` and exits `0` like everything else.
 
 So never let a bare pipe or `||` stand between a silence claim and its query.
 
