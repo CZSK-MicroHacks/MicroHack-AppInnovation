@@ -3395,3 +3395,24 @@ own CRITICALs without re-deriving it.
 **Restored: the `mode` gate is FORCED - no honest capture of a `Single`-mode environment can satisfy
 `"const": "multiple"`, and Challenge 3 cannot be completed as written.** The correspondent's two
 findings are theirs to restore; they have been told.
+
+### Postscript: the rule was already in the shipped deliverable
+
+Checking that nothing shipped carried tonight's downgrade, the grep for `unreachable` returned four
+hits in `evidence/ch01-feedback-java-rewrite.md`. None concerns the schema - but `:265` reads:
+
+```
+An unreachable-when-reachable report invites someone to re-derive a fix that is already [present]
+```
+
+**That is tonight's error, in the deliverable, written by me, about a different artifact, before I
+made it.** Two of the other three hits (`:119`, `:188`) are corrections of my own earlier overreach
+in the same direction: I called the error registry unreachable, measured, and withdrew it.
+
+So this is the fourth recorded instance of a rule failing to prevent its own recurrence by its
+author - and the strongest, because the rule is not in these working notes but in the artifact the
+arm ships, and the previous recurrence had already been caught and corrected once.
+
+> **Having made an error, corrected it, and published the correction as guidance is not protection
+> against making it again.** The generalisation lives in prose; the next instance arrives as a
+> concrete probe returning `0`, and nothing about a zero announces which rule governs it.
