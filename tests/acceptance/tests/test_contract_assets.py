@@ -5542,3 +5542,41 @@ def test_dotnet_runbook_names_the_acceptance_criteria_that_are_not_verified(repo
         "the runbook lists the criteria without naming that each has a "
         "same-sized dishonest form, which is the property review cannot see"
     )
+
+
+def test_recovery_time_claim_matches_what_the_validator_actually_binds(repo_root):
+    """The chapter promised a guarantee one field wider than the check delivers.
+
+    This is a defect in a remedy this delivery published, not in the workshop as
+    received: neither `--recovery-time` nor `validate_recovery_time` exists at
+    `4bf59f7`. Having built the binding, I then described it as covering more
+    than it does.
+
+    `validate_recovery_time` binds `recoveredAt` to the sealed
+    `incident.alertResolvedAt` and recomputes `minutesToRecovery`, but requires
+    only `recovered >= detected` for `detectedAt`. So a pair of timestamps that
+    agree with each other passes whenever `recoveredAt` is correct, yielding any
+    MTTR the participant likes. The chapter claimed such a pair fails. A check
+    described as stronger than it is stops the reader looking at the one field
+    that still depends on them.
+    """
+    source = (repo_root / "tests/acceptance/catalog_acceptance/sre_evidence.py").read_text(
+        encoding="utf-8"
+    )
+    assert "recovered >= detected" in source, (
+        "the detection clock is no longer merely ordered against recovery; "
+        "re-derive this guard rather than deleting it"
+    )
+    assert 'incident.get("detectedAt")' not in source, (
+        "detectedAt now appears bound to the sealed report -- if the binding was "
+        "added, the chapter text may state the stronger guarantee again"
+    )
+    text = (repo_root / "challenges/ch06-sre-agent/README.md").read_text(encoding="utf-8")
+    assert "inventing a pair of timestamps that agree with each other" not in text, (
+        "challenges/ch06 still claims an invented agreeing pair fails; with "
+        "detectedAt unbound that claim is false"
+    )
+    assert "no digest binds" in text, (
+        "the chapter never tells the participant which field is unbound, so the "
+        "one value that still depends on their honesty looks machine-checked"
+    )

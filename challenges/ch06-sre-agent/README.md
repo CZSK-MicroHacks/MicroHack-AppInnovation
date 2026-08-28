@@ -321,8 +321,16 @@ uv --no-config run catalog-validate-sre-agent-evidence \
 
 `--recovery-time` recomputes `minutesToRecovery` from the two timestamps in
 `evidence/ch06-mttr.json` and checks its `recoveredAt` against
-`incident.alertResolvedAt` in the sealed report. Editing the minutes by hand, or
-inventing a pair of timestamps that agree with each other, both fail here.
+`incident.alertResolvedAt` in the sealed report. Editing the minutes by hand
+fails here, and so does moving `recoveredAt`.
+
+`detectedAt` is the one value in this file that no digest binds. The validator
+requires only that it precede `recoveredAt`, so an invented `detectedAt` — with a
+`minutesToRecovery` that correctly matches it — passes. That gap is stated here
+rather than left for you to find, because a check that is described as stronger
+than it is stops you looking at the one field that still needs you to be honest.
+Take `detectedAt` from the `IncidentActivitySnapshot` timestamp in the audit the
+report seals, which is when the agent actually observed the incident.
 
 Do not manually create or edit the normalized report.
 
