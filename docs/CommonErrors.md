@@ -1658,8 +1658,49 @@ rather than across the file.
 
 The same measurement then produced a better finding than the claim it refuted. `postgresql` pins
 a `linux/arm64` digest; the only host in the file declaring `arm64` is `hosts.coordinator`, and
-`hosts.workshopVm` declares no `architectures` key at all. An `arm64` image serves an `arm64`
+`hosts.workshopVm` declares `architecture: "x64"` — singular key, so it is explicitly excluded
+from `arm64` rather than silently unstated. An `arm64` image serves an `arm64`
 host, so the file provisions the application's **database** for the coordinator and no **runtime**
 for it. That is not a scope decision about an unsupported platform, and it is not answered by
 "nothing here is cross-platform" — **the file expects that host to run the database and gives it
 no way to build the application.**
+
+### An absent key may be a differently-spelled key
+
+`.get("architectures")` on `hosts.workshopVm` returns `None`. I published that as *"declares no
+`architectures` key at all"* and built an argument on the silence. The host declares its
+architecture plainly, under the singular key:
+
+```
+hosts.workshopVm.architecture   = "x64"          <- singular scalar
+hosts.coordinator.architectures = ["arm64","x86_64"]  <- plural list
+```
+
+**`None` from a dictionary lookup is two different facts wearing one face:** the property is
+absent, or the property is present under a name you did not ask for. A lookup cannot tell them
+apart, and only the first supports an argument from silence. **Enumerate the keys before concluding
+one is missing** — `sorted(obj.keys())` costs nothing and answers both.
+
+The divergence is the file's, not the reader's, and it is lopsided enough to be a trap:
+
+```
+"architecture"  (singular) : 12 objects, every value "x64"
+"architectures" (plural)   :  1 object,  hosts.coordinator, value ["arm64","x86_64"]
+```
+
+The plural exists because the coordinator is the only object with more than one value — a local
+decision that silently created a second spelling of the same property. The **values** diverged with
+it: `x64` in all 12, `x86_64` in the one. A consumer comparing a host to a tool by string equality
+gets a false mismatch, because `hosts.coordinator` never says `x64`. `tools.uv` carries both
+spellings inside a single object — `architecture: "x64"` beside a URL named
+`uv-x86_64-pc-windows-msvc.zip`.
+
+**Why nothing caught it:** the frozen suite pins the majority form (`tools.git.architecture ==
+"x64"`) and reads `hosts.workshopVm.azureImage.version`, but contains **no reference to
+`hosts.coordinator` anywhere**. The one object that departs from the convention is the one object
+the tests never touch. That is not a coincidence to be corrected by adding an assertion — it is the
+general shape: **a convention is enforced where it is already followed, and the outlier is outside
+the guard because being outside is what made it an outlier.**
+
+Ask of a structured file *"which spellings of this property exist"*, not *"what is this property's
+value"*, and check the minority spelling first — it is where the exception lives.

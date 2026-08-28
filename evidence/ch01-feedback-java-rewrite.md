@@ -590,10 +590,21 @@ routes, two OS families, both pinned. The runtimes have one route and one family
 
 **The `linux/arm64` digest is the load-bearing detail.** An `arm64` image can only serve an
 `arm64` host, and the only host in the file declaring `arm64` is `hosts.coordinator` — this
-machine. `hosts.workshopVm` declares no `architectures` key at all. So the lock does not merely
-tolerate this host; it **provisions the application's database to run on it**, at a pinned digest,
-and that is the route this walkthrough actually used. What it does not provision for the same host
-is a runtime to build the application that would talk to that database.
+machine. `hosts.workshopVm` declares `architecture: "x64"`, so it is not merely unstated as
+`arm64`; it is **explicitly excluded** from it. So the lock does not merely tolerate this host; it
+**provisions the application's database to run on it**, at a pinned digest, and that is the route
+this walkthrough actually used. What it does not provision for the same host is a runtime to build
+the application that would talk to that database.
+
+An earlier revision of this paragraph said `workshopVm` *"declares no `architectures` key at all"*.
+That was literally true and materially wrong: the key is spelled `architecture`, singular. **12
+objects in this lock use the singular form; exactly one — `hosts.coordinator` — uses the plural
+`architectures`,** because it is the only one with more than one value. The two forms also carry
+different vocabularies for the same architecture: the 12 singular values are all `x64`, and the
+sole plural list says `x86_64`. `tools.uv` holds both spellings in one object, `architecture:
+"x64"` beside a URL named `uv-x86_64-pc-windows-msvc.zip`. Nothing reconciles them — the frozen
+suite pins the majority form (`tools.git.architecture == "x64"`) and **never reads
+`hosts.coordinator` at all**, so the outlier is unguarded by construction.
 
 | | routes | OS families | serves the coordinator |
 |---|---|---|---|
