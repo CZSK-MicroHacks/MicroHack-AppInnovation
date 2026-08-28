@@ -576,13 +576,35 @@ Engine **27.4.0** — matching `hosts.coordinator.dockerEngineVersion` exactly.
 
 **Resist the tempting stronger version of this claim, because the same file refutes it.**
 "All five installers are Windows" invites the reading that the lock is simply a Windows
-artifact — and that reading is answerable: `tools.terraform.platforms` ships a `darwin/arm64`
-download with a `sha256`, and `databases.postgresql.localContainer.platforms` ships a
-`linux/arm64` digest. Cross-platform acquisition is **solved twice in this file**, once for a
-tool and once for a database, both pinned. It is left unsolved only for `runtimes.dotnet` and
-`runtimes.java`, which carry no `localContainer` or `platforms` key at all — and which are the
-two components an attendee cannot proceed without. **The larger count produces the weaker
-argument;** the narrow claim is the one that survives contact with the file.
+artifact. An earlier revision of this paragraph answered that with *"cross-platform acquisition
+is solved twice, for a tool and for a database"* — citing `tools.terraform.platforms` and
+`databases.postgresql.localContainer.platforms`. **The Terraform half of that was wrong.** Its
+platforms are `darwin/arm64` and `darwin/amd64`: two *architectures* of one OS family, macOS
+only, with no Windows entry at all. That is cross-**architecture**, not cross-platform, and the
+evidence was in the output I read when I wrote it.
+
+**The database half stands, and it is the whole contrast.** Both databases genuinely span two OS
+families — a Windows `installer` under `windowsService` *and* a Linux `localContainer` image
+(`sqlserver` `linux/amd64`; `postgresql` `linux/amd64` **and** `linux/arm64`). Two acquisition
+routes, two OS families, both pinned. The runtimes have one route and one family.
+
+**The `linux/arm64` digest is the load-bearing detail.** An `arm64` image can only serve an
+`arm64` host, and the only host in the file declaring `arm64` is `hosts.coordinator` — this
+machine. `hosts.workshopVm` declares no `architectures` key at all. So the lock does not merely
+tolerate this host; it **provisions the application's database to run on it**, at a pinned digest,
+and that is the route this walkthrough actually used. What it does not provision for the same host
+is a runtime to build the application that would talk to that database.
+
+| | routes | OS families | serves the coordinator |
+|---|---|---|---|
+| `databases.postgresql` | installer + container | Windows + Linux | **yes** — `linux/arm64` |
+| `databases.sqlserver` | installer + container | Windows + Linux | no — `linux/amd64` only |
+| `tools.terraform` | download | **macOS only** | yes |
+| `runtimes.dotnet` / `runtimes.java` | installer | Windows only | **no** |
+
+So the inconsistency is not "macOS is unsupported" and not "nothing is cross-platform". It is
+narrower and harder to answer: **the file expects this host to run the database and gives it no
+way to build the application.**
 
 **That same block also predicts the Testcontainers asymmetry this delivery treated as an
 anomaly.** `coordinator` pins a Docker engine; `workshopVm` pins none. `PostgreSqlIntegrationTest`

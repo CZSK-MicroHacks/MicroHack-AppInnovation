@@ -707,7 +707,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 ## 101. Maven finds a JRE, then containerized Testcontainers cannot find Docker
 **Symptom:** Maven reports that no compiler is available on macOS; after moving the build into a JDK container, the PostgreSQL integration test reports no valid Docker environment.
 
-**Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary. Underneath both: `workshop/toolchain.lock.json` gives a macOS host **no pinned way to acquire either language runtime**. All five of its installer keys — `runtimes.dotnet.windowsSourceSdkInstaller`, `runtimes.java.windowsSourceRuntimeInstaller`, and the three under `databases.*` — are Windows `x64`. The sharp part is not that they are uniformly Windows, because the file is *not* Windows-only: `tools.terraform.platforms` ships a `darwin/arm64` download with a `sha256`, and `databases.postgresql.localContainer.platforms` ships a `linux/arm64` digest. Cross-platform acquisition is solved twice, for a tool and for a database — and left unsolved for the two runtimes, which are the only components the attendee cannot proceed without. Meanwhile `hosts.coordinator` contracts macOS >= 13.0 on `arm64` and `x86_64` and pins Docker Desktop 4.37.1 / Engine 27.4.0 to the patch version. So acquiring a JDK by hand off the VM is the **expected** path here, not a workaround for a defect — worth stating, because a reader who cannot tell which one they are doing also cannot tell whether to report it.
+**Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary. Underneath both: `workshop/toolchain.lock.json` gives a macOS host **no pinned way to acquire either language runtime**. All five of its installer keys — `runtimes.dotnet.windowsSourceSdkInstaller`, `runtimes.java.windowsSourceRuntimeInstaller`, and the three under `databases.*` — are Windows `x64`. The sharp part is not that they are uniformly Windows. It is that the lock provisions a **database** for this host and not a **runtime**: `databases.postgresql.localContainer.platforms` pins a `linux/arm64` digest, and the only `arm64` host the file declares is `hosts.coordinator` (macOS >= 13.0, Docker Desktop 4.37.1 / Engine 27.4.0 pinned to the patch version). An `arm64` image serves an `arm64` host, so the file contemplates this machine running the application's database — while offering it no way to build the application that would use it. So acquiring a JDK by hand off the VM is the **expected** path here, not a workaround for a defect — worth stating, because a reader who cannot tell which one they are doing also cannot tell whether to report it.
 
 **Resolution:** Use the exact digest-pinned Microsoft OpenJDK build image. Mount Docker Desktop's VM `/var/run/docker.sock`, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` and `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`, and mount the checkout at the same absolute path. Do not install an unpinned JDK or skip the integration test. Here "unpinned" means *not digest-pinned* and scopes the build image; it does not by itself settle whether a version-pinned host install is acceptable. If you cannot run the container build, see the non-TTY cask entry below, which pins the version explicitly.
 
@@ -1634,3 +1634,32 @@ The same reviewer had already been unable to see the fix, having read the branch
 behind tip — so the charity was offered about a defect that no longer existed, on the strength of
 a reading of text that had already been replaced. **Stale read, then generous inference, and the
 two failures compose: neither alone would have produced a wrong conclusion about the artifact.**
+
+### Cross-architecture is not cross-platform
+
+A claim in this document read *"cross-platform acquisition is solved twice, for a tool and for a
+database."* Half of it was false, and the disproof was in the command output it was written from:
+
+```
+tools.terraform.platforms            darwin/arm64, darwin/amd64          <- one OS family
+databases.postgresql localContainer  linux/amd64, linux/arm64            <- one OS family
+                     windowsService  installer (.exe)                    <- second family
+```
+
+**Terraform is macOS-only.** Two entries that differ in *architecture* look, at a glance, exactly
+like two entries that differ in *platform* — `darwin/arm64` and `darwin/amd64` sit in the same
+shape of list as `linux/amd64` and `windows/amd64` would. The reader supplies "cross-platform"
+because the list has two members.
+
+The database half survives, and only because a **second acquisition route** exists: an installer
+in one OS family and a container image in another. **Plurality within one route is not coverage
+across families.** When a claim is about reach, count *families*, and count them per component
+rather than across the file.
+
+The same measurement then produced a better finding than the claim it refuted. `postgresql` pins
+a `linux/arm64` digest; the only host in the file declaring `arm64` is `hosts.coordinator`, and
+`hosts.workshopVm` declares no `architectures` key at all. An `arm64` image serves an `arm64`
+host, so the file provisions the application's **database** for the coordinator and no **runtime**
+for it. That is not a scope decision about an unsupported platform, and it is not answered by
+"nothing here is cross-platform" — **the file expects that host to run the database and gives it
+no way to build the application.**
