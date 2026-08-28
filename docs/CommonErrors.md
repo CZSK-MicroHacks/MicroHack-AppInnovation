@@ -3339,3 +3339,59 @@ scoring perfectly safe on the push axis while attached to nothing.
 
 The third column is **conditionally delivered**, and on that column this branch was mis-scored by its
 own author as complete.
+
+## The reachability probe was blind, and it travelled - it downgraded three findings, two of them another party's
+
+This file downgraded the `mode` casing defect from FORCED on the grounds that `cicd-evidence` appears
+in zero challenge and zero solution files. A correspondent adopted the same test and used it to
+reduce two of their own CRITICAL findings. **The test is wrong, and all three findings stand at their
+original severity.**
+
+```
+challenges/ch02/README.md:212  catalog-validate-challenge-evidence load
+challenges/ch03/README.md:274  catalog-validate-challenge-evidence cicd            <- prescribed
+challenges/ch04/README.md:257  catalog-validate-challenge-evidence observability   <- prescribed
+success criteria, each:  "- [ ] catalog-validate-challenge-evidence <kind> exits 0."
+
+catalog_acceptance/shared_challenges.py:399
+    schema_name = { "load": "load-test-evidence.schema.json",
+                    "cicd": "cicd-evidence.schema.json",
+                    "observability": "observability-evidence.schema.json" }
+
+cicd-evidence.schema.json          title "Challenge 3 CI/CD revision evidence"   mode const 'multiple'
+observability-evidence.schema.json                                            rowCount const 1
+attendee artifact names            evidence/cicd-report.json · evidence/load-test-report.json
+MY PROBE  git grep -F 'cicd-evidence' -- challenges/  ->  0        BLIND
+```
+
+**The attendee is required to produce the artifact, is handed the command that validates it against
+the schema, and the success criteria require that command to exit zero.** The gate is maximally
+reachable.
+
+> **The schema is bound to the attendee's command by a keyword that resolves in Python, so the
+> schema's filename never appears in attendee-facing material and never needs to.** Searching for a
+> schema's name in the challenge text measures documentation style, not reachability.
+
+It is the adjacent-question error again - *does this name appear here* standing in for *can a
+participant reach this gate* - and the two diverge exactly when indirection exists, which is the
+normal case for anything a program looks up.
+
+### Why this instance is the worst one in this file
+
+Every other blind instrument recorded here produced a **false negative on a defect**, and the usual
+consequence was an unfounded accusation or a missing confirmation. This one produced a **false
+negative on reachability**, whose consequence is a *downgrade* - it made three real findings look
+smaller.
+
+And it is the only instrument defect tonight that **crossed between parties**. It was published as
+the test that dissolved one of my own findings, which is the most persuasive possible framing: a test
+that costs its author something reads as disinterested, so a correspondent applied it to two of their
+own CRITICALs without re-deriving it.
+
+> **A test whose first result is against its author is not thereby validated.** Self-cost is evidence
+> about motive and none at all about instrument, and it is precisely the property that makes a broken
+> test travel.
+
+**Restored: the `mode` gate is FORCED - no honest capture of a `Single`-mode environment can satisfy
+`"const": "multiple"`, and Challenge 3 cannot be completed as written.** The correspondent's two
+findings are theirs to restore; they have been told.
