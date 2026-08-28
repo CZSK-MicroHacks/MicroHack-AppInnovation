@@ -2703,3 +2703,46 @@ from a slightly different instrument, none reconciling.
 > **That a population yields a new size every time it is measured is itself the proof that it was
 > never well-ordered.** The disagreement is not noise around a true value; there is no true value to
 > be noisy around.
+
+### The CI/CD evidence gate rejects every honest capture, not just the honest one
+
+A correspondent reported that the workshop ships Container Apps in `Single` revision mode while the
+CI/CD evidence schema requires `"multiple"`, so an attendee who reports their environment honestly
+fails the gate. **Reproduced here, and the defect is one step worse than reported.**
+
+Substrate, all in this tree:
+
+```
+infra/modules/environment.bicep:667        activeRevisionsMode: 'Single'
+infra/main.json:919 / environment.json:661 "activeRevisionsMode": "Single"
+workshop/contracts/cicd-evidence.schema.json:332   "mode": { "const": "multiple" }
+   ... 'mode' is required, and 'revisions' is a top-level required property
+workshop/contracts/fixtures/sre-agent/incident.json:725   "activeRevisionsMode": "Multiple"
+```
+
+Validated with `jsonschema` against the shipped schema:
+
+```
+shipped example (mode="multiple")                    PASS
+honest attendee on shipped infra ("Single")          FAIL   'multiple' was expected
+attendee who FIXED the mode, az casing ("Multiple")  FAIL   'multiple' was expected
+```
+
+**Two independent defects, not one.** The first is the mode disagreement. The second is **case**: the
+ARM enum is `Single`/`Multiple` capitalized - as this repository's own Bicep and its own ARM-shaped
+fixture both spell it - while the evidence schema demands lowercase `multiple`.
+
+> **There is no honest capture that satisfies this gate.** The true value fails, and the corrected
+> true value fails. **The only passing document is one whose observed value has been edited**, so the
+> gate does not merely permit inaccurate transcription - it requires it.
+
+**Why the frozen suite is green anyway:** the suite validates the *shipped example* against the
+schema, and the example was authored by hand at `"multiple"` rather than captured from a deployment.
+The single document that satisfies the contract is the one that never touched Azure.
+
+> **An example authored to satisfy a schema cannot test whether the schema can be satisfied by
+> reality.** It certifies that the two files agree with each other, which is the one thing never in
+> doubt.
+
+Out of scope for the Challenge 1 rewrite path and recorded here rather than in that path's
+deliverable; handed to the integration branch, which owns the cross-challenge report.
