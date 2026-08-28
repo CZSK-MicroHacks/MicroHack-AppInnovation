@@ -1764,3 +1764,63 @@ lines, and the unit of the argument is a function.
 that resolved to the *wrong* thing. This one resolves to the *right* thing four different ways, and
 still produced a disagreement, a withdrawal of a true reading, and a filed finding. **Ambiguity does
 not require an error to do damage.**
+
+### In wrapped prose, a longer search pattern is not narrower - it is broken
+
+The sweep that found the contradiction above nearly did not. Measured against the revision that
+carried it, with the defect definitely present in the file:
+
+```
+"solved twice in"                          -> 1   <- the fragment actually used
+"cross-platform acquisition is solved twice" -> 2
+"solved twice in this file"                -> 0   MISS
+"acquisition is solved twice in this file" -> 0   MISS
+```
+
+The claim is hard-wrapped: `solved twice in` ends one line and `this file,` begins the next.
+`git grep` matches within a line, so **every pattern long enough to span the wrap returns zero.**
+
+**This inverts the usual intuition about search.** A longer pattern is normally just more specific -
+fewer hits, same reliability. Here it is not narrower, it is **non-functional**, and it fails
+silently with the most reassuring output a sweep can produce. Worse, the failure is correlated with
+diligence: **a reviewer who pastes the full sentence they just withdrew is the one guaranteed to
+miss it**, while a careless three-word fragment finds it. Precision is anti-correlated with recall.
+42% of the non-blank markdown lines in this repository fall in the 70-100 character band, so this
+applies to the whole documentation set, not one paragraph.
+
+Sweep on normalized whitespace, not on lines:
+
+```python
+import re, pathlib, subprocess
+flat = lambda p: re.sub(r"\s+", " ", pathlib.Path(p).read_text(errors="replace"))
+for f in subprocess.run(["git","ls-files","*.md"],capture_output=True,text=True).stdout.split():
+    if CLAIM in flat(f):
+        print(f)
+```
+
+**`git grep` reports lines; the unit of a claim is a sentence; in wrapped prose a sentence is not a
+line.** Same mismatch as citing a function by a line number - the tool's unit is finer than the
+argument's unit, and nothing in the output says so.
+
+### The re-run is only a control if the instrument changes
+
+Three instruments failed inside ten minutes while *verifying* the entry above, all silently:
+
+1. `grep -c` for the wrapped phrase - returned the **exact inverse** of the truth, reporting the
+   claim absent from both revisions that carried it and present only in the commit that fixed it.
+   Acting on it would have meant telling a correct reviewer their correction was wrong.
+2. A "was it marked as withdrawn" heuristic with a 170-character context window and a hand-listed
+   set of marker phrases - raised a false positive because the list omitted *"I published that as"*.
+3. The original sweep, which succeeded only because the fragment happened to fit on one line.
+
+The lesson is not *re-run the check*. **I did re-run it, and the re-run carried the same blind spot,
+because it was the same kind of instrument asking the same kind of question.** A repeated
+measurement confirms a defective instrument as readily as a sound one.
+
+> **Re-running a check is a control only when the second run uses a different instrument.** Same
+> tool, same unit, same assumption - a second run buys nothing but confidence.
+
+Cheapest way to satisfy this: make the second instrument structural where the first was textual.
+Parse where you grepped; walk keys where you pattern-matched; resolve a line to an AST node where
+you read a number. Every recovery recorded in this document came from changing the instrument, not
+from repeating the measurement.
