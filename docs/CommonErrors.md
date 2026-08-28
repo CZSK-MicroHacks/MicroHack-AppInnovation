@@ -709,7 +709,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 
 **Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary.
 
-**Resolution:** Use the exact digest-pinned Microsoft OpenJDK build image. Mount Docker Desktop's VM `/var/run/docker.sock`, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` and `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`, and mount the checkout at the same absolute path. Do not install an unpinned JDK or skip the integration test.
+**Resolution:** Use the exact digest-pinned Microsoft OpenJDK build image. Mount Docker Desktop's VM `/var/run/docker.sock`, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` and `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`, and mount the checkout at the same absolute path. Do not install an unpinned JDK or skip the integration test. Here "unpinned" means *not digest-pinned* and scopes the build image; it does not by itself settle whether a version-pinned host install is acceptable. If you cannot run the container build, see the non-TTY cask entry below, which pins the version explicitly.
 
 ## 102. Markdown backticks break a PowerShell checker regex
 **Symptom:** A checker intended to parse fenced PowerShell blocks fails with `Missing ')' in method call` before reading any guide.

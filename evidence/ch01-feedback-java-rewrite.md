@@ -303,6 +303,43 @@ it deliberately, transmits a position already retracted. It is not an under-coun
 the opposite of the author's settled judgment. Deletion had been tried, found to leave the
 case uncovered, and reversed on purpose — and a stale citation hides exactly that reversal.
 
+**But not every disagreement about a number is skew, and assuming it is costs a real check.**
+A count is a function of two things, and only one of them is the revision. Two counts of the
+tarball block over the *same* bytes:
+
+| pattern | `8033b29` | `b779325` | tip | `origin/rewrite-integration` |
+|---|---:|---:|---:|---:|
+| the three prescriptive lines (`mkdir` / URL / `export`) | 3 | 3 | 3 | 3 |
+| that, plus incidental re-mentions (`cd`, `tar`) | 5 | 5 | 5 | 5 |
+
+**Both are correct; neither is stale.** The narrow count is flat across every revision the
+block has existed at, so a 3-vs-5 disagreement carries no information about *when* either
+party looked. **Before attributing a numeric disagreement to rev-skew, re-run both numbers at
+one revision** — if they still differ, the instrument differed, not the substrate. This is the
+positive control for skew claims specifically, and it is cheap.
+
+### A correction I got wrong in the safe direction, and the defect it exposed
+
+This arm reported that `8033b29` *narrowed* entry 101's "unpinned" to "not digest-pinned".
+**That is false as stated, and the disproof is one command:** entry 101's resolution line is
+**byte-identical at `4bf59f7` and at this branch's tip.** The commit never touched it.
+
+What it actually added was a **gloss in a different entry** — the non-TTY cask entry, ~245
+lines away — asserting how entry 101's sentence should be read. So the reinterpretation is
+real, but it lives somewhere the sentence it reinterprets does not point to.
+
+**That is a residual defect in this arm's own fix, and it is this report's dominant theme
+turned on its author.** A reader routed to entry 101 — which is where the material sends
+them — reads an unqualified *"Do not install an unpinned JDK"* and has no way to learn it is
+scoped to the build image. The pointer ran cask-entry → 101 and never 101 → cask-entry, so
+the contradiction was only resolved for someone who had already read both. **Knowledge
+correct, routing one-directional.** Fixed by scoping the phrase in place and adding the
+return pointer; no test pinned that wording.
+
+The general form is worth more than the instance: **describing an added gloss as an edit to
+the original is the same operand error as the rest of this record.** Both artefacts contain
+the words; only one of them is the one a reader reaches.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
