@@ -149,9 +149,17 @@ psql -c 'REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM "<your-identity>";'
 Wait a few seconds, then drive `/?search=...` and `/perftest/catalog` several times each.
 The performance endpoint needs its API key header. Expect `500` and `503`.
 
-**Restore, then verify.** Re-add the role membership or re-grant `SELECT`, confirm the
-grants are back by querying them, and confirm `/readyz` reports ready and `/` returns
-`200`.
+**Restore, then verify — with the probe that failed, not a weaker one.** Re-add the role
+membership or re-grant `SELECT`, confirm the grants are back by querying them, and then
+re-drive **`/?search=...` and `/perftest/catalog`**, the two requests that returned `500`
+and `503`. Both must return `200`.
+
+Do not verify this restore with `/readyz`, and do not verify it with a bare `/`. Section
+["A thing worth noticing"](#a-thing-worth-noticing-while-you-are-here) explains why
+`/readyz` returns `200` throughout this fault: it never reads application data, so it
+cannot observe the fault and therefore cannot observe its removal either. A bare `/` is
+weaker than the request that failed. Verifying a fault is gone with a probe that could not
+see it while it was present is not a verification.
 
 ## 3. `catalog.query.failed` needs a narrower fault
 
@@ -174,8 +182,10 @@ psql -c 'REVOKE SELECT ON TABLE figures FROM "<your-identity>";'
 Drive `/?search=...` a few times and expect `500`.
 
 **Restore.** On Azure SQL, `REVOKE SELECT ON OBJECT::dbo.Figures` removes the `DENY`
-without removing the role grant. On PostgreSQL, re-`GRANT SELECT` on the table. Confirm
-`/` returns `200` and `/readyz` reports ready.
+without removing the role grant. On PostgreSQL, re-`GRANT SELECT` on the table. Verify with
+the request that failed: **`/?search=...` must return `200`**. A bare `/` is not sufficient
+here for the same reason as in step 2 — it is a weaker probe than the one that surfaced the
+fault.
 
 ## 4. Wait before you query
 
@@ -206,11 +216,14 @@ Query gotchas worth knowing in advance:
 
 1. Confirm the application is healthy and the workspace you resolved is your stack's.
 2. Step 1. No undo needed.
-3. Step 2. Restore and verify before moving on.
-4. Step 3. Restore and verify `/` returns `200`.
+3. Step 2. Restore and verify with `/?search=...` and `/perftest/catalog` before moving on.
+4. Step 3. Restore and verify `/?search=...` returns `200`.
 5. Wait 300 seconds.
 6. Run the union query and confirm all eight signal names are present.
 7. Only then collect telemetry evidence.
+8. Re-run the acceptance suite **last**, after every fault is restored and verified.
+   The handoff contract pins the acceptance `result` to `passed`, so an acceptance run
+   taken while any fault is active cannot satisfy it.
 
 Steps 2 and 3 must not overlap. Together they exhaust the connection pool, the failures
 surface as connection-pool timeouts rather than database exceptions,
