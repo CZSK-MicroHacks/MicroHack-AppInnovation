@@ -84,16 +84,15 @@ def _run_client(
 ) -> str:
     """Run a database client and return stdout without exposing credentials.
 
-    PostgreSQL is pinned to UTF-8 because ``psql`` emits the server encoding
-    verbatim; decoding it through the Windows locale silently mojibakes any
-    non-ASCII row and makes comparison against the catalog impossible. The
-    sqlcmd path is deliberately left on the interpreter default, which is what
-    it has always been validated against.
+    Both clients are pinned to UTF-8 because they emit the server encoding
+    verbatim; decoding either through the Windows locale silently mojibakes any
+    non-ASCII row, and on cp1252 hosts raises inside ``subprocess``'s reader
+    thread, which returns ``stdout=None`` instead of failing.
 
     Raises:
         RuntimeError: If the client is missing, fails, or times out.
     """
-    decoding = {"encoding": "utf-8", "errors": "strict"} if client_name == "psql" else {}
+    decoding = {"encoding": "utf-8", "errors": "strict"}
     try:
         result = subprocess.run(
             command,

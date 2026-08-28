@@ -974,6 +974,477 @@ this delivery, so there was never anything to capture. Every screenshot the chap
 is of an IDE that does not exist here.
 
 ---
+### Finding 20 — `render-handoff` is unconditionally impossible as shipped, because the acceptance report's `baseUrl` can never equal the target output's `application.url`
+
+**Severity: blocks the last command of the chapter for every attendee, on both stacks.**
+
+`catalog_migrate/handoff.py:144-150` gates the handoff on four equalities between the
+acceptance report's `subject` and the target output. Three of them matched exactly on my
+run. The fourth is an **exact string comparison of URLs**:
+
+```python
+or acceptance["baseUrl"] != app["url"]
+```
+
+and it cannot succeed:
+
+| artifact | field | value |
+| --- | --- | --- |
+| `evidence/azure-target-output.json` | `application.url` | `https://ca-mh-user001-dotnet.…azurecontainerapps.io` |
+| `evidence/acceptance-report.json` | `baseUrl` | `https://ca-mh-user001-dotnet.…azurecontainerapps.io/` |
+
+One character. The target URL comes from a Bicep output and has no trailing slash. The
+acceptance `baseUrl` is declared as `base_url: AnyHttpUrl` (`catalog_acceptance/models/contracts.py:276`)
+and is serialized **raw** into the report at `catalog_acceptance/runner.py:397`. Pydantic v2's
+`AnyHttpUrl` normalizes a host-only URL by appending `/`:
+
+```
+'https://ca-mh-…azurecontainerapps.io'   -> 'https://ca-mh-…azurecontainerapps.io/'
+'https://ca-mh-…azurecontainerapps.io/'  -> 'https://ca-mh-…azurecontainerapps.io/'
+```
+
+**Both** input forms normalize to the trailing-slash form, so no value the attendee can
+pass to `--base-url` avoids it. This is not a mistake the attendee can make or unmake.
+
+Note the near-miss twenty lines earlier in the *same file*: `runner.py:247` does
+`str(self._settings.base_url).rstrip("/")` for the per-check base URL. The author knew
+about the normalization, stripped it where it would have broken request construction, and
+passed the un-stripped value into the report.
+
+**The repository already contains the correct comparison.** `catalog_acceptance/handoff.py:1245`
+compares the identical pair of values as:
+
+```python
+if str(report.base_url).rstrip("/") != handoff["application"]["url"].rstrip("/"):
+```
+
+Two implementations of one comparison, in one repository, one tolerant and one exact —
+and the exact one is the blocking gate.
+
+**Why no test caught it, and this is the important part.** `tests/test_migration_handoff.py:342`
+builds the acceptance fixture as a raw dict:
+
+```python
+"baseUrl": target["application"]["url"],
+```
+
+It **copies** the target URL into the acceptance document rather than producing the
+document the way the product produces it. The value never passes through `AcceptanceReport`,
+so it never passes through `AnyHttpUrl`, so the normalization the real producer always
+applies is structurally invisible to the test. `tests/test_contract_assets.py:1101` does
+the same thing. The fixture is equal to the target *by construction*, which is precisely
+the property under test.
+
+I verified the tests cannot distinguish the two behaviours: `test_migration_handoff.py`
+reports **12 passed** both against the shipped exact comparison and against the
+`rstrip("/")` fix. A test that passes identically whether or not the defect is present is
+not testing the thing it is named for.
+
+This is the same shape as the pattern the facilitator has now named seven times — *tests
+that verify a model of correctness rather than the artifact* — but this instance is in the
+frozen contract code rather than in a remedy, and it has been shipped long enough to be
+the reason nobody has ever reached `modernization-contract.json` on this path.
+
+**Fix applied and verified.** One line, matching the repository's own tolerant sibling:
+
+```python
+or acceptance["baseUrl"].rstrip("/") != app["url"].rstrip("/")
+```
+
+With that change the gate passed on real evidence and the run advanced to the next check.
+
+**The wrong-but-plausible angle.** The error text is `acceptance subject differs from
+target output`. It names four fields and identifies none of them. Three of the four are
+long hex strings that an attendee will naturally suspect first — a commit, a digest, a
+revision name. The one that is actually wrong is the one that *looks identical* when the
+two documents are read side by side, because a trailing slash is invisible in casual
+reading and is stripped by most terminals' URL rendering. The plausible attendee response
+is to re-run the deployment, re-tag the image, or re-run acceptance with a different
+`--source-commit`. None of that can work, and each attempt costs a full deploy cycle.
+
+
+### Finding 21 — the telemetry fault-injection procedure destroys the acceptance evidence the handoff requires, and the chapter never says so
+
+**Severity: high. Silent, ordering-dependent, and it produces a failure two steps away from its cause.**
+
+`docs/TelemetryFaultInjection.md` exists because five of the eight required log signals —
+`catalog.database.failed`, `catalog.import.failed`, `catalog.performance.failed`,
+`catalog.query.failed`, `exception` — are only emitted when the application **fails**. The
+attendee is required to drive the running release into a faulted state to make the
+telemetry evidence collectable at all.
+
+The handoff then requires the opposite. `modernization-contract.schema.json:413` pins
+`acceptance.result` to `"const": "passed"`, and `catalog_migrate/handoff.py:234` copies
+`acceptance["status"]` straight into that slot. So the chapter requires one artifact
+proving the app is healthy and another proving it is not, from the same deployed revision,
+and gives no ordering constraint for producing them.
+
+**What happened on my run, which is the ordinary sequence, not an unusual one.** I ran
+acceptance, got the F-81 result, then ran fault injection to collect the telemetry
+signals. Acceptance had written `evidence/acceptance-report.json`; the fault-injection
+window included an acceptance execution, which **overwrote the same path** with an
+11-of-22 report:
+
+```
+status=failed profile=full finishedAt=2026-08-27T23:59:51Z
+checks=22 passed=11
+FAIL catalog-order-and-count, name-search, name-only-search, category-filter-slug,
+     category-filter-name, known-figure, unknown-figure, import-new-category,
+     idempotent-import, invalid-import, performance-contract
+```
+
+Every one of those eleven failures is the fault injection working correctly. The report is
+an accurate record of a deliberately broken application. It is also now the only
+acceptance evidence on disk, and `render-handoff` — run much later, after the faults were
+restored and the app was demonstrably healthy again — fails with:
+
+```
+document does not satisfy modernization-contract.schema.json: 'passed' was expected
+```
+
+**Why this is the dangerous kind of defect rather than the annoying kind.** The message
+names a JSON Schema and a constant. It does not name the file, the field, or the fact that
+the artifact was overwritten by a procedure the chapter itself instructed. By the time it
+fires, the application is healthy, the telemetry is green, and the acceptance report on
+disk describes a state that no longer exists. Everything the attendee can *see* about the
+running system says the run is good.
+
+The two plausible responses are both bad:
+
+1. **Edit `acceptance-report.json`** to say `"status": "passed"`. It is one word, it is in
+   a file the attendee wrote, the app really is healthy, and the resulting contract
+   validates and ships. This produces a handoff bundle asserting 22 passed checks that
+   were never observed on the release. Challenges 2 through 6 consume it.
+2. **Re-run acceptance** — correct, but only obvious if you already know the report was
+   clobbered rather than that the app is broken. Nothing on screen suggests it.
+
+Option 1 is easier, faster, and looks more like a correction than a fabrication. That is
+the whole failure mode.
+
+**What the material is missing.** One sentence, in `docs/TelemetryFaultInjection.md`:
+*restore the faults, then re-run full acceptance, and do that before `render-handoff`.*
+Better still, have fault injection write to a distinct path, so that the artifact proving
+the app healthy is never the same file as the artifact proving it broken.
+
+**What I did.** I re-ran full acceptance on the release revision with the faults restored,
+as a new measurement. I did not edit the report. An old green run re-reported as new would
+have been worse than a gap, and a hand-edited status would have been worse than both.
+
+
+### Finding 22 — the fault-injection restore verification passes while the application is still broken
+
+**Severity: high, and it is a false negative in the workshop's own verification step.**
+
+`docs/TelemetryFaultInjection.md:135-137` specifies how to confirm the database fault has
+been undone:
+
+> **Restore, then verify.** Re-add the role membership or re-grant `SELECT`, confirm the
+> grants are back by querying them, and confirm `/readyz` reports ready and `/` returns `200`.
+
+and again at `:164-166` for the narrower `dbo.Figures` `DENY`:
+
+> **Restore.** … Confirm `/` returns `200` and `/readyz` reports ready.
+
+**Both probes return success against an application whose catalog is still dead.** I ran
+them and got exactly that:
+
+```
+/healthz => 200 len=20
+/readyz  => 200 len=65
+/        => 200 len=147507
+```
+
+Three green probes, one of them a 147-kilobyte page. Full acceptance against the same
+revision at the same moment:
+
+```
+status=failed  passed=11/22
+FAIL known-figure      :: known figure detail returned HTTP 500 or invalid HTML
+FAIL unknown-figure    :: unknown=500, malformed=404, noncanonical=404
+FAIL name-search       :: name search or literal wildcard behavior returned unexpected results
+FAIL performance-contract :: performance endpoint returned HTTP 503 or invalid JSON
+… 7 more
+```
+
+**Why the probes lie.** The document *itself* explains the mechanism, 40 lines further
+down at `:206-208` — `/readyz` "opens a connection and runs a trivial statement; it never
+reads application data". The `/` route resolves the category list, which is a different
+table from `dbo.Figures`. So a `DENY SELECT ON OBJECT::dbo.Figures` — the fault the
+document tells you to inject in step 3 — leaves `/` rendering a full page of categories
+and leaves `/readyz` reporting ready. The two probes prescribed for verifying the restore
+are precisely the two the fault is documented as not touching.
+
+The author knew the failure mode, wrote it down as a warning about *injection*, and did
+not carry it into the *restore* step twenty lines earlier.
+
+**What it costs.** I restored the faults, ran the prescribed verification, saw three
+200s, and moved on believing the application was healthy. It was not; `dbo.Figures` was
+still denied and the role memberships were still dropped. Everything downstream inherited
+that: the acceptance re-run came back 11/22, and because the failures are real 500s and
+503s rather than harness errors, the natural reading is *the application regressed* or
+*the deployment is bad*. I spent a full diagnostic cycle — a Log Analytics exception
+query, a container-app identity lookup and a scheduled-task round trip — establishing that
+the application was fine and the grants were not.
+
+The confirming measurement, from Log Analytics rather than from the app itself:
+
+| endpoint | before regrant | after regrant |
+| --- | --- | --- |
+| `GET /perftest/catalog` | `503` | `200` |
+| `GET /_Host` (catalog page) | `200` | `200` |
+| `GET /readyz` | `200` | `200` |
+
+Only one row moved. The two rows the document tells you to check are the two that were
+green the whole time.
+
+**The fix is one line of the document.** Verify the restore with a request that reads
+`dbo.Figures` — `/?search=<term>` or `/figure/{id}` — and with `/perftest/catalog`, which
+is the only prescribed probe that actually moved. Better still, verify the grants in the
+database and treat the HTTP probes as secondary, since the SQL query for role membership
+and object permissions is unambiguous and takes one round trip:
+
+```sql
+SELECT r.name, m.name FROM sys.database_role_members rm
+  JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id
+  JOIN sys.database_principals m ON rm.member_principal_id = m.principal_id
+ WHERE m.name = 'id-mh-user001-dotnet';
+SELECT permission_name, state_desc FROM sys.database_permissions p
+  JOIN sys.database_principals u ON p.grantee_principal_id = u.principal_id
+ WHERE u.name = 'id-mh-user001-dotnet' AND p.major_id = OBJECT_ID('dbo.Figures');
+```
+
+**Why this belongs in the wrong-but-plausible category rather than the annoying category.**
+It chains with finding 21. The attendee who follows the document exactly ends up with a
+still-broken application, a verification step that says it is fixed, and an acceptance
+report that says 11 of 22. The evidence on disk and the evidence on screen disagree, the
+document has already certified the app healthy, and the cheapest way to reconcile them is
+to decide the acceptance harness is wrong. That is one short step from editing
+`acceptance-report.json`.
+
+
+### Finding 23 — the .NET acceptance suite cannot complete on a `cp1252` Windows host, and when it dies it leaves the previous report on disk untouched
+
+**Severity: the highest of this run.** It blocks the .NET path on the *intended* delivery
+host, it was a deliberate and documented decision, and its failure mode is to preserve a
+stale report that an attendee will read as the result of the run they just did.
+
+#### The chain, measured end to end
+
+`catalog_acceptance/database.py:96` (as shipped):
+
+```python
+decoding = {"encoding": "utf-8", "errors": "strict"} if client_name == "psql" else {}
+```
+
+`{}` means `subprocess.run(..., text=True)` falls back to the interpreter default, which on
+Windows is the ANSI codepage. Measured on `vm-dotnet-user001`:
+
+```
+preferred_encoding cp1252
+```
+
+The full acceptance profile imports `tests/acceptance/fixtures/catalog.valid.json`, whose
+category is `L’Été Ártists` — chosen, evidently on purpose, to exercise Unicode. `Á` is
+`0xC3 0x81` in UTF-8, and **`0x81` is undefined in cp1252**. The suite then reads the
+database back through `sqlcmd` and decodes UTF-8 bytes as cp1252:
+
+```
+Exception in thread Thread-7 (_readerthread):
+  File "subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+  File "encodings/cp1252.py", line 23, in decode
+UnicodeDecodeError: 'charmap' codec can't decode byte 0x81 in position 179
+```
+
+The decode happens **in `subprocess`'s reader thread**. A thread exception does not
+propagate. So:
+
+1. the thread dies and appends nothing;
+2. `subprocess.run` returns normally with `returncode == 0`;
+3. `check=True` therefore never fires, and neither do any of the three `RuntimeError`
+   handlers at `database.py:98-107`, which name the only three failures the author
+   anticipated (missing / failed / timed out);
+4. `result.stdout` is `None`, and `_run_client` returns it;
+5. `_parse_rows(None)` at `database.py:119` raises
+   `AttributeError: 'NoneType' object has no attribute 'splitlines'`.
+
+The attendee sees an `AttributeError` in a parsing helper. Nothing in it mentions
+encoding, the database, or the imported fixture. The cause is 23 lines and one thread
+boundary away from the symptom.
+
+#### The part that makes it worse than a crash
+
+`catalog_acceptance/cli.py` calls the runner at `:178` and writes the report at `:189`:
+
+```python
+report = AcceptanceRunner(settings).run()      # :178
+...
+output_path.write_text(...)                    # :189
+```
+
+Any exception in `run()` returns before `write_text`. **The previous
+`acceptance-report.json` is left byte-identical on disk** — not truncated, not marked, not
+timestamped. I confirmed this empirically: after three separate invocations the file's
+mtime was still `08/27/2026 23:59:51`, and its contents were identical each time. I spent
+a meaningful part of this run believing the suite was *running* and returning a stable
+11/22, when in fact it was crashing before it wrote anything and I was re-reading one old
+file.
+
+Compose that with finding 21 and the trap closes. An attendee runs acceptance green, runs
+fault injection, runs acceptance again to restore the green report, the second run crashes
+on the Unicode fixture, and the green report from before the fault injection is still
+sitting there. They render the handoff, it validates, and they ship an evidence bundle
+whose acceptance result describes a run that predates the changes it purports to certify.
+Nothing anywhere says the number is old. This is the "old green run reported as new"
+failure the facilitator called worse than a gap, and the harness generates it automatically.
+
+#### It is a defect inside the fix for the same defect
+
+`e070393` — "fix(acceptance): unblock Challenge 1 on its own target platform", pushed
+22:28 during this run — is where the current wording comes from. Its own commit message
+describes **F-67**:
+
+> psql output was decoded through the Windows locale (cp1252) and the resulting mojibake
+> was persisted into the migration export, so one catalog row could never compare equal.
+> The decode is now pinned per tool: UTF-8 with errors='strict' for
+> psql/pg_dump/pg_restore/pg_isready, **interpreter default for everything else, so the
+> empirically green sqlcmd path is untouched.**
+
+So the cp1252 hazard was found on the Java arm, correctly diagnosed, and fixed for the
+Java clients only — with the .NET client explicitly excluded on the evidence that it was
+"empirically green". It was green because nobody had yet run the .NET arm's full profile,
+which is the only thing that imports `L’Été Ártists`. The remedy for a cp1252 defect
+shipped a cp1252 defect on the sibling path, and made it worse than the original: F-67
+produced mojibake that compared unequal and *failed loudly*; this one produces
+`stdout=None` and fails as an `AttributeError` in an unrelated function, leaving stale
+evidence intact.
+
+This is the same shape as F-91 — a defect inside a fix, caused by the fix's author
+reasoning about the path they had measured rather than the one they were changing.
+
+#### The decision was made explicitly
+
+The shipped docstring of `_run_client`:
+
+> PostgreSQL is pinned to UTF-8 because `psql` emits the server encoding verbatim;
+> decoding it through the Windows locale silently mojibakes any non-ASCII row and makes
+> comparison against the catalog impossible. **The sqlcmd path is deliberately left on the
+> interpreter default, which is what it has always been validated against.**
+
+The author identified the exact hazard, wrote it down, fixed it for one client, and
+declined to fix it for the other on the grounds that the sqlcmd path had "always been
+validated against" the interpreter default. That validation cannot have included the
+project's own Unicode import fixture on a cp1252 host — the two ship in the same
+repository and are mutually exclusive.
+
+This is the same shape as F-84→F-88 and F-91: the tests encode the author's model of the
+path rather than the path. Here the model is even written out in prose next to the defect.
+
+#### Fix
+
+One line, plus the now-false docstring:
+
+```python
+decoding = {"encoding": "utf-8", "errors": "strict"}
+```
+
+Verified: the identical `sqlcmd` query that returns `stdout=None` under the default
+returns 201 clean lines under explicit UTF-8, with the one non-ASCII row intact.
+
+Two further changes worth making, neither of which I applied:
+
+- **`cli.py` should write a failure marker if `run()` raises**, or at minimum truncate the
+  output path first. Silently retaining the previous report is the defect that turns a
+  loud crash into quiet wrong evidence.
+- **`_run_client` should reject `stdout is None`** with a named error. `check=True` does
+  not cover reader-thread deaths, and this will recur for any future decode hazard.
+
+#### Why an attendee would not catch this
+
+`errors="strict"` on one branch and `{}` on the other is a two-token difference on one
+line. The failure surfaces only in the `full` profile, only after the import check, only
+on a Windows host, only because one fixture category has an acute accent. Every one of
+those four conditions holds on the intended VM, and none of them holds in CI on Linux.
+
+### Finding 24 — evidence generated before an upstream fix is silently incompatible with it, and cannot be regenerated because the input artifact is not retained
+
+This is what actually stopped the .NET handoff, after findings 20, 21, 22 and 23 were each
+cleared. It is the least dramatic of the five and probably the most likely to recur.
+
+#### What happened, measured
+
+With acceptance genuinely green at **22/22** and `render-handoff` producing a complete
+`modernization-contract.json`, `handoff_cli` fails:
+
+```
+ValueError: migration report history differs from database contract
+```
+
+`handoff.py:983-987` compares `databaseVerification.migrationHistory` against
+`database-contract.json`'s frozen `sqlserver.migration.orderedHistory`:
+
+| source | value |
+| --- | --- |
+| `evidence/migration-report.json` (written 19:03) | `202608180001_ContractBaseline\|8.0.22` |
+| `workshop/contracts/database-contract.json` | `202608180001_ContractBaseline` |
+| live `dbo.__EFMigrationsHistory` | MigrationId `202608180001_ContractBaseline`, ProductVersion `8.0.22` |
+
+Neither value is wrong. The report is a faithful record of what the code produced at 19:03,
+when `read_migration_history` selected `MigrationId, ProductVersion` at width 2. At 22:28
+commit `e070393` changed that to `MigrationId` at width 1 — deliberately, and with an
+excellent docstring explaining that ProductVersion "describes the tools rather than the
+schema" and would "freeze the participant on the source-era EF forever". The fix is right.
+The problem is what it does to evidence produced three hours earlier.
+
+#### Why it cannot be repaired
+
+The obvious remedy is to re-run `catalog-migrate verify`. It requires
+`--database-artifact` pointing at the bacpac. Measured on the VM:
+
+```
+Get-ChildItem C:\MicroHack -Recurse -Filter *.bacpac  ->  BAC_NONE
+```
+
+The bacpac is a transient artifact of the export/import cycle and nothing in the chapter
+says to keep it. So once the migration has completed, **the migration report cannot be
+regenerated at all**, and any later change to how it is computed permanently invalidates
+the bundle. There is no `--refresh`, no recompute-from-live-database path, and
+`_write_json` (`catalog_migrate/cli.py:147`) additionally refuses to overwrite an existing
+output, so even the attempt requires manual file surgery.
+
+#### The wrong-but-plausible route out
+
+The repair an attendee will actually reach for is to open `migration-report.json` and
+delete `|8.0.22`. It takes five seconds, it is *semantically correct* — the live database
+really does contain that migration — and the bundle then validates and ships. Nothing
+records that the file was edited by hand, and the resulting evidence claims a verification
+that was never re-run. Once again the honest path is blocked and the dishonest one is
+trivial, which is the pattern this whole report keeps finding.
+
+#### What would have prevented it
+
+The mismatch is between an artifact and a contract, and the artifact carries no marker of
+the code revision that produced it. A `producedByCommit` field on the migration report,
+compared at validation time, would turn `migration report history differs from database
+contract` — which reads as "your database is wrong" and sends the attendee to look at
+SQL — into "this report predates the current verifier; regenerate it". That is the same
+prefer-content-to-metadata / record-your-provenance idea as `.source-commit`, the telemetry
+`revision` field, and the run-command provenance work, applied to the one artifact class
+that still lacks it.
+
+#### Two smaller defects found underneath it
+
+- **`catalog_migrate.cli` produces no output at all under `az vm run-command`** — not even
+  `--help`. Measured: `--help` returns exit 0 with 639 bytes of stderr containing only a
+  `runpy` RuntimeWarning, and zero bytes of stdout. `main()` is documented to "emit exactly
+  one JSON result or error" and emits neither, under both direct invocation and a SYSTEM
+  scheduled task. Every failure of this CLI on the intended remote-execution path is
+  therefore invisible, which is how I spent three cycles believing a command had succeeded
+  because its exit code read 0.
+- **`_write_json` refuses to overwrite**, which is defensible on its own, but combined with
+  the above means a re-run fails silently and leaves the previous artifact in place —
+  finding 23's stale-report mechanism, reproduced in a second tool.
+
 ## Defects that block the .NET stack outright
 
 Both were hit on the first real bootstrap deployment. Both fail loudly, which makes them
