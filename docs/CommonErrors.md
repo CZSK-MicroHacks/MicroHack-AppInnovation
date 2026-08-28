@@ -2319,7 +2319,7 @@ present present` while its two neighbours carried full paths. **The path as writ
 if executed literally** - a table asserting a successful presence check, containing a probe that
 would fail. Corrected to the full path.
 
-### The measurement that raised the alarm was itself over-counting
+### The measurement that raised the alarm was attributed to the wrong mechanism
 
 The same check reported five bare mentions. The instrument was `grep -o 'handoff\.py'`:
 
@@ -2328,17 +2328,46 @@ unanchored  handoff\.py                        7
 anchored    (^|[^A-Za-z_/])handoff\.py         4
 ```
 
-`handoff.py` is a **substring of `test_migration_handoff.py`**, so an unqualified basename pattern
-matches a different file three times. Of the four real mentions, three are legitimate - the citation
-is the subject of the sentence, shown ambiguous deliberately - leaving exactly one defect.
+Both figures are **correct at the revision where they were taken**. The published explanation was
+not. It read: *`handoff.py` is a substring of `test_migration_handoff.py`, so an unqualified pattern
+matches a different file three times.* Decomposed exhaustively at that same revision:
 
-> **A basename pattern with no boundary anchor matches every filename that ends with it**, and the
-> over-count arrives as evidence of a problem rather than of a bad pattern. Absence has dominated
-> this document because it is silent; this is the loud failure, and it is more persuasive - a
-> spurious non-zero reads as confirmation, and nobody re-derives a count that agrees with their
-> suspicion.
+```
+e16f24a   total 7   substring confounder 0   path-qualified 3   bare 4   (sums)
+```
 
-Ninth and tenth instances, both in the check written to verify a correspondent's compliment.
+**Zero substring matches.** All three excluded items were **path-qualified citations** - the exact
+practice this document spends its length demanding. The anchor `[^A-Za-z_/]` excludes `/`, so it
+discards `catalog_acceptance/handoff.py` for the same reason it discards an accident, and the two
+land in one indistinguishable bucket.
+
+> **The gap was real, the number was right, and the mechanism named for it contributed nothing.** A
+> correct measurement with a fabricated cause is harder to catch than a wrong measurement, because
+> the arithmetic checks out and the explanation is the part nobody re-derives.
+
+Of the four bare mentions, three are legitimate - the citation is the subject of the sentence, shown
+ambiguous on purpose - leaving one defect, which stands.
+
+> **A basename pattern with no boundary anchor matches every filename that ends with it** - a real
+> mechanism, and simply not the one operating here. Absence has dominated this document because it
+> is silent; this is the loud failure, and it is more persuasive: a spurious non-zero reads as
+> confirmation, and nobody re-derives a count that agrees with their suspicion.
+
+### Writing this entry doubled the population it reports on
+
+```
+e16f24a  (before the entry)   total  7   bare 4
+76eade9  (after  the entry)   total 15   bare 9
+```
+
+The entry above names the file it counts, in prose and in fenced examples, eight further times.
+**Anyone re-deriving the figure from the document that states it gets 15, and the document says 7.**
+
+Second occurrence of a mechanism already filed here for a JSON file count, and the first was not
+enough to prevent the second - because the rule was written as a fact about that one artifact rather
+than as a property of **any measurement published into the corpus it measures.** Both figures are
+therefore recorded with the revision that produces them, which is the only form in which either is
+checkable.
 
 ### "Measured:" is not a measurement
 
