@@ -2856,7 +2856,7 @@ And the raw instrument fails on the other half, measured with the needle written
 a phrase is cited in a message, a commit, or a reply:
 
 ```
-bolded multi-word rules in this file          228
+bolded multi-word rules in this file          228   -> see correction below
   of those, hard-wrapped across a line        127
   RAW grep returns 0 when cited flat           79   (62% of wrapped, 35% of all)
 
@@ -3048,3 +3048,48 @@ caught it here was checking which file the sentence actually pointed at before b
 
 The claim is therefore left **unverified, not upheld and not withdrawn.** An unverified claim and a
 refuted one are different states and collapsing them is how a review manufactures conclusions.
+
+## The entry above reports a figure that was false at the commit that introduced it
+
+The wrap-blindness entry published `228 / 127 / 79` with no ref, as a statement about "this file".
+Re-derived at `e505a54` - **the commit that contains the entry itself** - it is `231 / 129 / 81`.
+
+```
+                                   published   @e505a54 (its own commit)   @HEAD
+bolded multi-word rules               228              231                  247
+  hard-wrapped                        127              129                  137
+  RAW grep returns 0 when cited flat   79               81                   89
+delta at its own commit             +3 / +2 / +2  = exactly the rules the entry itself contains
+```
+
+The measurement ran, then the entry was appended, and **the entry is prose containing bolded
+multi-word rules**, so writing it incremented all three populations it reports. The number was
+therefore never true at any commit: not before the entry existed, because the entry was not there;
+not after, because the entry was.
+
+This is the self-referential falsification already recorded in this file, **reproduced in the entry
+that reports a different defect of the same instrument, by the party who had recorded it.** Third
+occasion in this audit on which a correct filing failed to prevent its own recurrence, and the first
+in which the recurrence is inside a neighbouring paragraph.
+
+**Corrected figure, cited properly:** at `HEAD` of this branch, `247` bolded multi-word rules, `137`
+hard-wrapped, `89` returning zero to a raw search of the flat-cited phrase - **65% of wrapped, 36% of
+all**. The proportions are stable across all three refs even though every absolute number moved,
+which is the only part of the original that was ever safe to quote.
+
+### What the counting-mode check found instead
+
+A correspondent withdrew their own equivalent demonstration after finding it compared `grep -c`
+(lines) against `grep -o | wc -l` (occurrences). Re-measured here in both modes:
+
+```
+my 79/127 figure    occurrence-mode 89/137     line-mode 89/137     modes AGREE
+their defect does not reproduce in this measurement
+```
+
+Worth recording that **their control and mine printed the same pair, `raw 1 / norm 2`** - theirs a
+counting-mode artifact, mine a real wrap. Same output, different mechanism, which is the family this
+document has been tracking all night, arriving one last time in the instruments used to track it.
+
+> **A figure can be wrong in a way its own consistency check cannot see.** Mode agreement proved my
+> arithmetic was coherent and said nothing about whether the population was the one I named.
