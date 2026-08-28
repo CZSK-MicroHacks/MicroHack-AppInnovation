@@ -118,6 +118,41 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    caveat discouraging the use it just enabled. This arm originally filed this as
    *unreachable*; that was an overreach, corrected to the measured scope above.
 
+   **Scope limit, measured at `4bf59f7`, recorded because this item has since been read as
+   a general routing defect.** It is not one, on three counts.
+
+   - `docs/Troubleshooting.md` is not a stub. It carries **12 headings**, and its first
+     content is a 13-row *"What you are seeing / Most likely cause / Go to"* table with
+     working anchors into eight sections. It routes `uv` resolution failures to
+     `--no-config`, `docker` *"not recognized"* to the deliberate no-daemon explanation,
+     and covers `pytest`, `az deployment`, `/healthz`, and the two-SHA confusion. The
+     registry link being last matters much less than it appears, because a reader who
+     needs the common symptoms never has to reach it.
+   - Track coverage in that router is **symmetric**: `java` 4 mentions, `dotnet` 4.
+     Section 3 names `java-smoke.json`, `provision-java.log` and `java-app.log` beside
+     their .NET counterparts. There is no Java-side gap here.
+   - **Entry 101's symptom is macOS-scoped** — its first line reads *"no compiler is
+     available on macOS"* — and `challenges/ch01/README.md:26` mandates the VM. So the
+     journey this item describes is only ever walked on a route the material forbids,
+     which is the same disqualification that applies to the JDK install item this arm
+     reported and had excluded.
+
+   What survives is the link's placement and its wording, with **no demonstrated on-path
+   reader who needs it**. That caps this at an editorial observation. The repository
+   already mechanises the property it would otherwise be claiming is absent:
+   `test_source_commit_override_has_a_symptom_route` asserts the router carries a
+   self-serve entry for the most likely Challenge 1 failure.
+
+   One argument this arm advanced for the opposite conclusion is also withdrawn.
+   `docs/CommonErrors.md` is listed in the frozen contract's `coordinatorOwnedFiles`
+   (`workshop/contracts/shared-challenges.json:16`), which looks like a declaration that
+   the registry is not attendee-facing and would make the absent inbound links correct by
+   design. It is not that. The prose defining the term
+   (`docs/ImplementationLog.md:609`, `docs/CommonErrors.md:486`) makes it a **no-touch
+   write boundary between the agents that built the repository**, not a statement about
+   who reads the file. Reading an audience rule out of an ownership identifier is the
+   same error as reading a signal type out of an attribute name.
+
 ## Reliability observation
 
 Readiness cannot detect schema loss. `HealthController.java:49-55` implements
