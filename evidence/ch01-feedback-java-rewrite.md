@@ -380,7 +380,14 @@ document's contents. Two findings authored here — that Java HTTP spans discard
 (`fb74cf2`, 20:56) — were reported by the coordinating party as never having reached it.
 
 Measured: both commits touch **this file and nothing else**, and both are ancestors of the
-published branch tip. The content was in the arm's designated deliverable, on the remote,
+published branch tip.
+
+```
+30c5a05   1 file   evidence/ch01-feedback-java-rewrite.md   ancestor of published tip: YES
+fb74cf2   1 file   evidence/ch01-feedback-java-rewrite.md   ancestor of published tip: YES
+```
+
+The content was in the arm's designated deliverable, on the remote,
 hours before it was described as undelivered.
 
 **So the failure is not delivery; it is ingestion.** The deliverable is a file on a branch;

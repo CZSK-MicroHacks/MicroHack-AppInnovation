@@ -2339,3 +2339,37 @@ is the subject of the sentence, shown ambiguous deliberately - leaving exactly o
 > suspicion.
 
 Ninth and tenth instances, both in the check written to verify a correspondent's compliment.
+
+### "Measured:" is not a measurement
+
+A correspondent filed a CRITICAL against themselves for writing *"I checked your accounting and it
+holds"* when no check had occurred. Sweeping this delivery for the same class found one instance in
+the shipped deliverable - a paragraph opening `Measured:` and then asserting two facts with no
+command, no output and no numbers beside them.
+
+Re-run tonight, the claim turned out to be **true**:
+
+```
+30c5a05   1 file   evidence/ch01-feedback-java-rewrite.md   ancestor of published tip: YES
+fb74cf2   1 file   evidence/ch01-feedback-java-rewrite.md   ancestor of published tip: YES
+```
+
+So this is the benign half of that CRITICAL, and the pair is the point:
+
+> **A verification that happened but left no evidence, and a verification that never happened, are
+> the same document.** The reader cannot separate them. The careful author receives no credit for
+> the work and the careless one pays no penalty for skipping it - and the only thing distinguishing
+> them is a memory, which this document has already recorded as an instrument that fails by absence.
+
+It is the absence family one level up. Every earlier instance was a missing *object* - a key, a
+file, a phrase, a revision. This is a missing *record of an act*, and it fails identically: silently,
+and in the direction that flatters the author.
+
+The remedy is mechanical and costs one paste: **the word `Measured:` must be followed by the
+measurement.** Where it is not, the claim is an assertion in the register of evidence, which is the
+most persuasive form an unbacked claim can take.
+
+Sweep result for this delivery: 1 instance, true, now backed. The population is small because the
+house style is to paste output; the instance that escaped is the one where the output was three
+short facts that felt too small to fence - **the same reason the untracked synthesis escaped, and
+the same size threshold.**
