@@ -3306,7 +3306,7 @@ Twenty-four files are present on `michalmar-refactored-waddle` and absent from
 `origin/rewrite-integration`, including this entire report and every evidence artifact:
 
 - `ch01-feedback-dotnet-modernization.md` — the primary deliverable
-- `evidence/` — 20 files: acceptance, telemetry (4 raw + 2 rendered), migration, target
+- `evidence/` — 21 files: acceptance, telemetry (4 raw + 2 rendered), migration, target
   output, runtime tests, task results, two `.trx` baselines, assessment, plan, rollback
   runbook and revision, CVE summary, registry, and two capture documents
 - `dotnet/Dockerfile` and `dotnet/src/LegoCatalog.App/Services/AzureBlobImageStore.cs` —
