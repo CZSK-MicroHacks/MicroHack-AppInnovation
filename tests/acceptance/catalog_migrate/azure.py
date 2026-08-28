@@ -108,10 +108,17 @@ def _require_resource_state(
     resource that was never created, which is almost never what actually happened,
     and a caller who cannot see the difference between ``Updating`` and ``Failed``
     cannot tell "wait" apart from "stop".
+
+    Every attempt's reading is recorded, not just the last. A state that varies
+    across attempts is genuine flapping; the same state repeated for the whole
+    window is a resource that is not moving, or a caller reading a replica that
+    disagrees with another caller's. Those need opposite responses and the final
+    state alone cannot distinguish them, so the sequence is reported too.
     """
-    state = ""
+    observed: list[str] = []
     for attempt in range(max(attempts, 1)):
         state = _resource_provisioning_state(runner, resource_id, subscription_id)
+        observed.append(state or "unavailable")
         if state == "Succeeded":
             return
         if state not in _TRANSIENT_PROVISIONING_STATES:
@@ -120,7 +127,7 @@ def _require_resource_state(
             sleep(retry_seconds)
     raise PreconditionError(
         f"Azure resource is not provisioned: {resource_id} "
-        f"(provisioningState={state or 'unavailable'})"
+        f"(provisioningState={observed[-1]}; observed={','.join(observed)})"
     )
 
 

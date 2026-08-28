@@ -123,3 +123,38 @@ def test_query_failure_is_not_disguised_as_a_precondition() -> None:
         _require_resource_state(
             _FailingRunner(), RESOURCE_ID, SUBSCRIPTION_ID, sleep=_never_sleep
         )
+
+
+def test_every_attempt_is_reported_so_flapping_is_distinguishable() -> None:
+    """A caller must be able to tell a flapping resource from a persistently stale read.
+
+    Both exhaust the retry window and both end on the same final state, so the final
+    state alone cannot separate them. The .NET arm could only tell them apart by
+    querying from two machines at once, which an attendee cannot do.
+    """
+    runner = _ScriptedRunner(["Updating", "Creating", "Updating"])
+    with pytest.raises(PreconditionError) as failure:
+        _require_resource_state(
+            runner,
+            RESOURCE_ID,
+            SUBSCRIPTION_ID,
+            attempts=3,
+            sleep=_never_sleep,
+        )
+    message = str(failure.value)
+    assert "observed=Updating,Creating,Updating" in message
+    assert "provisioningState=Updating" in message
+
+
+def test_a_resource_that_never_moves_reports_the_repeated_state() -> None:
+    """An unchanging state across the whole window is the stale-or-stuck signature."""
+    runner = _ScriptedRunner(["Updating", "Updating", "Updating"])
+    with pytest.raises(PreconditionError) as failure:
+        _require_resource_state(
+            runner,
+            RESOURCE_ID,
+            SUBSCRIPTION_ID,
+            attempts=3,
+            sleep=_never_sleep,
+        )
+    assert "observed=Updating,Updating,Updating" in str(failure.value)
