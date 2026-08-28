@@ -1286,3 +1286,38 @@ the guard in an earlier one.
 The corollary for reporting: publish the skip count with the pass count. `34 run / 0 skipped`
 and `28 run / 6 skipped` are both green, and only the pair tells a reader which environment
 produced them. A bare pass count cannot distinguish a skipped suite from a complete one.
+
+## Accepting the better duplicate can leave zero copies on the branch that ships
+
+Two people fix the same defect independently. One compares the two, finds the other's version
+better, and drops their own as redundant. That is the right call on the merits and it can
+still end with **no fix anywhere that matters**, because the surviving copy is on a different
+branch from the discarded one. Each party believes the defect is closed; the integration
+branch has neither fix.
+
+It happened here. Both parties reached `@Testcontainers(disabledWithoutDocker = true)`
+independently. The duplicate was dropped as redundant, and the survivor sits on a topic
+branch:
+
+```bash
+# the fix, at the branch that would ship
+git grep -n "disabledWithoutDocker" origin/rewrite-integration \
+  || echo ">>> absent (exit $?)"
+
+# positive control: the same query, same shape, where it does exist
+git grep -c "disabledWithoutDocker" origin/michalmar-ch01-java-rewrite-walkthrough
+```
+
+The first prints `absent (exit 1)`; the second returns three files. **Run the control.** A bare
+`exit 1` cannot distinguish "not there" from "query never worked", and this is a silence claim
+about the state of a deliverable — the most expensive kind to get wrong. Check the files exist
+at that rev too, with `git cat-file -e "<rev>:<path>"`, or a moved file reads as a missing fix.
+
+**The rule: a supersession is not complete until the surviving copy is on the branch the
+discarded one was on.** "Yours is better, I'm dropping mine" is a statement about two patches;
+shipping is a statement about one branch. Before dropping a duplicate fix, verify the
+replacement is reachable from the ref that ships — and if it is not, the correct order is
+land first, drop second.
+
+This is the mirror of the substrate mechanism above: there, a finding recorded as open was
+already fixed; here, a finding recorded as fixed is live everywhere it counts.
