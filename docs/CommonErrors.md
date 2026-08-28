@@ -1161,6 +1161,45 @@ The rule this yields is about adjudication, not shell:
 Absence of a rev in a `git grep` is therefore not a neutral default. It silently selects the one
 object that no one else can see.
 
+**Corollary — when two parties quote the same file differently, diff the revs before diffing the
+quote.** The rule above tells you to use the other party's rev. It does not tell you what to do at
+the moment the disagreement appears, and the tempting move is to explain the *difference in the
+text* — they abbreviated, they truncated, they quoted selectively. Every one of those explanations
+is about the reader. The cheapest one is about the file.
+
+Measured here, on `workshop/observability/queries.kql`, where one party read four query predicates
+ending at `== "__REVISION_NAME__"` and the other read the same four with `or AppRoleInstance
+startswith "__REVISION_NAME__"` appended:
+
+```bash
+for rev in 4bf59f7 HEAD origin/rewrite-integration; do
+  n=$(git grep -c 'AppRoleInstance startswith' "$rev" -- workshop/observability/queries.kql \
+      | awk -F: '{s+=$NF} END{print s+0}')
+  c=$(git grep -c 'query-id' "$rev" -- workshop/observability/queries.kql \
+      | awk -F: '{s+=$NF} END{print s+0}')
+  echo "$rev  fallback=$n  control=$c"
+done
+```
+
+`4bf59f7` and `HEAD` report `fallback=0`; `origin/rewrite-integration` reports `4`. The control
+returns 5 at all three, so the zeros are genuine absences and not a query that never worked. The
+clause was added by a later commit. **Neither party misquoted anything.** Only the second count
+depends on a moving ref, so re-measure rather than trusting the number written here — the immutable
+one is `4bf59f7`, which is the base every reader starts from.
+
+> Before explaining why someone quoted an artifact differently, check whether they were reading a
+> different artifact. One command settles it, and it comes first because "you truncated" is an
+> accusation while "our revs differ" is a fact.
+
+This matters most in the direction that feels safest. Finding *more* text at your own tip and
+concluding the other party cut it is the same inversion as finding *less* and concluding they
+invented it — the extra text is evidence about your rev, not about their honesty.
+
+It also changes the disposition of the underlying claim. A claim true at the base and false at the
+tip is **superseded, not refuted**, and those are different facts about a deliverable: one says the
+report was wrong, the other says the tree moved. Only the second tells a reader starting from the
+base what they will actually see.
+
 ### Mechanism E — the substrate cannot tell you a finding was closed
 
 Mechanism D asks *which version did you search*. This one asks *which artifact carries the
@@ -1321,3 +1360,52 @@ land first, drop second.
 
 This is the mirror of the substrate mechanism above: there, a finding recorded as open was
 already fixed; here, a finding recorded as fixed is live everywhere it counts.
+
+## The same attribute name under two signal types, at the lines you correctly cited
+
+Every other inversion in this file comes from reading the **wrong** artifact: the wrong rev, the
+wrong branch, a filter that could not have returned the counter-evidence. This one comes from
+reading the **right** artifact — the right file, at the right lines — incompletely. No substrate
+check catches it, because the substrate was never in question.
+
+The claim was that `db.system.name` is emitted equivalently on both tracks, cited to
+`solutions/reference/dotnet/src/LegoCatalog.App/Services/CatalogTelemetry.cs:67` and `:113`. Both
+line numbers are correct. Both lines contain the string. The conclusion is still wrong, because
+the string is all that was read:
+
+```bash
+F=solutions/reference/dotnet/src/LegoCatalog.App/Services/CatalogTelemetry.cs
+git grep -n 'db\.system\.name' HEAD -- "$F"          # :67 and :113 — the name is there
+
+git grep -n -E '\.(SetTag|AddTag)\(' HEAD -- "$F" \
+  || echo ">>> no span attribute set in this file (exit $?)"
+
+# positive control: the same API, same tree, where it does exist
+git grep -c -E '\.(SetTag|AddTag)\(' HEAD -- solutions/reference/dotnet
+```
+
+The second command exits 1; the control returns 11 across three sibling services, so the absence
+is real. Reading what encloses each line settles it — `:67` is a `KeyValuePair` argument to
+`_databaseDuration.Record(...)`, a **metric tag**; `:113` is a key in the dictionary passed to
+`logger.BeginScope(...)`, a **log scope**. On the Java track the same name reaches
+`span.setAttribute` on a `CLIENT` span. Same identifier, three signal types, one of which is a
+span attribute and two of which are not.
+
+**Telemetry attribute names are deliberately identical across signals** — that is what a semantic
+convention is for. So the name is the one part of the line that cannot tell you which signal
+carries it, and grepping for it returns a hit of exactly equal confidence in all three cases.
+
+> An identifier is not an emission. Grep locates the name; only the **call it is passed to** says
+> which signal it lands on, and therefore which table can ever be queried for it.
+
+The consequence is a query that is unsatisfiable rather than merely empty. A dashboard reading
+`AppDependencies` for an attribute emitted as a metric tag returns no rows in every window, and
+when the panel ends in `| where value > 0` that renders as a healthy window with nothing wrong —
+the same silent-green shape as a filter that never matched. Empty because nothing happened and
+empty because nothing could are indistinguishable at the panel.
+
+The general form is the one this audit hit most often, in its most literal instance: **a claim of
+the form "X is the same as Y" has two operands, and here both were opened, to the correct lines,
+and only one attribute of each was compared.** "Check the substrate" does not catch this. The
+check that does is naming, before concluding, which property of each operand the claim actually
+depends on — here the API, not the name — and confirming that property was the one read.
