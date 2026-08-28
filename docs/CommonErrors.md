@@ -2050,3 +2050,51 @@ So the guard needs its own qualifier, and it is not recursive without one:
 The general form, which is why this family has been so persistent: **every guard proposed against
 absence has itself been an instrument capable of returning absence.** Terminating it requires a step
 of a different kind, not a more careful step of the same kind.
+
+### The author of a citation rule wrote six citations that break it
+
+A criterion arrived from another track: *a guard is legitimate only when its defect class has zero
+legitimate instances; otherwise it is an exemption list.* Applied here to this document's own
+duplicate-basename rule, against this delivery's own prose.
+
+The first measurement used the wrong unit and had to be discarded:
+
+```
+basenames in the tree with >1 home    121 / 592  (20.4%)   <- WRONG UNIT
+```
+
+The guard does not fire on files, it fires on **citations**. Re-measured on the population that
+exists:
+
+```
+bare basename:line citations written        11
+   whose basename has more than one home     6   (54.5%)
+   distinct offenders: CatalogApplication.java, handoff.py,
+                       HealthController.java, CatalogResourceIdentity.java
+```
+
+**The document that filed the one-basename-two-directories finding then committed it six times.**
+Not through disagreement with the rule - the rule is stated three of those six times, in the very
+sentences that are bare.
+
+And that is the answer to the criterion, because those three are **legitimate**: a citation being
+discussed as an example of ambiguity must be shown ambiguous. Two more are disambiguated in the same
+clause. **Three were genuine defects** and are now fixed with a path prefix. So:
+
+> A mechanical duplicate-basename guard would have flagged 6 and been right about 3. **By the
+> criterion, it is an exemption list, not a rule** - the same verdict the absent-from-main guard got
+> on its first live test. Two guards proposed in one hour, both rejected by their first real
+> population.
+
+The most instructive of the three is the one that already carried a revision:
+
+```
+before   CatalogResourceIdentity.java:20 at origin/rewrite-integration    ref stated, path omitted
+after    java/.../config/CatalogResourceIdentity.java:20 at origin/...    both
+```
+
+Elsewhere in this audit the complementary error was made by the other party: **path stated, revision
+omitted.** Same address, opposite halves, and each party supplied precisely the component the other
+had spent the preceding hour insisting on. **Knowing which component is missing is not the same
+capability as noticing that one is** - the first is knowledge, the second is a habit, and only the
+second fires while you are writing.

@@ -155,7 +155,7 @@ so the block aborts before reaching Maven. The constituent commands were run ind
 
 ## Reliability observation
 
-Readiness cannot detect schema loss. `HealthController.java:49-55` implements
+Readiness cannot detect schema loss. `java/…/web/HealthController.java:49-55` implements
 `databaseReady()` as `SELECT 1`, which succeeds whenever a connection opens, regardless of
 whether the schema the application requires is present. The .NET stack has the identical
 shape via `CanConnectAsync`. A replica whose table has been dropped therefore reports ready,
@@ -746,7 +746,7 @@ documented way.
 **The route is not lost, but the recovery path stated in the first version of this entry was
 wrong, and the facilitator refuted it by execution.** `http.route` *is* populated on the span
 for every request, because `/healthz` and `/readyz` are `@GetMapping` handlers
-(`web/HealthController.java:25,30`) and so set Spring's `BEST_MATCHING_PATTERN`. But it does
+(`java/…/web/HealthController.java:25,30`) and so set Spring's `BEST_MATCHING_PATTERN`. But it does
 **not** reach the `requests` table: `customDimensions` is null on all 1 077 Java request
 records, so the query published here previously —
 `requests | extend route = tostring(customDimensions["http.route"])` — **returns empty**.
@@ -827,7 +827,7 @@ and this arm's stated consequence does not hold there.
 
 **The mechanism is nonetheless unfixed at that tip.** `ac78017` touched five files —
 queries, contracts, workbook, tests — and **no application source**. The revision name is
-still emitted as a resource attribute only (`CatalogResourceIdentity.java:20` at
+still emitted as a resource attribute only (`java/…/config/CatalogResourceIdentity.java:20` at
 `origin/rewrite-integration`) and still never as a span attribute (verified there, exit 1).
 
 So the surviving defect is sharper than a fragility: **the first leg was never alive.** It
