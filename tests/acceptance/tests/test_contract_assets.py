@@ -2449,6 +2449,7 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
 
     offenders: list[str] = []
     examined = 0
+    visited: set[str] = set()
     for markdown in sorted(repo_root.rglob("*.md")):
         parts = markdown.relative_to(repo_root).parts
         if set(parts) & {".git", "node_modules", ".venv", "bin", "obj", "target"}:
@@ -2461,6 +2462,7 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
             if language.lower() not in executable:
                 continue
             examined += 1
+            visited.add("/".join(parts))
             if not invocation.search(body):
                 continue
             if establishes_cwd.search(body):
@@ -2470,6 +2472,41 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
     assert examined >= 40, (
         f"only {examined} executable fences examined; the fence filter is stale and "
         "this guard would pass on a repository full of uncd'd suite invocations"
+    )
+    # The floor above is liveness, not coverage: it sat at 40 against 293 real fences, so
+    # seven eighths of the repository could fall out of the walk without failing it. The
+    # chapter READMEs that name a console script are exactly where an uncd'd invocation
+    # would be written, and git enumerates them without reference to this walk.
+    should_reach = {
+        path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/*/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+        and any(
+            language.lower() in executable and invocation.search(body)
+            for language, body in _fenced_blocks(
+                (repo_root / path).read_text(encoding="utf-8")
+            )
+        )
+    }
+    assert should_reach, "no chapter document invokes the suite; the anchor is stale"
+    assert should_reach <= visited, (
+        "these documents invoke the acceptance suite but the walk never reached them, "
+        "so this guard is reporting on a smaller corpus than the one it concludes "
+        f"about: {sorted(should_reach - visited)}"
     )
     assert not offenders, (
         "these blocks invoke the acceptance suite without a cd inside the block: "
@@ -4464,8 +4501,35 @@ def test_every_schema_definition_is_reachable(repo_root: Path) -> None:
     regrows.
     """
     schemas = sorted((repo_root / "workshop" / "contracts").glob("*.schema.json"))
-    assert len(schemas) >= 15, (
-        f"only {len(schemas)} contract schemas found -- this guard is not running"
+    # A floor cannot tell a narrowed glob from a shrunken corpus. This one sat at 15
+    # against 42 real schemas, so the glob could have stopped seeing two thirds of them
+    # and still reported green. Git enumerates the same population by an independent
+    # route, so disagreement between the two is the thing worth asserting.
+    tracked = {
+        Path(path).name
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "workshop/contracts/*.schema.json",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    }
+    assert tracked, "no contract schemas found -- this guard is not running"
+    assert {schema.name for schema in schemas} == tracked, (
+        "the schema glob and git disagree about which contract schemas exist, so this "
+        "guard is checking a different population than the repository contains; "
+        f"glob-only={sorted({schema.name for schema in schemas} - tracked)} "
+        f"git-only={sorted(tracked - {schema.name for schema in schemas})}"
     )
 
     orphans: list[str] = []
