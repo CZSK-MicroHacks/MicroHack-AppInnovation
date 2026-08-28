@@ -423,6 +423,132 @@ external artifact you are recalling rather than reading, and it deserves `git lo
 recollection. The 24-commit gap here is the whole cause; nothing about the reasoning was
 faulty, only its input.
 
+### The duplicate source tree, and why a line number is not an address here
+
+The last exchange of this audit was a correction that turned out to be no correction: this
+arm cited `AddSqlClientInstrumentation()` at `Program.cs:86`, the coordinating party
+measured `:86` as `AddAspNetCoreInstrumentation()` and put SqlClient at `:107`. **Both are
+right.** The application exists in two trees, and they have drifted:
+
+| | `dotnet/src/…/Program.cs` | `solutions/reference/dotnet/src/…/Program.cs` |
+|---|---:|---:|
+| lines | 117 | 148 |
+| `AddAspNetCoreInstrumentation` | `:70`, `:83` | `:86`, `:104` |
+| `AddSqlClientInstrumentation` | **`:86`** | **`:107`** |
+
+**`:86` is a real OpenTelemetry registration in both files and a different one in each.** That
+is the worst available case: not a citation that fails to resolve, but one that resolves
+**silently and plausibly** to the wrong call. A reader checking either claim finds
+instrumentation at the cited line and confirms.
+
+The scale, measured rather than estimated: **81 `.cs`/`.java` sources live under
+`solutions/reference/`; 75 of them have a path-identical twin outside it; 64 of those 75 are
+byte-identical and 11 have drifted.** The 64 are harmless — same bytes, so a line number
+resolves the same way in either tree. **The entire hazard is the 11**, and it is concentrated
+in exactly the files this audit kept citing:
+
+```
+dotnet/src/LegoCatalog.App/Program.cs                          117 -> 148
+dotnet/src/LegoCatalog.App/Configuration/CatalogRuntimeOptions.cs   187 -> 271
+java/.../config/CatalogRuntimeOptions.java                     141 -> 284
+java/.../config/TomcatPathConfiguration.java                    22 -> 22
+java/.../PostgreSqlIntegrationTest.java                        345 -> 347
+```
+
+`TomcatPathConfiguration.java` is the case worth naming: **it drifts at an identical line
+count.** Even a reader who thinks to sanity-check the file length gets a match. The single
+differing line is an `import`.
+
+**Reconciliation, so this count is not later quoted against the runbook's.** The Java runbook
+says `java/` and `solutions/reference/java/` "differ only in the nine files the modernization
+path edits". **That is exact** — `diff -rq java solutions/reference/java` reports **9**
+differing files, plus 5 present only in the reference (`Dockerfile`, `ImageStore.java`,
+`AzureBlobImageStore.java`, `AzureConfigurationTest.java`, the `service` test package) and 1
+only in `java/` (`target/`, untracked build output). The **11** above is a different
+population: *both* stacks, tracked `.cs`/`.java` only, so it excludes `README.md`, `pom.xml`
+and `application.properties` and includes the .NET side. Two correct numbers over two
+populations — the same trap as the `:86` disagreement, caught this time by measuring both at
+one revision before writing either down.
+
+And that import is what turns an addressing nuisance into a substantive finding.
+
+### The reference tree is across a major-version fork the rewrite path never crosses
+
+The drifted imports are not edits. They are **Spring Boot 4 package relocations**:
+
+| | `java/` | `solutions/reference/java/` |
+|---|---|---|
+| `spring-boot-starter-parent` | **3.5.16** | **4.0.7** |
+| `java.version` / `maven.compiler.release` | **17** | **21** |
+| Tomcat factory import | `…boot.web.embedded.tomcat` | `…boot.tomcat.servlet` |
+| MockMvc autoconfigure | `…boot.test.autoconfigure.web.servlet` | `…boot.webmvc.test.autoconfigure` |
+| `TestRestTemplate` | `…boot.test.web.client` | `…boot.resttestclient` |
+| Dockerfile base | *(authored by participant)* | `openjdk/jdk:21-azurelinux`, digest-pinned |
+
+**This fork is contracted, not accidental.** `workshop/toolchain.lock.json` declares
+`sourceRuntime 17.0.20+8` / `sourceSpringBoot 3.5.16` and `targetRuntime 21.0.12` /
+`targetSpringBoot 4.0.7`. The reference tree is the *target* state, and the modernization
+tracks are supposed to arrive there. Nothing is wrong with the reference existing.
+
+**What is wrong is that it is unreachable and unmarked from where this path stands.**
+`challenge-paths.json` binds `copilot-rewrite-java` to `sourcePath: "java"` and declares **no
+target runtime at all**. So the rewrite participant stays on 17/3.5 for the whole exercise —
+correctly, and this arm reached the frozen surface that way. But the JDK the lock ships an
+installer for cannot even *parse* the reference:
+
+```
+$ javac --release 21 …   # on the pinned Microsoft OpenJDK 17.0.20+8
+error: release version 21 not supported          → exit 2
+$ javac --release 17 …   # positive control
+                                                  → exit 0
+```
+
+So a rewrite participant who does the most natural thing available to them — open
+`solutions/reference/java/` to see what "finished" looks like — gets a tree that is
+**path-identical for 75 files, byte-identical for 64 of them, and will not build on their
+machine.** Nothing in the rewrite guidance says the reference is a different major version.
+The failure surfaces as import errors in files whose paths they recognise.
+
+**The installer asymmetry is the aggravator, and it is workshop-wide rather than Java-only.**
+The lock contains exactly two installer entries — `windowsSourceSdkInstaller` and
+`windowsSourceRuntimeInstaller` — and **zero** target-runtime installers (verified: the
+string `targetRuntimeInstaller` has 0 occurrences). Both stacks contract a target runtime
+(.NET 8→10, Java 17→21) that has **no pinned, hash-verified acquisition path**, while every
+JAR, NuGet package, Maven distribution and database image in the same file is pinned by hash
+or signature. That gap is the direct cause of the hand-rolled JDK installation this arm had
+to perform, and therefore of `docs/CommonErrors.md` entry 101 existing at all.
+
+**Answering the question this arm was set:** *does the rewrite guidance reach the same frozen
+contract surface as modernization, or quietly assume divergence?* It reaches it — 14/14
+frozen contract tests and 612/1 acceptance, all on JDK 17. **But not via the reference.** The
+guidance does not assume divergence; it is **silent about a divergence already present in the
+tree**, and the silence is maximally plausible because the two trees share their paths, their
+class names, and most of their bytes. That is this delivery's recurring defect in its most
+literal form yet: *two artefacts carry the identifier, only one is the one you opened* — here
+not two files, but two entire trees.
+
+**Remedy, and it is documentation-cheap:** state in the rewrite runbook that
+`solutions/reference/` is the **post-modernization** target state on Spring Boot 4 / Java 21
+and is not buildable with the pinned source JDK. One sentence. The alternative — a reader
+discovering it from a relocated `import` — costs an hour and looks like their own mistake.
+
+**Consequences, in order of how much they cost:**
+
+1. **A line number is not an address in this repo; a path plus a line number is.** Any finding
+   in this audit citing `Program.cs:NN` without its tree is ambiguous, and the ambiguity is
+   invisible because both resolutions look correct.
+2. **Two parties can verify contradictory claims and both be right**, which reads as one of
+   them being careless and is neither. That happened here at the very end, after both sides
+   had adopted every guard in this document.
+3. It is the same defect as everything else in this record — **two artefacts carry the
+   identifier, only one is the one you opened** — but with the operand hidden inside a number
+   rather than a name, so none of the earlier guards fire on it.
+
+**The guard that would have caught it** is the cheapest yet and belongs with the rest: when a
+citation is disputed, `git ls-tree -r --name-only <rev> | grep '<basename>$'` **before**
+re-reading the line. If the file has two homes, the disagreement is about addressing and not
+about content — and no amount of re-reading either copy will surface that.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
@@ -449,7 +575,8 @@ counting "failed outbound calls tagged with a database system" (`:190`), and a r
 deliverable, "a count of failed database dependency calls" (`:356`).
 
 The tracks do not produce that telemetry equivalently. .NET registers
-`AddSqlClientInstrumentation()` (`dotnet/src/LegoCatalog.App/Program.cs:86`), so every
+`AddSqlClientInstrumentation()` (`dotnet/src/LegoCatalog.App/Program.cs:86`; the same call is
+`:107` in the `solutions/reference/` copy — see the duplicate-tree note below), so every
 database call on every route becomes a dependency record. Java registers no HTTP or JDBC
 instrumentation library at all — its only `instrumentation` artifact is the logback *log*
 appender, and the deployed image runs a bare `java -jar` with no `-javaagent`
