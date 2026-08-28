@@ -2985,3 +2985,86 @@ I have not removed it. I cannot prove the provenance, the estate is shared with 
 arm, and removing a permission on a shared estate on the strength of an unproven
 reconstruction is the exact class of action this report has declined throughout. Reported
 for the owner to decide.
+
+---
+
+## F-170 correction: there **is** a reachable pointer, and the finding is better without that claim
+
+Asked to confirm I had read past the end of the table I cited — after an adjacent arm was
+refuted for stopping four lines short — I re-checked by whole-file count rather than by
+reading, at upstream `9c14770`:
+
+| File | `CATALOG_DATABASE_USERNAME` occurrences | Lines |
+| --- | --- | --- |
+| `solutions/ch01-copilot-modernization/dotnet/README.md` | **0** | 660 |
+| `challenges/ch01/README.md` | **0** | 415 |
+
+My method was a whole-file grep from the start, so the stopped-reading trap does not apply.
+**But a different one did, and I had walked into it.**
+
+`solutions/ch01-copilot-modernization/dotnet/README.md:248-250` reads:
+
+> The platform injects configuration under **these exact names**, defined in
+> `infra/modules/environment.bicep` and tabulated in
+> [the .NET reference](../../reference/dotnet/README.md#configuration):
+
+**That is a pointer, in the very paragraph introducing the table**, and it resolves to
+`solutions/reference/dotnet/README.md:31`, which names the variable:
+
+> `| CATALOG_DATABASE_USERNAME | Together with password | SQL login; omit both username and password for Windows integrated security |`
+
+So **"the Copilot path contains no pointer to a document that would have prevented the
+error" is false.** The pointer exists and is one hop from where the reader is standing. I
+had asserted a reachability claim on the strength of a single-file count — the same error
+class as the adjacent arm's, differing only in which axis I failed to check. I checked
+whether the *file* named the variable; I did not check whether the *paragraph* handed me a
+route.
+
+**The finding survives, and the true version is sharper.** Following the pointer does not
+prevent the error, for a reason no count would reveal: **every document describes the
+variable as one you set, and none as one you inherit.** `reference/dotnet/README.md:31`
+defines its semantics for SQL authentication, and `:118` actively *sets* it
+(`$env:CATALOG_DATABASE_USERNAME = '<test-verifier-user>'`) for the test-verifier path.
+Nowhere does any document state that it is **already present at Machine scope on the
+supplied VM image**, or that it must be cleared before a managed-identity acceptance run.
+
+> The attendee who follows the pointer, reads the whole table, and understands it perfectly
+> is *no better protected*, because what they needed was not the variable's meaning but its
+> **ambient state** — and documentation of semantics is not documentation of state.
+
+That is the same idea as preferring content to metadata, and the same shape as the
+incidental defence: the artifact is correct, reachable, and does not address the failure.
+**Do not file F-170 on a "no reachable route" premise — it will be refuted, correctly.**
+File it on the state-versus-semantics distinction, which is true, checkable, and survives
+the pointer.
+
+## F-169 correction: the "attendees do not have Owner" premise is contradicted twice
+
+F-169 was filed unfixed on the reasoning that the remedy needs User Access Administrator or
+Owner at scope, *"which we have established attendees do not have."* Both halves of the
+estate contradict that:
+
+1. **`infra/main.bicep:120-122`**, in the template's own comment:
+   > *"The participant's resource group is created before the workshop, together with the two
+   > legacy VMs, and the participant holds Owner on it."*
+2. **Measured:** `vm-dotnet-user001`'s managed identity holds **`Owner` on
+   `rg-user001`** — and `grep` for the Owner role GUID across all of `infra/` returns
+   **zero**, so this is granted pre-workshop, outside the Challenge 1 template.
+
+The second is the load-bearing one. The IMDS gate at `catalog_migrate/azure.py:43-57` forces
+the migration to execute **on that VM** — and the identity that VM runs as has Owner on the
+resource group containing the SQL server. Owner carries
+`Microsoft.Sql/servers/administrators/write` and `Microsoft.Authorization/roleAssignments/write`,
+so **the very execution context F-169 describes as hard-stopped holds the rights the remedy
+needs.**
+
+This makes my own finding weaker and I am reporting it anyway. The defect in the identity
+*model* stands — a single `principalType: 'User'` Entra admin with
+`azureADOnlyAuthentication: true` means the shipped configuration has no working
+non-interactive path, which is a real design gap. But **"the attendee cannot fix it" does
+not survive**, and F-169 should not be filed with that as its severity argument.
+
+Worth noting what produced this: I only looked because the facilitator's challenge sent me
+back to the estate, and the Owner assignment is visible in the same
+`az role assignment list` output I ran to answer a completely different question. **Neither
+of us would have checked it, because neither of us doubted it.**
