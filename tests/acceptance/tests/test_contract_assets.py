@@ -3901,6 +3901,35 @@ def test_every_provisioning_script_is_reachable_from_a_document(repo_root: Path)
         f"only {len(readable)} documents searched; the walk is not running"
     )
 
+    # The floor above proves the walk is alive, not that it is complete, and a live
+    # walk over a shrunken corpus reports "reachable" for scripts nothing names any
+    # more. This floor was lowered from 200 to 150 when the excluded-directory set
+    # was broadened; the corpus has since grown back past 200 and the floor was never
+    # restored, so it now carries enough slack to hide a quarter of the repository.
+    # Anchoring on the documents that must always be searched is stable as the corpus
+    # grows and still fails the moment a suffix or exclusion drops one of them.
+    anchors = {
+        repo_root / line
+        for line in subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+             "challenges/*.md", "solutions/*.md", "docs/*.md"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if line
+    }
+    assert anchors, "no anchor documents enumerated; the git query stopped matching"
+    missing_anchors = sorted(
+        str(path.relative_to(repo_root)) for path in anchors - set(readable)
+    )
+    assert not missing_anchors, (
+        "these tracked documents are outside the walk, so a script named only by one "
+        "of them would be reported reachable when it is not: "
+        + ", ".join(missing_anchors)
+    )
+
     unreachable: list[str] = []
     for script in scripts:
         mentions = [
@@ -5587,4 +5616,97 @@ def test_recovery_time_claim_matches_what_the_validator_actually_binds(repo_root
     assert "no digest binds" in text, (
         "the chapter never tells the participant which field is unbound, so the "
         "one value that still depends on their honesty looks machine-checked"
+    )
+
+
+def test_the_not_measured_permission_is_unconditional_and_sits_at_the_table(
+    repo_root: Path,
+) -> None:
+    """The permission to leave a scorecard row empty must reach the reader who needs it.
+
+    The only permission the chapter gave was conditional -- "if your facilitator gave
+    you a golden handoff" -- and it sat in `Before you start`, above the table. An
+    attendee who simply could not measure a row was not covered by that condition, and
+    the nearest text at the point of use pushed the other way: "the two days were spent
+    producing exactly these numbers". Correct guidance, gated on the wrong condition,
+    sited away from the confusion it answers.
+
+    Nothing reads the scorecard back, so a complete table and an invented one are the
+    same artifact. The chapter has to say that where the attendee is deciding whether
+    to guess, not two sections earlier.
+    """
+    chapter = (repo_root / "challenges" / "wrapup" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    heading = chapter.index("## Fill in your scorecard")
+    table = chapter.index("| What you measured |")
+    preamble = chapter[heading:table]
+
+    assert "not measured" in preamble, (
+        "the permission to mark a row *not measured* must appear between the scorecard "
+        "heading and the table, where the attendee is deciding whether to guess"
+    )
+    assert "unconditional" in preamble, (
+        "the permission must state that it is unconditional; the chapter previously "
+        "gated it on having received a golden handoff"
+    )
+    for reason in ("ran out of time", "failed"):
+        assert reason in preamble, (
+            f"the permission must name {reason!r} as a covered reason, so an attendee "
+            "who was blocked rather than handed a golden bundle knows it applies"
+        )
+    assert "forged" in preamble and "cannot be distinguished" in preamble, (
+        "the preamble must say a full scorecard is indistinguishable from an invented "
+        "one; without that, marking a row *not measured* reads as the weaker answer"
+    )
+
+
+def test_the_facilitator_readout_discloses_what_the_mttr_number_is_worth(
+    repo_root: Path,
+) -> None:
+    """The workshop's closing ritual must not read out an unbound number as a measurement.
+
+    The chapter ends by telling facilitators to collect `minutesToRecovery` from every
+    table and read out the median. That is the single least-bound number the delivery
+    produces: `validate_recovery_time` binds `recoveredAt` to the sealed alert
+    resolution and re-derives the arithmetic, but constrains `detectedAt` only by
+    ordering, so a typed detection time yields a passing number (F-139). The teams
+    whose incident never ran have no file at all, so the median is taken over a
+    denominator nobody states.
+
+    A number read aloud to a room is the one figure from these two days that leaves the
+    building. It has to leave with its provenance attached.
+    """
+    chapter = (repo_root / "challenges" / "wrapup" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    readout = chapter[chapter.index("**Facilitators:**") :]
+
+    assert "detectedAt" in readout, (
+        "the readout must name the field nothing binds; otherwise the median is "
+        "presented as a measured quantity"
+    )
+    assert "have the file at all" in readout, (
+        "the readout must tell facilitators to state how many tables produced the file, "
+        "or the median of the finishers is heard as the median of the room"
+    )
+
+    source = (
+        repo_root
+        / "tests"
+        / "acceptance"
+        / "catalog_acceptance"
+        / "sre_evidence.py"
+    ).read_text(encoding="utf-8")
+    validator = source[source.index("def validate_recovery_time") :]
+    validator = validator[: validator.index("\ndef ")]
+    assert "alertResolvedAt" in validator or "alert_resolved" in validator, (
+        "the recovery validator no longer binds the resolution clock; the readout's "
+        "disclosure describes a validator that no longer exists"
+    )
+    assert "detected ==" not in validator and "== detected" not in validator, (
+        "detectedAt is now compared against something in validate_recovery_time -- if "
+        "the gap has been closed, the facilitator readout and the Challenge 6 prose "
+        "must be updated in the same change, so this guard fails on the improvement "
+        "rather than letting a stale disclosure survive it"
     )
