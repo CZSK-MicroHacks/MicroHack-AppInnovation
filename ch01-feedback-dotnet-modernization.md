@@ -912,6 +912,68 @@ worked example, since that example cannot work for five of the tool's commands.
 
 ---
 
+---
+
+## The two numbers: what the honest telemetry path actually cost
+
+Reported as measured, not as expected.
+
+### (a) Channel unavailability — **60m48s, then it cleared**
+
+21:59:31 → 23:00:19, **57 consecutive** `az vm run-command invoke` attempts, every one
+returning `Conflict: Run command extension execution is in progress` with the VM at
+`provisioningState: Updating`. At 23:00:19 the queued job launched with no intervention.
+
+The finding is not the hour. It is that **the hour is unprovable while you are in it.**
+There is no way to enumerate an in-flight `run-command` of this class (`az vm run-command
+list` returns `[]`), no way to cancel one, no surfaced timeout and no correlation ID in the
+`Conflict` message. "Wait" and "this will never clear" look identical from the outside, and
+the natural remedy — deallocate the VM — destroys the very long-running job the attendee is
+trying to preserve.
+
+It recurred at 00:05, again with `run-command list` empty, so this class is reproducible and
+not a one-off.
+
+### (b) The evidence path itself — **about 6 minutes, and discovery was free**
+
+Split as requested.
+
+**Discovery: free, offline, reusable.** Mapping all 25 contract signals to their App
+Insights storage locations needed no channel at all — `az monitor log-analytics query` works
+from the laptop. It is now published as `workshop/contracts/telemetry-signal-map.json`, so
+no future attendee pays it either. I had expected this to dominate. It did not.
+
+**Capture → green report: ~6 minutes.** 23:27:41 to 23:33. Four `az monitor log-analytics
+query` calls to collect real rows, a short script to assemble the manifest, and two render
+attempts:
+
+1. First render failed with **8 problems at once** — a missing route-template probe and
+   seven schema violations from an extra `count` key I had added to every measurement.
+2. Fixed both, re-rendered, green: `provenanceCheck: verified`, 1 + 6 + 5 + 8 signals.
+
+**What that means for F-89, stated against my own interest.** The renderer *did* remove the
+hand-transcription problem — I never typed a unit, never typed a signal name, and the
+provenance cross-check caught nothing because it had nothing to catch. But **6 minutes is
+not where this chapter's time goes.** Against 60m48s of channel unavailability and roughly
+two hours of fault injection and revision archaeology, the evidence-rendering step is
+noise. If the argument for F-89 rests on time saved, the argument is weak.
+
+The argument that survives is the other one: before the renderer, the bundle was
+*fabricable* — five documents of plausible prose that no tool checked and no test covered.
+That was never mainly about effort. It was about whether an attendee who took a shortcut
+could be detected, and the answer was no. The renderer changes that, and the fact that it
+also happens to be fast is a bonus, not the case for it.
+
+I would rather publish this than a flattering number: **the expensive part of Challenge 1
+telemetry is getting the signals to exist at all, not writing them down.**
+
+### Screenshots: **zero**
+
+Not "unavailable", not "pending". Zero. There is no VS Code, no Bastion and no desktop in
+this delivery, so there was never anything to capture. Every screenshot the chapter asks for
+is of an IDE that does not exist here.
+
+---
 ## Defects that block the .NET stack outright
 
 Both were hit on the first real bootstrap deployment. Both fail loudly, which makes them
