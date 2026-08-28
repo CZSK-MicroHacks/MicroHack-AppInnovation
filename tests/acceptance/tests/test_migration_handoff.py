@@ -752,3 +752,90 @@ def test_golden_rehearsal_command_names_the_failing_step_in_its_verdict(
     assert verdict["status"] == "failed"
     assert verdict["step"] == "cross-field-checks"
     assert "surefire-reports" in verdict["error"]
+
+
+def test_render_handoff_accepts_a_base_url_with_a_trailing_slash(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    """A trailing slash on the acceptance base URL still names the same deployment.
+
+    The subject comparison used exact string equality against the Container Apps
+    FQDN, which carries no trailing slash. A participant who copies the URL from a
+    browser address bar gets one, and the render failed with "acceptance subject
+    differs from target output" -- a message that sends them hunting for a revision
+    or digest mismatch that does not exist.
+    """
+    contracts = repo_root / "workshop/contracts"
+    target = load_json(contracts / "azure-target-output.application.example.json")
+    rollback_revision = (
+        f'{target["application"]["containerAppName"]}'
+        f'--baseline-{target["sourceCommit"][:12]}'
+    )
+    commit = target["sourceCommit"]
+    migration = load_json(contracts / "migration-report.postgresql.example.json")
+    migration["sourceCommit"] = commit
+    runtime = {
+        "schemaVersion": "1.1.0",
+        "stack": "java-postgresql",
+        "sourceCommit": commit,
+        "status": "passed",
+        "artifactFormat": "junit",
+        "artifact": "java/target/surefire-reports",
+        "command": "OTEL_SDK_DISABLED=true ./mvnw -q test",
+        "tests": _runtime_tests(contracts, "java-postgresql"),
+    }
+    acceptance = _acceptance(target)
+    assert not acceptance["baseUrl"].endswith("/"), "fixture already ends in a slash"
+    acceptance["baseUrl"] = acceptance["baseUrl"] + "/"
+    telemetry = _telemetry(target, "mh-catalog-java")
+
+    (tmp_path / "workshop/contracts").mkdir(parents=True)
+    for name in ("challenge-paths.json", "challenge-paths.schema.json"):
+        (tmp_path / "workshop/contracts" / name).write_text(
+            (contracts / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data/manifest.json").write_text(
+        (repo_root / "data/manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    paths: dict[str, Path] = {}
+    for name, document in (
+        ("azure-target-output", target),
+        ("migration-report", migration),
+        ("acceptance-report", acceptance),
+        ("telemetry-report", telemetry),
+        ("runtime-test-report", runtime),
+    ):
+        path = evidence / f"{name}.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        paths[name] = path
+    for name in (
+        "baseline-backup.md",
+        "managed-database-separation.json",
+        "container-build.json",
+        "iac-review.md",
+        "rollback-runbook.md",
+    ):
+        (evidence / name).write_text("durable evidence\n", encoding="utf-8")
+
+    handoff = render_handoff(
+        runner=ReleaseRunner(target, rollback_revision),
+        target_path=paths["azure-target-output"],
+        migration_path=paths["migration-report"],
+        acceptance_path=paths["acceptance-report"],
+        telemetry_path=paths["telemetry-report"],
+        runtime_path=paths["runtime-test-report"],
+        output_path=evidence / "modernization-contract.json",
+        modernization_path="manual",
+        rollback_revision=rollback_revision,
+        rollback_runbook_path=evidence / "rollback-runbook.md",
+        root=tmp_path,
+    )
+    assert handoff["source"]["commitSha"] == commit
+    # The slash is normalised for the comparison only; it does not leak into the
+    # rendered contract's record of the deployed application.
+    assert handoff["application"]["url"] == target["application"]["url"]
