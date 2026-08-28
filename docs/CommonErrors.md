@@ -971,3 +971,34 @@ export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
 
 This yields exactly the pinned 17.0.20+8. Check `java -version` before building: an older
 system JDK earlier on `PATH` produces a Maven failure that does not mention the JDK.
+
+## Do not infer a document's silence from a filtered search
+
+**Symptom.** You conclude "the material never documents X", having established it with a
+targeted `grep`.
+
+**What actually happens.** The pattern you searched for often *cannot* match the text that
+would refute you. Searching `java/README.md` for `CATALOG_` returns only `CATALOG_*` rows —
+so it can never reveal the `OTEL_*`, `DEPLOYMENT_ENVIRONMENT` and `CONTAINER_APP_REVISION`
+rows sitting four lines further down the same table. The output looks like evidence about
+the document; it is evidence about the filter.
+
+**Rule.** A claim of the form *"the material is silent on X"* may not rest on a grep. Back it
+with a full read of the named file, or an exhaustive diff of code against documentation:
+
+```bash
+# every env var the code reads, versus every env var the README tabulates
+python3 - <<'PY'
+import re
+code = set(re.findall(r'"([A-Z][A-Z0-9_]{3,})"', open('java/src/main/java/com/microsoft/microhack/catalog/config/CatalogRuntimeOptions.java').read()))
+code |= set(re.findall(r'\$\{([A-Z][A-Z0-9_]{3,})', open('java/src/main/resources/application.properties').read()))
+doc  = set(re.findall(r'\|\s*`([A-Z][A-Z0-9_]{3,})`\s*\|', open('java/README.md').read()))
+print("in code, undocumented:", sorted(code - doc) or "none")
+PY
+```
+
+Run against the baseline this reports `none` — the table is exactly complete, 15 for 15.
+
+**Why it is worth a rule.** Silence claims are unfalsifiable from inside the search that
+produced them, so they survive review that a positive claim would not. The generalized form
+of the mistake is verifying your own query instead of the artifact.
