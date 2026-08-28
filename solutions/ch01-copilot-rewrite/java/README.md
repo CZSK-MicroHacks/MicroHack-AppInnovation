@@ -34,6 +34,21 @@ and section 5 builds it — after bootstrap has created the registry to build it
 
 ## Registered boundary
 
+This document is organized in six sections; the challenge is organized in eight
+checkpoints. They are not the same numbering, and both documents cross-reference in their
+own. Use this map:
+
+| Challenge checkpoint | This runbook |
+| --- | --- |
+| 1 characterization | §1 |
+| 2 bounded plan | §2 |
+| 3 diff review | §3 |
+| 4 container | §4 (Dockerfile guards) |
+| 5 publish | §4 (commit, push, `$SourceCommit`) |
+| 6 migration | §5 (Windows source-VM migration) |
+| 7 release | §5 (bootstrap, `az acr build`, cutover) |
+| 8 handoff | §6 |
+
 `copilot-rewrite-java` resolves to:
 
 | Interface | Exact value |
@@ -65,9 +80,18 @@ mkdir -p evidence .workshop-tmp
 ./java/mvnw -f java/pom.xml test
 cp -R java/target/surefire-reports .workshop-tmp/java-characterization
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 cd ../..
 ```
+
+The deselected test is a repository-authoring guard, not a participant gate. It asserts that
+`java/` and `solutions/reference/java/` differ only in the nine files the *modernization*
+path edits, and that the only files the reference adds are its declared additions —
+`Dockerfile` among them. Both assertions are incompatible with this path by construction: a
+bounded rewrite edits files outside that set, and checkpoint 4 has you author
+`java/Dockerfile`, which removes it from the reference's declared additions. Deselect it here
+and keep running everything else, which is what actually characterizes your application.
 
 Start the unchanged application and disposable PostgreSQL using `java/README.md`,
 then run full shared acceptance against that baseline. Record the exact application
@@ -130,7 +154,8 @@ rm -rf .workshop-tmp/java-$SLICE_NAME
 mkdir -p .workshop-tmp/java-$SLICE_NAME
 cp -R java/target/surefire-reports .workshop-tmp/java-$SLICE_NAME/
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 uv --no-config run python -m catalog_acceptance \
   --profile smoke \
   --base-url "$CATALOG_BASE_URL" \
@@ -167,6 +192,18 @@ Container Apps revisions, migration report, runtime evidence, and handoff.
 **Executable proof (PowerShell)**
 
 ```powershell
+$DockerfilePath = 'java\Dockerfile'
+if (-not (Test-Path $DockerfilePath)) {
+    throw 'Author java/Dockerfile before the container checkpoint.'
+}
+$Dockerfile = Get-Content -Path $DockerfilePath -Raw
+if ($Dockerfile -notmatch '(?m)^\s*USER\s+(?!root\s*$)\S+') {
+    throw 'The runtime stage must declare a non-root USER.'
+}
+if ($Dockerfile -notmatch '(?m)^\s*EXPOSE\s+8080\s*$') {
+    throw 'The runtime stage must expose 8080.'
+}
+
 $Dirty = git status --porcelain -- java data
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not [string]::IsNullOrWhiteSpace(($Dirty -join "`n"))) {
@@ -193,19 +230,13 @@ $SourceCommit = ($SourceCommitLines -join '').Trim()
 if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
     throw 'SOURCE_COMMIT must be a lowercase full 40-hex commit.'
 }
-
-$DockerfilePath = 'java\Dockerfile'
-if (-not (Test-Path $DockerfilePath)) {
-    throw 'Author java/Dockerfile before the container checkpoint.'
-}
-$Dockerfile = Get-Content -Path $DockerfilePath -Raw
-if ($Dockerfile -notmatch '(?m)^\s*USER\s+(?!root\s*$)\S+') {
-    throw 'The runtime stage must declare a non-root USER.'
-}
-if ($Dockerfile -notmatch '(?m)^\s*EXPOSE\s+8080\s*$') {
-    throw 'The runtime stage must expose 8080.'
-}
 ```
+
+The Dockerfile guards run first on purpose. `$SourceCommit` is the commit Challenge 3 checks
+out and builds `java/Dockerfile` from, so a commit published without it is unusable: you
+would have to author the file, commit, push, and re-derive `$SourceCommit` before any command
+that consumes it. Failing before the push costs nothing; failing after it costs the whole
+publish.
 
 The first push opens a browser sign-in through Git Credential Manager. Sign in as the
 account that owns the repository; the credential is reused by every later push. Re-running
