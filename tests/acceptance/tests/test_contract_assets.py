@@ -5174,13 +5174,35 @@ def test_no_unguarded_trim_on_native_command_output(repo_root: Path) -> None:
     the surrounding code was written to emit. Collecting into `@(...)` and
     joining first yields an empty string, so the intended check runs.
     """
+    script = _provisioner(repo_root)
     offenders: list[str] = []
-    for number, line in enumerate(_provisioner(repo_root).splitlines(), start=1):
-        if ".Trim()" not in line or "(&" not in line:
+
+    # The provisioner's `.Trim()` sites are the population this guard exists to
+    # cover; a floor here fails the guard if a refactor moves them out of reach
+    # instead of letting an empty scan read as a clean script.
+    inspected = len(re.findall(r"\.Trim\(\)", script))
+    assert inspected >= 12, f"only {inspected} `.Trim()` sites scanned"
+
+    # `.Trim()` and its native call may sit on different physical lines, so the
+    # expression is recovered by matching parentheses backwards from the call
+    # rather than by scanning single lines.
+    for match in re.finditer(r"\)\s*\.Trim\(\)", script):
+        close = script.index(")", match.start())
+        depth = 0
+        for index in range(close, -1, -1):
+            if script[index] == ")":
+                depth += 1
+            elif script[index] == "(":
+                depth -= 1
+                if depth == 0:
+                    break
+        else:
             continue
-        if "-join" in line:
+        expression = script[index : close + 1]
+        if "&" not in expression or "-join" in expression:
             continue
-        offenders.append(f"{number}: {line.strip()}")
+        number = script.count("\n", 0, index) + 1
+        offenders.append(f"{number}: {' '.join(expression.split())[:120]}")
 
     assert not offenders, (
         "`.Trim()` is applied to unguarded native command output; wrap the "

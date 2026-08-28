@@ -1056,10 +1056,10 @@ superpassword=$DatabasePassword
         if ($LASTEXITCODE -ne 0) {
             throw 'PostgreSQL is not accepting local connections.'
         }
-        $PostgreSqlVersion = (
-            & $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
-                'SHOW server_version'
-        ).Trim()
+        $PostgreSqlVersion = (@(
+                & $PsqlCommand -h localhost -p 5432 -U postgres -d postgres -tAc `
+                    'SHOW server_version'
+            ) -join '').Trim()
         if ($PostgreSqlVersion -notmatch '^18\.6(?:\s|$)') {
             throw "The local PostgreSQL server version is $PostgreSqlVersion instead of 18.6."
         }
