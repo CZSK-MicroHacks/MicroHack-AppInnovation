@@ -270,6 +270,39 @@ question.** That is the same failure as reading a signal type out of an attribut
 as reading an audience rule out of an ownership identifier — three instances in this arm's
 record of an artefact being consulted for a property it does not carry.
 
+**The rule is not self-enforcing, including for whoever states it.** One round after it was
+agreed, both parties broke it again on the same subject. The sharper sub-distinction, which
+neither of us had:
+
+```bash
+git ls-remote origin <your-branch>            # TIP IDENTITY: what the ref points at now
+git merge-base --is-ancestor 216433e 02b9930  # REACHABILITY: is this commit published
+```
+
+**A commit that is an ancestor of a remote ref is on the remote.** Reporting "not on origin"
+because the tip is a different SHA tests tip identity and answers reachability — and the
+error runs in *both* directions, so neither direction is the safe one to guess:
+
+| instrument reads | claim made | verdict |
+|---|---|---|
+| local tracking config | "never pushed" | wrong — it was published |
+| tip inequality | "not on origin" | wrong — it was an ancestor |
+| `ls-remote` | "tip is X" | exact |
+
+**And a third failure is neither party's error: the tip moves between messages.** A fetch and
+a push that straddle each other produce two honest measurements that disagree, and nothing in
+either output distinguishes *stale* from *superseded*. The only defence that survives latency
+is to **cite a SHA together with the command and moment that established it**, so a reader can
+tell a claim that was never true from one that has since stopped being true. Between
+independent arms this is not pedantry — it is the difference between a correction and a
+re-derivation of work that already exists.
+
+**The same skew has a documentary form, and it is the one that cost the most here.** Citing a
+rev where a file genuinely lacked a passage, after a later commit on the same branch restored
+it deliberately, transmits a position already retracted. It is not an under-count; it argues
+the opposite of the author's settled judgment. Deletion had been tried, found to leave the
+case uncovered, and reversed on purpose — and a stale citation hides exactly that reversal.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
