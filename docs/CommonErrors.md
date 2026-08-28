@@ -1244,3 +1244,45 @@ the criterion:
 Documenting the rule is not the weaker option here; it is the only correct one, because the
 judgement the rule needs — *is this path absent because it is wrong, or because it has not
 been produced yet?* — is exactly what a guard cannot make.
+
+## A test that cannot skip will fail instead, and where the hook runs decides which
+
+`PostgreSqlIntegrationTest` is `@Testcontainers` with a `@Container` field. The workshop VM
+has no Docker daemon by design and the prescribed verification command is a bare `mvnw test`,
+so the class errored on the mandated path. Reproduced here by redirecting the JVM's home so
+the socket disappears — note that `HOME=… ` is *not* enough, because Testcontainers resolves
+`~/.docker/run/docker.sock` from the `user.home` system property, not the environment
+variable, and the run passes while looking like it was isolated:
+
+```bash
+# looks isolated, is not: falls back to the socket and passes
+env HOME=/tmp/nohome DOCKER_HOST=tcp://127.0.0.1:1 ./mvnw -Dtest=PostgreSqlIntegrationTest test
+
+# genuinely without Docker
+DOCKER_HOST=tcp://127.0.0.1:1 ./mvnw -DargLine="-Duser.home=/tmp/nohome" \
+  -Dtest=PostgreSqlIntegrationTest test
+```
+
+The obvious remedy — asserting Docker availability inside the class — does not work, and the
+reason generalises past Testcontainers. `TestcontainersExtension` implements **both**
+`BeforeAllCallback` and `ExecutionCondition`. JUnit evaluates conditions first and runs
+`BeforeAllCallback` second, and the container is started from the callback. An
+`assumeTrue(...)` in a `@BeforeAll` body is therefore ordered *after* the failure it is meant
+to avoid: the container start has already thrown, and the run errors rather than skipping.
+The working form is the condition-time flag, `@Testcontainers(disabledWithoutDocker = true)`.
+
+Measured, same tree, one flag apart:
+
+| | without Docker | with Docker |
+| --- | --- | --- |
+| `@Testcontainers` | `tests=1 errors=1`, BUILD FAILURE | 34 run, 0 skipped |
+| `@Testcontainers(disabledWithoutDocker = true)` | 6 skipped, BUILD SUCCESS | 34 run, 0 skipped |
+
+**The general rule: a guard only guards if it runs before the thing it guards against.** A
+remedy placed after the failing step is not a weaker fix, it is not a fix — it never
+executes. Before writing a skip, find out which lifecycle phase starts the resource and put
+the guard in an earlier one.
+
+The corollary for reporting: publish the skip count with the pass count. `34 run / 0 skipped`
+and `28 run / 6 skipped` are both green, and only the pair tells a reader which environment
+produced them. A bare pass count cannot distinguish a skipped suite from a complete one.

@@ -144,6 +144,12 @@ Push-Location java
 Pop-Location
 ```
 
+The VM has no Docker daemon, so the six `PostgreSqlIntegrationTest` cases skip and the
+build still succeeds: expect `Tests run: 34 ... Skipped: 6`. That is the correct VM
+result. On a machine with a Docker daemon the same command runs all 34 with none skipped,
+so compare the skip count as well as the pass count before calling a difference a
+regression.
+
 Record every task in `evidence/task-results.json` with supported capability,
 scope, human decision, changed files, validation command/exit code, and artifact
 paths. Record exact runtime/framework/dependency versions, build/test results,

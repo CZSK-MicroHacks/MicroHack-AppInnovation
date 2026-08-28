@@ -85,6 +85,13 @@ uv --no-config run pytest -q tests/test_contract_assets.py \
 cd ../..
 ```
 
+On the workshop VM there is no Docker daemon, so the six `PostgreSqlIntegrationTest` cases
+are skipped and `mvnw test` still succeeds: expect `Tests run: 34 ... Skipped: 6`. Six
+skipped is the correct VM result, not a regression — where a Docker daemon is present the
+same command runs all 34 with none skipped. Read the skip count alongside the pass count
+when you compare two runs, because only the pair distinguishes an environment difference
+from a real failure.
+
 The deselected test is a repository-authoring guard, not a participant gate. It asserts that
 `java/` and `solutions/reference/java/` differ only in the nine files the *modernization*
 path edits, and that the only files the reference adds are its declared additions —
