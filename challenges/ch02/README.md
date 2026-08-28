@@ -1,14 +1,14 @@
 # Challenge 2: make the catalog survive a traffic spike
 
 **By the end of this chapter you will have watched your catalog add capacity by itself
-under 40 concurrent users, serve every request without a single error, and give the
+under 80 concurrent users, serve every request without a single error, and give the
 capacity back when the traffic stopped — with the metrics to prove all three.**
 
 ## Why this matters
 
 On the Windows VM there was one instance of the catalog and one way to survive a busy
 day: hope, followed by a change request for a bigger machine. Nobody in the retailer
-could answer "what happens at 40 concurrent shoppers?" because there was no safe way to
+could answer "what happens at 80 concurrent shoppers?" because there was no safe way to
 find out and no metric to look at afterwards.
 
 You are about to answer that question with a number. This chapter retires the scaling
@@ -230,6 +230,13 @@ You are done when all of the following are true:
       within `1..3`.
 - [ ] The database metric peaks above its pre-load baseline, so you can point at the
       moment the web tier's extra replicas reached the data tier.
+- [ ] You have written down the run's **throughput** next to its replica count, and you
+      can say whether the extra replicas raised it. If throughput is flat while replicas
+      tripled, the app tier was never the constraint — say so, and name what was.
+- [ ] You can name the revision your evidence belongs to **and** the image digest it ran.
+      The revision name is not durable: any app-setting change creates a new revision and
+      moves traffic to it, so a name recorded today may not describe what ran. The digest
+      does.
 - [ ] `/healthz` and `/readyz` both return exactly `200` after recovery, from the handoff
       URLs.
 - [ ] `evidence/load-test-report.json` exists, was written by the renderer, and
@@ -268,7 +275,11 @@ Work in this order, and let each step gate the next:
    window, then keep polling replicas until the last non-null value is `1`.
 5. Hash everything, render, validate.
 
-If your replica series has more than one time series in it, you forgot the filter.
+If your replica series has more than one time series in it, you forgot the filter. A
+series can also be wrong while being the only one present: an unfiltered query returns
+whichever revision Azure lists first, and an inactive revision reports a flat `0`. One
+series is necessary, not sufficient — check that the `revisionName` on it is the one
+serving traffic.
 
 </details>
 
@@ -306,9 +317,9 @@ Read your own numbers out of `evidence/load-test-report.json` and say them out l
 
 | | Legacy VM | Your Container App |
 | --- | --- | --- |
-| Catalog response, median | your `catalogMedianMs` — one instance, no load, over the VM's loopback | **_your `medianResTime`_ ms** — under 40 concurrent users, over public HTTPS |
+| Catalog response, median | your `catalogMedianMs` — one instance, no load, over the VM's loopback | **_your `medianResTime`_ ms** — under 80 concurrent users, over public HTTPS |
 | Response to a traffic spike | One instance, forever | **1 → 2 or 3 replicas**, automatically, inside the 300-second run |
-| Errors under 40 concurrent users | Unknown — never safely tested | **0** |
+| Errors under 80 concurrent users | Unknown — never safely tested | **0** |
 | Capacity after the spike | Whatever you bought stays bought | **Back to 1 replica** within 15 minutes |
 | Database under the spike | Same box as the web tier | A separate managed service whose **peak rose above baseline** and stayed healthy |
 | Evidence | A screenshot, maybe | A digest-bound report re-derived from raw Azure responses |
@@ -318,6 +329,21 @@ is a measurement, and anyone can re-render it from the raw captures. The databas
 is the honest part of the story — it shows that scaling the web tier moved pressure to
 the data tier, which is exactly the conversation the retailer could never have when both
 lived on one Windows box.
+
+Push that row harder before you accept the headline. "It scaled out" and "it got faster"
+are two different claims, and this run only established the first. Put your throughput
+next to your replica count: if replicas went from one to three and throughput did not
+move, the extra replicas bought nothing, and the constraint lives somewhere behind them.
+On this stack it usually does — the workshop database is a single-vCore serverless tier,
+and it is entirely normal to see it pinned near 100% CPU while the web tier is still
+accepting work. Latency then rises roughly in step with concurrency, because the extra
+requests are queueing rather than being served.
+
+That is not a failed run; it is the run telling you which tier to spend money on. An
+attendee who records "autoscaling works" and stops has measured the elasticity of the
+tier that was not the bottleneck. The one who compares throughput across replica counts
+and correlates it against the database metric can say what to scale next, which is the
+answer the retailer is actually paying for. Write down whichever of the two you found.
 
 The first row is the one you carried in from Challenge 0, and it is the only row where
 both numbers are yours. State the caveat alongside them: Challenge 0 timed the catalog

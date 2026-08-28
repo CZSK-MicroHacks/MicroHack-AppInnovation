@@ -257,7 +257,7 @@ jq -e --arg testId "$TEST_ID" --arg runId "$TEST_RUN_ID" '
   and .testRunId == $runId
   and .status == "DONE"
   and .duration == 300000
-  and .virtualUsers == 40
+  and .virtualUsers == 80
   and .testRunStatistics.Total.sampleCount > 0
   and .testRunStatistics.Total.errorCount == 0
 ' "$RAW/test-run.json" >/dev/null

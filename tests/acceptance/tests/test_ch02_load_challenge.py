@@ -463,3 +463,63 @@ def test_the_load_profile_can_actually_trigger_the_scale_rule() -> None:
         f"{max_replicas}, so the scale-out saturates and the run cannot demonstrate the "
         "rule it is teaching"
     )
+
+
+USER_CLAIM = re.compile(
+    r"(\d+)\s+(?:concurrent\s+)?(?:virtual\s+)?(?:users|shoppers)\b"
+    r"|\.virtualUsers\s*==\s*(\d+)"
+    r"|\"virtualUsers\"\s*:\s*(\d+)"
+)
+
+
+def _documented_user_counts(path: Path) -> list[tuple[int, str]]:
+    """Every user-count claim in a prose file, with the line that makes it."""
+    found: list[tuple[int, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        for match in USER_CLAIM.finditer(line):
+            value = next(group for group in match.groups() if group is not None)
+            found.append((int(value), line.strip()))
+    return found
+
+
+def test_every_documented_user_count_matches_the_shipped_load_profile() -> None:
+    """Prose user counts must be derived from the JMX profile, not frozen beside it.
+
+    The load profile's virtual-user count appears in the JMeter plan, in both guides, and
+    in the contract note. Those were pinned independently, each correct at the time it was
+    written and none of them tied to the others. Retuning the profile therefore left stale
+    claims behind in exactly the places a substitution pattern did not anticipate --
+    ``40 concurrent users`` and ``.virtualUsers == 40`` both survived a sweep for
+    ``40 users``. One of the survivors was a jq assertion in the solution, so the
+    documented validation contradicted the shipped plan and would have failed for anyone
+    following it.
+
+    Pinning each site again would reproduce the fault on the next retune. This pins the
+    *relation* instead: the JMX plan is the single source, and every prose claim is
+    checked against it, so a future change to the profile fails here rather than
+    surviving as a contradiction.
+    """
+    threads = ElementTree.parse(JMETER).getroot().find(
+        ".//*[@name='ThreadGroup.num_threads']"
+    )
+    assert threads is not None and threads.text, "no thread count in the JMeter plan"
+    expected = int(threads.text)
+
+    stale: list[str] = []
+    examined = 0
+    for guide in (*GUIDES, ROOT / "workshop/contracts/README.md"):
+        for value, line in _documented_user_counts(guide):
+            examined += 1
+            if value != expected:
+                stale.append(f"{guide.relative_to(ROOT)}: {value} != {expected} -- {line}")
+
+    # Without this the guard passes on an empty enumeration, so a rewording that stopped
+    # matching the pattern would silently retire the check instead of failing it.
+    assert examined >= 6, (
+        f"only {examined} documented user counts found across the ch02 guides and the "
+        "contract note; the pattern has stopped matching the prose it is meant to police"
+    )
+    assert not stale, (
+        "documented user counts disagree with the shipped JMeter profile:\n  "
+        + "\n  ".join(stale)
+    )
