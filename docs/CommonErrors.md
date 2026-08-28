@@ -707,7 +707,7 @@ Documenting issues encountered while implementing the data generator (Azure Open
 ## 101. Maven finds a JRE, then containerized Testcontainers cannot find Docker
 **Symptom:** Maven reports that no compiler is available on macOS; after moving the build into a JDK container, the PostgreSQL integration test reports no valid Docker environment.
 
-**Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary. Underneath both: `workshop/toolchain.lock.json` ships **no macOS runtime installer** — its complete installer set is `runtimes.dotnet.windowsSourceSdkInstaller` and `runtimes.java.windowsSourceRuntimeInstaller`, and `macos`/`darwin`/`linux` appear as key prefixes zero times. This is not an oversight about an unsupported platform: the same file's `hosts.coordinator` contracts macOS ≥ 13.0 on `arm64` and `x86_64` and pins Docker Desktop 4.37.1 / Engine 27.4.0 to the patch version. So acquiring a JDK by hand off the VM is the **expected** path here, not a workaround for a defect — worth stating, because a reader who cannot tell which one they are doing also cannot tell whether to report it.
+**Cause:** The host resolves a legacy JRE without `javac`, and a test process inside a container cannot control Docker Desktop or reach sibling containers without the documented boundary. Underneath both: `workshop/toolchain.lock.json` gives a macOS host **no pinned way to acquire either language runtime**. All five of its installer keys — `runtimes.dotnet.windowsSourceSdkInstaller`, `runtimes.java.windowsSourceRuntimeInstaller`, and the three under `databases.*` — are Windows `x64`. The sharp part is not that they are uniformly Windows, because the file is *not* Windows-only: `tools.terraform.platforms` ships a `darwin/arm64` download with a `sha256`, and `databases.postgresql.localContainer.platforms` ships a `linux/arm64` digest. Cross-platform acquisition is solved twice, for a tool and for a database — and left unsolved for the two runtimes, which are the only components the attendee cannot proceed without. Meanwhile `hosts.coordinator` contracts macOS >= 13.0 on `arm64` and `x86_64` and pins Docker Desktop 4.37.1 / Engine 27.4.0 to the patch version. So acquiring a JDK by hand off the VM is the **expected** path here, not a workaround for a defect — worth stating, because a reader who cannot tell which one they are doing also cannot tell whether to report it.
 
 **Resolution:** Use the exact digest-pinned Microsoft OpenJDK build image. Mount Docker Desktop's VM `/var/run/docker.sock`, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` and `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`, and mount the checkout at the same absolute path. Do not install an unpinned JDK or skip the integration test. Here "unpinned" means *not digest-pinned* and scopes the build image; it does not by itself settle whether a version-pinned host install is acceptable. If you cannot run the container build, see the non-TTY cask entry below, which pins the version explicitly.
 
@@ -1534,3 +1534,46 @@ across trees at an identical 22/22, so a length comparison **conceals** that dri
 direction, a citation to `handoff.py:1008` is unambiguous despite two files having that basename,
 because one of them is 255 lines long and cannot hold line 1008 — arithmetic **reveals** the tree
 there. Neither behaviour is a property you can rely on; both are accidents of the files involved.
+
+### A regex is not an inventory of a structured file
+
+The installer count in the JDK entry above was first published as **2** and is actually **5**. The
+instrument was `grep -o '"[a-zA-Z]*Installer"' … | sort -u`, and it under-counted for two
+independent reasons, both silent:
+
+- **case** — the pattern requires a capital `I`, so the three keys literally named `installer`
+  never matched;
+- **deduplication by name rather than by path** — `sort -u` collapses three distinct
+  `databases.*.installer` keys into one, because they share a key name while living at different
+  paths.
+
+Either defect alone hides keys. Together they turned five into two, and nothing in the output said
+so: a grep that finds fewer things looks exactly like a file that contains fewer things.
+
+Walk the structure instead, and report **paths**, not names:
+
+```python
+import json
+hits = []
+def walk(node, path=""):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            here = f"{path}.{key}" if path else key
+            if "installer" in key.lower():
+                hits.append(here)
+            walk(value, here)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            walk(value, f"{path}[{index}]")
+walk(json.load(open("workshop/toolchain.lock.json")))
+print(len(hits))
+```
+
+**The correction also changed the finding, in the direction neither party expected.** The natural
+reading of "all five installers are Windows" is that the lockfile is a Windows artifact — and that
+reading is refutable from the same file, which pins a `darwin/arm64` Terraform download with a
+`sha256` and a `linux/arm64` PostgreSQL digest. So a bigger number produced a *weaker* claim.
+The durable statement is narrower than either count: cross-platform acquisition is solved twice in
+this file, for a tool and for a database, and is unsolved only for the two language runtimes —
+which are the components an attendee cannot proceed without. **A count is not a finding; check
+what the larger number does to the argument before adopting it.**
