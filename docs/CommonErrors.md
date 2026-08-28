@@ -1915,3 +1915,43 @@ def norm(t):
     t = re.sub(r"[*_`]", "", t)              # inline emphasis splits phrases invisibly
     return re.sub(r"\s+", " ", t)            # hard wraps
 ```
+
+### Absence from a branch that lacks the substrate proves nothing
+
+A remedy was checked for on the default branch to decide whether it had shipped. It was absent, and
+the conclusion drawn was that the fix had not been delivered. Measured:
+
+```
+merge-base(main, 4bf59f7)  = main itself
+main..4bf59f7              = 52 commits
+4bf59f7..main              =  0 commits          <- main is a strict ancestor
+
+on main:  workshop/toolchain.lock.json ABSENT   tests/acceptance ABSENT
+          java ABSENT                           infra ABSENT
+```
+
+**`main` is not a divergent line, it is an old one** - 52 commits behind the frozen baseline, and it
+contains none of the substrate the defect lives in. The acceptance suite is not there; neither is
+the module holding the gate the remedy is about. So *"the remedy is absent from `main`"* is true and
+carries no information: **everything is absent from `main`.** A check that cannot distinguish
+"withheld" from "nothing here yet" has not measured delivery.
+
+**The verdict was still right, and the evidence for it was one ref away.** The remedy is also absent
+from `4bf59f7` - the frozen baseline every artifact is required to record as its `sourceCommit`, and
+therefore the tree participants actually receive. That is the ref that decides the question, it was
+already the project's stated convention, and it supports the same conclusion soundly.
+
+Two rules, and the second is the one that is easy to miss:
+
+- **Before reading absence as a decision, confirm the ref contains the thing the artifact belongs
+  to.** Probe for a sibling that must be present - here, the module the remedy edits. If the sibling
+  is missing too, the instrument is pointed at the wrong tree and its zero means nothing.
+- **A correct verdict reached on unsound evidence is not a smaller error than a wrong verdict.** It
+  survives review because the conclusion checks out, and the defective reasoning is what gets reused
+  on the next question, where it will not happen to be right.
+
+This is the fourth distinct mechanism in this document whose failure mode is an indistinguishable
+`ABSENT`: a lookup under a differently-spelled key, a symbol resolved against the wrong revision, a
+phrase hidden by markup, and now a path checked on a tree that predates it. **Absence is never
+self-explanatory. Every one of these produced a confident conclusion from a zero, and in three of
+the four the zero was an artifact of the instrument rather than a fact about the world.**
