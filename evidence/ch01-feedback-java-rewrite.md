@@ -199,9 +199,11 @@ deliverable, "a count of failed database dependency calls" (`:356`).
 
 The tracks do not produce that telemetry equivalently. .NET registers
 `AddSqlClientInstrumentation()` (`dotnet/src/LegoCatalog.App/Program.cs:86`), so every
-database call on every route becomes a dependency record. Java registers no
+database call on every route becomes a dependency record. Java registers no HTTP or JDBC
 instrumentation library at all — its only `instrumentation` artifact is the logback *log*
-appender — so dependency records come solely from two explicit call sites,
+appender, and the deployed image runs a bare `java -jar` with no `-javaagent`
+(`solutions/reference/java/Dockerfile:25`) — so dependency records come solely from two
+explicit call sites,
 `CatalogService:47` and `PerformanceCatalogService:52`, both via
 `CatalogTelemetry.startDatabaseSpan` (`:79`, `SpanKind.CLIENT`).
 
@@ -214,3 +216,52 @@ and no document says so.
 This is F-213's shape: material asserting a uniform result that holds on one substrate only.
 Unlike F-213 this arm has **not** fixed it — the remedy is a judgement about how much
 telemetry the workshop intends to teach, not a defect with one correct repair.
+
+## Late finding — Java HTTP telemetry is hand-rolled and discards the URL
+
+**Substrate: `solutions/reference/java/`, the tree the deployed image is built from, at
+`fb74cf2`.** The static half is executed; no Application Insights query was run by this arm.
+
+The two tracks obtain HTTP server spans from different places, and only one of them is a
+library.
+
+* **.NET** registers `AddAspNetCoreInstrumentation()`
+  (`solutions/reference/dotnet/src/LegoCatalog.App/Program.cs:104`). Its own
+  `Middleware/RequestTelemetryMiddleware.cs` creates **no** spans — verified, zero
+  `StartActivity`/`ActivityKind` occurrences in 55 lines. So every .NET request span is
+  library-generated, carrying the conventional `GET /route` name and `url.*` attributes.
+* **Java** has no HTTP instrumentation library in `pom.xml` and no agent: the image's
+  entrypoint is `java -jar /app/catalog.jar` with no `-javaagent` and no
+  `JAVA_TOOL_OPTIONS` (`Dockerfile:25`). Every Java request span therefore comes from
+  `web/RequestTelemetryFilter.java`, which is the sole source.
+
+That filter hardcodes the span name — `tracer.spanBuilder("http.server")`
+(`service/CatalogTelemetry.java:73`) — and sets exactly four attributes:
+`http.request.method`, `server.address`, `http.route` (when a handler matched), and
+`http.response.status_code`. **It never sets any URL attribute**: `url.full`, `url.path`,
+and `http.url` do not occur anywhere under `solutions/reference/java/src/main` (verified,
+with a positive control confirming the search matched files).
+
+The consequence in Application Insights is that every Java request arrives with
+`operation_Name = "http.server"` and an empty `url`, for all routes. Ch4 asks participants
+to analyse request telemetry; on the Java track the columns that identify *which* endpoint
+was called are empty by construction, so the documented analysis cannot be performed the
+documented way.
+
+**The route is not lost, only relocated.** `http.route` is populated for every request,
+because `/healthz` and `/readyz` are `@GetMapping` handlers
+(`web/HealthController.java:25,30`) and so set Spring's `BEST_MATCHING_PATTERN`. It lands in
+`customDimensions`, not in a top-level column. Recovering it:
+
+```kql
+requests
+| extend route = tostring(customDimensions["http.route"])
+| summarize count() by route, operation_Name
+```
+
+**Bearing on the empty dependency table.** Server spans and `db.client` spans are created by
+the same `Tracer`, from the same SDK instance, exported through the same pipeline. An export
+fault cannot drop one span kind and keep the other. So if server spans are arriving, an
+empty dependency table means the two qualifying call sites were never executed — a traffic
+gap, not an instrumentation gap. The query above decides it: probe routes only means
+absent traffic; `/` or `/figure/{id}` present with no dependencies means a real defect.
