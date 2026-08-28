@@ -942,10 +942,13 @@ compiler is available, and `catalog_acceptance --profile full` aborts with `psql
 for database verification`.
 
 **Cause.** Both are already documented in this file — the JDK case as entry 101, the `psql`
-case as entry 45. Neither is reachable from the material a participant is handed. Every
-challenge README routes troubleshooting to `docs/Troubleshooting.md`
+case as entry 45. Neither is reachable *directly* from the material a participant is handed.
+Every challenge README routes troubleshooting to `docs/Troubleshooting.md`
 (`challenges/ch01-copilot-rewrite/README.md:300`), which contains no mention of `javac`, a
-JDK, or a JRE, and no file under `challenges/` references this registry at all.
+JDK, or a JRE, and no file under `challenges/` references this registry at all. One hop back
+does exist — `docs/Troubleshooting.md:211` links here — but it is the last content line of
+that file, it calls this registry "resolved implementation pitfalls" rather than answers to
+errors you are about to hit, and the following sentence caveats the use it just enabled.
 
 **Fix.** Follow the entries that already exist rather than inventing a route:
 

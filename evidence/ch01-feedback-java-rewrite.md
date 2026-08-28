@@ -89,10 +89,16 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    `path = copilot-modernization`, and it cannot validate in the location it ships in,
    because the validator folds the handoff's own repo-relative path into the required
    evidence set while the registry pins a different filename.
-7. **Prerequisite recovery off the VM is documented but unroutable.** The answers exist as
-   `docs/CommonErrors.md` entries 45 and 101, but every challenge README routes
-   troubleshooting to `docs/Troubleshooting.md`, which never mentions `javac`, a JDK or a
-   JRE, and nothing under `challenges/` references the error registry at all.
+7. **Prerequisite recovery off the VM is documented, but described as something else where
+   it is linked.** The answers exist as `docs/CommonErrors.md` entries 45 and 101. Every
+   challenge README routes troubleshooting to `docs/Troubleshooting.md` (12 links), which
+   never mentions `javac`, a JDK or a JRE, and nothing under `challenges/` references the
+   error registry at all (0 references). One hop does exist —
+   `docs/Troubleshooting.md:211`, the last content line of a 212-line file — but it calls
+   the registry *"resolved implementation pitfalls"*, which reads as historical-internal
+   rather than as answers to errors you are about to hit, and the next sentence attaches a
+   caveat discouraging the use it just enabled. This arm originally filed this as
+   *unreachable*; that was an overreach, corrected to the measured scope above.
 
 ## Reliability observation
 
@@ -113,11 +119,18 @@ Two claims filed by this arm were withdrawn after checking rather than defending
 - A claim that four environment variables were undocumented. They are documented, in one
   table, four rows below where the search stopped.
 - A claim that the non-VM prerequisite path was unstated. It is stated, in
-  `docs/CommonErrors.md` entry 101 — which names this exact symptom, cause and resolution,
-  and explicitly forbids installing an unpinned JDK. This arm had invented a Homebrew route
-  the material never mentions, hit its failure, and filed that as a workshop defect. The
-  invented route was then *shipped* into `java/README.md` and the error registry, leaving two
-  contradictory resolutions for one root cause in a single file. Retracted at `1fa80cf`.
+  `docs/CommonErrors.md` entry 101, which names this exact symptom, cause and resolution.
+  This arm had invented a Homebrew route the material never mentions, hit its failure, and
+  filed that as a workshop defect. The invented route was then *shipped* into
+  `java/README.md` and the error registry. Retracted at `1fa80cf`.
+- The retraction was itself an overreach and needed a second correction at `8033b29`. It
+  read entry 101's *"do not install an unpinned JDK"* as forbidding host installs, and on
+  that basis **deleted** the registry's only answer to a real failure — the Homebrew cask
+  aborting in a non-TTY shell — while asserting in two files that a tarball or cask "is the
+  wrong answer even when it appears to work". The registry makes no such prohibition: that
+  sentence sits in a container-build context where *unpinned* means *not digest-pinned*.
+  Three attempts to salvage the claim all failed. The entry was restored verbatim and both
+  files corrected.
 
 Both failures share one shape and it is the most transferable thing this arm produced:
 **a claim that the material is silent on something is inadmissible when its evidence is a
