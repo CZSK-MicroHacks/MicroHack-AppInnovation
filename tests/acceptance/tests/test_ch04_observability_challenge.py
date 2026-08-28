@@ -248,3 +248,38 @@ def test_registry_identity_remains_the_refrozen_producer_contract() -> None:
         "windowReduction": "peak",
         "requiredMetric": "Replicas",
     }
+
+
+def test_role_name_filters_tolerate_the_namespace_the_contract_requires() -> None:
+    """Attribution filters must match the role name Azure Monitor actually emits.
+
+    This pins a *relation*, not a literal. ``serviceNamespace`` is a required
+    field of the modernization contract, and the Azure Monitor OpenTelemetry
+    exporter composes ``AppRoleName`` as ``[service.namespace]/service.name``
+    whenever a namespace is set. A query filtering the bare service name with
+    ``==`` is therefore unsatisfiable for every legal parameter value: it is
+    well-formed, it runs, and it returns zero rows forever. Requiring the
+    namespace and filtering it out are only jointly wrong, so the guard fails
+    if either side drifts back into agreement with itself alone.
+    """
+    schema = _load_json(CONTRACTS / "modernization-contract.schema.json")
+    required = schema["properties"]["observability"]["required"]
+    assert "serviceNamespace" in required, (
+        "guard assumes a required namespace; if it became optional the "
+        "composed-role-name relation below must be re-derived, not deleted"
+    )
+
+    contract = _query_contract()
+    examined = 0
+    for query in contract["queries"]:
+        text = query["template"]
+        if "AppRoleName" not in text:
+            continue
+        examined += 1
+        assert 'endswith "/__SERVICE_NAME__"' in text, (
+            f"query {query['id']!r} filters AppRoleName but cannot match the "
+            f"[namespace]/name form the required serviceNamespace produces"
+        )
+    assert examined >= 4, (
+        f"expected at least 4 role-name-attributed queries, walked {examined}"
+    )

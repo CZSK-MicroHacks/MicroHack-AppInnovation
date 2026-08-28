@@ -48,24 +48,24 @@
     {
       "id": "error-rate",
       "resultKind": "error-rate",
-      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | summarize totalRequests=count(), failedRequests=countif(Success == false) | where totalRequests > 0 and failedRequests > 0 | extend timestamp=endTime, value=100.0 * todouble(failedRequests) / todouble(totalRequests) | project timestamp, value, totalRequests, failedRequests",
-      "querySha256": "e5d48f7cdfc5b4b02521465b7794b4b3a213807e2ab942f600538fd02515e463",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" or AppRoleName endswith \"/mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" or AppRoleInstance startswith \"ca-mh-example--release-000000000000\" | summarize totalRequests=count(), failedRequests=countif(Success == false) | where totalRequests > 0 and failedRequests > 0 | extend timestamp=endTime, value=100.0 * todouble(failedRequests) / todouble(totalRequests) | project timestamp, value, totalRequests, failedRequests",
+      "querySha256": "01e88c745a8066bf5fe8f2fa98933eef6fbb19a7e8ba6a0163b099f165bb9699",
       "resultFile": "evidence/observability/error-rate.json",
       "rowCount": 1
     },
     {
       "id": "latency",
       "resultKind": "duration-ms",
-      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | summarize value=percentile(DurationMs, 95) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value",
-      "querySha256": "ebbadc02cb41d901315a9d497c9042a2a39f5276d4b825b75c94521d9aee2fea",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" or AppRoleName endswith \"/mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" or AppRoleInstance startswith \"ca-mh-example--release-000000000000\" | summarize value=percentile(DurationMs, 95) | where isnotnull(value) and value > 0 | extend timestamp=endTime | project timestamp, value",
+      "querySha256": "8175f7d1c0d1de75a6ff0e87452f10db9094e023da972498f18e7aaba1cba74f",
       "resultFile": "evidence/observability/latency.json",
       "rowCount": 1
     },
     {
       "id": "database-dependency-failures",
       "resultKind": "failure-count",
-      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppDependencies | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | where tostring(Properties[\"db.system.name\"]) != \"\" | summarize value=countif(Success == false) | where value > 0 | extend timestamp=endTime | project timestamp, value",
-      "querySha256": "358686002a109b93d1346eb338f9bb7d53909a36ae0220c2f2e4454260000302",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppDependencies | where TimeGenerated between (startTime .. endTime) | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" or AppRoleName endswith \"/mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" or AppRoleInstance startswith \"ca-mh-example--release-000000000000\" | where tostring(Properties[\"db.system.name\"]) != \"\" | summarize value=countif(Success == false) | where value > 0 | extend timestamp=endTime | project timestamp, value",
+      "querySha256": "e225b228b411901dfce0b228ca617f12eacd456e384da065b3473e3361a854d3",
       "resultFile": "evidence/observability/database-failures.json",
       "rowCount": 1
     },
@@ -80,8 +80,8 @@
     {
       "id": "cold-starts",
       "resultKind": "instance-first-request-count",
-      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated <= endTime | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" | where isnotempty(AppRoleInstance) | summarize firstRequest=min(TimeGenerated) by AppRoleInstance | where firstRequest between (startTime .. endTime) | summarize timestamp=max(firstRequest), value=count() | where value > 0 | project timestamp, value",
-      "querySha256": "7429654f8887a8effc4dbb57d073a2d8d7526c0cf385fc3c57d91aaec3b9b902",
+      "query": "let startTime = datetime(2026-08-20T13:45:00Z); let endTime = datetime(2026-08-20T13:55:00Z); AppRequests | where TimeGenerated <= endTime | where _ResourceId =~ \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-example/providers/Microsoft.Insights/components/appi-example\" | where AppRoleName == \"mh-catalog-dotnet\" or AppRoleName endswith \"/mh-catalog-dotnet\" | where AppVersion == \"0000000000000000000000000000000000000000\" | where tostring(Properties[\"azure.containerapps.revision.name\"]) == \"ca-mh-example--release-000000000000\" or AppRoleInstance startswith \"ca-mh-example--release-000000000000\" | where isnotempty(AppRoleInstance) | summarize firstRequest=min(TimeGenerated) by AppRoleInstance | where firstRequest between (startTime .. endTime) | summarize timestamp=max(firstRequest), value=count() | where value > 0 | project timestamp, value",
+      "querySha256": "445d694c909cd27096165cb047ab9f05507947903acffdd350a9fd3a80a7ee80",
       "resultFile": "evidence/observability/cold-starts.json",
       "rowCount": 1
     }
