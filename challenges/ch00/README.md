@@ -220,7 +220,7 @@ if (
   $marker.categories -ne 20 -or
   $marker.images -ne 198
 ) {
-  throw 'The .NET provisioning marker does not match the frozen baseline.'
+  throw "The $stack provisioning marker does not match the frozen baseline."
 }
 
 $health = Invoke-WebRequest "$baseUrl/healthz" -UseBasicParsing
@@ -235,12 +235,12 @@ if (
   $image.StatusCode -ne 200 -or
   $image.Headers.'Content-Type' -notlike 'image/png*'
 ) {
-  throw 'The .NET baseline HTTP checks failed.'
+  throw "The $stack baseline HTTP checks failed."
 }
 
 New-Item evidence -ItemType Directory -Force | Out-Null
 $marker | ConvertTo-Json -Depth 10 |
-  Set-Content evidence/ch00-dotnet-baseline.json -Encoding utf8
+  Set-Content "evidence/ch00-$stack-baseline.json" -Encoding utf8
 ```
 
 Record the full `sourceCommit` and `verifiedAtUtc` values. Do not edit the copied marker.
@@ -260,8 +260,9 @@ $stack = 'java'
 $baseUrl = 'http://localhost:8080'
 ```
 
-Write the copied marker to `evidence/ch00-java-baseline.json`. The expected corpus and
-routes are identical to the .NET check. The source marker is
+Write the copied marker to `evidence/ch00-java-baseline.json` — the block above derives that
+filename from `$stack`, so changing the two values is genuinely all you need. The expected
+corpus and routes are identical to the .NET check. The source marker is
 `C:\MicroHack\status\java-smoke.json`. Use the same facilitator-provided
 `$expectedSourceCommit`; do not substitute the current branch or a short SHA.
 

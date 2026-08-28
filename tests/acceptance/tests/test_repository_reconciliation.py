@@ -446,3 +446,50 @@ def test_run_command_conflict_tells_you_to_retry_before_escalating() -> None:
         "the retry-first advice must precede the named-orphan hunt: a single Conflict is "
         "not evidence of an orphan, and the orphan hunt is the more expensive path"
     )
+
+
+def test_ch00_baseline_filename_is_derived_from_the_stack_variable():
+    """Challenge 0 tells participants to change two values when switching stacks.
+
+    The evidence filename must therefore come from ``$stack`` rather than being
+    hardcoded, or following the instruction literally files a Java measurement under
+    the .NET name (F-102).
+    """
+    text = (ROOT / "challenges" / "ch00" / "README.md").read_text(encoding="utf-8")
+
+    assert 'Set-Content "evidence/ch00-$stack-baseline.json"' in text, (
+        "challenges/ch00 must derive the baseline evidence filename from $stack"
+    )
+    assert "Set-Content evidence/ch00-dotnet-baseline.json" not in text, (
+        "challenges/ch00 still hardcodes the .NET baseline filename"
+    )
+    for hardcoded in (
+        "throw 'The .NET baseline HTTP checks failed.'",
+        "throw 'The .NET provisioning marker does not match the frozen baseline.'",
+    ):
+        assert hardcoded not in text, (
+            f"challenges/ch00 still hardcodes a .NET-specific failure message: {hardcoded}"
+        )
+
+
+def test_ch01_warns_that_modernizing_ends_the_legacy_application():
+    """Challenge 1 edits configuration in the tree the legacy app boots from.
+
+    That destroys the workshop's "before" system silently and permanently, and the
+    wrap-up later asks for a comparison against it (F-103).
+    """
+    text = (ROOT / "challenges" / "ch01" / "README.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+
+    assert "ends the legacy application" in lowered, (
+        "challenges/ch01 must warn that the legacy application stops running"
+    )
+    assert "legacy-source" in text, (
+        "challenges/ch01 must offer the copy that preserves the legacy tree"
+    )
+
+    warning = lowered.index("ends the legacy application")
+    body = lowered[warning : warning + 1600]
+    assert "challenge 0" in body, (
+        "the warning must point back to Challenge 0 evidence as the surviving record"
+    )
