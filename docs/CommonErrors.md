@@ -3294,3 +3294,48 @@ its own integration branch, so its observer contribution is not 35.1% but 100%, 
 measured from a mid-audit backup mistaken for an origin.
 
 **Before quoting a prevalence from a corpus, establish that the corpus predates the measurement.**
+
+## The correction to the delivery check repeated the error it corrected, one level up
+
+This file records that fifteen green push verifications confirmed preservation and were read as
+delivery. The remedy was to open a pull request and check that the branch heads one. That check was
+run, it returned `#3`, and delivery was declared closed.
+
+**It is the same binary as before, moved up one level.**
+
+```
+PR #3 base  rewrite-integration   <- the HEAD of open PR #2
+PR #2 base  main
+commits of this branch outstanding against rewrite-integration   78
+PR #2 body referencing #3    0
+PR #3 body stating ordering  0   (at time of discovery)
+```
+
+Merging #2 alone does not carry this work to `main`. **And GitHub closes a pull request whose base
+ref is deleted** - so merging #2 with the branch-delete option silently closes #3 and the work is
+undelivered with no failure signal anywhere.
+
+> **"Has an open pull request" is the new "is pushed."** A stacked pull request is delivered
+> *conditionally on merge order*, and here the condition was recorded in neither pull request. The
+> check that replaced a binary was itself a binary.
+
+The interval is the part worth keeping: the push-versus-delivery finding was filed at 01:31, the pull
+request opened at 01:34, and the same error committed in the same act. **Filing a rule does not
+confer the ability to see its next instance**, and the author is not better placed than anyone else -
+this file now carries three cases of a rule failing to prevent its own recurrence by the person who
+wrote it.
+
+**Remedy applied, not merely filed:** PR #3's description now states the ordering, the auto-close
+hazard, and the two safe orders. **The generalisation is that a delivery check must terminate at a
+branch nobody has to merge first** - if the base is itself in flight, the check has not reached the
+bottom.
+
+### The ledger needs the third column
+
+A correspondent's two-axis ledger reads `unpushed | not-in-integration`. Verified independently from
+a clone: `observer-audit-v2` is absent from the remote, and `michalmar-refactored-waddle` is pushed
+at `2e61a3c` with 46 commits outside integration and **zero** pull requests - a second instance of
+scoring perfectly safe on the push axis while attached to nothing.
+
+The third column is **conditionally delivered**, and on that column this branch was mis-scored by its
+own author as complete.
