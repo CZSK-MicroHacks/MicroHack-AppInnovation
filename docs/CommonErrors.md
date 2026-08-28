@@ -2887,3 +2887,56 @@ It was caught only because `0%` contradicted a confirmed instance already record
 phrase known to return raw `0` and normalized `1`. **A measurement that reports no exposure while you
 are holding a verified instance of that exposure is not measuring what it claims to.** The disagreement
 with the known case was the whole signal; without it the zero was clean, plausible, and final.
+
+## Every instrument in this audit searches a corpus, and the dispute happened in a channel
+
+A correspondent corrected a file path this arm had used: the tests live under
+`com/microsoft/microhack/`, not `com/microhack/`, so a `git cat-file -e` built on the shorter
+spelling returns non-existent for both copies **regardless of whether the fix is present**. That is a
+probe whose answer does not depend on its subject, and the conclusion it supported happened to be
+true - which is the worst case, because a blind instrument that agrees with reality is never
+revisited.
+
+The instructive part is where the wrong spelling turned out to live:
+
+```
+git grep -F 'com/microhack/'          HEAD -- docs/ evidence/     0 hits
+CONTROL 'com/microsoft/microhack/'    HEAD -- docs/ evidence/     1 hit
+```
+
+**Zero in the committed record.** The error existed only in a message. It was never in the corpus, so
+no instrument either party has built all night could have found it, and none ever will.
+
+> **The corpus is versioned, searchable, and auditable. The channel carrying the claims about it is
+> none of those things.** Every count, control, strike and retraction in this audit was performed
+> against repositories. Every disagreement was conducted somewhere no `git grep` reaches.
+
+This composes with the observation that the channel only ever carried positives: a round that found
+nothing was never sent. So the medium in which all the prevalence figures were exchanged is
+**simultaneously unsearchable and selection-biased**, and those are independent defects of it. A
+figure quoted in a message and never committed cannot be re-derived, cannot be struck, and cannot be
+shown to have been withdrawn - the three operations this audit relied on most.
+
+The narrow practical consequence, and the only one that survives without the other party: **a claim
+that is not in the repository has not been made in a form anyone can check.** Committing before
+messaging was adopted here for provenance. It turns out to be the only thing that puts a claim inside
+the reach of the tools used to test claims.
+
+### A stale hash and a fabricated hash are not the same defect and read identically
+
+The same exchange charged this arm with citing a SHA that was not the remote tip. Checked:
+
+```
+git cat-file -t b8d1709                                        commit      it exists
+git merge-base --is-ancestor b8d1709 origin/<this branch>      exit 0      pushed, reachable
+git merge-base --is-ancestor 4f540c3 b8d1709                   exit 1      b8d1709 is the OLDER
+```
+
+So the citation was **stale by several commits, not false** - a real, pushed, reachable commit quoted
+after it stopped being the tip. The correspondent inferred a bad citation from "not the tip", which
+is the right suspicion and the wrong diagnosis.
+
+Both failures produce the same complaint from a reader, but they differ where it matters: a stale
+hash resolves in the repository and can be placed in history, a fabricated one cannot. **The remedy
+is the same for both and costs nothing** - cite the hash and say what it is the hash of, so that a
+reader who resolves it can tell which of the two they are holding.
