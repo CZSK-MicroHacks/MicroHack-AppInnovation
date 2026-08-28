@@ -441,19 +441,28 @@ is the worst available case: not a citation that fails to resolve, but one that 
 **silently and plausibly** to the wrong call. A reader checking either claim finds
 instrumentation at the cited line and confirms.
 
-The scale, measured rather than estimated: **81 `.cs`/`.java` sources live under
-`solutions/reference/`; 75 of them have a path-identical twin outside it; 64 of those 75 are
-byte-identical and 11 have drifted.** The 64 are harmless — same bytes, so a line number
-resolves the same way in either tree. **The entire hazard is the 11**, and it is concentrated
-in exactly the files this audit kept citing:
+The scale, measured rather than estimated **at `9bfd9a1` (this branch's tip), 2026-08-28
+23:13 CEST**: **81 `.cs`/`.java` sources live under `solutions/reference/`; 75 of them have a
+path-identical twin outside it; 64 of those 75 are byte-identical and 11 have drifted.** The
+64 are harmless — same bytes, so a line number resolves the same way in either tree. **The
+entire hazard is the 11**, and it is concentrated in exactly the files this audit kept citing:
 
 ```
 dotnet/src/LegoCatalog.App/Program.cs                          117 -> 148
 dotnet/src/LegoCatalog.App/Configuration/CatalogRuntimeOptions.cs   187 -> 271
 java/.../config/CatalogRuntimeOptions.java                     141 -> 284
 java/.../config/TomcatPathConfiguration.java                    22 -> 22
-java/.../PostgreSqlIntegrationTest.java                        345 -> 347
+java/.../PostgreSqlIntegrationTest.java                        345 -> 347   [see note]
 ```
+
+**Note, because this one line is rev-sensitive and the rest are not.**
+`PostgreSqlIntegrationTest.java` reads **340 -> 342** at the `4bf59f7` baseline *and* at
+`origin/rewrite-integration`, and **345 -> 347** here. The +5 in each tree is `0879b2f`, the
+`@Testcontainers(disabledWithoutDocker = true)` fix, which is on this branch and not in the
+shipping branch's tree. **A reader measuring at baseline will get different numbers and
+should not read that as an error.** The drift *delta* is +2 at every revision, so the finding
+is stable even though the pair is not — which is the general shape: **quote the delta when
+the claim is about drift, and the absolute pair only with the rev that produced it.**
 
 `TomcatPathConfiguration.java` is the case worth naming: **it drifts at an identical line
 count.** Even a reader who thinks to sanity-check the file length gets a match. The single

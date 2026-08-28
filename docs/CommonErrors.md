@@ -1465,7 +1465,20 @@ above is *both stacks, tracked sources only*; a Java-tree-only, all-file-types c
 runbook states and it is exact. Same state, two populations — the same trap one level up, so
 **re-run both counts at one revision before attributing a disagreement to either party.**
 
+A third note, because the absolute figures and the finding have different lifetimes. Line-count
+pairs are **rev-sensitive**: `PostgreSqlIntegrationTest.java` is `340/342` at the workshop
+baseline and `345/347` once the `disabledWithoutDocker` fix lands, because that commit adds five
+lines to *each* tree. The drift **delta** is `+2` at both revisions. So:
+
+> When the claim is about drift, quote the **delta**, which survives edits to both copies. Quote
+> an absolute pair only alongside the revision that produced it. A pair quoted bare will read as
+> a discrepancy to the next person, who is measuring somewhere else.
+
 The author of this entry had already committed two instances of the defect into the document
 describing it: two adjacent bullets citing `CatalogApplication.java:33` in one tree and
 `Program.cs:80` in the other. Naming the hazard did not confer immunity from it; the mechanical
-sweep above is what found them.
+sweep above is what found them. Independently and in the same hour, the party who authored the
+corresponding finding ran the sweep against their own report and found **19** unprefixed
+citations in it. **Two parties, each holding a freshly-written description of the trap, both
+still in it.** Awareness was not merely insufficient — it was maximal and simultaneous, and only
+the mechanical check found either set.
