@@ -2444,6 +2444,46 @@ after that deployment was attributed to a revision the handoff will reject, and 
 symptom was a revision name in a JSON file. Challenges are not as independent as the material
 presents them, and Challenge 1's evidence has a lifetime nobody states.
 
+> **Provenance correction — the material does not cause this, and I should not have
+> implied it did.** Asked to establish whether the material instructs the deployment that
+> deactivated my revisions, I checked and it does not:
+>
+> - `infra/observability-workbook.bicep:62` declares the container app as **`existing`**.
+>   ARM only *references* it. The diagnostic setting at `:73` is an extension resource
+>   (`scope: containerApp`). An Incremental deployment of that template **cannot create or
+>   deactivate a revision.**
+> - The only ch04 deployment command in the material — `solutions/ch04/README.md:75` —
+>   passes no `--name` and no `--mode`. ARM would derive the deployment name
+>   `observability-workbook` from the template file. **`obs-workbook-dotnet-ch4` is not a
+>   name that command can produce**; the `-dotnet-` infix is an arm discriminator appearing
+>   nowhere in ch04.
+> - `challenges/ch02`, `ch03` contain no container-app-mutating command at all.
+>
+> So the destructive deployment was hand-composed, not prescribed. **I ran Challenge 1
+> only**, and neither this report nor my plan records me issuing a workbook deployment —
+> but I want to be exact about how weak that is: my evidence that it was not mine is
+> *absence from my own records*, which is precisely the class of evidence this very finding
+> warns against. The estate was shared across three arms under one principal, and my own
+> activity-log note below records another party's work appearing in the same resource
+> group. **Not established. Most likely another arm; I cannot prove it and will not claim
+> it.**
+>
+> **What survives is material, and it is the more useful half.** Challenge 4 consumes
+> Challenge 1's revision as a load-bearing identity — `solutions/ch04/README.md:69`,
+> `REVISION_NAME=$(jq -er '.observability.revision' "$HANDOFF")` — and **neither challenge
+> ever states that this revision must still exist, still be named exactly, and still be
+> correctly activated when a later challenge runs.** I grepped both: `ch01` carries one
+> incidental mention in a summary line, `ch04` names the revision nine times as an input
+> and never once as something to preserve.
+>
+> The bicep's `existing` declaration is the only thing protecting it, and **nothing
+> documents that this is why**. That is the same shape as the inherited-variable finding
+> above: *the defence is real, correct, and incidental*, so it protects the canonical path
+> and evaporates for anyone who composes their own command — which, on a shared estate
+> under time pressure, is what people do. A one-line statement in Challenge 1 that the two
+> revisions are permanent evidence artifacts would cost nothing and would generalise the
+> protection the bicep currently provides by accident.
+
 Recovering it surfaced two Azure Container Apps traps worth documenting:
 
 - **`az containerapp revision list` hides inactive revisions** unless `--all` is passed.
