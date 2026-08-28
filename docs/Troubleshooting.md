@@ -111,7 +111,17 @@ the invocation on the VM.** It keeps executing until it finishes or hits the ser
 execution limit, holding the channel the whole time with nothing attached to it. A measured
 occurrence held a VM for **60 minutes 48 seconds**.
 
-**First, check for a stuck *named* run-command — this one is instantly fixable.** There are
+**Before anything else: retry two or three times over about a minute.** In measured back-to-back
+testing on an idle VM with **no** named run-commands present and no other caller, the channel
+flapped: five sequential invocations about 33 seconds apart all succeeded, and three fired 1–2
+seconds apart immediately afterwards **all returned `Conflict`**. The message very often means
+*your own previous run-command is still tearing down*, which clears in **seconds**. It is the
+most common cause and the cheapest to rule out, so rule it out first — a single `Conflict` is
+not evidence of an orphan.
+
+Escalate only if it persists across several minutes:
+
+**Then check for a stuck *named* run-command — this one is instantly fixable.** There are
 two kinds of orphan and they are not equally bad. A command started with
 `az vm run-command create` is a tracked resource with a name, so it can be listed and
 deleted. A command started with `az vm run-command invoke` is not, and cannot.
@@ -141,8 +151,10 @@ az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --query
   ```
 
   This is non-destructive: it removes only the stuck registration, not the VM and not the
-  CustomScript extension. In a measured occurrence the very next `invoke` succeeded with
-  **no wait at all**.
+  CustomScript extension. In one measured occurrence the very next `invoke` succeeded with
+  **no wait at all**; in another, deletion was followed by a few more seconds of `Conflict`
+  while the extension finished tearing down. Retry for a minute before concluding the
+  deletion did not help.
 - **`exec: Succeeded`** → that command is finished and is not your blocker. Continue to the
   probe below.
 
@@ -165,6 +177,24 @@ az monitor activity-log list -g <your-resource-group> --offset 12h `
   consecutive `Conflict` responses with `provisioningState: Updating` — and then cleared to
   `Succeeded` on its own. Budget an hour, not indefinitely. If you are past that and the
   probe is still empty, escalate to your facilitator rather than deallocating.
+
+  **You do not have to sit idle for that hour.** `invoke` is *rejected* while the channel is
+  held, but a **named** run-command is *queued* instead — measured: with a named command
+  deliberately holding the channel, `invoke` returned `Conflict` while
+  `az vm run-command create` submitted successfully and returned its output once the holder
+  finished.
+
+  ```powershell
+  az vm run-command create -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-queued-command-name> --script '<your-script>' --no-wait
+  az vm run-command show -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-queued-command-name> --instance-view --query "instanceView.output"
+  ```
+
+  This does **not** shorten the wait — the queued command still runs only after the channel
+  frees, so treat it as "submit and collect later", not as a bypass. **Delete it when you have
+  your output**, or you become the named-orphan case above for whoever uses the VM next.
+
 - **Output lists operations** → a real platform operation is in progress. Wait and retry.
 
 Scope the query to the VM as shown. Filtering only on `operationName` will also match your

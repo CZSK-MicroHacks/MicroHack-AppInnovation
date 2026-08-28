@@ -415,3 +415,34 @@ def test_run_command_docs_never_project_instance_view_from_a_list() -> None:
         "documented run-command orphan checks cannot run as written: "
         + "; ".join(sorted(set(offenders)))
     )
+
+
+def test_run_command_conflict_tells_you_to_retry_before_escalating() -> None:
+    """Keep the cheapest cause of `Conflict` ahead of the expensive ones.
+
+    Measured on an idle VM with no named run-commands and no other caller: five
+    invocations ~33s apart all succeeded, and three fired 1-2s apart immediately
+    after all returned `Conflict`. The message usually means the caller's own
+    previous command is still tearing down, which clears in seconds. Routing that
+    person to an orphan hunt or an hour-long wait costs them the difference.
+
+    Asserting on the measured claim rather than on the word "retry", which already
+    appeared in the table above this section and made an earlier version of this
+    guard pass without the fix it was written for.
+    """
+    text = (ROOT / "docs" / "Troubleshooting.md").read_text(encoding="utf-8")
+    marker = "az vm run-command` returns `Conflict"
+    start = text.find(marker)
+    assert start != -1, "the run-command Conflict section is gone"
+    section = text[start : start + 8000]
+    disclaimer = section.find("not evidence of an orphan")
+    named = section.find("named* run-command")
+    assert disclaimer != -1, (
+        "Troubleshooting.md no longer states that a single Conflict is not evidence of "
+        "an orphan, which is the measured, cheapest-first advice"
+    )
+    assert named != -1, "the named-orphan check is gone"
+    assert disclaimer < named, (
+        "the retry-first advice must precede the named-orphan hunt: a single Conflict is "
+        "not evidence of an orphan, and the orphan hunt is the more expensive path"
+    )
