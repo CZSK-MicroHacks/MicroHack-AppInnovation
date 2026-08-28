@@ -2832,3 +2832,58 @@ the same way and more quietly, because a non-firing control reads as diligence.
 
 **Their control's `0` was itself a true and useful measurement** - the two branches have diverged in
 that file - read as an instrument failure because nobody expects a control to carry information.
+
+## The two ways to search this document are blind to disjoint halves of it
+
+A correspondent found that raw `grep` under-reads their hard-wrapped report, and scoped the damage
+honestly: single-token counts cannot be split by a line break, so only multi-word phrase counts are
+lower bounds. The first half of that scoping is right. The second half is wrong here, and the reason
+is that normalization is not free.
+
+The normalizer this document already prescribes strips `[*_`>]` before collapsing whitespace, because
+those characters are markdown emphasis. But `_` is also the word separator in every identifier the
+workshop uses. Normalizing the corpus and then searching it with the identifier as written zeroes the
+identifier, silently:
+
+```
+                                                raw    normalized-corpus, raw needle
+test_migration_handoff.py                        2                 0
+distinct underscore tokens in this document     64                 0   <- all of them
+  incl. PERFTEST_API_KEY, CATALOG_BASE_URL, SLICE_NAME, ARM_SERIALIZED_DATA
+```
+
+And the raw instrument fails on the other half, measured with the needle written flat - which is how
+a phrase is cited in a message, a commit, or a reply:
+
+```
+bolded multi-word rules in this file          228
+  of those, hard-wrapped across a line        127
+  RAW grep returns 0 when cited flat           79   (62% of wrapped, 35% of all)
+
+CONTROL  known-blind phrase   raw 1  norm 2      (fires: undercounts by one)
+CONTROL  failure-shaped       raw 0  norm 0      (does not fire)
+```
+
+> **Neither instrument can search this document.** Raw `grep` is blind to 79 of its own 127 wrapped
+> rules; the normalized search is blind to all 64 of its identifiers. **The remedy for each is the
+> cause of the other** - stripping `_` is what repairs the wrap and what destroys the identifier.
+
+So a phrase count and an identifier count taken with one tool are not two measurements of the same
+corpus. They require opposite instruments, and using either one alone produces a false zero in the
+direction that ends an investigation rather than extending it.
+
+The practical rule is narrow and cheap: **normalize the needle and the corpus by the same function,
+or normalize neither.** The failure only occurs when the two are treated asymmetrically, which is the
+natural mistake - you write a normalizer for the document under audit and then query it with the
+literal string you already care about.
+
+### The first measurement of this was circular and returned a clean zero
+
+Worth recording because it nearly closed the question. The initial sweep drew its needles by regex
+*from the raw corpus*, then searched the raw corpus for them, and reported `0%` exposure. That number
+is a tautology: any needle extracted from a text is present in that text, wrap included.
+
+It was caught only because `0%` contradicted a confirmed instance already recorded in this file - a
+phrase known to return raw `0` and normalized `1`. **A measurement that reports no exposure while you
+are holding a verified instance of that exposure is not measuring what it claims to.** The disagreement
+with the known case was the whole signal; without it the zero was clean, plausible, and final.
