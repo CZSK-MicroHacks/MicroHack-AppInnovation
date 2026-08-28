@@ -935,42 +935,33 @@ is a frozen interface for participants; changing the oracle to fit the code is t
 move the challenge's review checklist exists to prevent. Everything else in the file is a
 real gate and must stay green.
 
-## `RuntimeError: psql is required` from the full acceptance profile
+## Two macOS setup failures are already answered here — but not where a participant looks
 
-**Symptom.** `catalog_acceptance --profile full` aborts partway through. The smoke profile is
-unaffected.
+**Symptom.** Off the provisioned VM the Java baseline stops twice: Maven reports that no
+compiler is available, and `catalog_acceptance --profile full` aborts with `psql is required
+for database verification`.
 
-**Cause.** The full profile shells out to `psql` for its database checks. macOS ships no
-PostgreSQL client, and installing the *server* is unnecessary.
+**Cause.** Both are already documented in this file — the JDK case as entry 101, the `psql`
+case as entry 45. Neither is reachable from the material a participant is handed. Every
+challenge README routes troubleshooting to `docs/Troubleshooting.md`
+(`challenges/ch01-copilot-rewrite/README.md:300`), which contains no mention of `javac`, a
+JDK, or a JRE, and no file under `challenges/` references this registry at all.
 
-**Fix.** `brew install libpq`, then put it on `PATH` — Homebrew deliberately keg-onlys it:
+**Fix.** Follow the entries that already exist rather than inventing a route:
 
-```bash
-export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
-```
+- **No compiler / legacy JRE — entry 101.** Build inside the digest-pinned Microsoft OpenJDK
+  image with the documented Testcontainers socket overrides. That entry explicitly says *do
+  not install an unpinned JDK and do not skip the integration test*, so an ad-hoc tarball or
+  a Homebrew cask is the wrong answer even when it appears to work.
+- **`psql` missing — entry 45.** Prepend `/opt/homebrew/opt/libpq/bin` to `PATH`.
 
-The crash is safe to recover from: it happens before any write, and the corpus was verified
-still at 198 figures afterwards. Re-run the profile from the start.
+The `psql` crash is safe to recover from: it happens before any write, and the corpus was
+verified still at 198 figures afterwards. Re-run the profile from the start.
 
-## `brew install --cask microsoft-openjdk@17` fails when you are not at an interactive terminal
-
-**Symptom.** The cask aborts with a sudo/password error. Common in an agent session, a CI
-step, or any non-TTY shell.
-
-**Cause.** The cask runs a `.pkg` installer, which needs an interactive `sudo` prompt.
-
-**Fix.** Use the tarball, which needs no elevation at all:
-
-```bash
-mkdir -p ~/.local/jdk && cd ~/.local/jdk
-curl -sSL -o msjdk17.tar.gz \
-  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
-tar xzf msjdk17.tar.gz
-export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
-```
-
-This yields exactly the pinned 17.0.20+8. Check `java -version` before building: an older
-system JDK earlier on `PATH` produces a Maven failure that does not mention the JDK.
+**Do not add a third entry for either symptom.** Both were re-derived from scratch during the
+rewrite walkthrough and written up here as new findings — one of them contradicting entry
+101's resolution — because the walkthrough searched the runbook it was executing and never
+searched this registry. Search this file before adding to it.
 
 ## Do not infer a document's silence from a filtered search
 

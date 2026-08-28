@@ -16,20 +16,19 @@ The Maven Wrapper is version 3.3.4 and downloads checksum-pinned Maven 3.9.16.
 
 ### Acquiring the prerequisites off the VM
 
-The provisioned workshop VM has all of these preinstalled. On your own machine you supply
-them yourself, and two of them have a non-obvious acquisition route on macOS:
+The provisioned workshop VM has all of these preinstalled. On your own machine two of them
+fail in ways that never name their cause, and both already have documented resolutions in
+[`docs/CommonErrors.md`](../docs/CommonErrors.md) — follow those rather than improvising:
+
+- **Maven reports that no compiler is available** — the host resolved a legacy JRE without
+  `javac`. See entry 101: build inside the digest-pinned Microsoft OpenJDK image with the
+  documented Testcontainers socket overrides. That entry explicitly says *do not install an
+  unpinned JDK and do not skip the integration test*, so a tarball or Homebrew cask is the
+  wrong answer even when it appears to work.
+- **`psql is required for database verification`** — see entry 45, and put keg-only `libpq`
+  on `PATH`:
 
 ```bash
-# JDK 17.0.20+8. The Homebrew cask runs a .pkg installer and fails without an
-# interactive sudo prompt, so use the tarball and point JAVA_HOME at it.
-mkdir -p ~/.local/jdk && cd ~/.local/jdk
-curl -sSL -o msjdk17.tar.gz \
-  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
-tar xzf msjdk17.tar.gz
-export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
-
-# psql 18.6, required by the full acceptance profile's database checks.
-brew install libpq
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 ```
 
