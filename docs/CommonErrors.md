@@ -2746,3 +2746,47 @@ The single document that satisfies the contract is the one that never touched Az
 
 Out of scope for the Challenge 1 rewrite path and recorded here rather than in that path's
 deliverable; handed to the integration branch, which owns the cross-challenge report.
+
+### An integration measured on one commit does not describe integrating the branch
+
+A correspondent measured the cherry-pick of `0879b2f` onto their branch and reported the accurate
+handoff as **"one docs hunk to resolve by hand, nothing else"**, with both Java runbooks clean. The
+commit description verifies exactly: 5 files, +67/-2, nothing under `infra/` or `.github/workflows/`.
+
+But the operator will not cherry-pick one commit; they will integrate the branch. Measured at the
+current tip with the same read-only tool:
+
+```
+merge-tree --write-tree HEAD origin/rewrite-integration        exit 1
+CONFLICT  docs/CommonErrors.md
+CONFLICT  docs/ImplementationLog.md
+CONFLICT  java/README.md                                    <- reported CLEAN for the cherry-pick
+CONFLICT  solutions/ch01-copilot-rewrite/java/README.md      <- reported CLEAN for the cherry-pick
+control: self-merge exit 0 | ch01-copilot-modernization/java/README.md auto-merged, 0 conflicts
+worktree dirty count before and after: 0 / 0
+```
+
+**One conflict became four, and two of the new ones are the runbooks reported clean.** Both
+statements are correct measurements of different operations, which is the whole defect: **a merge
+result is a property of `(source, target, operation)` and is not portable across any of the three.**
+
+**The load-bearing half is good news and had to be measured separately.** Inspecting the merged tree
+rather than the conflict list:
+
+```
+merged tree 089376e
+  java/.../PostgreSqlIntegrationTest.java              disabledWithoutDocker  2   markers 0
+  solutions/reference/java/.../PostgreSqlIntegrationTest.java  same           2   markers 0
+```
+
+**The fix itself integrates with no operator decision at all.** Every conflict is prose.
+
+> 🔴 **And that is the hazard, not the reassurance.** Three of the four conflicting files carry the
+> Docker remedy text - `java/README.md` 7 mentions, the rewrite runbook 21, the implementation log
+> 33. A careless resolution that takes either side wholesale keeps the working guard and drops the
+> instructions explaining it. **The result compiles, passes, and silently stops telling the attendee
+> why the test skips** - the absence family again, this time produced by the integration step rather
+> than by any measurement.
+
+**Accurate handoff, stated for the operation the operator will actually perform:** code clean, four
+prose conflicts, three of which must be resolved by union rather than by choosing a side.
