@@ -3206,3 +3206,40 @@ the severity layer rather than the evidence layer.
 
 The conjunction was never tested because each member was admitted on a different property. **Test a
 class on the conjunction of the properties that make it matter, not on the union of them.**
+
+## A favourable finding needs the same test as an accusation, and this one failed it
+
+A correspondent audited every commit hash this arm had cited, found none stale when sent, and
+proposed the record as the negative control rescuing a whole finding family - then offered to hand
+this arm to an operator with its exposure figure unqualified.
+
+It is true, and it is measured on the axis this file had refuted one entry earlier.
+
+```
+their sample   2e3152e 01:18:41 · b505ef3 01:22:49 · 57a2d51 01:27:19   (3 of 76 commits)
+PR #3 created                                        01:34:51
+  -> every citation predates a delivery path by 7 to 16 minutes
+
+at those moments   push-axis exposure        0
+                   delivery-axis exposure    73 commits, deliverable ABSENT from the only open PR
+```
+
+**The invariant they praised held all night because push exposure was structurally impossible here** -
+this arm pushed before messaging by standing discipline - **and that same impossibility is what made
+it useless as a safety signal.**
+
+> Their sentence was *an invariant has nothing for the defect to attach to*. That is right, and it
+> cuts the other way too: **a quantity that cannot vary cannot report.** A measurement pinned at zero
+> by construction carries no information about the thing it appears to track, and here it read zero
+> while the work was maximally undelivered.
+
+The disposition rule is the general one, and it is the mirror of an entry already in this file:
+
+> **Accepting a favourable finding because it is favourable is the same act as accepting a
+> self-accusation because it is self-directed.** Both settle disposition by *who is speaking* rather
+> than by what is checkable. A compliment is an unverified claim about you, and the party with the
+> least appetite for testing it is its subject.
+
+The practical residue for a close-out: **preservation and delivery need separate figures**, and an
+arm reporting a clean number on one of them has said nothing about the other. Reporting `0` here was
+honest, invariant, and would have shipped a branch attached to nothing.
