@@ -14,6 +14,28 @@ student-facing container image or Azure infrastructure.
 
 The Maven Wrapper is version 3.3.4 and downloads checksum-pinned Maven 3.9.16.
 
+### Acquiring the prerequisites off the VM
+
+The provisioned workshop VM has all of these preinstalled. On your own machine you supply
+them yourself, and two of them have a non-obvious acquisition route on macOS:
+
+```bash
+# JDK 17.0.20+8. The Homebrew cask runs a .pkg installer and fails without an
+# interactive sudo prompt, so use the tarball and point JAVA_HOME at it.
+mkdir -p ~/.local/jdk && cd ~/.local/jdk
+curl -sSL -o msjdk17.tar.gz \
+  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
+tar xzf msjdk17.tar.gz
+export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
+
+# psql 18.6, required by the full acceptance profile's database checks.
+brew install libpq
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+```
+
+Check `java -version` before building: a system JDK older than 17 on `PATH` is the most
+common cause of a confusing Maven failure here.
+
 ## Configuration
 
 Supply every secret outside source control:

@@ -5287,3 +5287,74 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
     assert not problems, "Dockerfile instructions disagree with the registry:\n" + "\n".join(
         problems
     )
+
+
+def _shell_commands(markdown: str) -> list[str]:
+    """Return each shell command in ``markdown`` with backslash continuations joined.
+
+    A command in these runbooks routinely spans several physical lines. Matching per
+    physical line is the mistake that let an unguarded ``.Trim()`` survive a sweep: the
+    parser could not represent the shape of the thing it purported to check. Joining
+    continuations first makes the unit of inspection the command, which is the unit the
+    participant actually runs.
+    """
+    commands: list[str] = []
+    pending: list[str] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.endswith("\\"):
+            pending.append(stripped[:-1].strip())
+            continue
+        pending.append(stripped)
+        commands.append(" ".join(part for part in pending if part))
+        pending = []
+    if pending:
+        commands.append(" ".join(part for part in pending if part))
+    return commands
+
+
+AUTHORING_GUARD = "test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches"
+
+
+def test_rewrite_runbooks_deselect_the_reference_tree_authoring_guard(
+    repo_root: Path,
+) -> None:
+    """The rewrite path must not run a guard a correctly-executed rewrite path fails.
+
+    ``test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches`` compares
+    the legacy tree against ``solutions/reference`` and asserts the reference's added
+    files are exactly ``MODERNIZATION_ADDITIONS`` -- which names ``Dockerfile``. Challenge
+    1 checkpoint 4 has the participant author ``<stack>/Dockerfile`` and checkpoint 5 has
+    them commit it, at which point the name is present on *both* sides, the difference
+    shrinks, and the equality breaks. Nothing is undeclared and nothing is missing; the
+    participant simply did their homework.
+
+    That makes it a repository-authoring guard, not a participant gate, and the rewrite
+    runbooks have to deselect it wherever they tell the reader to run the contract
+    assets. The modernization runbooks must keep running it in full, so the requirement
+    is scoped to the rewrite path only.
+    """
+    runbooks = sorted((repo_root / "solutions" / "ch01-copilot-rewrite").glob("*/README.md"))
+    assert len(runbooks) >= 2, f"expected both rewrite runbooks, found {len(runbooks)}"
+
+    inspected = 0
+    offenders: list[str] = []
+    for runbook in runbooks:
+        for command in _shell_commands(runbook.read_text(encoding="utf-8")):
+            if "pytest" not in command or "tests/test_contract_assets.py" not in command:
+                continue
+            inspected += 1
+            if AUTHORING_GUARD not in command:
+                offenders.append(
+                    f"{runbook.relative_to(repo_root)}: {command}"
+                )
+
+    assert inspected >= 4, (
+        f"only {inspected} contract-asset invocations found across the rewrite runbooks; "
+        "the walk is not reaching the commands it is supposed to check"
+    )
+    assert not offenders, (
+        "these rewrite-path commands run the reference-tree authoring guard, which a "
+        "participant fails as soon as they commit the Dockerfile checkpoint 4 asks them "
+        f"to author; deselect {AUTHORING_GUARD}:\n" + "\n".join(offenders)
+    )
