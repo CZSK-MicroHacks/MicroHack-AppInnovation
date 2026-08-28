@@ -24,13 +24,29 @@ telemetry evidence.
 
 ## Two traps that come before the faults
 
-**Query the right table.** The failure signals are logged with an exception attached, and
-the Azure Monitor OpenTelemetry exporter routes those records to **`AppExceptions`**. The
-success signals, logged without an exception, go to **`AppTraces`**. Querying only
-`AppTraces` returns zero rows for all four failure signals and looks exactly like missing
-instrumentation.
+**Query the right table — and the right table depends on your stack.** Whether a failure
+signal lands in `AppTraces` or `AppExceptions` is decided by one thing: **was a throwable
+attached to the log record?** The two reference stacks answer differently, so there is no
+single correct table.
 
-The signal name also lives in a different place in each table, **and in a different form**:
+| Stack | Failure signals land in | Keyed by | Why |
+| --- | --- | --- | --- |
+| **.NET** | `AppExceptions` | `Properties['OriginalFormat']` | `LogError(ex, "catalog.query.failed …")` attaches the exception to the event record |
+| **Java** | `AppTraces` | `Message` | `CatalogTelemetry.logFailure` calls `logger.error(event)` with **no** throwable, then logs a separate bare `"exception"` record |
+
+**Both were measured, not inferred** — `.NET`: 15 `catalog.query.failed` in `AppExceptions`,
+0 in `AppTraces`. **Java**: 2 `catalog.query.failed` in `AppTraces`, and the .NET-style
+`AppExceptions` query returns **0**.
+
+Success signals are logged without a throwable on both stacks and go to `AppTraces`.
+
+**If you query the other stack's table you get zero rows, and it looks exactly like missing
+instrumentation.** The safe move is to query neither table specifically — use the
+`union withsource` form in section 5, which is correct for both.
+
+The signal name also lives in a different place in each table, **and in a different form**.
+The form below is what **.NET** produces; Java's `Message` carries the bare signal name with
+no placeholder suffix, so the `split()` is harmless there but essential here:
 
 | Table | Where the signal name is | What the value actually looks like |
 | --- | --- | --- |
