@@ -1571,12 +1571,21 @@ print(len(hits))
 
 **The correction also changed the finding, in the direction neither party expected.** The natural
 reading of "all five installers are Windows" is that the lockfile is a Windows artifact — and that
-reading is refutable from the same file, which pins a `darwin/arm64` Terraform download with a
-`sha256` and a `linux/arm64` PostgreSQL digest. So a bigger number produced a *weaker* claim.
-The durable statement is narrower than either count: cross-platform acquisition is solved twice in
-this file, for a tool and for a database, and is unsolved only for the two language runtimes —
-which are the components an attendee cannot proceed without. **A count is not a finding; check
-what the larger number does to the argument before adopting it.**
+reading is refutable from the same file, which pins a `linux/arm64` PostgreSQL digest for a host
+that has no runtime. So a bigger number produced a *weaker* claim. **A count is not a finding;
+check what the larger number does to the argument before adopting it.**
+
+> **Withdrawn, and left here because the withdrawal is the point.** This paragraph originally
+> read *"cross-platform acquisition is solved twice in this file, for a tool and for a
+> database"*, citing a `darwin/arm64` Terraform download alongside the PostgreSQL digest.
+> Terraform's platforms are `darwin/arm64` and `darwin/amd64` — **one OS family, macOS only**.
+> See *Cross-architecture is not cross-platform* below for the measurement, and
+> *An absent key may be a differently-spelled key* for what replaced the argument.
+>
+> It survived here for three commits **after** being withdrawn 64 lines below, because I corrected
+> the two homes I remembered and did not sweep for a third. The rule against exactly that is in
+> this document too. **A withdrawal is not complete until `git grep` says so** — search for the
+> claim, not for the file you think contains it.
 
 ### A token every instrument agrees on is a false control
 
