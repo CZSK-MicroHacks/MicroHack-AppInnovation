@@ -664,6 +664,254 @@ able to tell which of the two things happened.
 
 ---
 
+### Finding 15 — the VM's only version signal is confidently wrong in both directions
+
+**Where.** `C:\MicroHack\source` on `vm-dotnet-user001`, and any attendee instruction of
+the form "check the VM is on the right commit".
+
+**What happens.** `C:\MicroHack\source` looks exactly like a git clone. `git log` works,
+`git status` works, `git rev-parse HEAD` returns a real SHA. It is not a clone: it is an
+archive extraction with a single synthetic commit, `4da1797 "Workshop baseline 4bf59f7…"`,
+and thereafter files are updated **by copy**. HEAD never moves. On my run it sat at that
+one commit with 32 modified files.
+
+The consequence is that every git-based version question answers wrongly:
+
+```
+git merge-base --is-ancestor 53e3706 HEAD  -> False
+git merge-base --is-ancestor 46f2a1f HEAD  -> False
+git merge-base --is-ancestor e78bd49 HEAD  -> False
+```
+
+All three of those commits' content **was** present in the working tree. There is no shared
+history, so `--is-ancestor` cannot be anything but `False`, for a current tree and a stale
+one alike.
+
+**Why this is the wrong-but-plausible class and not the loud class.** I hit this while
+verifying my own acceptance run. The answer I got was a clean, unambiguous `False` from a
+tool nobody distrusts, and my first interpretation was the natural one: *the VM is stale,
+the 22/22 I just collected was produced by old code, throw it away.* That would have
+discarded a valid result. Flip the situation — an attendee whose VM genuinely is stale
+runs the same check after a copy that did not happen, and gets `False` too, which they may
+equally well read as "the check is just broken here, ignore it". The signal is not missing.
+It is **present, confident, and uncorrelated with the truth**, which is worse, because a
+missing signal makes you go and look.
+
+**What I used instead.** Content, not metadata:
+
+```powershell
+Get-FileHash -Algorithm SHA256 C:\MicroHack\source\tests\acceptance\catalog_acceptance\runner.py
+```
+
+`B6F93F1F…`, byte-identical to the same file in my merged tree, and the F-81 marker string
+`body_is_unstable` present in it. That settles the question the git command could not.
+
+**The generalisation, which is the part worth keeping.** *Prefer content to metadata when
+the metadata is not maintained by the thing it describes.* This is the third time the same
+idea has come up in this chapter — `.source-commit` (a file describing a tree, written by
+neither), the run-command provenance work, and now this. In all three, a metadata field
+sits next to the artifact and is trusted because it is *adjacent*, not because anything
+keeps it true.
+
+**Recommendation.** Either make `C:\MicroHack\source` a real clone and `git pull` it, or —
+cheaper and honest — put a `.git`-free marker in it (`REVISION.txt` written by the same
+copy step that updates the files) and tell the attendee to hash-compare specific files.
+Do not leave a working `git` in a directory whose history is fiction.
+
+---
+
+### Finding 16 — the docs linter fails the build on the attendee's own deliverable, for a convention it never taught
+
+**Where.** `tests/docs/` — the markdown lint suite — versus `challenges/ch01/README.md`,
+which asks the attendee to write up their run.
+
+**What happens.** I ran the full suite at merged HEAD and got three failures. One of them
+was the docs linter rejecting **my feedback file** — the deliverable the chapter asks for —
+because it contained the string `<vm-mi-principal-id>` inside a command example. The rule
+wants attendee-supplied placeholders to be prefixed `your-`; `<your-vm-mi-principal-id>`
+passes, `<vm-mi-principal-id>` does not.
+
+That convention is not documented anywhere the attendee reads. It is not in
+`challenges/ch01/README.md`, not in the runbook, not in `CONTRIBUTING`. I only learned it
+by reading the test.
+
+**Why it matters more than it looks.** The failure is not attributed. The suite reports a
+docs-lint failure with a count, and the attendee — who has just spent an afternoon
+modernizing an application — reasonably concludes their *code* change broke something. The
+fix is in a file they authored freehand, five minutes ago, in prose. I diagnosed this in
+about two minutes because I had just written the line. Someone who wrote it an hour earlier
+will not.
+
+Note the shape: this is the workshop's quality gate firing on the workshop's own
+instruction to write prose. Two correct behaviours, no shared contract between them.
+
+**Recommendation.** Either exclude attendee-authored deliverables from the docs lint by
+path, or state the placeholder convention in the same paragraph that asks for the write-up.
+The second is better — the convention is a good one, it just needs to be reachable from
+where the work is done.
+
+*(The other two failures at merged HEAD were mine and correct: my Track A modernization
+trips two guards that pin the frozen legacy baseline. Those are the guards working.)*
+
+---
+
+### Finding 17 — the fault-injection procedure omits the two things you cannot guess
+
+**Where.** `docs/TelemetryFaultInjection.md`, §1 and §2. This is my own procedure, lifted
+into the material, so this finding is partly against myself.
+
+**Two gaps, and they cost differently.**
+
+**§1 supplies no command.** It says to drive an import that fails validation. It does not
+say the endpoint is `POST /import`, that the body is `multipart/form-data`, or that the
+field name is `catalogFile`. Every one of those is discoverable from the source in a couple
+of minutes; the section reads as if it had been written by someone with the controller open
+in another window. Cost: minutes, and it fails loudly (400 with a clear message) while you
+work it out.
+
+**§2 names a header without naming it.** It says the perf endpoint "needs its API key
+header". The header is `x-api-key`. I guessed `X-Perftest-Key` — a reasonable guess, since
+the *key* is called `performanceApiKey` and the endpoint is `/perftest/catalog` — and lost
+a full injection pass to it.
+
+**This one is in the wrong-but-plausible class and the first is not.** A wrong header
+returns **401**. The script keeps going, the run completes, no error is raised anywhere, and
+`PERFDONE` is written. Then the union query shows `catalog.performance.failed` still
+missing, and the natural next move is to conclude *the application does not emit that
+signal* and go looking in application code for a bug that is not there. The remedy the
+attendee is being steered toward is **modifying a correct application**. That is strictly
+worse than the `curl` timeout case elsewhere in this material, where the failure at least
+points outward.
+
+The confirmation, from the corrected pass: with `x-api-key` set, the same requests return
+**503** under the injected fault and **200** after restore. 401 → 503 is the whole
+difference between a pass that generates the signal and one that silently does not.
+
+**Recommendation.** Name the header. One word — `x-api-key` — in §2, and the literal
+`curl`/`Invoke-WebRequest` line in §1. If a section's failure mode is a 401 that looks like
+a successful run, it does not get to leave its parameters implicit.
+
+---
+
+### Finding 18 — `python -m catalog_migrate.cli` exits 0, prints nothing, and does nothing
+
+**This is the worst defect I found in the entire chapter.** It is a silent success.
+
+**Reproduction, no Azure required, from `tests/acceptance/`:**
+
+```
+$ uv run python -m catalog_migrate.cli render-handoff
+<frozen runpy>:128: RuntimeWarning: 'catalog_migrate.cli' found in sys.modules ...
+$ echo $?
+0
+```
+
+That invocation is missing **nine required arguments**. It exits **0**. It writes no file,
+prints no JSON, raises nothing.
+
+Compare the correct form:
+
+```
+$ uv run python -m catalog_migrate render-handoff
+{"command": null, "error": {"code": "invalid-input", "message": "argument error: the
+following arguments are required: --target-output, --migration-report, ..."},
+"exitCode": 2, "schemaVersion": "1.0.0", "status": "failed"}
+```
+
+**Cause.** `catalog_migrate/cli.py` has no `if __name__ == "__main__":` block.
+`catalog_migrate/__init__.py` does `from catalog_migrate.cli import main`, so `-m
+catalog_migrate.cli` imports the package (which imports `cli`), then re-executes `cli.py`
+as `__main__` — defining functions and falling off the end. `catalog_migrate/__main__.py`
+exists and is correct, so `-m catalog_migrate` works, as does the `catalog-migrate` console
+script.
+
+**Why the wrong form is the natural one.** Every other CLI in this repository is invoked as
+`python -m <package>.<module>`:
+
+```
+python -m catalog_acceptance.handoff_cli ...
+python -m catalog_acceptance.telemetry_evidence_cli ...
+```
+
+Both of those modules **do** carry `__main__` guards (`handoff_cli.py:40`,
+`telemetry_evidence_cli.py:79`). So the attendee learns `package.module` from the two CLIs
+they use most, applies it to the third, and gets silence. The one module in the trio that
+needs the guard is the one that does not have it.
+
+**Why it is the wrong-but-plausible class at its purest.** Exit code 0. No stderr except a
+`RuntimeWarning` that reads like Python noise. In a script — `set -e`, a CI step, a
+scheduled task, a `&&` chain — this is indistinguishable from success. It *is* success, as
+far as anything downstream can tell. I lost two full remote round-trips to it, and I only
+caught it because I checked `Test-Path` on the output file rather than trusting the exit
+code. An attendee who trusts the exit code proceeds to the next step believing the handoff
+contract exists.
+
+Worse: this is the **last** command in the chapter. Its output, `modernization-contract.json`,
+is what Challenges 2–6 consume. A silent no-op here produces a green Challenge 1 and a
+Challenge 2 that fails on a missing file, one step removed from its cause.
+
+**Recommendation.** Add `if __name__ == "__main__": raise SystemExit(main())` to
+`catalog_migrate/cli.py`. Three lines. There is no argument for leaving a module importable
+as `__main__` that does nothing when it is. If the intent is that `-m catalog_migrate.cli`
+be unsupported, make it *fail*, not succeed.
+
+---
+
+### Finding 19 — every IMDS-gated command fails when run through the documented remote-execution route
+
+**Where.** `validate_migration_topology` (`catalog_migrate/azure.py`) versus
+`az vm run-command invoke`, which is the only way to reach the VM in this delivery.
+
+**What happens.** Run `catalog-migrate render-handoff` *inside* a `run-command` script and
+it returns:
+
+```
+{"command": "render-handoff", "error": {"code": "precondition-failed",
+ "message": "Azure resource is not provisioned: /subscriptions/.../virtualMachines/
+ vm-dotnet-user001 (provisioningState=Updating)"}, "exitCode": 3, ...}
+```
+
+The VM is `Updating` **because the run-command that is executing this very script is what
+puts it there.** The extension's execution is a VM-level operation; for its whole duration
+the VM's `provisioningState` is `Updating`. So a topology check that requires `Succeeded`
+can never pass from inside the thing that makes it fail. The command is unable to run
+itself.
+
+**Why this is wrong-but-plausible rather than merely broken.** The error names the VM and a
+provisioning state. Everything about it says *your infrastructure is in a bad state, wait
+or fix it*. It says nothing about how the command was invoked. Combined with F-90 — where
+an orphaned run-command genuinely does wedge the VM in `Updating` for an hour — the
+attendee has every reason to read this as the wedge recurring, and to sit and wait for a
+condition that will never clear, because it is caused by their own act of looking.
+
+I had already seen the real F-90 wedge earlier in this run. When this error appeared I read
+it as the wedge returning. It is not. It is self-inflicted and instantaneous.
+
+**The workaround, which is also the fix.** Do not run IMDS-gated commands *in* the
+run-command channel. Detach them:
+
+```powershell
+schtasks /Create /TN MHJob /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\...\job.ps1" `
+         /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F
+schtasks /Run /TN MHJob
+```
+
+`run-command` returns in seconds, the VM goes back to `Succeeded`, and the detached task
+then sees a provisioned host. My job sleeps 90 s first so the registering run-command has
+certainly finished. This is the same pattern that lets the migration and acceptance steps
+work, and the reason those steps succeeded earlier while this one did not is simply that I
+had already been detaching them.
+
+**Recommendation.** Two things, and the first matters more. **Name the invocation in the
+error**: if `validate_migration_topology` sees `provisioningState=Updating` on *its own
+host*, it should say so — "this host is itself mid-operation; if you are running inside `az
+vm run-command`, detach the command". The gate has the information; it just does not use
+it. Second, document the scheduled-task pattern in the runbook as *the* way to drive
+`catalog-migrate` remotely, rather than leaving `az vm run-command invoke ...` as the
+worked example, since that example cannot work for five of the tool's commands.
+
+---
+
 ## Defects that block the .NET stack outright
 
 Both were hit on the first real bootstrap deployment. Both fail loudly, which makes them

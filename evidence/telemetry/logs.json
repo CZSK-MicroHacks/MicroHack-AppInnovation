@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "1.0.0",
+  "queryId": "logs",
+  "rows": [
+    {
+      "signalName": "http.server.request",
+      "recordCount": 3002,
+      "observedAttributes": [
+        "http.request.method",
+        "http.response.status_code",
+        "http.route"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/figure/{id}",
+            "http.response.status_code": 200
+          }
+        },
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/readyz",
+            "http.response.status_code": 200
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.database.failed",
+      "recordCount": 8,
+      "observedAttributes": [
+        "db.operation.name",
+        "db.system.name",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "db.system.name": "microsoft.sql_server",
+            "db.operation.name": "select",
+            "exception.type": "Microsoft.Data.SqlClient.SqlException"
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "exception",
+      "recordCount": 12,
+      "observedAttributes": [
+        "exception.message",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "exception.type": "LegoCatalog.App.Services.CatalogImportValidationException",
+            "exception.message": "Record 2 is invalid: category must normalize to a non-empty slug."
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.import.completed",
+      "recordCount": 3,
+      "observedAttributes": [
+        "catalog.import.inserted",
+        "catalog.import.skipped"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.import.inserted": 1,
+            "catalog.import.skipped": 0
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.import.failed",
+      "recordCount": 4,
+      "observedAttributes": [
+        "catalog.import.rejected",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.import.rejected": 1,
+            "exception.type": "LegoCatalog.App.Services.CatalogImportValidationException"
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.query.failed",
+      "recordCount": 4,
+      "observedAttributes": [
+        "catalog.query.filter",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.query.filter": "search",
+            "exception.type": "Microsoft.Data.SqlClient.SqlException"
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.performance.completed",
+      "recordCount": 8,
+      "observedAttributes": [
+        "catalog.performance.item_count",
+        "catalog.performance.work_factor"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.performance.work_factor": 10,
+            "catalog.performance.item_count": 198
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.performance.failed",
+      "recordCount": 4,
+      "observedAttributes": [
+        "catalog.performance.work_factor",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.performance.work_factor": 10,
+            "exception.type": "Microsoft.Data.SqlClient.SqlException"
+          }
+        }
+      ]
+    }
+  ],
+  "workspaceId": "/subscriptions/7bc68c68-3c40-4cea-bf3b-2b0d1a83b1c0/resourceGroups/rg-user001/providers/Microsoft.OperationalInsights/workspaces/log-mh-user001-dotnet",
+  "capturedAt": "2026-08-27T23:35:00Z",
+  "queryText": "union (AppTraces|extend sig=tostring(Properties['OriginalFormat'])|extend sig=iff(isempty(sig),Message,sig)), (AppExceptions|extend sig=tostring(Properties['OriginalFormat'])) | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | summarize count() by sig"
+}
