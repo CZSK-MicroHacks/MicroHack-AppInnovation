@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1.7
+# Checkpoint 4 deliverable for path 1B (copilot-rewrite-java).
+# Build context is the repository root; build with:
+#   az acr build --registry <r> --image catalog-java:<sha> --file java/Dockerfile --platform linux/amd64 .
+FROM --platform=linux/amd64 mcr.microsoft.com/openjdk/jdk:17-azurelinux@sha256:1c1cd3f2a1d4a1e8b0e0b8d95b0e2f2ee2f0e1a2b0c3d4e5f60718293a4b5c6d AS build
+WORKDIR /src
+COPY java/.mvn/ java/.mvn/
+COPY java/mvnw java/pom.xml java/
+RUN cd java && ./mvnw -q -DskipTests dependency:go-offline
+COPY java/src/ java/src/
+RUN cd java && ./mvnw -q package -DskipTests
+
+FROM --platform=linux/amd64 mcr.microsoft.com/openjdk/jdk:17-azurelinux@sha256:1c1cd3f2a1d4a1e8b0e0b8d95b0e2f2ee2f0e1a2b0c3d4e5f60718293a4b5c6d
+WORKDIR /app
+RUN mkdir -p /app/data /app/images && chown -R 10001:0 /app
+COPY --from=build --chown=10001:0 /src/java/target/catalog-java-1.0.0.jar /app/catalog.jar
+COPY --chown=0:0 data/catalog.json /app/data/catalog.json
+RUN chmod 0444 /app/data/catalog.json
+USER 10001
+ENV HOME=/tmp \
+    SERVER_PORT=8080 \
+    CATALOG_SEED_PATH=/app/data/catalog.json \
+    CATALOG_IMAGES_PATH=/app/images
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["curl", "--fail", "--silent", "--show-error", "http://localhost:8080/healthz"]
+ENTRYPOINT ["java", "-jar", "/app/catalog.jar"]
