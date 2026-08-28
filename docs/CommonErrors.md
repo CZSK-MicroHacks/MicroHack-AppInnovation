@@ -2940,3 +2940,62 @@ Both failures produce the same complaint from a reader, but they differ where it
 hash resolves in the repository and can be placed in history, a fabricated one cannot. **The remedy
 is the same for both and costs nothing** - cite the hash and say what it is the hash of, so that a
 reader who resolves it can tell which of the two they are holding.
+
+## The casing defect has a second member, and the evidence first offered for it was a homonym
+
+A correspondent generalised the `activeRevisionsMode` casing defect into a class - any schema `const`
+naming an Azure-derived enum - and nominated `principalType` in
+`workshop/contracts/azure-target-output.schema.json:581` as a second member. **The nomination is
+correct. The evidence offered for it was drawn from the wrong resource.**
+
+The cited witness was `infra/main.json:767`, `"principalType": "User"`. Every occurrence of
+`principalType` in that file belongs to `Microsoft.Authorization/roleAssignments`:
+
+```
+main.json:621  ServicePrincipal | 751 ServicePrincipal | 767 User | 782 User | 805 ServicePrincipal
+   all five      -> Microsoft.Authorization/roleAssignments
+schema $defs     -> entraAdministratorPrincipal   (siblings: name, objectId, principalType)
+   which describes  Microsoft.DBforPostgreSQL/flexibleServers/administrators
+```
+
+Two different resource types that happen to spell one property the same way. Role assignments do not
+produce the Entra administrator block the schema constrains, so that witness establishes nothing
+about it.
+
+**The conclusion survives, because the right witness exists and was not the one consulted:**
+
+```
+infra/modules/postgresql.bicep:55   principalType: 'User'      <- the actual administrators resource
+infra/main.json:1507                "principalType": "User"    <- its compiled ARM
+schema                              "const": "user"
+```
+
+Executed against the full schema, mutating only that field:
+
+```
+shipped example, as authored ('user')    PASS     <- positive control: validator is not rejecting all
+honest capture from deployed ARM ('User') FAIL    'user' was expected
+failure-shaped control                    FAIL
+```
+
+> **The inference was drawn from a homonym and is true only because a different, unexamined resource
+> independently carries the same value.** Had `postgresql.bicep` spelled it lowercase, the evidence
+> would have looked identical and the conclusion would have been false.
+
+That is the same-name-two-signals error already recorded in this file, appearing now in an
+adjudication rather than a measurement, and it is worth separating from the finding it supports: the
+class is real and now has two confirmed members, but **one of them was confirmed by luck of the
+corpus rather than by the reasoning that produced it.** A generalisation that fires on a field name
+must be re-grounded on the resource that emits the field, because field names are not unique across
+resource types and a schema constrains a producer, not a spelling.
+
+### Severity does not transfer with the class
+
+The revision-mode instance is forced: the challenge prescribes a validation command that runs against
+the attendee's own captured evidence, so an honest capture cannot pass. For `principalType` no
+prescribed capture command was found in `challenges/` or `workshop/`. An attendee who transcribes the
+example passes; one who captures from the deployment fails.
+
+**A class generalises the mechanism, not the severity.** Each member needs its own capture path
+established before it can be rated, and the member that suggested the class is not evidence about the
+members it predicts.
