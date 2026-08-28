@@ -66,6 +66,23 @@ error. Identity is table membership plus a type discriminator:
 | `http.server` | `AppRequests` |
 | `db.client` | `AppDependencies` where `DependencyType == 'SQL'` |
 
+**`AppRequests` stores the route template in a column, not an attribute.** The telemetry
+gate requires a matched-route probe (`http.request.method=GET`, `http.route=/figure/{id}`,
+`http.response.status_code=200`). On `AppRequests` none of those three is an attribute:
+the exporter folds the route template into `Name` (as `GET /figure/{id}`) and the status
+into `ResultCode`. Querying `customDimensions` for `http.route` returns zero rows on a
+perfectly instrumented app, and exercising the route again cannot change that. Derive the
+probe from the columns:
+
+```kusto
+AppRequests
+| where Name == "GET /figure/{id}" and ResultCode == "200"
+| project TimeGenerated, Name, ResultCode, AppRoleInstance
+```
+
+The same three values *are* stored as real attributes on the metrics and logs carriers, so
+only the trace carrier needs this derivation.
+
 The full measured mapping for all 25 contract signals — table, selector, and storage
 form for each — is `workshop/contracts/telemetry-signal-map.json`.
 

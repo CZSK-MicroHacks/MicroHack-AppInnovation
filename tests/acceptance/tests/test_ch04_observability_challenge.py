@@ -283,3 +283,39 @@ def test_role_name_filters_tolerate_the_namespace_the_contract_requires() -> Non
     assert examined >= 4, (
         f"expected at least 4 role-name-attributed queries, walked {examined}"
     )
+
+
+def test_the_route_probe_gate_documents_where_the_platform_stores_it() -> None:
+    """A required probe must be derivable, and its hint must not send you in circles.
+
+    The telemetry gate requires a matched-route probe on the traces carrier, but the
+    Azure Monitor exporter folds ``http.route`` into the ``AppRequests.Name`` column
+    and the status into ``ResultCode`` rather than writing them as attributes. The
+    requirement is only satisfiable if the derivation is documented, so this guard
+    pins the *relation* between the gate and its documentation: if the probe is
+    demanded, the storage form must be described where attendees are sent to look,
+    and the failure hint must not tell them to re-exercise a route that already
+    returned 200.
+    """
+    signal_map = _load_json(CONTRACTS / "telemetry-signal-map.json")
+    storage = signal_map["traces"]["http.server"].get("attributeStorage", {})
+    for attribute in ("http.route", "http.response.status_code"):
+        assert attribute in storage, (
+            f"the gate requires {attribute} on the traces carrier but the signal map "
+            f"does not say where AppRequests stores it"
+        )
+
+    guidance = (ROOT / "docs/TelemetryFaultInjection.md").read_text(encoding="utf-8")
+    assert "ResultCode" in guidance and "route template" in guidance, (
+        "the fault-injection guide is the document attendees are linked to; it must "
+        "carry the column derivation for the route probe"
+    )
+
+    renderer = (
+        ROOT / "tests/acceptance/catalog_acceptance/telemetry_evidence.py"
+    ).read_text(encoding="utf-8")
+    # brace-agnostic: the source is an f-string, so the literal carries "{{id}}"
+    assert "against a real figure" not in renderer, (
+        "the route-probe hint must not prescribe re-exercising a route that already "
+        "returned 200; that cannot add attributes the exporter never writes"
+    )
