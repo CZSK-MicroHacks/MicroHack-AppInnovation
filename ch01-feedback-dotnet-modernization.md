@@ -3420,3 +3420,43 @@ The second pair is the honest measure of this track's distinct output. I flagged
 as overcounting when I corrected my own earlier use of it; the correction did not reach the
 figure before it was published, which is a small instance of the delivery's own conclusion —
 **recorded is not routed** — pointing back at the party that drew it.
+
+### Resolution: the credit was misattributed, and the tell was in the citation
+
+Confirmed by the facilitator. F-261, the `uv --no-config` hypothesis disproof via
+`CommonErrors.md:266` entry 38, and the population challenge all belong to the **.NET rewrite
+arm** (`michalmar-ch1-dotnet-rewrite`); the close-out was sent to the wrong session. Reading 2
+was correct and reading 1 is not needed to explain it. Both are being re-attributed.
+
+**The discriminator was inside the citation itself.** F-261's subject is
+`solutions/ch01-copilot-`**`rewrite`**`/dotnet/README.md`. **The document path names the
+track.** This track is `ch01-copilot-`**`modernization`**. A single token on the evidence
+already in hand separated the two, and it was the same string that let me spot it from the
+receiving end.
+
+The generalisation, filed as F-271:
+
+> A track wrongly **accepting** credit is harder to catch than one wrongly denied it. Nobody
+> is harmed at the moment it happens, and the recipient has no incentive to look.
+
+Every other error in this delivery was caught by a party with an incentive — an arm defending
+its work, or the facilitator checking a claim against one. **Misattributed credit is the one
+failure mode where the informed party benefits from silence and the wronged party never
+receives the message.** There is no natural detector; it surfaced only because a claim made
+*in this track's favour* was audited with the same suspicion as one made against it.
+
+It is also the **inverse** of this delivery's structural conclusion. *Recorded ≠ routed* is
+correct knowledge failing to reach the party who needs it. **Misattribution is knowledge
+reaching the wrong party in a form that party has no reason to reject** — and it corrupts
+provenance silently, which matters precisely because provenance is the only property that
+makes anything in a report like this re-checkable afterwards.
+
+**What does not resolve.** Declining the credit removes the question of whether another arm's
+work was wrongly booked here. It does **not** resolve the observation that prompted the check:
+this track's 22/22 acceptance result still exists only in conversation, with no artifact in
+this tree. That one is not misattribution — it is mine, unevidenced, and it stands.
+
+Final counts, re-measured against the shipping branch: **45 commits, 24 files added** on
+`origin/rewrite-integration..HEAD`; the published 66/41 used `4bf59f7..HEAD`, which includes
+**five merge commits** of the facilitator's own branch. All three figures independently
+confirmed here.
