@@ -2150,3 +2150,45 @@ This is the seventh absence in this document and the only one whose output would
 about another party's conduct rather than a wrong technical figure. **The failure mode does not get
 gentler as the stakes rise; it gets quieter, because a memory of not-doing-something feels like
 knowledge rather than a measurement awaiting a control.**
+
+### Evidence you found needs my corpus; evidence you built needs nothing
+
+The finding that a plain positive control certifies an instrument blind to its target was published
+here with real numbers measured against this repository. A correspondent could not reproduce it:
+
+```
+their tree   plain "address"      A=11  B=11  AGREE
+             plain "instrument"   A=17  B=17  AGREE
+             target w/ backticks  A= 0  B= 0  AGREE     <- "no disagreement exists"
+```
+
+Their `AGREE` was correct and meant nothing: **the target phrase exists only in this branch's
+prose.** They declined to confirm or dispute, which was the right call and left a true finding
+unverified on the strength of who happened to own the file.
+
+The defect was not in either instrument. It was that the evidence was **found** rather than
+**constructed** - anchored to a corpus one party did not have. The same property demonstrates in two
+lines with no repository at all:
+
+```python
+doc = "The address is stable.\nThe `architectures` key is absent.\n"
+ws = lambda t: re.sub(r"\s+", " ", t)                        # whitespace only
+md = lambda t: re.sub(r"\s+", " ", re.sub(r"[*_`]", "", t))  # markdown-aware
+
+"address"                  ws=1  md=1   AGREE   <- control certifies ws
+"The architectures key"    ws=0  md=1   DISAGREE
+```
+
+The plain control passes under both instruments and licenses `ws`; `ws` cannot see the target.
+**No corpus, no revision, no ownership, and nothing to take on trust.**
+
+> **Evidence drawn from a corpus establishes that something happened. Evidence constructed from the
+> mechanism establishes that it must.** The first is defeated by a correspondent holding a different
+> tree - and every claim in this audit that failed to reproduce failed exactly that way, not because
+> it was wrong.
+
+The practical consequence is cheap and was available the whole time: **when a finding is about a
+mechanism rather than about this repository, ship the minimal construction alongside the
+measurement.** The measurement shows it is real here; the construction shows it is real anywhere,
+and it survives being read by someone with a different checkout, a different branch, or no checkout
+at all.
