@@ -1824,3 +1824,43 @@ Cheapest way to satisfy this: make the second instrument structural where the fi
 Parse where you grepped; walk keys where you pattern-matched; resolve a line to an AST node where
 you read a number. Every recovery recorded in this document came from changing the instrument, not
 from repeating the measurement.
+
+### An AST resolution is exact and still revision-relative
+
+Two parties resolved the same symbol in the same file with the same tool and got contradictory
+answers. Both were correct:
+
+```
+rev                          file    validate_handoff   _validate_structured_path_evidence
+4bf59f7 (baseline)           1288    1010-1288          ABSENT
+origin/rewrite-integration   1313    1033-1313          1010-1030
+```
+
+The shipped fix inserts a new function at line 1010 - **exactly where `validate_handoff` began in
+the baseline** - displacing it to 1033. So `:1145` lands inside `validate_handoff` in one tree and
+the ranges disagree by a constant offset in the other, and neither party had stated which revision
+they measured.
+
+**This happened immediately after both parties agreed that a citation must carry a granularity.**
+We fixed the granularity and both dropped the `ref`. Worse, the parse *conceals* the omission:
+`file.py:270` at least looks like it might be revision-sensitive, whereas
+`_validate_telemetry_results` reads like a stable name and returns an authoritative-sounding answer
+either way. **Adding precision to an address does not reduce its dependence on the revision - it
+disguises that dependence**, because a parser's output carries no visible coordinate for the tree it
+parsed.
+
+**And the failure mode was an absence, for the third time in this document.** Resolving
+`_validate_structured_path_evidence` against the tree that lacks the fix returns `NO SUCH FUNCTION`.
+I had the name right, from a diff of the shipped tree, and was one step from reporting that I had
+invented it. That is the same shape as `.get("architectures")` returning `None` - **an instrument
+reporting absence when it was pointed at the wrong object** - and it is the shape that recurs most
+in this audit, because absence is the one answer that looks identical no matter why it was produced.
+
+Quote the rev with the symbol, exactly as with a line:
+
+```
+_validate_structured_path_evidence @ origin/rewrite-integration  (1010-1030)
+```
+
+A symbol name is an address. It has the same components as any other, and `ref` is the one that
+looks least necessary and is least often supplied.
