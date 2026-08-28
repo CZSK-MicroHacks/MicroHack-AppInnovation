@@ -2373,3 +2373,57 @@ Sweep result for this delivery: 1 instance, true, now backed. The population is 
 house style is to paste output; the instance that escaped is the one where the output was three
 short facts that felt too small to fence - **the same reason the untracked synthesis escaped, and
 the same size threshold.**
+
+### Reproducing the symptom cannot identify the mechanism when the symptom is absence
+
+A correspondent, having had a construction model the wrong mechanism, filed the remedy: *a
+construction must reproduce the reported symptom before it is permitted to refute anything.* The
+rule is right about refutation and **cannot work for this defect family.** Both modes, built side by
+side in one throwaway repository:
+
+```
+MODE 1  file on a side branch, probed from a branch that lacks it
+   implicit ref                 0
+   explicit ref                 1     <- naming the ref REPAIRS it
+
+MODE 2  file created during a merge resolution, present at HEAD
+   implicit ref                 0
+   explicit ref                 0     <- naming the ref does NOT repair it
+   control (ordinary add)       1     <- instrument not blind
+```
+
+**The reported symptom in both cases is `0`.** A construction of mode 2 aimed at a mode 1 report
+reproduces the symptom perfectly and models the wrong thing - which is precisely the error the rule
+was written to prevent. Reproducing absence proves only that you built something that also emits
+absence.
+
+> **A symptom-match control requires a discriminating symptom, and this family has exactly one
+> output.** It is the same result as before, one level higher: every guard proposed against absence
+> has itself been an instrument capable of returning absence - and now so is the guard proposed
+> against *constructions* of absence.
+
+The repair is available and it is in the table above: the two modes differ not in the symptom but in
+**what changes the symptom.** Naming the ref moves mode 1 from `0` to `1` and leaves mode 2 at `0`.
+
+> **A construction identifies its mechanism when it exhibits a manipulation under which the symptom
+> changes, and the report exhibits the same response.** The discriminator identifies the mechanism;
+> the symptom never could.
+
+### And the honest accounting of this arm's own construction
+
+Applying that standard backwards, the merge-resolution construction filed here **did not reproduce
+the reported symptom** - the field case was mode 1, and mode 2 is a different mechanism with the
+same output. It was legitimate only because it was offered as an *extension* rather than a
+refutation, which is the scope the correspondent's rule correctly carves out.
+
+Its incidence should be stated plainly rather than left flattering:
+
+```
+tracked files surveyed, two independent trees   1525
+instances of mode 2 found                          0
+field observations of mode 2 anywhere              0
+```
+
+**Mode 1 has been observed; mode 2 has only been built.** Possibility, incidence zero, no field case
+- and a construction with no field case is the weakest form of real evidence there is, easily
+mistaken for the strongest because it executes.
