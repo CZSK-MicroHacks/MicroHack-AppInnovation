@@ -1713,3 +1713,54 @@ the guard because being outside is what made it an outlier.**
 
 Ask of a structured file *"which spellings of this property exist"*, not *"what is this property's
 value"*, and check the minority spelling first — it is where the exception lives.
+
+### One function has four valid addresses, and none of them says which
+
+The duplicate-basename trap has a third scale below the file. A reviewer described four citations
+into one module as competing claims: a range `234-325`, a point `:234`, a "correct" `:270` that was
+retired in favour of it, and a `:300` that had been measured but not filed. Resolved against the
+tree, they are not competing:
+
+```
+$ python3 -c "import ast; ..."          # AST, not grep
+_validate_telemetry_results: lines 234-325
+   234 INSIDE    270 INSIDE    300 INSIDE    325 INSIDE
+```
+
+**`234-325` is the function's exact extent. `:234` is its `def` line. `:270` and `:300` are lines
+inside it.** All four are correct addresses for the same function. Nothing was fabricated and
+nothing was fused — and "retiring `:270` in favour of `:234`" is not a correct citation replaced by
+a wrong one, it is a **precise address replaced by a containing one**, which reads identically in
+prose.
+
+So the address ambiguity runs at three scales, and the notation is the same at all three:
+
+| scale | collision | example |
+|---|---|---|
+| tree | one basename, two trees | `Program.cs:86` |
+| repository | one basename, two directories | `handoff.py:270` |
+| **function** | **one function, four addresses** | **`:234` vs `234-325` vs `:270`** |
+
+A `def` line and a line of interest are both written `file.py:N`. **A citation carries a number but
+not a granularity**, so a container's address is indistinguishable from a claim about its contents.
+That is why the disagreement looked substantive: two parties citing the same function at different
+granularities appear to disagree about *where* the defect is.
+
+Resolve with the parser, not the line number:
+
+```python
+import ast
+tree = ast.parse(open(path).read())
+for n in ast.walk(tree):
+    if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.lineno <= LINE <= n.end_lineno:
+        print(n.name, n.lineno, n.end_lineno)
+```
+
+If two citations land in the same node, they are the same claim at different zoom levels — reconcile
+them before treating either as a correction of the other. `grep -n` cannot tell you this; it reports
+lines, and the unit of the argument is a function.
+
+**The corollary matters more than the rule.** Every earlier instance in this document was a citation
+that resolved to the *wrong* thing. This one resolves to the *right* thing four different ways, and
+still produced a disagreement, a withdrawal of a true reading, and a filed finding. **Ambiguity does
+not require an error to do damage.**
