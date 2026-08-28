@@ -5445,6 +5445,54 @@ def _shell_commands(markdown: str) -> list[str]:
     return commands
 
 
+def test_reference_dockerfiles_carry_no_from_platform_selector(
+    repo_root: Path,
+) -> None:
+    """No reference Dockerfile may put a ``--platform`` selector on a ``FROM`` line.
+
+    The workshop mandates ``az acr build`` for every image build, because the
+    provisioned VM has no Docker daemon. ACR Tasks scans a Dockerfile for its base
+    images before building, and that scanner cannot parse ``FROM --platform=...``:
+    it aborts in seconds with ``unable to understand line FROM --platform=...`` and
+    ``failed to scan dependencies``. ``docker build`` parses the same line without
+    complaint, so a local build hides the failure that the mandated build hits.
+
+    Every base image in these two files is digest-pinned, and ACR Tasks already
+    defaults to ``linux/amd64``, so the selector buys nothing that the digest does
+    not already fix.
+
+    Denominator: the Dockerfiles under ``solutions/reference/``, which are the ones
+    the challenges instruct attendees to build with ``az acr build``. That
+    population is asserted to be non-empty below, so a rename cannot silence this
+    guard by emptying it. Complement: ``.devcontainer/Dockerfile`` is deliberately
+    excluded. It is built by the devcontainer tooling rather than by ACR Tasks, and
+    its base image is a floating tag rather than a digest, so neither the failure
+    mode nor the redundancy argument applies to it.
+    """
+    dockerfiles = sorted((repo_root / "solutions" / "reference").rglob("Dockerfile"))
+    assert dockerfiles, (
+        "no Dockerfile found under solutions/reference/ — the guard's population is "
+        "empty, so it would pass without asserting anything"
+    )
+
+    offenders = [
+        f"{path.relative_to(repo_root)}:{number}: {line.strip()}"
+        for path in dockerfiles
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if re.match(r"\s*FROM\s+--platform", line, re.IGNORECASE)
+    ]
+
+    assert not offenders, (
+        "a reference Dockerfile puts --platform on a FROM line, which makes it "
+        "unbuildable by the az acr build the challenges mandate:\n  "
+        + "\n  ".join(offenders)
+        + "\nDrop the selector; the base images are digest-pinned and ACR Tasks "
+        "already builds linux/amd64."
+    )
+
+
 def test_no_document_claims_setting_a_container_app_secret_restarts_the_app(
     repo_root: Path,
 ) -> None:
