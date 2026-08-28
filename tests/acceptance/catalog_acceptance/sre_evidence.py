@@ -3354,6 +3354,78 @@ def render_sre_agent_evidence(
     }
 
 
+def _normalise_instant(value: str, label: str) -> datetime:
+    """Parse one evidence timestamp, tolerating the sub-second precision Azure emits."""
+    text = _string(value, label).strip()
+    _require(text.endswith("Z"), f"{label} must be a UTC instant ending in Z")
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(microsecond=0)
+    except ValueError as error:
+        raise ValueError(f"{label} is not an ISO-8601 instant: {text}") from error
+
+
+def validate_recovery_time(
+    mttr_path: Path,
+    report_path: Path,
+    repository_root: Path,
+) -> dict[str, Any]:
+    """Recompute the chapter's headline recovery figure and bind it to the sealed report.
+
+    ``evidence/ch06-mttr.json`` is written by a shell block and is not part of the
+    frozen evidence contract, so nothing else in the workshop reads it. Both of
+    its timestamps come from captures the report already seals: ``recoveredAt``
+    is the resolved alert's ``resolvedDateTime``, which the report carries as
+    ``incident.alertResolvedAt``. Checking the arithmetic alone would still
+    accept two invented timestamps that agree with each other, so the recovery
+    instant is compared against the sealed report as well.
+    """
+    root = repository_root.resolve()
+    mttr_resolved = resolve_repository_file(
+        root,
+        _relative_file(root, mttr_path, "recovery time file"),
+    )
+    report_resolved = resolve_repository_file(
+        root,
+        _relative_file(root, report_path, "SRE Agent report"),
+    )
+    mttr = load_json_object(mttr_resolved)
+    report = load_json_object(report_resolved)
+
+    detected = _normalise_instant(mttr.get("detectedAt"), "detectedAt")
+    recovered = _normalise_instant(mttr.get("recoveredAt"), "recoveredAt")
+    _require(
+        recovered >= detected,
+        "recovery is earlier than detection: recheck both timestamps",
+    )
+
+    claimed = mttr.get("minutesToRecovery")
+    _require(
+        isinstance(claimed, int) and not isinstance(claimed, bool),
+        "minutesToRecovery must be an integer",
+    )
+    computed = int((recovered - detected).total_seconds() // 60)
+    _require(
+        claimed == computed,
+        f"minutesToRecovery is {claimed} but its own timestamps give {computed}",
+    )
+
+    incident = _mapping(report.get("incident"), "report incident")
+    sealed = _normalise_instant(
+        incident.get("alertResolvedAt"), "report incident.alertResolvedAt"
+    )
+    _require(
+        recovered == sealed,
+        "recoveredAt does not match the resolved alert the report seals: "
+        f"{recovered.isoformat()} against {sealed.isoformat()}",
+    )
+    return {
+        "kind": "sre-agent-recovery-time",
+        "recoveryTime": _relative_file(root, mttr_resolved, "recovery time file"),
+        "minutesToRecovery": computed,
+        "sha256": sha256_file(mttr_resolved),
+    }
+
+
 def validate_sre_agent_evidence(
     capture_path: Path,
     handoff_path: Path,
