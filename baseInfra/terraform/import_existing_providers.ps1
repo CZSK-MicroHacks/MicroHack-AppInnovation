@@ -60,7 +60,12 @@ Write-Host "Found $($providers.Count) providers in locals.tf" -ForegroundColor G
 
 # Get currently registered providers from Azure
 Write-Host "`nChecking which providers are already registered in subscription..." -ForegroundColor Yellow
-$registeredProviders = az provider list --subscription $SubscriptionId --query "[?registrationState=='Registered'].namespace" -o json | ConvertFrom-Json
+$registeredProvidersJson = az provider list --subscription $SubscriptionId --query "[?registrationState=='Registered'].namespace" -o json
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to list resource providers for subscription $SubscriptionId. Run 'az login' and confirm you have access to that subscription."
+    exit 1
+}
+$registeredProviders = $registeredProvidersJson | ConvertFrom-Json
 
 Write-Host "Found $($registeredProviders.Count) registered providers in Azure" -ForegroundColor Green
 

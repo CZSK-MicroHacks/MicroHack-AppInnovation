@@ -5187,3 +5187,29 @@ def test_no_unguarded_trim_on_native_command_output(repo_root: Path) -> None:
         "pipeline in `(@(...) -join '')` so empty output degrades to an empty "
         "string instead of a null-reference error:\n" + "\n".join(offenders)
     )
+
+
+def test_provider_import_script_checks_az_exit_status(repo_root: Path) -> None:
+    """`az provider list` failing must stop the import, not report success.
+
+    Without an exit-status check the failed call prints nothing, the provider
+    list parses as empty, and the script reports "No providers need to be
+    imported" and exits 0 -- a green message for a run that did nothing.
+    """
+    script = (
+        repo_root / "baseInfra" / "terraform" / "import_existing_providers.ps1"
+    ).read_text(encoding="utf-8")
+    lines = script.splitlines()
+
+    call = next(
+        (index for index, line in enumerate(lines) if "az provider list" in line),
+        None,
+    )
+    assert call is not None, "expected an `az provider list` call to guard"
+
+    window = "\n".join(lines[call + 1 : call + 6])
+    assert "$LASTEXITCODE" in window, (
+        "`az provider list` is not followed by a $LASTEXITCODE check, so an "
+        "authentication or permission failure is reported as success:\n"
+        + "\n".join(lines[call : call + 6])
+    )
