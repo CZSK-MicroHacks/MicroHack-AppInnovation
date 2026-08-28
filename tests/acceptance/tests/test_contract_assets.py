@@ -5426,3 +5426,61 @@ def test_internal_environment_reachability_reaches_the_chapters_that_hit_it(repo
             f"{rel} troubleshooting names the mode but not where a probe must "
             "originate, which is the only part that unblocks the attendee"
         )
+
+
+def test_deprecated_subassessment_query_cannot_abort_the_capture(repo_root):
+    """A frozen request to a since-deprecated endpoint must not kill the capture.
+
+    Defender for Cloud deprecated the sub-assessments endpoint, so the chapter's
+    frozen `GET .../subAssessments?api-version=2019-01-01-preview` now answers
+    HTTP 404 `SubAssessmentsDeprecated` and `az rest` exits non-zero. The capture
+    block runs under `set -euo pipefail`, so an unguarded `IMAGE_RESPONSE=$(az
+    rest ...)` aborts every remaining step. The contract already sanctions
+    `unavailable` as a status, so the honest outcome was reachable in principle
+    and unreachable in practice.
+    """
+    solution = (repo_root / "solutions/ch05-defender/README.md").read_text(encoding="utf-8")
+    assert "IMAGE_RESPONSE=$(az rest" in solution, (
+        "the image-assessment capture no longer exists in the form this guard "
+        "was written against; re-derive the guard rather than deleting it"
+    )
+    guarded = "if ! IMAGE_RESPONSE=$(az rest" in solution
+    assert guarded, (
+        "solutions/ch05-defender captures the image assessment with an unguarded "
+        "command substitution; under `set -euo pipefail` the deprecated endpoint's "
+        "non-zero exit aborts the capture before any status can be recorded"
+    )
+    assert "image-assessment.error.txt" in solution, (
+        "the failed query's error text is discarded, so the envelope cannot show "
+        "what the endpoint actually answered"
+    )
+    assert "unavailable" in solution, (
+        "the solution never names the status the contract reserves for a signal "
+        "that could not be collected"
+    )
+
+
+def test_subassessment_deprecation_reaches_the_chapter_that_hits_it(repo_root):
+    """The empty-response row absorbed the failed-query symptom and misrouted it.
+
+    Challenge 5's troubleshooting table had a row for "returns nothing" whose
+    fix is "Nothing to fix" — correct for an asynchronous empty result, actively
+    wrong for a hard 404 that aborted the run. A participant matching on symptom
+    lands on the wrong cause. The discriminating row has to exist *and* be read
+    first, so the specific symptom is not swallowed by the general one.
+    """
+    text = (repo_root / "challenges/ch05-defender/README.md").read_text(encoding="utf-8")
+    section = text.split("## If it goes wrong", 1)
+    assert len(section) == 2, "challenges/ch05-defender has no troubleshooting section"
+    body = section[1]
+    deprecated_at = body.find("SubAssessmentsDeprecated")
+    assert deprecated_at != -1, (
+        "challenges/ch05-defender troubleshooting never names the deprecation, so "
+        "the attendee meets an aborted capture with no row that matches it"
+    )
+    async_at = body.find("asynchronous")
+    assert async_at != -1, "the asynchronous-findings row is missing"
+    assert deprecated_at < async_at, (
+        "the asynchronous-findings row precedes the deprecation row; a participant "
+        "matching on symptom reaches 'Nothing to fix' before the row that applies"
+    )
