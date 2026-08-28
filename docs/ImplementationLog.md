@@ -1878,3 +1878,23 @@ second-order defect created by our own fix is still our defect, and this entry c
 - **Worth recording for sequencing: this artifact needs no Azure.** The runtime report is
   produced entirely from a local build and test run, so it can be generated and validated
   before any deployment exists. It was generated here on a no-deploy arm.
+
+### Rebase onto the upstream fixes, and a self-inflicted regression worth recording
+
+The upstream branch adjudicated two of the findings above and fixed them in its own words
+(checkpoint 4 now names the stack directory and the registry file; slice 5 now says "the
+non-root container image you author in checkpoint 4"). Rebasing this branch onto that work
+conflicted in `solutions/ch01-copilot-rewrite/java/README.md`.
+
+Resolving that conflict to the upstream copy of the whole file **discarded three unrelated
+fixes that lived in the same file**: the contract-assets deselect at both call sites, the
+checkpoint-to-section map, and the section 4 reordering. The subtlety is that taking
+upstream's side of a conflict is safe when the conflict lands in a later commit — the earlier
+commits are already applied to the tree — but destructive when it lands in the *first*, where
+that file's entire contribution is still unapplied. The overlap was two paragraphs; the loss
+was most of the commit.
+
+It was caught by grepping the resolved tree for each fix rather than assuming the rebase had
+preserved them, which is the same check that found the half-landed template reference.
+Restored in a follow-up commit, keeping upstream's wording verbatim everywhere the two
+actually overlapped.
