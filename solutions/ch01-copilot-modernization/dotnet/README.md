@@ -149,6 +149,20 @@ Expected final application artifacts include
 configuration, `AzureBlobImageStore`, and direct Azure Monitor exporters.
 Assessment or task success is not behavioral proof.
 
+Three of this challenge's acceptance criteria are **stated but not verified by
+any build or test**, and in each the non-compliant path is green. Each honest
+fix and its forgery are the same size, so a diff will not tell them apart:
+
+| Criterion | The one-line forgery | The honest fix |
+| --- | --- | --- |
+| Zero vulnerable packages | `<NoWarn>$(NoWarn);NU1903</NoWarn>` — permanently disables the audit gate that .NET 10 turns on by default | Pin the transitive package to a fixed version |
+| Container base pinned to the locked digest | `FROM mcr.microsoft.com/dotnet/aspnet:10.0.11-azurelinux3.0-amd64` — the tag builds and now resolves to a *different* image than `workshop/toolchain.lock.json` records | `FROM ...@sha256:<the digest in the lock>` |
+| Image key traversal check preserved | Implementing `IImageStore` without the canonical-key check — the security tests exercise `LocalImageStore.IsCanonicalImageKey` as a static method and never through the interface, so all of them stay green | Apply the check in every `IImageStore` implementation |
+
+Record in `evidence/build-test-cve-summary.md` which of these you did, not
+merely that the build was clean. A green build is evidence that the build is
+green.
+
 Stop and replan if a task changes files outside its preview, changes Azure SQL
 to another database family, adds SQL credentials to source, chooses Azure
 Files, weakens TLS, changes a frozen contract, replaces immutable image
@@ -228,6 +242,26 @@ Review that the image is non-root, listens on `8080`, and takes database,
 Blob, and telemetry configuration from the environment. A supported IDE
 containerization task may prepare or review these changes, but
 `dotnet/Dockerfile` and its locked digests are the accepted artifact.
+
+The platform injects configuration under **these exact names**, defined in
+`infra/modules/environment.bicep` and tabulated in
+[the .NET reference](../../reference/dotnet/README.md#configuration):
+
+| Variable | Why it must be read by this name |
+| --- | --- |
+| `CATALOG_DATABASE_AUTHENTICATION` | `managed-identity` selects token auth; any other value silently falls back to a connection string that Azure SQL will refuse |
+| `AZURE_CLIENT_ID` | The user-assigned workload identity the token is requested for |
+| `CATALOG_IMAGE_PROVIDER` | `azure-blob` switches the image store off local disk |
+| `CATALOG_BLOB_SERVICE_ENDPOINT`, `CATALOG_BLOB_CONTAINER` | Where blob images are read from |
+| `CATALOG_DATABASE_HOST`, `CATALOG_DATABASE_NAME`, `CATALOG_DATABASE_PORT` | Target database coordinates |
+| `OTEL_SERVICE_VERSION`, `CONTAINER_APP_REVISION`, `DEPLOYMENT_ENVIRONMENT` | Telemetry correlation |
+
+Read these names, do not invent your own. Binding the database to a
+conventional `ConnectionStrings__Catalog` instead — or reading blob settings
+under any other key — **builds cleanly, passes all 42 tests, and deploys
+successfully**, because nothing in the build or the test suite reads the
+platform's environment. Managed identity and the blob image store are simply
+inert at runtime, and the failure surfaces only as data that never appears.
 
 The build publishes exactly `catalog-dotnet:$SourceCommit`. Never use `latest`. Do not
 continue until the registry returns an immutable digest.

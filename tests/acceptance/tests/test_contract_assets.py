@@ -5484,3 +5484,61 @@ def test_subassessment_deprecation_reaches_the_chapter_that_hits_it(repo_root):
         "the asynchronous-findings row precedes the deprecation row; a participant "
         "matching on symptom reaches 'Nothing to fix' before the row that applies"
     )
+
+
+def test_copilot_runbooks_name_the_environment_contract_they_depend_on(repo_root):
+    """The injected variable names existed only in Bicep the attendee never opens.
+
+    `infra/modules/environment.bicep` is the sole definition of the names the
+    platform injects. The Copilot runbooks said only that the image "takes
+    database, Blob, and telemetry configuration from the environment" and did
+    not route to the reference table that lists them. Binding the database to a
+    conventional `ConnectionStrings__Catalog` or `SPRING_DATASOURCE_URL`
+    instead builds cleanly, passes every test, and deploys successfully, with
+    managed identity and the blob store silently inert -- nothing in the build
+    or the suite reads the platform's environment.
+    """
+    required = (
+        "CATALOG_DATABASE_AUTHENTICATION",
+        "CATALOG_IMAGE_PROVIDER",
+        "CATALOG_BLOB_SERVICE_ENDPOINT",
+        "AZURE_CLIENT_ID",
+    )
+    for rel in (
+        "solutions/ch01-copilot-modernization/dotnet/README.md",
+        "solutions/ch01-copilot-modernization/java/README.md",
+    ):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        for name in required:
+            assert name in text, (
+                f"{rel} never names {name}, so the attendee must infer the "
+                "environment contract; a wrong guess is green through build, "
+                "test, and deploy"
+            )
+        assert "do not invent your own" in text.lower(), (
+            f"{rel} lists the names without stating that inventing a different "
+            "one fails silently, which is the only part that changes behaviour"
+        )
+
+
+def test_dotnet_runbook_names_the_acceptance_criteria_that_are_not_verified(repo_root):
+    """Three criteria were stated, unverified, and forgeable in one line each.
+
+    NuGet audit suppression (`NoWarn NU1903`), a tag-only container `FROM` that
+    has drifted off the locked digest, and an `IImageStore` implementation that
+    omits the traversal check all leave the build and the whole suite green.
+    In each case the forgery and the honest fix are the same size, so review
+    cannot separate them and the runbook has to say so.
+    """
+    text = (repo_root / "solutions/ch01-copilot-modernization/dotnet/README.md").read_text(
+        encoding="utf-8"
+    )
+    for token in ("NU1903", "IImageStore", "toolchain.lock.json"):
+        assert token in text, (
+            f"the .NET runbook never mentions {token}, so the criterion it "
+            "belongs to stays stated-but-unverified with a green wrong path"
+        )
+    assert "forgery" in text.lower(), (
+        "the runbook lists the criteria without naming that each has a "
+        "same-sized dishonest form, which is the property review cannot see"
+    )
