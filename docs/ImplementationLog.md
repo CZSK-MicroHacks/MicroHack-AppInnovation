@@ -7,8 +7,11 @@
 - Removed platform selectors from both Dockerfile stages because the locally valid syntax
   is remotely rejected by ACR Tasks; the target platform is now supplied to `az acr build`.
 - Kept the exercise at the authorized no-deploy boundary and recorded measured local
-  timings, ambiguities, immutable baseline provenance, and the subscription public-IP
-  policy limitation in `evidence/manual-dotnet-control-feedback.md`.
+  timings, ambiguities, and immutable baseline provenance in
+  `evidence/manual-dotnet-control-feedback.md`.
+- Corrected the final feedback after facilitator verification: the missing health client
+  belonged to the control arm's Debian image, the reconciliation pytest was outside the
+  manual path, and the public-IP policy did not apply to the internal managed environment.
 
 ### 2025-08-28 (Infrastructure - network redesign with Bastion)
 - Adjusted per-user VNet to /22 CIDR with dedicated `vms` /24 and `AzureBastionSubnet` /26.

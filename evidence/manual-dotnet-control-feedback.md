@@ -42,18 +42,20 @@ is **not measured** because deployment was explicitly out of scope.
    explicit `docker buildx imagetools inspect` example.
 5. A Dockerfile with `FROM --platform=linux/amd64` is locally valid but remotely rejected
    by ACR Tasks. Platform selection must be removed from every `FROM` line and passed to
-   `az acr build --platform linux/amd64`.
-6. The repository reconciliation suite assumes `dotnet/Dockerfile` exists only in the
-   reference tree, so the documented participant action of adding that file makes the
-   full repository guard fail by design. The participant validation command should exclude
-   this maintainer-only topology assertion or provide a participant mode.
-7. The pinned ASP.NET runtime image does not contain `curl`, although the required health
-   check invokes it. The Dockerfile must install a health-check client or use a different
-   probe strategy.
-8. Deployment material currently implies the Container Apps environment can be created.
-   In this subscription, policy prevents every public IP allocation, so the deployment
-   fails before application validation. This should be called out as a known environment
-   limitation rather than diagnosed by each participant.
+   `az acr build --platform linux/amd64`. Confirmed as F-149 and fixed in `9c14770`.
+6. **Re-scoped:** I ran the repository contract suite on my own initiative. Its maintainer
+   reconciliation guard rejected the required participant `dotnet/Dockerfile`, but the
+   manual path never instructs participants to run that pytest suite. This was outside the
+   manual path, not a defect in its written instructions. The equivalent rewrite-path issue
+   was F-115 and was already fixed in `ff70fac`.
+7. **Corrected:** The workshop reference uses an Azure Linux ASP.NET 10 image that includes
+   `/usr/bin/curl`. Missing `curl` was specific to the .NET 8 Debian `bookworm-slim` image
+   I selected for my control-arm Dockerfile. Installing it fixed my artifact; this was not
+   a defect in the workshop reference Dockerfile.
+8. **Withdrawn:** The public-IP policy denial did not apply to the participant path. The
+   workshop uses a facilitator-provisioned, VNet-injected internal Container Apps
+   environment and does not instruct participants to create one. My earlier attribution
+   generalized an environment constraint into a workshop defect without textual support.
 9. The manual path's useful learning is concentrated in understanding ordering and safety
    gates. Most elapsed time is operational setup, protected-input handling, and waiting on
    Azure rather than application modernization.
@@ -68,11 +70,11 @@ is **not measured** because deployment was explicitly out of scope.
   private networking, ACR Tasks, Container Apps revisions, and evidence contracts.
 - MCR base-image digests must be resolved and verified before authoring the Dockerfile.
 - ACR platform selection belongs on `az acr build`, not on Dockerfile `FROM` instructions.
-- The slim runtime needs an explicitly installed health-check client.
-- Maintainer-only repository reconciliation checks are not participant validation gates.
+- A participant choosing a slim base image must verify or install the health-check client.
+- The manual path does not include the maintainer repository reconciliation pytest suite.
 - `sourceCommit` provenance and the participant delivery commit are distinct identities.
-- Azure waits, approval coordination, revision collisions, and subscription policy
-  preflights are operational work, not incidental setup.
+- Azure waits, approval coordination, and revision collisions are operational work, not
+  incidental setup.
 
 ## Comparison notes
 
@@ -83,6 +85,6 @@ is **not measured** because deployment was explicitly out of scope.
 - I would keep infrastructure deployment, database import, identity assignment, and
   traffic changes behind explicit human approval even when using an assistant.
 - I would use this sequence on a real estate migration, but automate repeatable evidence
-  capture and preflight subscription policy before the workshop starts.
+  capture and environment preflight before the workshop starts.
 - Verdict: genuine for an experienced Azure operator with the exact VM inputs, but a trap
   for a participant treating the document as a standalone tutorial.

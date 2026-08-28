@@ -905,10 +905,11 @@ that call ever acquires a `-ReadPrincipal`.
 
 ## A container health check invokes a missing client
 
-**Symptom:** A container image uses `curl` in `HEALTHCHECK`, but running `command -v curl`
-against the pinned ASP.NET runtime image exits `127`.
+**Symptom:** The control-arm Dockerfile uses `curl` in `HEALTHCHECK`, but running
+`command -v curl` against its selected ASP.NET runtime image exits `127`.
 
-**Cause:** The `bookworm-slim` ASP.NET runtime image does not include `curl`.
+**Cause:** The selected .NET 8 Debian `bookworm-slim` image does not include `curl`. The
+workshop reference's Azure Linux ASP.NET 10 image does include it.
 
 **Fix:** Install `curl` in the runtime stage with `--no-install-recommends`, remove the apt
 package lists in the same layer, and verify the final health command rather than assuming a
@@ -916,16 +917,17 @@ diagnostic client exists in the base image.
 
 ## A participant Dockerfile conflicts with repository reconciliation
 
-**Symptom:** Contract reconciliation fails after the manual path adds `dotnet/Dockerfile`,
-even though authoring that file is explicitly required by Challenge 1.
+**Symptom:** Running the maintainer contract-assets pytest suite after the manual path adds
+`dotnet/Dockerfile` causes the reconciliation test to fail.
 
 **Cause:** The maintainer guard freezes `Dockerfile` as a reference-only modernization
-addition, while participant work necessarily adds the same path to the legacy tree.
+addition, while participant work necessarily adds the same path to the legacy tree. The
+manual path does not instruct participants to run this suite, so this does not block the
+documented manual workflow. The rewrite-path instance was tracked as F-115.
 
-**Fix:** Treat this specific topology assertion as a maintainer baseline guard, not as
-participant-path validation. Continue to run the native suite and applicable contract
-checks, and record the intentional reconciliation mismatch instead of deleting the required
-participant Dockerfile.
+**Fix:** Do not treat this maintainer baseline guard as a manual-path validation command.
+Run only the native and acceptance commands documented by the manual path. Rewrite guides
+that invoke pytest deselect the maintainer-only topology assertion.
 
 ## ACR Tasks rejects Dockerfile platform selectors
 
