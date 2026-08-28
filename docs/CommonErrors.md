@@ -1409,3 +1409,63 @@ the form "X is the same as Y" has two operands, and here both were opened, to th
 and only one attribute of each was compared.** "Check the substrate" does not catch this. The
 check that does is naming, before concluding, which property of each operand the claim actually
 depends on — here the API, not the name — and confirming that property was the one read.
+
+For the case where the two operands are the **same line number in two different files**, see
+*A line number is not an address when the file has two homes* below.
+
+## A line number is not an address when the file has two homes
+
+The entry above is about reading the right file incompletely. This one is about reading a file
+that was never the one under discussion — while every check you run says it was.
+
+Two parties disagreed over where `AddSqlClientInstrumentation()` sits in `Program.cs`. One said
+`:86`, the other `:107`. **Both were right**, because the application exists in two trees:
+
+```bash
+# before re-reading a disputed line, ask how many homes the file has
+git ls-tree -r --name-only HEAD | grep '/Program\.cs$'
+
+# dotnet/src/LegoCatalog.App/Program.cs                    117 lines
+# solutions/reference/dotnet/src/LegoCatalog.App/Program.cs 148 lines
+```
+
+`:86` is `.AddSqlClientInstrumentation()` in the first and `.AddAspNetCoreInstrumentation()` in
+the second. **Both are real OpenTelemetry registrations of the same family.** So each party
+opened a file, found instrumentation at the cited line, and confirmed. Re-reading either copy
+more carefully never surfaces the problem, because neither copy is wrong.
+
+The population is large and mostly benign, which is what makes the exceptions hard to see:
+**81 tracked sources under `solutions/reference/`, 75 with a path-identical twin, 64 of those
+byte-identical, 11 drifted.** For the 64 a line number resolves the same either way. The whole
+hazard is the 11 — and one of them, `TomcatPathConfiguration.java`, **drifts at an identical
+line count**, so even a length sanity-check matches. Its single differing line is an `import`.
+
+> A line number is an address only when the basename is unique. Here it is a **relative** offset
+> into whichever of two files you happened to open, and both resolve.
+
+Two properties make this worse than an ordinary ambiguity. First, it is **silent** — there is no
+failed lookup, no exit 1, no empty result to notice. Second, the drift is not cosmetic: the
+reference tree is a **Spring Boot major version ahead** (`4.0.7`/`release 21` against
+`3.5.16`/`release 17`), so the differing lines are package relocations. A claim verified in one
+tree can be false in the other while every quoted identifier still matches.
+
+The guard is one command, run **before** re-reading anything:
+
+```bash
+# the question is not "what is at line N" but "how many files could line N be in"
+git ls-tree -r --name-only HEAD | grep '/CatalogRuntimeOptions\.java$'
+```
+
+If the basename has two homes, the disagreement is about **addressing**, not content, and no
+amount of re-reading either operand will resolve it. Cite the tree with the line, always.
+
+Two counting notes, recorded together so neither is later quoted against the other. The `11`
+above is *both stacks, tracked sources only*; a Java-tree-only, all-file-types comparison gives
+`diff -rq java solutions/reference/java` → **9 differing files**, which is the number the Java
+runbook states and it is exact. Same state, two populations — the same trap one level up, so
+**re-run both counts at one revision before attributing a disagreement to either party.**
+
+The author of this entry had already committed two instances of the defect into the document
+describing it: two adjacent bullets citing `CatalogApplication.java:33` in one tree and
+`Program.cs:80` in the other. Naming the hazard did not confer immunity from it; the mechanical
+sweep above is what found them.
