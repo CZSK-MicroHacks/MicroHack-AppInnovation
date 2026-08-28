@@ -1068,7 +1068,31 @@ The discriminator is the exit code, and for `git grep` it is unambiguous:
 | `1` | ran, matched nothing — **a real negative** | none |
 | `129` | usage error, **never searched** | none |
 
-So never let a bare pipe or `||` stand between a silence claim and its query. Check `$?`
-explicitly, or use `set -o pipefail`. Mechanism A and mechanism B are different bugs that
-produce a byte-identical artifact, and in both recorded instances the claim they would have
-supported was not merely unproven but **the exact opposite of the truth** — zero versus 28.
+So never let a bare pipe or `||` stand between a silence claim and its query.
+
+**And surfacing an exit code is worthless unless it is the exit code of the command whose
+silence you are claiming.** Both `$?` and `||` bind to the **last stage of a pipeline**, so
+they are safe only when the query *is* the last stage. Interpose `| wc -l`, `| sed`, `| head`
+and each silently reports on the wrong command — in opposite directions:
+
+```bash
+git grep -li 'zzz-nothing' HEAD | sed 's/^/hit: /'; echo $?   # 0 — sed's success, not the miss
+git grep -lin 'copilot-rewrite' HEAD | wc -l; echo $?         # 0 — though git grep exited 129
+git grep -lin 'copilot-rewrite' HEAD | wc -l || echo 'none'   # fallback never fires at all
+
+set -o pipefail; git grep -lin … | wc -l; echo $?             # 129 — correct
+git grep -lin … | wc -l; echo "${PIPESTATUS[0]}"              # 129 — correct
+```
+
+Note the two failures are inverses. **Without** a pipe, a broken query makes `||` fire and you
+publish a false *negative*. **With** a pipe, the same broken query stops `||` firing at all and
+you publish a false *positive* — the query looks like it succeeded. Same construct, opposite
+guarantee, decided by whether a pipe is present.
+
+Use `set -o pipefail`, or read `${PIPESTATUS[0]}`, or put nothing after the query at all. A
+bare `cmd || echo` is genuinely safe — `||` binds to `cmd` when there is no pipeline — which
+is why the safe and unsafe forms look nearly identical on the page.
+
+Mechanism A and mechanism B are different bugs that produce a byte-identical artifact, and in
+every recorded instance the claim they would have supported was not merely unproven but **the
+exact opposite of the truth** — zero versus 28, or a document said to be silent that is not.
