@@ -221,7 +221,9 @@ deploy; a failure here then costs minutes instead of surfacing after a migration
 
 ## 4. Build the immutable container
 
-Use the Dockerfile you authored at the repository root. Build it **in Azure Container
+Use the `dotnet/Dockerfile` you authored — the path `workshop/contracts/challenge-paths.json`
+pins and the contract tests read, not the repository root this guide defines as
+`C:\MicroHack\source`. Build it **in Azure Container
 Registry** with `az acr build`: the provisioned VM has no Docker daemon, and `az acr
 build` uploads the context and builds inside the registry, so none is needed.
 

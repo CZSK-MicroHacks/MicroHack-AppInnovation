@@ -200,8 +200,8 @@ those interfaces; it does not reinterpret them.
 6. **Build the container image from the Dockerfile you authored.** The legacy baseline has
    no Dockerfile — writing one is part of the work, and you wrote it at the
    [publish gate](#publish-your-work-to-github) because the commit Challenge 3 checks out
-   has to contain it. `dotnet/Dockerfile` or `java/Dockerfile` sits at the repository root
-   and needs a numeric non-root user, a read-only seed, port `8080`, a health check,
+   has to contain it. `dotnet/Dockerfile` or `java/Dockerfile` — inside that stack's own
+   directory, not beside it — needs a numeric non-root user, a read-only seed, port `8080`, a health check,
    pinned base-image digests, and an external `/app/images` path. Build it with
    `az acr build`, which uploads the context and builds inside Azure Container Registry —
    the VM has no Docker daemon and does not need one, and the registry only exists from

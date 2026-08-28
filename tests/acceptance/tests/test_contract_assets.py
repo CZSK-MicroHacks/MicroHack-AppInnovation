@@ -5349,6 +5349,12 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
     challenge explicitly defines as `C:\\MicroHack\\source`. Following the prose
     put the file one directory above every reader of it. Nothing tied the two
     together, so the divergence was invisible to the suite.
+
+    The first version of this guard walked `challenges/` only and required the word
+    to be backticked. Both restrictions were invisible in a passing run, and the
+    same instruction survived in `solutions/ch01-copilot-modernization/dotnet`, in
+    plain prose, for the whole of the delivery. A guard that names a class and
+    inspects one directory reports on the directory while reading as the class.
     """
     registry = json.loads(
         (repo_root / "workshop" / "contracts" / "challenge-paths.json").read_text(
@@ -5362,8 +5368,32 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
     }
     assert len(pinned) >= 2, f"registry pins only {len(pinned)} Dockerfile paths"
 
-    readmes = sorted((repo_root / "challenges").glob("ch01*/README.md"))
-    assert len(readmes) >= 3, f"only {len(readmes)} ch01 challenge readmes found"
+    # Both corpora, enumerated by git rather than by a glob whose narrowing would be
+    # indistinguishable from a repository that had shrunk.
+    readmes = sorted(
+        repo_root / path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/ch01*/README.md",
+                "solutions/ch01*/*/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert len(readmes) >= 3, f"only {len(readmes)} ch01 readmes found"
+    assert any(
+        part.parts[0] == "solutions" for part in (p.relative_to(repo_root) for p in readmes)
+    ), "the walk sees no solution documents; it is reporting on challenges alone"
 
     problems: list[str] = []
     named: set[str] = set()
@@ -5375,8 +5405,9 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
         inspected += 1
         relative = readme.relative_to(repo_root)
         # A document that never states a location is silent, not wrong; the
-        # defect is stating one that disagrees with the registry.
-        if re.search(r"`Dockerfile`[^.]{0,80}?repository\s+root", text, re.DOTALL):
+        # defect is stating one that disagrees with the registry. Backticks are
+        # not required: the surviving instance was plain prose.
+        if re.search(r"\bDockerfile\b[^.]{0,80}?repository\s+root", text, re.DOTALL):
             problems.append(f"{relative}: sends the Dockerfile to the repository root")
         named |= {path for path in pinned if path in text}
 
