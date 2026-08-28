@@ -2784,6 +2784,28 @@ stash-verified to fail on revert.
   reachable if the toolchain is updated mid-run. In this audit that happened because a
   second party pushed a fix while I was working — not something a solo attendee does.
 
+### A fourth correction: the `ide-extensions.txt` escalation was wrong at the premise
+
+I reported that the Copilot runbook stages `evidence/ide-extensions.txt` at `:164` without
+ever producing it, and read that as the material pressuring an attendee to fabricate the
+file. **The premise is false.** `solutions/ch01-copilot-modernization/dotnet/README.md:92`
+does produce it — `$InstalledExtensions | Sort-Object | Set-Content -Encoding utf8
+evidence\ide-extensions.txt` — immediately after the block that `throw`s on any missing
+locked extension. A participant running the runbook in order has the file before reaching
+the `git add`.
+
+I hit the pathspec error because I could not run the extension-capture step at all, having
+no IDE. That is my delivery variant, not a defect: absent the pinned extensions the
+runbook blocks at `:86` with a named error, which is exactly correct fail-closed
+behaviour.
+
+Refusing to forge the file was right. Inferring from my own blocked state that the
+material *demanded* forgery was not — I generalised from a missing prerequisite to an
+authoring defect without checking whether the prerequisite had a producer. That is the
+same error as finding 21's §6 claim and the unscoped activity-log probe: **a confident
+diagnosis built on the part of the document I had actually read.** Fourth instance this
+run, and the reason I now regard "did I check the producer?" as the cheapest guard I have.
+
 ### What was confirmed about F-23
 
 The facilitator's own account: the docstring claimed the sqlcmd path "is what it has always
