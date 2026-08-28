@@ -3,6 +3,7 @@
 from copy import deepcopy
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ElementTree
@@ -54,7 +55,7 @@ def _assert_bounded_jmeter(path: Path) -> None:
         for element in thread_group
         if element.tag in {"stringProp", "boolProp"}
     }
-    assert thread_properties["ThreadGroup.num_threads"] == "40"
+    assert thread_properties["ThreadGroup.num_threads"] == "120"
     assert thread_properties["ThreadGroup.duration"] == "300"
     assert thread_properties["ThreadGroup.scheduler"] == "true"
     assert thread_properties["ThreadGroup.on_sample_error"] == "stoptestnow"
@@ -236,7 +237,7 @@ def test_guides_require_raw_capture_renderer_and_common_validator() -> None:
         "/perftest/catalog",
         "/healthz",
         "/readyz",
-        "40",
+        "120",
         "300",
         "app_cpu_billed",
         "cpu_percent",
@@ -393,3 +394,61 @@ def test_renderer_rejects_delayed_post_run_scale_out(
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "failed"
     assert "in-load scale-out" in result["error"]
+
+
+SCALE_RULE = ROOT / "infra/modules/environment.bicep"
+
+
+def _scale_rule_numbers() -> tuple[int, int]:
+    """Return ``(concurrentRequests, maxReplicas)`` from the Container Apps scale rule."""
+    source = SCALE_RULE.read_text(encoding="utf-8")
+    concurrent = re.search(r"concurrentRequests:\s*'(\d+)'", source)
+    maximum = re.search(r"maxReplicas:\s*(\d+)", source)
+    assert concurrent is not None, f"no concurrentRequests in {SCALE_RULE}"
+    assert maximum is not None, f"no maxReplicas in {SCALE_RULE}"
+    return int(concurrent.group(1)), int(maximum.group(1))
+
+
+def test_the_load_profile_can_actually_trigger_the_scale_rule() -> None:
+    """The shipped load must be able to produce the replica evidence the challenge demands.
+
+    Challenge 2 requires ``evidence/load/raw/replicas.json`` to show "one replica
+    immediately before load, two or three" during it. Whether that evidence is
+    *obtainable* is pure arithmetic: the KEDA HTTP scaler asks for
+    ``ceil(concurrent / concurrentRequests)`` replicas, so a virtual-user count at or
+    below the threshold pins the app at one replica no matter how long it runs.
+
+    Both numbers were frozen independently -- the user count by this module, the
+    threshold by the bicep and the shared-challenge contract -- and nothing compared
+    them. Shipped, they were 40 against 50: the participant could execute the documented
+    run perfectly, get a green ``DONE`` with zero errors, and still be unable to produce
+    the required artifact. The challenge's own troubleshooting table named this exact
+    arithmetic as a cause and offered a remedy only for the *other* cause.
+
+    This test is the comparison that was missing. It fails if either number drifts to
+    where the evidence gate stops being satisfiable.
+    """
+    thread_group = ElementTree.parse(JMETER).getroot().iter("ThreadGroup")
+    threads = [
+        int(prop.text or "0")
+        for group in thread_group
+        for prop in group.iter("stringProp")
+        if prop.get("name") == "ThreadGroup.num_threads"
+    ]
+    assert len(threads) == 1, f"expected exactly one thread group, found {len(threads)}"
+    users = threads[0]
+
+    concurrent_requests, max_replicas = _scale_rule_numbers()
+    desired = -(-users // concurrent_requests)
+
+    assert desired >= 2, (
+        f"{users} virtual users against a concurrentRequests threshold of "
+        f"{concurrent_requests} asks for {desired} replica(s), so the run can never show "
+        "the two-or-three replicas Challenge 2 requires as evidence; raise the user count "
+        "above the threshold or lower the threshold"
+    )
+    assert desired <= max_replicas, (
+        f"{users} virtual users ask for {desired} replicas but maxReplicas is "
+        f"{max_replicas}, so the scale-out saturates and the run cannot demonstrate the "
+        "rule it is teaching"
+    )
