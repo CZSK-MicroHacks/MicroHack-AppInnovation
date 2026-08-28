@@ -515,8 +515,39 @@ The lock contains exactly two installer entries — `windowsSourceSdkInstaller` 
 string `targetRuntimeInstaller` has 0 occurrences). Both stacks contract a target runtime
 (.NET 8→10, Java 17→21) that has **no pinned, hash-verified acquisition path**, while every
 JAR, NuGet package, Maven distribution and database image in the same file is pinned by hash
-or signature. That gap is the direct cause of the hand-rolled JDK installation this arm had
-to perform, and therefore of `docs/CommonErrors.md` entry 101 existing at all.
+or signature — 27 `sha256`, 5 `sha512`, 6 `digest`, 16 `signature`.
+
+**Correction to an earlier draft of this section, because the causal claim was wrong.** This
+document previously called that target gap "the direct cause" of the hand-rolled JDK install
+behind `docs/CommonErrors.md` entry 101. It is not. The JDK installed by hand here is
+**`17.0.20+8` — the `sourceRuntime`**, which *does* have a pinned installer entry. That entry
+is **Windows-only**, and this host is macOS. **The platform axis is what bit; the target axis
+never applied**, and the paragraphs above say why in advance: `challenge-paths.json` binds
+`copilot-rewrite-java` to `sourcePath` with no target runtime, so this path never crosses to
+the target at all. **The finding two paragraphs up refutes the causal claim two paragraphs
+down** — written in one sitting, by one author, in one file.
+
+**And the platform gap is stronger than an omission, because macOS is a declared host.** The
+lock's own `hosts` block contracts two of them:
+
+| | `coordinator` | `workshopVm` |
+|---|---|---|
+| OS | **macOS ≥ 13.0**, arm64 + x86_64 | Windows Server 2025 Datacenter |
+| Docker | **pinned** — Desktop 4.37.1, Engine 27.4.0 | **none pinned** |
+| runtime installers | **zero** | 2, both `windowsSource…` |
+
+So macOS is not an unsupported platform whose absence is out of contract — **it is a
+first-class host that the same file provisions carefully enough to pin a Docker engine for,
+and then ships no runtime installer for.** That is an internal inconsistency within one
+document, not a gap at its edge. Measured on this machine: `sw_vers` 26.6.2 arm64, Docker
+Engine **27.4.0** — matching `hosts.coordinator.dockerEngineVersion` exactly.
+
+**That same block also predicts the Testcontainers asymmetry this delivery treated as an
+anomaly.** `coordinator` pins a Docker engine; `workshopVm` pins none. `PostgreSqlIntegrationTest`
+passing on this host and being excluded on the VM is therefore **contracted behaviour, not an
+environment surprise** — the runbook's "six skipped is the correct VM result" is consistent
+with the lock, and the lock said so first. The workshop prose discusses the asymmetry as
+something to warn about; the lock already encodes it.
 
 **Answering the question this arm was set:** *does the rewrite guidance reach the same frozen
 contract surface as modernization, or quietly assume divergence?* It reaches it — 14/14
