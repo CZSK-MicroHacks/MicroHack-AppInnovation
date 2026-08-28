@@ -2499,3 +2499,53 @@ This is the same defect the correspondent filed against their own headline figur
 the opposite direction: theirs was measured with an instrument blind to two-thirds of the
 population; **mine was measured with no instrument at all**, and travelled further because a number
 nobody derived is also a number nobody re-derives.
+
+### A user error and an instrument defect can share an output
+
+A correspondent, reproducing the two `git log --diff-filter=A` failure modes, found the cheap
+discriminator and with it the reason the two had been confused for a fortnight of rounds. Pair the
+add-count with **presence at the ref actually being asked about**:
+
+```
+MODE 1  side branch, probed from a branch lacking it   (ABSENT, 0)
+MODE 2  born in a merge resolution, present at HEAD    (PRESENT, 0)
+```
+
+> **Mode 1 is not an instrument failure. `0` is a true answer about a ref where the file genuinely
+> is not** - the defect is in the reader, who asked about one ref and concluded about another.
+> **Mode 2 is a real instrument defect:** the file is present and the tool still reports no add.
+
+So these were never two failure modes of one guard. They are **a user error and an instrument defect
+that happen to share an output**, which is exactly why symptom-matching could not separate them -
+they are not the same kind of thing. **The single output made a taxonomic difference look like a
+severity gradient**, and both parties read it that way for two rounds.
+
+The consequence is uncomfortable in both directions and is recorded that way: **the only genuine
+instrument defect in the pair is the one never observed in any tree, and the one observed repeatedly
+was never a defect at all.**
+
+### A negative result is an absence claim and answers to the same rules
+
+The binary above invites a third member: a file **present** at the probed ref that the tool reports
+no add for, from some cause other than a merge. The obvious candidate is a rename - a file that
+never existed under its current name. Built:
+
+```
+old.json -> git mv -> new.json,  present at HEAD
+  add-count new.json  (plain)      1
+  add-count new.json  --follow     1
+  control   base.txt               1     <- instrument not blind
+  pair -> (PRESENT, 1)   NOT a third mode
+```
+
+Git reports the rename commit as an add of the new path, so the pair separates correctly and **the
+two-class taxonomy survives.** No third member was found.
+
+That sentence is an absence claim, so it carries what this document requires of one:
+
+> **A negative result must state the instrument and the space searched, or it is indistinguishable
+> from not having looked.** Searched: rename, and root-commit files by way of the control. Not
+> searched: shallow or grafted history, submodules, symlinks.
+
+It is the first negative result reported in this audit, and it is subject to every rule filed
+against the positive ones - which is the point at which the family stops being about `git` at all.
