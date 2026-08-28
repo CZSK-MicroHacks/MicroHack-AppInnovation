@@ -1232,7 +1232,7 @@ So: **check the remedy, not the symptom.** If you cannot name what the fix would
 cannot verify the finding's status by reading anything.
 
 **Corollary — the corpus you can list is not the corpus that runs.** Sweeping every tracked
-`.json` in a tree for prose-in-a-JSON found 137 files, 0 defective, which looks like proof the
+`.json` in a tree for prose-in-a-JSON found 138 files, 0 defective, which looks like proof the
 class is extinct. It is not: the artifact that actually carried that defect was a *generated*
 bundle, assembled at test time and invisible to `git ls-files`. The sweep was clean because it
 could not see the thing it was looking for. Confirming the class was remediated meant reading
@@ -2098,3 +2098,55 @@ omitted.** Same address, opposite halves, and each party supplied precisely the 
 had spent the preceding hour insisting on. **Knowing which component is missing is not the same
 capability as noticing that one is** - the first is knowledge, the second is a habit, and only the
 second fires while you are writing.
+
+### Recording the evidence changed the corpus the evidence described
+
+A figure published in this document - *"138 `.json` files, 0 defective"* - was written as `137`. The
+count had not drifted afterwards. It was already wrong when published:
+
+```
+f166e20  publish the measured signal map            -> 137   <- measured here
+216433e  commit the runtime evidence artifacts      -> 138   <- my own commit
+f20058e  publish "137 files, 0 defective"           -> 138   <- stale on arrival
+```
+
+The file that broke it is `evidence/runtime-test-report.json` - **the artifact committed to
+evidence the finding.** It parses as JSON, so `0 defective` still holds and the conclusion is
+untouched; only the denominator was stale.
+
+> **A count is a measurement at a revision, and publishing it at a later one makes it stale with
+> zero elapsed intent.** Here the interval contained a single commit, authored by the same person,
+> for the purpose of supporting the very claim the count appears in. **The act of recording evidence
+> made the evidence a member of the population it describes.**
+
+Right conclusion, wrong figure - the pattern this document filed against another party an hour
+earlier, committed here in its own text, in the entry that warns about corpora nobody checked were
+the right corpus.
+
+### Your own memory is an instrument, and it fails by absence
+
+A message arrived crediting this arm with a sweep it did not recognise: a `.json` enumeration, a
+generated-bundle argument, a constant it had never seen. Checked against recollection, all of it
+read as **absent**, and the conclusion forming was that another track's work had been misattributed
+- which would have been an accusation, not merely an error.
+
+The repository disagreed:
+
+```
+f20058e   docs: record that a tracked-file sweep cannot see a generated artifact   <- mine
+CommonErrors.md:1235   the sweep, the count, the corollary                        <- mine
+```
+
+**It was this arm's own work, from earlier in a long session.** The only reason nothing was sent is
+a standing rule to reproduce before writing - a rule adopted for other people's claims, which
+happened to cover this one.
+
+> **In a long session the least-audited instrument in use is your own recollection, because it does
+> not present itself as an instrument.** Every other tool here announces that it is one. Memory
+> returns absence in the same undifferentiated form as `cat-file`, `.get()` and `grep` - and that
+> absence is indistinguishable from *never happened*.
+
+This is the seventh absence in this document and the only one whose output would have been a claim
+about another party's conduct rather than a wrong technical figure. **The failure mode does not get
+gentler as the stakes rise; it gets quieter, because a memory of not-doing-something feels like
+knowledge rather than a measurement awaiting a control.**
