@@ -407,6 +407,7 @@ Exact prompts, the raw capture commands, and the full evidence assembly are in
 | The validator reports early evidence | You began querying before the alert-bound `IncidentActivitySnapshot` | Recapture the investigation artifacts after the snapshot timestamp and before `AgentResponse`. Ordering is part of the proof. |
 | More than two Container App writes appear in the Activity Log | Someone changed the app during the incident window — a portal click counts | Stop and tell the facilitator; the window has to be re-seeded rather than explained away. |
 | The alert stays `Fired` after a successful rollback | Azure Monitor has not re-evaluated yet | Wait and re-query. Do not force a resolution, and do not stop your recovery clock until the alert actually reads `Resolved`. |
+| `curl` of `/healthz` or `/readyz` never connects, from your laptop, while the app itself is healthy | The Container Apps environment was deployed internal, so ingress is published only inside the virtual network. The facilitator sets this when the subscription blocks public IP creation — check with `az containerapp env list --query "[].{name:name,internal:properties.vnetConfiguration.internal}" -o table` | This is an environment mode, not a failed recovery. Run the probes from a peered host — the migration-source VM — with `az vm run-command invoke`, and record those results as your recovery checks. |
 
 More diagnostics in [the troubleshooting guide](../../docs/Troubleshooting.md).
 

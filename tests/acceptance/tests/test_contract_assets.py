@@ -5358,3 +5358,71 @@ def test_rewrite_runbooks_deselect_the_reference_tree_authoring_guard(
         "participant fails as soon as they commit the Dockerfile checkpoint 4 asks them "
         f"to author; deselect {AUTHORING_GUARD}:\n" + "\n".join(offenders)
     )
+
+
+def test_no_document_prints_the_lead_time_label_the_chapter_disowns(repo_root):
+    """The guard above surveyed the prose; the attendee runs the `jq`.
+
+    `test_lead_time_is_labelled_as_the_interval_it_measures` fixed the front door
+    and the glossary and checked two prose phrasings. It never surveyed the
+    solution, which printed `deployment lead time (commit to live)` from a
+    variable bound to the staging job's `startedAt` — a dispatch time. Challenge 3
+    spends three separate passages disowning exactly that label, so the one place
+    the attendee sees a number was contradicting the chapter that produced it.
+    """
+    offenders = []
+    inspected = 0
+    for path in sorted(repo_root.glob("**/*.md")):
+        if any(part in {".git", "node_modules", "evidence"} for part in path.parts):
+            continue
+        text = path.read_text(encoding="utf-8").lower()
+        inspected += 1
+        if "lead time (commit to live)" in text:
+            offenders.append(path.relative_to(repo_root).as_posix())
+    # The workshop ships far more than this; the floor only has to sit above the
+    # handful of documents that would remain if the glob or the filter broke.
+    assert inspected >= 20, (
+        f"only {inspected} markdown documents were walked; this guard has stopped "
+        "seeing the corpus and would pass on an empty enumeration"
+    )
+    assert not offenders, (
+        "these documents print the lead-time label Challenge 3 disowns, and the "
+        f"interval they measure starts at workflow dispatch: {offenders}"
+    )
+
+
+def test_solution_lead_time_block_matches_the_challenge_it_solves(repo_root):
+    """A solution that relabels the chapter's metric teaches the wrong number."""
+    solution = (repo_root / "solutions/ch03/README.md").read_text(encoding="utf-8")
+    assert "pipeline lead time (dispatch to live)" in solution, (
+        "solutions/ch03 no longer prints the canonical label from challenges/ch03"
+    )
+    assert "$commit" not in solution, (
+        "solutions/ch03 binds a dispatch timestamp to a variable named $commit; "
+        "the name is what made the wrong label look correct"
+    )
+
+
+def test_internal_environment_reachability_reaches_the_chapters_that_hit_it(repo_root):
+    """The consequence was documented only where it is caused, not where it lands.
+
+    `infra/main.bicep` and `infra/modules/environment.bicep` both state, in a
+    parameter description, that an internal environment leaves the app
+    unreachable from "a GitHub-hosted runner or an operator laptop". Two tracks
+    hit exactly those two consequences — Challenge 3's staging smoke probes and
+    Challenge 6's recovery probes — and neither found the note, because neither
+    was reading Bicep. The chapters that own the symptom have to carry it.
+    """
+    for rel in ("challenges/ch03/README.md", "challenges/ch06-sre-agent/README.md"):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        section = text.split("## If it goes wrong", 1)
+        assert len(section) == 2, f"{rel} has no troubleshooting section to carry it"
+        body = section[1].lower()
+        assert "internal" in body, (
+            f"{rel} troubleshooting never mentions the internal environment mode, "
+            "so the attendee meets an unreachable URL with no way to name it"
+        )
+        assert "virtual network" in body or "peered" in body, (
+            f"{rel} troubleshooting names the mode but not where a probe must "
+            "originate, which is the only part that unblocks the attendee"
+        )

@@ -453,20 +453,20 @@ is read-only — it changes no evidence:
 
 ```bash
 jq -r '
-  (.workflow.jobs.staging.startedAt | fromdateiso8601) as $commit
+  (.workflow.jobs.staging.startedAt | fromdateiso8601) as $dispatched
   | (.workflow.jobs.staging.completedAt | fromdateiso8601) as $ready
   | (.approval.approvedAt | fromdateiso8601) as $approved
   | (.traffic.promotion.observedAt | fromdateiso8601) as $live
   | (.traffic.safety.rollbackAttemptedAt | fromdateiso8601) as $undoStart
   | (.traffic.safety.rollbackCompletedAt | fromdateiso8601) as $undoEnd
-  | "deployment lead time (commit to live): \(((($live - $commit) / 60) * 10 | round) / 10) min",
-    "  of which pipeline work:              \((((($ready - $commit) + ($live - $approved)) / 60) * 10 | round) / 10) min",
+  | "pipeline lead time (dispatch to live): \(((($live - $dispatched) / 60) * 10 | round) / 10) min",
+    "  of which pipeline work:              \((((($ready - $dispatched) + ($live - $approved)) / 60) * 10 | round) / 10) min",
     "  of which waiting for a human:        \(((($approved - $ready) / 60) * 10 | round) / 10) min",
     "rollback duration:                     \(((($undoEnd - $undoStart) / 60) * 10 | round) / 10) min"
 ' evidence/cicd-report.json
 ```
 
-Facilitators: collect these two figures from each team. Deployment lead time and rollback
+Facilitators: collect these two figures from each team. Pipeline lead time and rollback
 duration against a manual weekend release are the numbers participants take back to their
 own organizations.
 
