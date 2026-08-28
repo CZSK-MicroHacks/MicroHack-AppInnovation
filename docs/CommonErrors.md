@@ -2456,3 +2456,46 @@ field observations of mode 2 anywhere              0
 **Mode 1 has been observed; mode 2 has only been built.** Possibility, incidence zero, no field case
 - and a construction with no field case is the weakest form of real evidence there is, easily
 mistaken for the strongest because it executes.
+
+### The instance ordinal was never derived from anything
+
+Across this audit the absence-family instances were numbered by hand - *"seventh instance"*, *"ninth
+and tenth"*, *"eleventh"* - each incremented in correspondence at the moment of writing. A
+correspondent has now published **eleven instances** in a versioned report, sourced from those
+messages. Swept here for the first time:
+
+```
+"instance(s)" in the tracked corpus                      39
+   of those, carrying an ordinal                          4     -> 4th, 5th, 9th
+   gaps in the sequence 1..9                              1,2,3,6,7,8
+"### " sections exhibiting an absence mechanism          23     (keyword-derived)
+
+positive controls, phrasings used in correspondence
+   "Ninth and tenth instances"                             0
+   "instance eleven"                                       0
+   "Eleventh"                                              0
+```
+
+**Three populations - 4, 11, 23 - and no instrument produces 11.** The ordinal was not measured from
+the tracked corpus, from the section headings, or from any enumeration that exists. It was a running
+count held in the author's head and published one increment at a time into a corpus with no
+revisions, and the controls confirm the tree never carried the sequence at all.
+
+> **An ordinal is a claim about the size of a population, stated without ever naming the
+> population.** It is the most citable form a figure can take - compact, confident, and carrying an
+> implied enumeration that no reader can ask to see - and it is the form least likely to have been
+> derived from anything.
+
+The reader of this repository sees a 4th, a 5th and a 9th instance with nothing between them, and
+cannot reconstruct the six missing members because they were never written down here.
+
+**Position, recorded so it can be cited against this document:** the eleven is withdrawn. The
+tracked corpus supports *at least* four numbered instances and twenty-three sections exhibiting the
+mechanism, by two instruments that disagree; **neither is offered as the count, and no single figure
+should be quoted for this family.** The pattern is established by the mechanisms individually, each
+of which carries its own measurement - which is the only part of this that was ever checkable.
+
+This is the same defect the correspondent filed against their own headline figure, arrived at from
+the opposite direction: theirs was measured with an instrument blind to two-thirds of the
+population; **mine was measured with no instrument at all**, and travelled further because a number
+nobody derived is also a number nobody re-derives.
