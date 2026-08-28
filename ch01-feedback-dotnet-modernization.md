@@ -3068,3 +3068,150 @@ Worth noting what produced this: I only looked because the facilitator's challen
 back to the estate, and the Owner assignment is visible in the same
 `az role assignment list` output I ran to answer a completely different question. **Neither
 of us would have checked it, because neither of us doubted it.**
+
+## Retraction: my "granted outside the template" claim was false, and my grep could not have found the counter-evidence
+
+In the F-169 correction above I wrote that the Owner grants were *"granted pre-workshop,
+outside the template,"* citing a grep for the Owner role GUID across `infra/` that returned
+zero. **The claim is false.** Both grants are in the template:
+
+`baseInfra/terraform/modules/user_environment/rbac.tf`
+
+| Lines | Resource | Principal | `principalType` |
+| --- | --- | --- | --- |
+| `:6-25` | `rg_owner_role_assignment` | the participant | `User` |
+| `:27-41` | `vm_identity_owner`, `for_each = local.stacks` | **both VM identities** | `ServicePrincipal` |
+
+Line `:13` and line `:35` both assign `local.owner_role_definition_id`, defined at `:2` as
+the Owner GUID. The grant to the VM identities is deliberate, parameterised over both
+stacks, and load-bearing.
+
+**The error is not that I searched and missed it. It is that I searched a subtree that
+could not contain it and reported the empty result as evidence of absence.** The
+infrastructure in this repository lives in *two* top-level directories — `infra/` and
+`baseInfra/` — and `baseInfra/` is present in my worktree. Nothing prevented me from
+finding this except that I chose the filter and then trusted its output.
+
+This is worth stating precisely because of how it reads in the report. The sentence
+*"grep across all of `infra/` returns zero"* is **literally true**. Every word of the
+evidence is accurate. The inference drawn from it — *therefore no IaC grants Owner* — is
+false, and the reader cannot detect the gap, because the report does not say that another
+infrastructure directory exists. **A scoped negative published without its scope is
+indistinguishable from a global negative.**
+
+That generalises past this instance:
+
+> A negative result is only evidence of absence if the search space is stated *and*
+> justified. `grep -rn X infra/` returning zero is evidence about `infra/`. Publishing it as
+> evidence about the repository requires a separate claim — that `infra/` is where such a
+> thing would be — and **that claim is the one that was never made and never checked.**
+
+I have made the identical mistake this run at least once before, with the whole-file counts
+that led to the F-170 pointer error: there I checked whether the file named the variable and
+inferred that the reader had no route to it. Same structure — a true measurement, an
+unstated assumption about sufficiency, a false conclusion.
+
+The consequence here was contained only because the facilitator checked. Their own account
+is that they ran the same `grep -rn <owner-guid> infra/`, got the same zero, and were
+drafting a finding against the estate when the repository's own test suite contradicted
+them. **Three parties reached the same false conclusion from the same filter in one round.**
+That is not three mistakes; it is one defect in the method, made three times.
+
+### Minor, found while verifying: the namespace comment in `rbac.tf` is wrong
+
+`baseInfra/terraform/modules/user_environment/rbac.tf:3`
+
+```hcl
+role_assignment_ns = "b24988ac-6180-42a0-ab88-20f7382dd24c" # reuse Owner GUID as stable UUIDv5 namespace
+```
+
+`b24988ac-6180-42a0-ab88-20f7382dd24c` is the **Contributor** role definition ID. Owner is
+`8e3af657-a8ff-443c-a75c-2fe8c4bcb635`, used correctly two lines above at `:2`.
+
+Functionally harmless — a UUIDv5 namespace only needs to be stable, and any GUID serves.
+**The hazard is the obvious cleanup.** A maintainer who notices the mismatch and "corrects"
+the value to the real Owner GUID changes the computed `uuidv5` name of *every* role
+assignment in the module, and Terraform will destroy and recreate all of them — including
+the participant's Owner grant on their own resource group. A one-character-class edit that
+looks like a comment fix and is actually a privilege interruption.
+
+It belongs to the same family as the rest of this report: **the comment is wrong in a
+direction that invites a change, and nothing in the file warns that the value is
+load-bearing beyond its own literal.**
+
+## F-170, third refutation: the paragraph exists, and the variable name is not in it
+
+The facilitator refuted my *second* framing — that no document describes the variable as one
+you inherit — by citing the Machine-scope paragraph in `docs/Troubleshooting.md`. **They are
+right, and I verified it in my own tree** (`docs/Troubleshooting.md:202-205`, under the
+heading `` `--base-url or CATALOG_BASE_URL is required` ``):
+
+> The acceptance CLI reads `CATALOG_BASE_URL` from the environment. Provisioning persists
+> it — along with `CATALOG_DATABASE_HOST`, `_PORT`, `_NAME`, `_USERNAME`, and the corpus
+> paths — at Machine scope, so only shells started *after* provisioning finished inherit
+> them.
+
+Inheritance is stated. Machine scope is stated. My second framing is dead.
+
+Their replacement framing is **misindexing**: the paragraph is filed under an error the
+poisoned attendee never sees. That is correct and I accept it. But there is a fourth-level
+defect it does not cover, and the two need separating because **they have different
+remedies**.
+
+### The recovery move that defeats misindexing also fails here
+
+An attendee who cannot find a paragraph by its heading has one obvious next move:
+**full-text search for the variable name from the error**. Against misindexing alone, that
+move works — the text is present, so Ctrl-F finds it and the wrong heading stops mattering.
+
+Here it does not work, because **the paragraph does not contain the variable name.** It
+writes `CATALOG_DATABASE_HOST` in full and then elides the rest to `` `_PORT` ``,
+`` `_NAME` ``, `` `_USERNAME` ``. Measured:
+
+| Search | Scope | Hits |
+| --- | --- | --- |
+| `CATALOG_DATABASE_USERNAME` | every file in `docs/` | **0** |
+| `CATALOG_DATABASE_USERNAME` | `docs/Troubleshooting.md` | **0** |
+| `_USERNAME` | `docs/Troubleshooting.md` | 1 — line `:203`, inside the elision |
+
+So the one document that explains the mechanism is unreachable by **both** routes
+independently: not by heading, because it is indexed under a different symptom; and not by
+search, because it never spells the name the attendee is searching for.
+
+**This matters for the fix.** Correcting the index alone — adding the real error message as
+a heading, or cross-linking it — leaves the search route broken, because the elision is
+still there. An attendee who has learned to distrust headings and go straight to full-text
+search, which is the more experienced habit, is *no better off after the index fix than
+before it*. The two failures are independent and both need addressing:
+
+1. index the paragraph under the error the poisoned attendee actually sees;
+2. spell `CATALOG_DATABASE_USERNAME` in full at least once where the inheritance is described.
+
+The second is a four-word edit and it is the one that survives a reader who ignores every
+heading in the file.
+
+### The error string is absent more broadly than reported
+
+The facilitator reported zero occurrences of the poisoned-run error in
+`docs/Troubleshooting.md` and in `challenges/`. Measured across **every markdown file in the
+repository**, `forbids username and password` occurs **once** — at
+`ch01-feedback-dotnet-modernization.md:2353`, in this report. It appears nowhere in the
+workshop material at all. The searchable index for that error is a document written by the
+person who hit it.
+
+### And the .NET Copilot runbook is the one .NET runbook that omits the name
+
+Full-string occurrences of `CATALOG_DATABASE_USERNAME` across the four .NET documents:
+
+| Document | Occurrences |
+| --- | --- |
+| `solutions/ch01-copilot-modernization/dotnet/README.md` | **0** |
+| `solutions/ch01-copilot-rewrite/dotnet/README.md` | 1 |
+| `solutions/ch01-manual/dotnet/README.md` | 3 |
+| `solutions/reference/dotnet/README.md` | 3 |
+
+The path I was assigned is the only .NET path whose runbook never writes the variable's
+name. Combined with the pointer at `:250` — which is real, and which I was wrong to say was
+absent — the accurate statement is: **the .NET Copilot attendee's own document never names
+the variable, and the document it points to explains what the variable means but not that it
+is already set.** The route exists; it does not lead anywhere that resolves the failure.
