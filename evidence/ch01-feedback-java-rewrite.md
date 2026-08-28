@@ -521,9 +521,22 @@ $ javac --release 17 …   # positive control
 
 So a rewrite participant who does the most natural thing available to them — open
 `solutions/reference/java/` to see what "finished" looks like — gets a tree that is
-**path-identical for 75 files, byte-identical for 64 of them, and will not build on their
-machine.** Nothing in the rewrite guidance says the reference is a different major version.
-The failure surfaces as import errors in files whose paths they recognise.
+~~path-identical for 75 files, byte-identical for 64 of them~~ **path-identical for 54
+files, byte-identical for 45 of them, and will not build on their machine.** Nothing in
+the rewrite guidance says the reference is a different major version. The failure
+surfaces as import errors in files whose paths they recognise.
+
+> **Corrected against the original figure, which reproduces nowhere.** `54 / 45` is
+> `git ls-tree -r` over `solutions/reference/java` against `java`, blob-hash compared,
+> and it is stable at `4bf59f7` **and** at this arm's HEAD. The struck `75 / 64` was
+> published without a ref or a command and could not be reproduced at either ref or
+> under any other comparison scope tried (`solutions/reference` whole, and the rewrite
+> track's own `java/` copy, both of which share only 1 path). Because it was published
+> bare, **there is no way to tell whether it was drift, a different instrument, or an
+> error** — which is this document's own rule about bare figures, arriving against this
+> document. The direction of the finding is unchanged: 54 of the 54 files under `java/`
+> are path-shared with the reference, so a participant still recognises essentially the
+> whole tree. The magnitude was overstated by roughly two fifths.
 
 **The installer asymmetry is the aggravator, and it is workshop-wide rather than Java-only.**
 The lock contains **five** installer keys — two under `runtimes.*` (`windowsSourceSdkInstaller`,

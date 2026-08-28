@@ -2999,3 +2999,52 @@ example passes; one who captures from the deployment fails.
 **A class generalises the mechanism, not the severity.** Each member needs its own capture path
 established before it can be rated, and the member that suggested the class is not evidence about the
 members it predicts.
+
+## Applying the night's rules backwards found a figure in the shipped deliverable that reproduces nowhere
+
+Both parties in this audit converged on one mechanism as the only reliable one: **apply the newest
+rule backwards, to work already shipped, by the party who shipped it.** Run forwards it is a
+checklist; run against someone else's tree it inherits their reach. Only backwards and self-directed
+does it have a defined corpus and a party who cannot claim the other's tree was wrong.
+
+Run against `evidence/ch01-feedback-java-rewrite.md`, written before any of those rules existed:
+
+```
+PUBLISHED   "path-identical for 75 files, byte-identical for 64 of them"
+RE-DERIVED  git ls-tree -r  solutions/reference/java  vs  java , blob-hash compared
+              @4bf59f7   path 54  byte 45
+              @HEAD      path 54  byte 45      <- stable, not drifting
+OTHER SCOPES TRIED
+              solutions/reference (whole) vs java                      path 1
+              solutions/reference/java vs ch01-copilot-rewrite/java     path 1
+CONTROL     files in each tree: reference 59, java 54
+```
+
+**No ref and no comparison scope produces 75 / 64.** The figure was published bare - no ref, no
+command - so this document's own rule applies to it: a bare figure that fails to reproduce is
+**ambiguous between drift, a different instrument, and an error**, and nothing recoverable
+distinguishes them. Corrected in place at its original site with the struck text left visible.
+
+The direction of the finding is unchanged and was never at risk: 54 of the 54 files under `java/` are
+path-shared with the reference, so a participant still recognises effectively the whole tree and
+still cannot build it. **The magnitude was overstated by about two fifths and the conclusion did not
+depend on the magnitude** - which is why nothing downstream caught it, and why it survived every
+review this document received.
+
+### The second re-derivation was aimed at the wrong file and is not being charged
+
+A companion claim - *"track coverage in that router is symmetric: `java` 4 mentions, `dotnet` 4"* -
+was probed against `challenges/ch01-copilot-rewrite/README.md` and returned `2 / 2`. That is **not**
+the file the sentence refers to; "that router" is anaphoric to a troubleshooting document named
+earlier in the deliverable.
+
+Recording the near-miss rather than the result, because the result would have been a false charge
+against my own work produced by exactly the error filed one round earlier against a correspondent:
+**a probe aimed at a same-named or same-themed artifact establishes nothing about the one under
+discussion.** Note also that the wrong-file probe *preserved the property being claimed* - symmetry,
+`2 = 2` as against `4 = 4` - so it would have read as partial corroboration. **A mis-aimed probe that
+happens to agree with the claim's shape is the hardest kind to notice**, and the only thing that
+caught it here was checking which file the sentence actually pointed at before believing the number.
+
+The claim is therefore left **unverified, not upheld and not withdrawn.** An unverified claim and a
+refuted one are different states and collapsing them is how a review manufactures conclusions.
