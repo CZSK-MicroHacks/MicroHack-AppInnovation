@@ -1118,3 +1118,40 @@ is why the safe and unsafe forms look nearly identical on the page.
 Mechanism A and mechanism B are different bugs that produce a byte-identical artifact, and in
 every recorded instance the claim they would have supported was not merely unproven but **the
 exact opposite of the truth** — zero versus 28, or a document said to be silent that is not.
+
+### When to mechanise this rule instead of documenting it
+
+Four rounds of this entry were caught by a person noticing at the right moment. The fifth was
+caught by `test_every_bash_block_binds_every_variable_it_expands`, which failed an unbound
+`$path` in the remedy directly above. **A test needs nobody to be paying attention**, so the
+obvious conclusion is to mechanise the rest of the rule too.
+
+That was measured over this repo's markdown corpus and **it does not work**, which is worth
+recording so nobody spends the afternoon again. After discarding the extractor's own
+artifacts — `VAR=value` assignments read as paths, and links that resolve relative to their
+own document rather than the repo root — **573** path citations remain, **239** of them
+unresolvable. They partition cleanly, and the partition is the point:
+
+- **participant outputs** (`evidence/…`) — **219** — absent *by design* until a run;
+- **historical changelog entries** in `docs/ImplementationLog.md` — **18** — describing a
+  tree shape that has since been restructured; accurate when written, not defects now;
+- **generated directories** — **1** — `data_seed/`, the data generator's default `OUTPUT_DIR`;
+- **imprecise but resolvable** — **1** — `docs/Facilitator.md:917` cites
+  `modules/environment.bicep`; the file is at `infra/modules/environment.bicep` and the same
+  sentence names `infra/main.bicep` two lines above, so a reader resolves it. Cosmetic.
+
+Genuine broken references: **zero**. **238 of 239 are correct documentation** and the last is
+a shortened prefix in a sentence that supplies the prefix.
+
+The difference is not that one rule is more important. **An unbound variable has no
+legitimate instances in a shell script, so any occurrence is a defect. A path that does not
+exist has many legitimate instances in documentation, so occurrence proves nothing.** That is
+the criterion:
+
+> A verification rule can be mechanised when its defect class has **no legitimate instances**
+> in the corpus it guards. Otherwise a guard is only an exemption list, and the exemptions are
+> where the real defects will hide.
+
+Documenting the rule is not the weaker option here; it is the only correct one, because the
+judgement the rule needs — *is this path absent because it is wrong, or because it has not
+been produced yet?* — is exactly what a guard cannot make.
