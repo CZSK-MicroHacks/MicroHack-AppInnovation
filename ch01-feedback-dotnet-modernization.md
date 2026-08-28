@@ -2366,9 +2366,56 @@ CATALOG_BASE_URL = http://localhost:5000
 `contracts.py:370` then rejects the run. **The error names an argument the attendee never passed,
 from a variable the material never mentions, in a shell they never polluted.** Blame-inverting,
 and it hard-stops managed acceptance on the shipped image. The one-line fix is to clear the
-variable first — `solutions/ch01-manual/dotnet/README.md:342-343` does exactly that, but at
-*teardown*, so the codebase knows about the variable and simply never clears it *before*
-acceptance.
+variable first — `solutions/ch01-manual/dotnet/README.md:342-343` does exactly that.
+
+> **Correction (facilitator, upheld).** I wrote that `:342` sits at *teardown*. It does not.
+> It sits directly under the managed-identity setup block
+> (`CATALOG_DATABASE_AUTHENTICATION = 'managed-identity'`, `AZURE_CLIENT_ID`) and immediately
+> **before** `dotnet run`. That inverts the reading in my favour and against the material:
+> the authors did not merely know the variable exists, they knew it **poisons a
+> managed-identity run** and cleared it at the application call site — while leaving the
+> acceptance call site, which enforces the same rule at `contracts.py:370`, unprotected.
+> Knowledge present at one call site, absent at the other. I also mis-cited
+> `_require_resource_state` as `azure.py:59-82`; it is at **`azure.py:87`** (`:59-82` is
+> `_resource_provisioning_state`). Both corrections are mine to own.
+
+**The sharper form: the defence against inherited variables is incidental, not designed.**
+
+Measured against `origin/rewrite-integration` at `9c14770` (55 commits past my base), in the
+Copilot path's own runbook — the document a Path 1C attendee actually reads:
+
+| Machine-scope variable (baked into the VM image) | What the runbook does at the acceptance call | Outcome |
+| --- | --- | --- |
+| `CATALOG_DATABASE_HOST` | sets it explicitly (`:508`) | masked |
+| `CATALOG_DATABASE_NAME` | sets it explicitly (`:509`) | masked |
+| `CATALOG_BASE_URL` | overridden via `--base-url` (`:517`) | masked |
+| `CATALOG_DATABASE_PORT` | untouched | survives as `1433` — harmless by coincidence |
+| **`CATALOG_DATABASE_USERNAME`** | **untouched** | survives as `catalog` → `cli.py:73` → `contracts.py:370` → **hard stop** |
+
+The runbook is entirely fluent in the idiom that would fix this. It issues
+`Remove-Item Env:` **eight times across five variables** — `SQLCMDACCESS_TOKEN`,
+`PERFTEST_API_KEY`, `MIGRATION_SOURCE_DATABASE_PASSWORD`,
+`MIGRATION_TARGET_ADMINISTRATOR_PASSWORD`, `MIGRATION_TARGET_APPLICATION_PASSWORD`. Every
+one of those five is a secret **the runbook itself told the attendee to set**. Not one
+inherited variable is ever cleared.
+
+So the rule is: **the runbook cleans up what it created, and never cleans up what the image
+created.** The three inherited variables that *are* neutralised are neutralised as a side
+effect of work the runbook had to do anyway — it sets `HOST`/`NAME` because it must point at
+the release target, not because it is defending against inheritance.
+`CATALOG_DATABASE_USERNAME` is the **only inherited variable with no independent reason to be
+set**, and therefore the only one that falls through.
+
+That makes the finding generative rather than a one-off omission: any machine-scope variable
+the runbook has no separate reason to assign will fail the same way, and the fix is not
+"add one `Remove-Item`" but "clear the inherited set explicitly, so the defence stops being
+accidental."
+
+**Measured upstream, not assumed.** `CATALOG_DATABASE_USERNAME` appears **zero** times in
+`solutions/ch01-copilot-modernization/dotnet/README.md` and **zero** times anywhere under
+`challenges/`, at `9c14770` — i.e. after the F-137 fix landed. I checked upstream before
+claiming the gap, having previously reported finding 20 as live when it had already been
+fixed by `859767d`.
 
 **The half that matters more.** Those same variables are the defaults for `--database-host`
 (`cli.py:53`) and `--database-name` (`cli.py:68`), and they name the **legacy source** SQL
