@@ -472,24 +472,36 @@ def test_ch00_baseline_filename_is_derived_from_the_stack_variable():
         )
 
 
-def test_ch01_warns_that_modernizing_ends_the_legacy_application():
-    """Challenge 1 edits configuration in the tree the legacy app boots from.
+def test_ch01_warns_that_modernizing_can_end_the_legacy_application():
+    """Challenge 1 may edit configuration in the tree the legacy app boots from.
 
-    That destroys the workshop's "before" system silently and permanently, and the
-    wrap-up later asks for a comparison against it (F-103).
+    When it does, the workshop's "before" system stops permanently and silently, and
+    the wrap-up later asks for a comparison against it (F-103). The two stacks diverged
+    during the trial run -- Java repointed in place and died, .NET did not -- so the
+    warning must be conditional rather than absolute, and must still name the surviving
+    record and the preserving copy.
     """
     text = (ROOT / "challenges" / "ch01" / "README.md").read_text(encoding="utf-8")
     lowered = text.lower()
 
-    assert "ends the legacy application" in lowered, (
-        "challenges/ch01 must warn that the legacy application stops running"
+    assert "can end the legacy application" in lowered, (
+        "challenges/ch01 must warn that the legacy application can stop running"
+    )
+    assert "ends the legacy application" not in lowered, (
+        "the warning must not claim the loss is certain -- the .NET arm modernized "
+        "without it, so an absolute claim is false and teaches attendees to ignore it"
     )
     assert "legacy-source" in text, (
         "challenges/ch01 must offer the copy that preserves the legacy tree"
     )
 
-    warning = lowered.index("ends the legacy application")
+    warning = lowered.index("can end the legacy application")
     body = lowered[warning : warning + 1600]
     assert "challenge 0" in body, (
         "the warning must point back to Challenge 0 evidence as the surviving record"
     )
+    for config in ("application.properties", "appsettings.json"):
+        assert config in body, (
+            f"the warning must name {config} -- the edit that causes the loss is "
+            "otherwise unguided, and no other document mentions these files"
+        )
