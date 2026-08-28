@@ -2030,7 +2030,8 @@ absence:
 
 ```
 sibling candidate at 4bf59f7            4bf59f7    integration branch
-handoff.py                              present    present        <- valid
+tests/acceptance/catalog_acceptance/
+  handoff.py                            present    present        <- valid
 workshop/toolchain.lock.json            present    present        <- valid
 docs/TelemetryFaultInjection.md         ABSENT     present        <- FALSE ALARM
 ```
@@ -2294,3 +2295,47 @@ one that decides whether to act:
 > mechanism without its population count is how a latent defect gets filed with the urgency of a
 > live one - the same over-claim as reporting a single found instance as if it were a pattern,
 > arrived at from the opposite direction.
+
+### The remediation pattern could not see the citations it was meant to fix
+
+An earlier entry audited ambiguous citations in these documents, found six of eleven naming a
+basename with more than one home, fixed three and declared the class handled. The audit pattern was
+`basename:line`. Re-checked against the same basename from a different direction:
+
+```
+handoff.py at 4bf59f7
+  tests/acceptance/catalog_acceptance/handoff.py   1288 lines
+  tests/acceptance/catalog_migrate/handoff.py       253 lines
+  bare `4bf59f7:handoff.py`                        ABSENT   <- resolves at the repository root
+```
+
+**Mentions carrying no line number were structurally invisible to the audit.** The pattern required
+a colon; a bare `handoff.py` in prose or in a table cell has none, so the remediation swept a subset
+defined by its own syntax and reported the class closed. Same aggregation-unit defect as the one
+this document already files - committed inside the fix for it.
+
+One real defect was found this way: a sibling-probe evidence table recorded the row `handoff.py
+present present` while its two neighbours carried full paths. **The path as written resolves ABSENT
+if executed literally** - a table asserting a successful presence check, containing a probe that
+would fail. Corrected to the full path.
+
+### The measurement that raised the alarm was itself over-counting
+
+The same check reported five bare mentions. The instrument was `grep -o 'handoff\.py'`:
+
+```
+unanchored  handoff\.py                        7
+anchored    (^|[^A-Za-z_/])handoff\.py         4
+```
+
+`handoff.py` is a **substring of `test_migration_handoff.py`**, so an unqualified basename pattern
+matches a different file three times. Of the four real mentions, three are legitimate - the citation
+is the subject of the sentence, shown ambiguous deliberately - leaving exactly one defect.
+
+> **A basename pattern with no boundary anchor matches every filename that ends with it**, and the
+> over-count arrives as evidence of a problem rather than of a bad pattern. Absence has dominated
+> this document because it is silent; this is the loud failure, and it is more persuasive - a
+> spurious non-zero reads as confirmation, and nobody re-derives a count that agrees with their
+> suspicion.
+
+Ninth and tenth instances, both in the check written to verify a correspondent's compliment.
