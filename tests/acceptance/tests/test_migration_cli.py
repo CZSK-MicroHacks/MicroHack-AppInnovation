@@ -659,3 +659,59 @@ def test_bootstrap_commands_reject_application_output(
     )
 
     assert result == 2
+
+
+def test_both_database_clients_decode_as_utf8_like_the_catalog_they_compare() -> None:
+    """The decode must match the data, and the fixture proves why it must.
+
+    This pins a *relation*: the seed catalog is UTF-8 and contains characters
+    that no single-byte console code page can decode, so any client output
+    decoded through the host locale either mojibakes the row or raises far from
+    the call site. Pinning one client and leaving the other on the interpreter
+    default is the failure this guard exists to prevent, so it fails if the
+    decoding becomes conditional on which client is running again.
+    """
+    root = Path(__file__).resolve().parents[3]
+    source = (
+        root / "tests/acceptance/catalog_acceptance/database.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'if client_name == "psql" else {}' not in source, (
+        "database client decoding must not be conditional on the client; the "
+        "sqlcmd path was left on the interpreter default and failed on cp1252"
+    )
+    assert '{"encoding": "utf-8", "errors": "strict"}' in source
+    assert "UnicodeDecodeError" in source, (
+        "a decode failure must be named, not surface as AttributeError on None"
+    )
+
+    fixture = (root / "tests/acceptance/fixtures/catalog.valid.json").read_bytes()
+    try:
+        fixture.decode("cp1252")
+    except UnicodeDecodeError:
+        return
+    raise AssertionError(
+        "the fixture no longer proves the hazard; if it became cp1252-clean the "
+        "UTF-8 pin above must be re-justified rather than assumed"
+    )
+
+
+def test_a_crashing_acceptance_run_cannot_leave_a_stale_report_on_disk() -> None:
+    """The report is written after the run, so a crash must not preserve the old one.
+
+    Without this the sequence green run, fault injection, crashing re-run leaves
+    a pre-injection green report in place, and the handoff certifies an
+    acceptance result that predates the changes it is attesting to.
+    """
+    root = Path(__file__).resolve().parents[3]
+    source = (
+        root / "tests/acceptance/catalog_acceptance/cli.py"
+    ).read_text(encoding="utf-8")
+
+    unlink = source.find("unlink(missing_ok=True)")
+    run = source.find("AcceptanceRunner(settings).run()")
+    assert unlink != -1, "the previous report must be removed before the run"
+    assert unlink < run, (
+        "the stale report must be removed *before* the run, otherwise a crash "
+        "inside run() preserves it"
+    )

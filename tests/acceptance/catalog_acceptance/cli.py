@@ -175,6 +175,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         verify_import=not arguments.skip_import,
         verify_all_images=not arguments.sample_images,
     )
+    if arguments.output:
+        # A crashing run must not leave the previous report on disk looking
+        # current: the report is written after the run, so any failure inside
+        # run() would otherwise preserve a stale -- possibly green, possibly
+        # pre-fault-injection -- result that the handoff would then certify.
+        arguments.output.unlink(missing_ok=True)
     report = AcceptanceRunner(settings).run()
     rendered = json.dumps(
         report.model_dump(
