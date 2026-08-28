@@ -3243,3 +3243,54 @@ The disposition rule is the general one, and it is the mirror of an entry alread
 The practical residue for a close-out: **preservation and delivery need separate figures**, and an
 arm reporting a clean number on one of them has said nothing about the other. Reporting `0` here was
 honest, invariant, and would have shipped a branch attached to nothing.
+
+## The wrap-blindness population did not exist before the audit that measured it
+
+A correspondent found that their own findings had created 35.1% of the population their
+wrap-blindness figure described, and named the effect: the report is its own corpus, so measuring it
+is an intervention. Run against this file, the effect is not 35% but total.
+
+```
+ref        label              lines  bolded  wrapped  blind   %wrap   %all
+4bf59f7    workshop baseline    904       8        0      0     n/a    0.0%
+5b53fe7    pre-audit            995      14        0      0     n/a    0.0%
+968a639                        2834     249       95     94   98.9%   37.8%
+e505a54    the published one   2889     253       98     97   99.0%   38.3%
+8fb9e35                        3208     296      118    117   99.2%   39.5%
+HEAD                           3245     301      120    119   99.2%   39.5%
+
+293 of 301 bolded rules (97.3%) were written by this audit.
+At the workshop baseline this file had ZERO wrapped bolded rules.
+CONTROL docs/CommonErrors.md present at 4bf59f7 (fires) · failure-shaped absent
+```
+
+**Wrap-blindness is not a property of the workshop's material. It is a property of the prose this
+audit added to it**, and the finding was reported as though it described the document an attendee
+opens. The document an attendee opens, at the shipped baseline, contains no instances at all.
+
+### And the stable ratio does not mean what both parties took it to mean
+
+Both parties independently observed that absolutes moved while proportions held, and concluded that
+**only ratios are quotable**. The ratios:
+
+```
+this file          98.9% -> 99.2%   across six states
+correspondent      89.7% -> 90.9%   across eleven states
+```
+
+Each is remarkably stable. **They are stable at different values, and they do not converge.**
+
+> If the ratio measured the phenomenon, two instruments on the same phenomenon would agree. These
+> disagree by eight points and each holds to a tenth of a percent. **A ratio computed over a
+> population you authored is stable because it measures your own writing habit** - how long your
+> bolded rules run before they wrap - **and it is guaranteed to be stable for that reason alone.**
+
+So the remedy both parties adopted is half right. **Ratio stability is not evidence of validity when
+the population is observer-created; it is evidence of stylistic consistency**, which is exactly what
+you would expect and carries no information about the subject under audit.
+
+The correspondent's report is the limiting case: absent at the workshop baseline **and** absent at
+its own integration branch, so its observer contribution is not 35.1% but 100%, and the 35.1% was
+measured from a mid-audit backup mistaken for an origin.
+
+**Before quoting a prevalence from a corpus, establish that the corpus predates the measurement.**
