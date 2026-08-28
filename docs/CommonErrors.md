@@ -2192,3 +2192,51 @@ mechanism rather than about this repository, ship the minimal construction along
 measurement.** The measurement shows it is real here; the construction shows it is real anywhere,
 and it survives being read by someone with a different checkout, a different branch, or no checkout
 at all.
+
+### The normalization that is correct for one question is wrong for the next
+
+The five-layer markdown normalizer built earlier in this document drops fenced code blocks, because
+for the question *"is this claim asserted in prose?"* a fence contains quoted data, not an
+assertion. It was then reused, unchanged, for a different question - *"does this claim have a home
+in the repository?"* - and returned three false negatives:
+
+```
+claim                      fences dropped   fences kept   truth
+positive-control numbers          0              1        in a code fence
+6-of-11 citation figures          0              1        in a code fence
+two-line construction             0              1        in a code fence
+```
+
+For the second question, **a fence is exactly where the evidence lives** - tables of measurements
+and runnable fixtures are fenced by construction. Same instrument, same corpus, same author, one
+question later, and the normalization that made it correct made it blind.
+
+> **A normalizer encodes the question it was built for.** Reusing it silently re-asks that question
+> instead of the new one, and the answer is returned in the vocabulary of the new question. This is
+> not a wrong corpus, a wrong revision or a wrong unit - **it is the right instrument aimed at the
+> right data, answering something you are no longer asking.**
+
+Ninth absence instance here, produced by the check written to audit the author's own discipline.
+
+### The unversioned corpus is the one nobody sweeps
+
+The same check, once corrected, found one claim with **no tracked home at all**: a six-item
+enumeration asserting that every non-reproduction in this audit failed by corpus anchoring rather
+than by being wrong. It was composed directly in correspondence and never committed.
+
+The standing rule here was *commit before messaging*, and it held for every claim but the last -
+because the last was not a report of work already done, it was **a new synthesis written in the
+channel.** That is the case the rule does not cover: it guards claims that summarise commits, not
+claims that are born in a message.
+
+> **A message stream is a corpus with no revisions, no sweep and no reader who audits it - and it is
+> quoted into artifacts that do have all three.** Every propagation guard in this document operates
+> on tracked files. None of them can see the place where the most general claims were first stated.
+
+Worse on inspection, the untracked claim was also **over-scoped**: it asserted six non-reproductions
+when only four were verified here and two were reported by a correspondent whose tree this author
+cannot read. The claim that escaped the sweep is the one that needed it - not by coincidence, but
+because **a synthesis is exactly the kind of claim that outruns its evidence**, and committing it is
+what would have forced the count.
+
+Recorded in its honest form: **four verified, two reported**, and the pattern holds across the four.
