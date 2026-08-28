@@ -114,29 +114,50 @@ are about.
 
 ## Corrections this arm made to its own work
 
-Two claims filed by this arm were withdrawn after checking rather than defending them:
+Five corrections were made to this arm's own filings. Two were surfaced by the facilitator
+declining to take the arm's word; three the arm found by re-checking claims it had already
+made. Listed in the order they happened:
 
-- A claim that four environment variables were undocumented. They are documented, in one
-  table, four rows below where the search stopped.
-- A claim that the non-VM prerequisite path was unstated. It is stated, in
-  `docs/CommonErrors.md` entry 101, which names this exact symptom, cause and resolution.
-  This arm had invented a Homebrew route the material never mentions, hit its failure, and
-  filed that as a workshop defect. The invented route was then *shipped* into
-  `java/README.md` and the error registry. Retracted at `1fa80cf`.
-- The retraction was itself an overreach and needed a second correction at `8033b29`. It
-  read entry 101's *"do not install an unpinned JDK"* as forbidding host installs, and on
-  that basis **deleted** the registry's only answer to a real failure — the Homebrew cask
-  aborting in a non-TTY shell — while asserting in two files that a tarball or cask "is the
-  wrong answer even when it appears to work". The registry makes no such prohibition: that
-  sentence sits in a container-build context where *unpinned* means *not digest-pinned*.
-  Three attempts to salvage the claim all failed. The entry was restored verbatim and both
-  files corrected.
+1. **"The non-VM prerequisite path is unstated."** Refuted — `docs/CommonErrors.md` entry
+   101 names this exact symptom, cause and resolution. This arm had invented a Homebrew
+   route the material never mentions, hit its failure, and filed that as a workshop defect.
+   The invented route was then *shipped* into `java/README.md` and the error registry.
+   Withdrawn; retracted at `1fa80cf`.
+2. **"Four environment variables are undocumented."** Refuted by the facilitator — all four
+   are documented in one table, four rows below where the search stopped.
+3. **The retraction in (1) was itself an overreach**, corrected at `8033b29`. It read entry
+   101's *"do not install an unpinned JDK"* as forbidding host installs, and on that basis
+   **deleted** the registry's only answer to a real failure — the Homebrew cask aborting in
+   a non-TTY shell — while asserting in two files that a tarball or cask "is the wrong
+   answer even when it appears to work". The registry makes no such prohibition: that
+   sentence sits in a container-build context where *unpinned* means *not digest-pinned*.
+   Three attempts to salvage the claim all failed. The entry was restored verbatim.
+4. **"The error registry is unreachable from the participant path."** Corrected to measured
+   scope. One hop does exist (`docs/Troubleshooting.md:211`). The cited evidence was a search
+   for `javac|JDK|JRE`, which correctly establishes that the file does not discuss JDKs and
+   was then used to claim it does not *link the registry* — a different question.
+5. **A residue of (3) survived into this file** and into a second document after the claim
+   had been retracted once. Found by re-reading rather than by anyone asking.
 
-Both failures share one shape and it is the most transferable thing this arm produced:
-**a claim that the material is silent on something is inadmissible when its evidence is a
-filtered search, because the filter could not have returned the counter-evidence.** The
-second failure adds a variant — the answer existed in a file that was never searched at all,
-because the search was scoped to the document being executed.
+Two further self-catches concerned the write-up rather than the findings: a commit that
+recorded the rule below but not the corollary it was derived from, caught by grepping the
+commit for the thing it was believed to contain and finding nothing.
+
+The shape these share is the most transferable thing this arm produced, and it is recorded
+durably in `docs/CommonErrors.md` rather than only in correspondence:
+
+> **A claim that the material is silent on X may not rest on a filtered search.** The
+> original form: the filter could not have returned the counter-evidence. The sharper form,
+> which covers a filter that is perfectly well built but answers a different question than
+> the conclusion needs: **search for the thing being denied, not the subject matter around
+> it.** Two corollaries, each learned by violating it — *counting a filter's hits is not
+> reading them*, and *a non-zero exit is not a zero result*, since a broken query and a real
+> negative both print nothing.
+
+The property worth carrying forward is where these failures occurred. **Every one of them
+arose in the verification step, not the discovery step.** Nothing here was found carelessly;
+it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
+exactly why it is under-defended.
 
 ## Not measured — do not infer from this arm
 
