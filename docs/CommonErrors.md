@@ -2638,3 +2638,68 @@ as a statement about the corpus with the file never named, and used to charge a 
 had and false only in the undisclosed narrower one. **The charge is downgraded from fabrication to a
 scope disagreement**, and it is this document's own most-filed defect - an undisclosed corpus -
 landing on the single most severe accusation it makes.
+
+### The verification of a strike was blind to the way this document wraps
+
+A correspondent reported asserting a strike without running it. Run here, the strike **was** run - and
+the instrument could not see the failure mode, which is the worse outcome:
+
+```
+phrase struck last commit: "controls confirm the tree never carried the sequence at all"
+  git grep -F  @HEAD    0     <- reads as a clean strike
+  normalized   @HEAD    1     <- STILL PRESENT, quoted inside the correction
+controls: known-present raw 1 / norm 1   failure-shaped raw 0 / norm 0
+```
+
+This file is hard-wrapped near 100 characters, so the quoted clause is split by a newline and a raw
+`grep` cannot match it. **The strike removed the assertion; the text remains, and the check said
+otherwise.**
+
+> **A verification that runs and returns the answer you wanted is not better than an unrun one when
+> the instrument cannot see the failure mode. It is worse** - it converts an unchecked claim into a
+> checked one while adding no information, and the record now says someone looked.
+
+The aggravating detail is that this document **already contains** the entry prescribing whitespace
+normalization before searching prose, written by the same author for the same reason. A finding
+scoped to the instance that produced it does not generalise on its own; it has to be applied.
+
+### Quoting a struck claim is correct practice and is indistinguishable from asserting it
+
+The correspondent's inverse of the drift finding - **a correction can manufacture the instances it
+reports absent** - reproduces here in the same commit that filed it:
+
+```
+"fabricat"        @5e64a26 12  ->  @HEAD 14     (+2, both inside the downgrade)
+"fabricated cause" @5e64a26  1  ->  @HEAD  1     (struck as an assertion, retained as a quotation)
+```
+
+The downgrade of a charge quotes the charge, so the phrase survives at the same count. **This is not
+a defect to remove.** Leaving the original wording beside a correction is what makes the correction
+checkable, and this document demands it everywhere else.
+
+> **Occurrence counting cannot distinguish an assertion from a quotation of one.** Any count of a
+> withdrawn phrase is therefore uninterpretable without reading every hit - and a withdrawal, done
+> properly, *raises* that count. The remedy for one defect is the cause of the other, and the only
+> resolution is to stop treating the count as the evidence.
+
+### An ordinal fed by several families is not one sequence
+
+The correspondent found nine families sharing one ordinal namespace in their report - "eighth absence
+instance", "eighth code instance" and "eighth instance" being three different eighths, each locally
+valid, letting a counter advance indefinitely on work that never belongs to the same sequence twice.
+
+Measured here it fires, more weakly, and the re-measurement is the finding:
+
+```
+ordinal+instance collocations   7      distinct ordinals   4
+  ninth    n=4   families [absence, bare]   <-- AMBIGUOUS
+  fifth    n=1   [bare]      seventh n=1 [bare]      first n=1 [bare]
+```
+
+One ordinal of four is ambiguous. But this is now the **third** count of the same population in this
+document - 4 ordinal-carrying instances, then 4 with different members, now 7 collocations - each
+from a slightly different instrument, none reconciling.
+
+> **That a population yields a new size every time it is measured is itself the proof that it was
+> never well-ordered.** The disagreement is not noise around a true value; there is no true value to
+> be noisy around.
