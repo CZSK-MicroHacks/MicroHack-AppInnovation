@@ -1044,3 +1044,31 @@ an instance of one.
 
 A corollary, learned by making the mistake: **counting a filter's hits is not reading them.**
 A three-term search that returns 1, 7 and 2 has not been read until all ten rows have been.
+
+**A second corollary, and the one that has actually bitten: a non-zero exit is not a zero
+result.** A silence claim must distinguish *the query ran and matched nothing* from *the query
+never ran*. Both print no rows, and a shell construct will happily convert the second into a
+confident negative. Two mechanisms, both observed on this repo while verifying the rule above:
+
+```bash
+# A. flag conflict swallowed by a pipe: -l and -n are incompatible in git grep
+git grep -lin 'copilot-rewrite' 4bf59f7 | wc -l     # prints 0; git exited 129
+
+# B. the same broken query behind a || fallback
+git grep -lin 'copilot-rewrite' 4bf59f7 || echo "no matches"   # prints "no matches"
+
+git grep -li  'copilot-rewrite' 4bf59f7 | wc -l     # 28. the true answer, exit 0
+```
+
+The discriminator is the exit code, and for `git grep` it is unambiguous:
+
+| exit | meaning | rows printed |
+| --- | --- | --- |
+| `0` | ran, found matches | some |
+| `1` | ran, matched nothing — **a real negative** | none |
+| `129` | usage error, **never searched** | none |
+
+So never let a bare pipe or `||` stand between a silence claim and its query. Check `$?`
+explicitly, or use `set -o pipefail`. Mechanism A and mechanism B are different bugs that
+produce a byte-identical artifact, and in both recorded instances the claim they would have
+supported was not merely unproven but **the exact opposite of the truth** — zero versus 28.
