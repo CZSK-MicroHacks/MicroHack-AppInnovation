@@ -198,7 +198,7 @@ This is the ~10-minute wait. Azure provisions a load engine, runs the plan for e
 300 seconds, and deprovisions; the poll loop below is fail-closed on any status other
 than the known in-flight set.
 
-The JMX has one HTTPS `GET /perftest/catalog` sampler, 120 users, a 300-second
+The JMX has one HTTPS `GET /perftest/catalog` sampler, 80 users, a 300-second
 scheduler, HTTP `200` assertion, stop-on-sample-error behavior, and both
 redirect modes disabled. The hostname comes from `CATALOG_BASE_HOST`; the API
 key comes only from Azure Load Testing `GetSecret`.
@@ -524,7 +524,7 @@ The broader diagnostic workflow is in
 ## What a completed run shows
 
 `evidence/load-test-report.json` now carries the chapter's headline numbers: replicas
-moving `1 → 2` or `3` and back to `1`, zero errors across 120 virtual users for 300
+moving `1 → 2` or `3` and back to `1`, zero errors across 80 virtual users for 300
 seconds, and a database peak above its own pre-load baseline. Those are the figures to
 read aloud in the debrief — they are the first quantitative answer the retailer has ever
 had to "what happens when it gets busy?".

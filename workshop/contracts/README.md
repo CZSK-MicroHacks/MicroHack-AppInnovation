@@ -59,7 +59,7 @@ decodes those inputs, rejects duplicate keys, non-finite or missing metric value
 traversal, symlinks, identity drift, and digest drift, then writes the report and all five
 normalized observations deterministically. The common validator repeats that rendering and
 requires byte-equivalent JSON values, so a report cannot diverge from its raw capture. The
-capture requires a `Microsoft.LoadTestService/loadTests` run with exactly 120 users for 300
+capture requires a `Microsoft.LoadTestService/loadTests` run with exactly 80 users for 300
 seconds and zero failed requests, an immediately preceding Azure Resource Manager observation
 of the exact 1-3 replica and 50-concurrent-request HTTP scale rule named `http`, and
 revision-filtered `Replicas` `Maximum` points at `PT1M`. The series must prove a one-replica

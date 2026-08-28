@@ -83,7 +83,7 @@ concurrent requests by `concurrentRequests` `50` and keeps the answer between `1
 
 ```mermaid
 flowchart LR
-    LT[Azure Load Testing<br/>120 virtual users, 300 s] -->|HTTPS GET /perftest/catalog| REV
+    LT[Azure Load Testing<br/>80 virtual users, 300 s] -->|HTTPS GET /perftest/catalog| REV
     REV[Revision] --> R1[Replica 1]
     REV -.scale rule: http, 50 concurrent.-> R2[Replica 2]
     REV -.-> R3[Replica 3]
@@ -107,7 +107,7 @@ describes, and come away with evidence that it scaled out, stayed correct, and r
 Concretely, you must show that the existing revision:
 
 - serves one sampler: HTTPS `GET /perftest/catalog`;
-- completes 120 virtual users for 300 seconds with zero errors;
+- completes 80 virtual users for 300 seconds with zero errors;
 - has one replica before load, two or three during the observed run timestamps,
   and one after load;
 - stays inside the target's scale contract: rule `http`, type `http`, minimum `1`,
@@ -150,7 +150,7 @@ for ten minutes so Azure Monitor writes a one-replica data point at `PT1M` grain
 
 ### 3. Run the bounded load test
 
-The checked-in plan is deliberately small and deterministic: one sampler, 120 users, a
+The checked-in plan is deliberately small and deterministic: one sampler, 80 users, a
 300-second scheduler, an HTTP `200` assertion, stop-on-error behaviour, and both redirect
 modes disabled — a redirect stays a 3xx and therefore fails the assertion rather than
 quietly passing. The hostname is injected as an environment variable; the API key reaches
@@ -223,7 +223,7 @@ The frozen interfaces behind those two commands are
 
 You are done when all of the following are true:
 
-- [ ] The load run finished in status `DONE` with 120 virtual users, 300 seconds, and an
+- [ ] The load run finished in status `DONE` with 80 virtual users, 300 seconds, and an
       error count of exactly zero.
 - [ ] `evidence/load/raw/replicas.json` shows one replica immediately before load, two or
       three inside the observed load window, and one again afterwards — every value
@@ -293,7 +293,7 @@ Every command, with its fail-closed assertions, is in
 | --- | --- | --- |
 | `az load` says the resource does not exist, or `PERFTEST_API_KEY_SECRET_URI` is unset | `infra/perf-testing.bicep` has not been deployed, or the `PERFTEST-API-KEY` secret value was never set in the vault it creates | Deploy the template and set the secret — see [infra/README.md](../../infra/README.md). Do not improvise a substitute resource |
 | The run finishes with a nonzero error count | The sampler got a 3xx or a 4xx — usually a missing or wrong `x-api-key`, or a URL that redirects | Confirm the Key Vault secret holds the catalog's performance-test key and that the Load Testing resource's identity can read it. Redirects are intentionally not followed |
-| Replicas never exceed one | 120 users sustained against the `concurrentRequests` `50` threshold should reach two or three replicas, so a flat series means the load never arrived: the run targeted a different host, or you filtered on the wrong revision | Check that the `revisionName` filter matches the handoff revision exactly, and confirm the run really executed against your host |
+| Replicas never exceed one | 80 users sustained against the `concurrentRequests` `50` threshold should reach two or three replicas, so a flat series means the load never arrived: the run targeted a different host, or you filtered on the wrong revision | Check that the `revisionName` filter matches the handoff revision exactly, and confirm the run really executed against your host |
 | Replicas rise only after `LOAD_END` | Metric lag, or the load window was taken from your polling clock instead of the engine timestamps | Use `executionStartDateTime`/`executionEndDateTime` from the run response and re-pull the metric |
 | The validator rejects a digest | A raw file was edited, reformatted, or re-captured after hashing | Re-hash the exact bytes you captured; never hand-edit normalized evidence |
 | `.testRunStatistics.Total.medianResTime` is null or absent | The field is optional in the Azure Load Testing run response | Take the median response time from the run's own dashboard in the portal instead. Do not re-capture `test-run.json` to obtain it — the digest in `capture.json` is bound to the bytes you already hashed |
@@ -322,7 +322,7 @@ lived on one Windows box.
 The first row is the one you carried in from Challenge 0, and it is the only row where
 both numbers are yours. State the caveat alongside them: Challenge 0 timed the catalog
 page over the VM's own loopback with nothing else happening on that box, and this chapter
-timed `GET /perftest/catalog` over public HTTPS with 120 users arriving at once. They are
+timed `GET /perftest/catalog` over public HTTPS with 80 users arriving at once. They are
 not the same measurement, so the claim to make is not that the move made the catalog
 faster. It is that a question the retailer used to answer with an opinion now has a
 recorded before and a recorded after — and that you can say what each one measured.

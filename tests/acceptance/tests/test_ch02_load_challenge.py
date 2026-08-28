@@ -55,7 +55,7 @@ def _assert_bounded_jmeter(path: Path) -> None:
         for element in thread_group
         if element.tag in {"stringProp", "boolProp"}
     }
-    assert thread_properties["ThreadGroup.num_threads"] == "120"
+    assert thread_properties["ThreadGroup.num_threads"] == "80"
     assert thread_properties["ThreadGroup.duration"] == "300"
     assert thread_properties["ThreadGroup.scheduler"] == "true"
     assert thread_properties["ThreadGroup.on_sample_error"] == "stoptestnow"
@@ -237,7 +237,7 @@ def test_guides_require_raw_capture_renderer_and_common_validator() -> None:
         "/perftest/catalog",
         "/healthz",
         "/readyz",
-        "120",
+        "80",
         "300",
         "app_cpu_billed",
         "cpu_percent",
@@ -427,6 +427,17 @@ def test_the_load_profile_can_actually_trigger_the_scale_rule() -> None:
 
     This test is the comparison that was missing. It fails if either number drifts to
     where the evidence gate stops being satisfiable.
+
+    The user count is not arbitrary. Two warm digest-pinned runs against the deployed
+    .NET app measured the window directly: 40 concurrent held one replica with zero
+    errors, and 160 concurrent scaled to three but returned 2.06% HTTP 500s. Challenge 2
+    requires *both* zero errors and two-or-three replicas, so neither measured point
+    satisfies it. Throughput is database-bound at ~22 rps -- latency tracks Little's Law,
+    ``p50 ~= concurrency / rps`` -- so driving harder deepens the queue instead of raising
+    throughput, and the errors are queue depth, not app-tier capacity. 80 sits at the
+    geometric midpoint of the two measured points, asks for two replicas rather than
+    pinning the ceiling at three, and predicts a p50 near 3.6s against the 7.6s where
+    errors appeared.
     """
     thread_group = ElementTree.parse(JMETER).getroot().iter("ThreadGroup")
     threads = [
