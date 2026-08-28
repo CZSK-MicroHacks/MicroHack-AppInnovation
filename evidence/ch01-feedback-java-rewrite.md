@@ -185,3 +185,32 @@ to end; one slice's shape was exercised. The full acceptance profile was run loc
 never against a deployed application.
 
 **Screenshots: none exist.** No image artifact was captured at any point by this arm.
+
+## Late finding — Ch4's database-dependency gate is weaker on Java by construction
+
+**Read-not-run.** This arm never deployed and never queried Application Insights. The
+static half below is executed against this tree at `b8d1709`; the live half is not, and
+nothing here claims a record count.
+
+Ch4 gates on database dependency telemetry — the Application Map showing the database as a
+separate node (`challenges/ch04/README.md:154`), a `database-dependency-failures` query
+counting "failed outbound calls tagged with a database system" (`:190`), and a required
+deliverable, "a count of failed database dependency calls" (`:356`).
+
+The tracks do not produce that telemetry equivalently. .NET registers
+`AddSqlClientInstrumentation()` (`dotnet/src/LegoCatalog.App/Program.cs:86`), so every
+database call on every route becomes a dependency record. Java registers no
+instrumentation library at all — its only `instrumentation` artifact is the logback *log*
+appender — so dependency records come solely from two explicit call sites,
+`CatalogService:47` and `PerformanceCatalogService:52`, both via
+`CatalogTelemetry.startDatabaseSpan` (`:79`, `SpanKind.CLIENT`).
+
+The consequence is specific: `/import` writes to the database under an `INTERNAL` span
+(`CatalogImportService:28`), so a **failing import emits no dependency record on Java** while
+emitting them on .NET. The most natural way to demonstrate a database fault produces a
+populated `database-dependency-failures` result on one track and an empty one on the other,
+and no document says so.
+
+This is F-213's shape: material asserting a uniform result that holds on one substrate only.
+Unlike F-213 this arm has **not** fixed it — the remedy is a judgement about how much
+telemetry the workshop intends to teach, not a defect with one correct repair.
