@@ -976,6 +976,16 @@ is of an IDE that does not exist here.
 ---
 ### Finding 20 — `render-handoff` is unconditionally impossible as shipped, because the acceptance report's `baseUrl` can never equal the target output's `application.url`
 
+> **Adjudicated — real at the audited commit, already remediated upstream.** Verified after
+> close-out: `859767d` ("fix(handoff): tolerate a trailing slash on the acceptance base
+> URL", 2026-08-28 04:17) applies the identical `rstrip("/")` on both sides on
+> `origin/rewrite-integration`, which is **43 commits** ahead of the `4bf59f7e` I was
+> directed to audit. The defect was genuine in the source under audit and the diagnosis
+> stands; my "blocks the chapter for every attendee" framing does **not** apply to the
+> integration branch. Recorded here rather than deleted, because the reason it survived to
+> `4bf59f7e` — a fixture that copies the URL as a raw dict and so never exercises the
+> Pydantic normalization — is unchanged and will hide the next instance.
+
 **Severity: blocks the last command of the chapter for every attendee, on both stacks.**
 
 `catalog_migrate/handoff.py:144-150` gates the handoff on four equalities between the
@@ -2743,3 +2753,61 @@ check the attendee runs *before* starting, and a provenance field the evidence s
 *requires* rather than forbids, are the two ends of one guard. I lost time to the first and
 found the second only by reading the validator source. An attendee will do neither.
 
+
+
+---
+
+## Adjudication of findings 20–24
+
+Recorded verbatim from the facilitator's close-out so this file is not a one-sided
+account. Suite **622 passed / 1 skipped** at `a1d65d5`; both new guard pairs
+stash-verified to fail on revert.
+
+| Finding | Verdict | Landed as |
+| --- | --- | --- |
+| **20** trailing slash | Real at `4bf59f7e`; already fixed upstream by `859767d` | no new label |
+| **21** fault injection destroys acceptance evidence | **Narrowed.** `TelemetryFaultInjection.md` §6 *does* state the fault ordering and mandate restore-and-verify. What it never states is where the **acceptance re-run** belongs — that half upheld | **F-132** |
+| **22** restore verification is a false negative | **Upheld and widened** — true of the bare `/` as well as `/readyz`, and §6 repeated the weak probe in its summary; all three sites fixed | **F-131** |
+| **23** cp1252 + stale report | **Upheld in full**, split by provenance | **F-129** + **F-130** |
+| **24** report/verifier version skew | Observation upheld and independently verified. **Scope conditional** — reachable only by updating the toolchain mid-challenge, a second-party action. `producedByCommit` recorded as the right remedy; not built | recorded |
+
+### Corrections I owe my own report
+
+- **Finding 20 is narrower than I claimed.** See the note under the finding. I asserted it
+  blocked the chapter for everyone; it blocked the commit I was auditing.
+- **Finding 21 is half right.** I wrote that the chapter "never states the ordering
+  constraint". §6 does state the *fault* ordering. What is missing is only the position of
+  the acceptance re-run. The stronger claim was not checked against §6 before I made it —
+  the same failure mode as the unscoped activity-log probe I filed earlier, and the third
+  time this run I have shipped a confident claim I had not fully verified.
+- **Finding 24's blast radius is smaller than the write-up implies.** The skew is only
+  reachable if the toolchain is updated mid-run. In this audit that happened because a
+  second party pushed a fix while I was working — not something a solo attendee does.
+
+### What was confirmed about F-23
+
+The facilitator's own account: the docstring claimed the sqlcmd path "is what it has always
+been validated against", and *"it had not been — the only profile that loads
+`catalog.valid.json` had never run on a cp1252 host, so 'empirically green' meant 'never
+executed.'"* The conditional decode is theirs (**F-129**); the run-then-write ordering in
+`cli.py` predates them and is material (**F-130**). The F-129 guard pins the *relation* —
+it asserts both that the decode is unconditional **and** that the fixture is still not
+cp1252-decodable, so ASCII-cleaning the fixture fails the guard rather than silently
+voiding it.
+
+### Measurement, as published
+
+**(a) ~61 minutes** of channel unavailability against **(b) ~6 minutes** of productive work,
+discovery free and offline. Recorded without adjustment: **F-89 bought fabricability
+closure, not throughput.** The evidence path was never the bottleneck.
+
+### The closing claim
+
+*The builder's paths are a subset of the user's, and the defects live in the complement.*
+F-129 is its cleanest instance — it was unreachable for its author, who never ran the one
+profile that loads the fixture on the platform it targets. F-92 came from rendering to a
+scratch directory. F-24 came from pulling a fix mid-run, which only a second party can do.
+None of the five findings above exist without the arms-run-blind structure.
+
+**Screenshots: zero**, because this delivery has no GUI. Stated as zero with the reason,
+not as "pending".
