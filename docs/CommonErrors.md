@@ -1161,6 +1161,45 @@ The rule this yields is about adjudication, not shell:
 Absence of a rev in a `git grep` is therefore not a neutral default. It silently selects the one
 object that no one else can see.
 
+### Mechanism E — the substrate cannot tell you a finding was closed
+
+Mechanism D asks *which version did you search*. This one asks *which artifact carries the
+fix*, and it survives doing D perfectly.
+
+**A finding is closed by its remedy, not by its symptom's substrate.** When the remedy is a
+document, a reclassification, or a procedure, the code the symptom lives in is **byte-identical
+whether or not the finding was fixed**. Re-reading it returns a confident answer that carries no
+information.
+
+Worked instance, from this arm's own ledger. A blocking finding said: checkpoint 4 has the
+participant author `<stack>/Dockerfile`, `MODERNIZATION_ADDITIONS` already names `Dockerfile`,
+so the equality in the reference-tree guard breaks. Verified by reading the constant. Recorded
+as open.
+
+The constant is identical at this branch and at `origin/rewrite-integration`. The finding is
+nonetheless **fixed** there, by `ff70fac`, which changed neither:
+
+- it **reclassifies** the guard as repository-authoring rather than a participant gate —
+  a participant who does the homework puts the name on both sides, so nothing is undeclared;
+- it **requires** both rewrite runbooks to `--deselect` it, enforced by a new test, while the
+  modernization runbooks keep running it in full.
+
+Re-reading the constant reports "unchanged, still open" in both worlds. **Note the direction:
+the common warning is against a finding recorded as fixed that isn't. This is the mirror — a
+finding recorded as open that was closed — and the mechanism is the same, because closure was
+never a property of the substrate.**
+
+So: **check the remedy, not the symptom.** If you cannot name what the fix would change, you
+cannot verify the finding's status by reading anything.
+
+This mechanism is also the first in the family that **propagates**. A–D produce a wrong answer
+in one terminal. E produces a wrong *status*, which is then published, cited, and built upon.
+
+It is also, by the criterion below, **unmechanisable**: the defect class is "clause still
+present", and every clause in a codebase is a legitimate instance. There is no corpus to scope
+and no exemption list to write, because the check requires knowing what the remedy was — which
+lives in the ledger, not in the tree.
+
 ### When to mechanise this rule instead of documenting it
 
 Four rounds of this entry were caught by a person noticing at the right moment. The fifth was

@@ -55,7 +55,25 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    contains `Dockerfile`, so performing checkpoint 4 breaks the assertion **with both
    diagnostics printing an empty list**, giving a participant no way to read the cause.
    The 612-passed run above is green **only because `--deselect` suppresses that guard.**
-   This is a mitigation, not a fix, and the gate remains unsatisfiable from this path.
+
+   **Disposition — remedied upstream after this file was written.** As raised, this gate was
+   described as unsatisfiable and the deselect as "a mitigation, not a fix". That judgement
+   was accurate at the rev it was written against and is superseded at
+   `origin/rewrite-integration`. Commit `ff70fac` reclassifies
+   `test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches` as a
+   **repository-authoring guard rather than a participant gate** — a participant who authors
+   the Dockerfile checkpoint 4 asks for puts the name on both sides of the comparison, so
+   "nothing is undeclared and nothing is missing; the participant simply did their homework."
+   The deselect is therefore the correct answer, not a workaround, and
+   `test_rewrite_runbooks_deselect_the_reference_tree_authoring_guard` now *requires* both
+   rewrite runbooks to carry it (2 invocations each) while the modernization runbooks keep
+   running the guard in full.
+
+   **This arm did not detect that.** `MODERNIZATION_ADDITIONS` is byte-identical at both
+   revs, so re-reading the constant reports "unchanged, still open" whether or not the
+   finding was closed — the remedy was a reclassification plus a runbook requirement, and
+   neither is visible in the substrate the symptom lives in. Recorded as an instance of
+   mechanism E in `docs/CommonErrors.md`.
 2. **The extension preflight gate at `:76`** is unsatisfiable without the VS Code CLI and was
    bypassed, not met.
 3. **No handoff instance was produced.** Checkpoint 8 was inspect-only, so the handoff
