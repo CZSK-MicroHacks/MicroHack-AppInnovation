@@ -5445,6 +5445,89 @@ def _shell_commands(markdown: str) -> list[str]:
     return commands
 
 
+def test_no_document_claims_setting_a_container_app_secret_restarts_the_app(
+    repo_root: Path,
+) -> None:
+    """No document may claim that setting a Container App secret restarts the app.
+
+    ``az containerapp secret set`` succeeds without creating a revision and without
+    restarting anything; it warns that a restart is required and leaves the previous
+    value being enforced. A document that says otherwise sends a reader to a correct
+    remedy and tells them it already took effect, so they read stored-value parity as
+    proof while the application still rejects the key.
+
+    Denominator: every tracked Markdown file. Complement: this pins one false claim
+    out of the corpus; it does not assert the corpus is free of other false claims
+    about CLI behaviour.
+    """
+    claim = re.compile(
+        r"(secret[^.\n]{0,80}(restarts the app|forces a new revision)"
+        r"|(restarts the app|forces a new revision)[^.\n]{0,80}secret)",
+        re.IGNORECASE,
+    )
+    documents = sorted(
+        repo_root / path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "*.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert documents, "Enumeration returned no Markdown; the guard has no population."
+
+    offenders = []
+    for path in documents:
+        if not path.is_file():
+            continue
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if claim.search(line):
+                offenders.append(f"{path.relative_to(repo_root)}:{number}: {line.strip()}")
+    assert not offenders, (
+        "These lines claim that setting a Container App secret restarts the "
+        "application. It does not; the old value stays in force until the revision "
+        "is restarted:\n" + "\n".join(offenders)
+    )
+
+
+def test_key_parity_check_distinguishes_stored_values_from_enforced_values(
+    repo_root: Path,
+) -> None:
+    """The key-parity comparison must say it reads stored, not enforced, values.
+
+    The comparison reads the Key Vault secret and the Container App secret. Both are
+    stored values. A revision serves the secret it started with, so the comparison can
+    print agreement against an application that returns ``401`` on every sample. The
+    section must say so, or its green result is affirmative false evidence.
+
+    Denominator: one file, ``infra/README.md``, the only document carrying this
+    comparison. This is a regression pin, not a survey.
+    """
+    readme = repo_root / "infra" / "README.md"
+    body = readme.read_text(encoding="utf-8")
+    assert "KEYS DISAGREE" in body, (
+        "infra/README.md no longer carries the key-parity comparison; this guard "
+        "has lost its subject and must be re-aimed rather than deleted."
+    )
+    assert "stored" in body and "az containerapp revision restart" in body, (
+        "The key-parity section must state that it compares stored values and must "
+        "give the explicit revision restart, because setting the Container App "
+        "secret does not restart the application."
+    )
+
+
 AUTHORING_GUARD = "test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches"
 
 

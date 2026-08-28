@@ -209,8 +209,32 @@ kv=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" \
 [ "$aca" = "$kv" ] && echo "keys agree" || echo "KEYS DISAGREE - the load test will 401 on every sample"
 ```
 
+Both readings are of *stored* values. A Container App serves the secret its running
+revision started with, so a stored value and an enforced value can differ and this
+comparison still prints `keys agree`.
+
 If they disagree, set the vault secret to the value the application already enforces.
-Changing the application's secret instead forces a new revision and restarts the app.
+The vault side needs no restart: `az load test` reads the secret when a run starts.
+
+Changing the application's secret is the direction that bites. `az containerapp secret
+set` does **not** create a revision and does **not** restart anything — it succeeds,
+warns `must be restarted in order for secret changes to take effect`, and leaves the
+old key being enforced. Until you restart the revision the comparison above reads
+`keys agree` against an application that still returns `401`. If you take this
+direction, restart explicitly and confirm the revision came back:
+
+```bash
+: "${RESOURCE_GROUP:?Set the workshop resource group}"
+: "${CONTAINER_APP_NAME:?Set the deployed Container App name}"
+
+revision=$(az containerapp revision list --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" --query "[?properties.active].name | [0]" --output tsv)
+az containerapp revision restart --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" --revision "$revision" --output none
+az containerapp revision show --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" --revision "$revision" \
+  --query "{running:properties.runningState,healthy:properties.healthState}" --output json
+```
 
 Challenge 2 reads two values from this deployment: `loadTestResourceId` becomes
 `LOAD_TEST_RESOURCE_ID`, and the secret identifier
