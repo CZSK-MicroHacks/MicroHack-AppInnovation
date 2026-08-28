@@ -5235,3 +5235,55 @@ def test_provider_import_script_checks_az_exit_status(repo_root: Path) -> None:
         "authentication or permission failure is reported as success:\n"
         + "\n".join(lines[call : call + 6])
     )
+
+
+def test_dockerfile_authoring_instructions_match_the_path_registry(
+    repo_root: Path,
+) -> None:
+    """Challenge prose must send the Dockerfile where the registry pins it.
+
+    `challenge-paths.json` pins each stack's Dockerfile inside its stack directory
+    and the contract tests read it there, but the rewrite challenge told
+    participants to author it "at the repository root" -- a location the same
+    challenge explicitly defines as `C:\\MicroHack\\source`. Following the prose
+    put the file one directory above every reader of it. Nothing tied the two
+    together, so the divergence was invisible to the suite.
+    """
+    registry = json.loads(
+        (repo_root / "workshop" / "contracts" / "challenge-paths.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    pinned = {
+        slice_["dockerfile"]
+        for slice_ in registry["slices"]
+        if slice_.get("dockerfile")
+    }
+    assert len(pinned) >= 2, f"registry pins only {len(pinned)} Dockerfile paths"
+
+    readmes = sorted((repo_root / "challenges").glob("ch01*/README.md"))
+    assert len(readmes) >= 3, f"only {len(readmes)} ch01 challenge readmes found"
+
+    problems: list[str] = []
+    named: set[str] = set()
+    inspected = 0
+    for readme in readmes:
+        text = readme.read_text(encoding="utf-8")
+        if "Dockerfile" not in text:
+            continue
+        inspected += 1
+        relative = readme.relative_to(repo_root)
+        # A document that never states a location is silent, not wrong; the
+        # defect is stating one that disagrees with the registry.
+        if re.search(r"`Dockerfile`[^.]{0,80}?repository\s+root", text, re.DOTALL):
+            problems.append(f"{relative}: sends the Dockerfile to the repository root")
+        named |= {path for path in pinned if path in text}
+
+    assert inspected >= 3, f"only {inspected} ch01 readmes mention a Dockerfile"
+    missing = sorted(pinned - named)
+    if missing:
+        problems.append(f"no ch01 challenge names the pinned path(s) {missing}")
+
+    assert not problems, "Dockerfile instructions disagree with the registry:\n" + "\n".join(
+        problems
+    )

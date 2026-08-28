@@ -93,7 +93,7 @@ Write `evidence/bounded-plan.md` before asking for code. A suitable sequence is:
 3. local/Blob image abstraction and image-key security;
 4. external configuration, managed identity, health, readiness, and bounded
    performance;
-5. telemetry and the existing non-root Container Apps image.
+5. telemetry, then the non-root container image you author in checkpoint 4.
 
 For every slice, list exact files, tests, exclusions, and how to return to the last
 passing commit. A human must approve the plan and must review schema, security,

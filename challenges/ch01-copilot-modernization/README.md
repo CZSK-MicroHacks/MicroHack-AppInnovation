@@ -87,7 +87,8 @@ on the right is where this path takes it, and that move is the point of this pat
 The destination is the frozen shared design: one non-root Azure Container Apps
 application, the matching managed database, immutable ACR image identity, managed
 identity, direct Azure Monitor OpenTelemetry export, and 198 images in Azure Blob
-Storage. Use `infra/main.bicep`, the selected stack's `Dockerfile` at the repository root,
+Storage. Use `infra/main.bicep`, the selected stack's `Dockerfile` in its stack directory
+(`java/Dockerfile` or `dotnet/Dockerfile`),
 `catalog-migrate`, and the shared acceptance harness. Do not replace or reinterpret those
 interfaces.
 
