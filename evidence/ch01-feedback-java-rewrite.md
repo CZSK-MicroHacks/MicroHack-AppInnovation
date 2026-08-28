@@ -340,6 +340,38 @@ The general form is worth more than the instance: **describing an added gloss as
 the original is the same operand error as the rest of this record.** Both artefacts contain
 the words; only one of them is the one a reader reaches.
 
+**Two properties of the repair are worth naming, because they are what made it safe.** The
+original sentence survives *verbatim ahead of* the qualifier, so every existing citation of it
+still matches — a routing gap can be closed without invalidating the quotations that
+diagnosed it, and appending is what buys that. And the guard that found the gap was the
+counterparty's refusal to confirm a claim they could not reproduce: **"unconfirmed, not
+refuted" is a disposition worth having**, because it returns the burden to the claimant
+without asserting a counter-fact the checker also cannot support.
+
+### The theme, in its concluded form
+
+This item is not an isolated finding. Across the delivery the same defect was instantiated
+independently in **every artifact class the exercise contains** — the workshop material, the
+audit report about it, and an arm's own remediation of that report, this one:
+
+| artifact | knowledge | routing |
+|---|---|---|
+| workshop material (`CommonErrors.md`, `Troubleshooting.md`) | present and correct | thin or one-way |
+| the audit report | six corrections recorded | no forward pointer at the superseded text |
+| this arm's own fix to entry 101 | qualification existed in a sibling entry | one-directional, cask → 101 never back |
+
+**In no case was the knowledge missing, stale, or wrong. In every case the party who needed it
+was not routed to it.** That is why "document it better" is the wrong remedy and never the
+one to reach for: the documentation already existed and was already correct. **The remedy is
+bidirectional linking, checked mechanically** — a link asserted in one direction should fail a
+test if its return leg is absent, in exactly the way this repo already fails a build for an
+unbound variable in a shell block.
+
+The corollary for anyone *authoring* a remedy: **search the shipping branch for prior work on
+the same identifier before writing a new fix** — `git log -S'<identifier>' origin/<your-branch>`.
+A re-derived remedy is not merely wasted effort; it can be a strict subset of an existing one
+and therefore a regression, while presenting as new work.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
