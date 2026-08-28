@@ -1482,3 +1482,55 @@ corresponding finding ran the sweep against their own report and found **19** un
 citations in it. **Two parties, each holding a freshly-written description of the trap, both
 still in it.** Awareness was not merely insufficient — it was maximal and simultaneous, and only
 the mechanical check found either set.
+
+### How wide should the guard be
+
+The obvious next move is to narrow it. Of 95 ambiguous basenames in the tree, 15 were cited; of
+those, 4 sit on pairs that actually differ and 11 resolve to identical bytes either way. So the
+narrow trigger is *ambiguous **and** drifted*, and it fires 4 times instead of 15. The argument
+for narrowing is alert fatigue: 11 alerts that need dismissing by hand is the reliable way to get
+a reviewer to stop running the check.
+
+**That cost model is imported from a different kind of guard and does not transfer here.** It
+holds when the remedy is an investigation, because dismissing a false positive costs a human
+decision. This guard's remedy is a mechanical edit — prepend the tree to the citation — which is
+correct whether or not the pair currently differs, needs no judgement, and cannot be wrong. Eleven
+harmless prefixes is not eleven investigations. Breadth is nearly free exactly when the fix is.
+
+**Narrowing also carries an unstated precondition: that the check is re-run.** The 11 identical
+pairs are harmless *at one revision*. A citation on an identical pair becomes a wrong citation the
+moment a commit touches one copy and not the other, and the narrow guard is silent until then — so
+it is only sound if something runs it continuously. Whether that holds is measurable, not
+assumable:
+
+```bash
+# how often does a commit touch one tree but not its twin?
+git log --format=%h workshop-baseline..shipping-tip | while read -r sha; do
+  git show --name-only --format= "$sha" | grep -qE '^(java|dotnet)/' && echo "$sha app"
+  git show --name-only --format= "$sha" | grep -q  '^solutions/reference/'  && echo "$sha ref"
+done | sort | uniq -c
+```
+
+Measured over this repository's shipping range: **3 of 3** commits touching either tree touched
+exactly one of them; **none touched both.** One-sided edits are not the exception here, they are
+the whole population — so the mechanism that converts a harmless citation into a wrong one is the
+normal way this repository changes.
+
+**But no pair actually flipped from identical to drifted in that range (0 of 64), and the honest
+statement keeps both halves.** The nearest miss is `b7fc289`, which edits `CatalogApplication.java`
+in the reference tree only — a genuine one-sided edit to a twinned file that happened to land on a
+pair which was *already* drifted, so it deepened existing drift instead of creating new drift. The
+hazard's mechanism has fired; the dice were kind about where. Claiming more than that would be the
+same over-reach this entry exists to catch.
+
+One precision note on the same figures. *Harmful* is a strict subset of *observable*, not a synonym
+for it: of the 4 drifted citations, one resolved silently to a different plausible call, two failed
+loudly, and one was simply correct in the tree it named. The sound direction is one-way — a
+citation that is undetectable is harmless, because identical bytes cannot mislead. The converse
+does not follow, so a narrow guard's 4 hits are not 4 defects either.
+
+Finally, line count cuts both ways and is not a check. `TomcatPathConfiguration.java` differs
+across trees at an identical 22/22, so a length comparison **conceals** that drift. In the other
+direction, a citation to `handoff.py:1008` is unambiguous despite two files having that basename,
+because one of them is 255 lines long and cannot hold line 1008 — arithmetic **reveals** the tree
+there. Neither behaviour is a property you can rely on; both are accidents of the files involved.
