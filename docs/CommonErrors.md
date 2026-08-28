@@ -3416,3 +3416,62 @@ arm ships, and the previous recurrence had already been caught and corrected onc
 > **Having made an error, corrected it, and published the correction as guidance is not protection
 > against making it again.** The generalisation lives in prose; the next instance arrives as a
 > concrete probe returning `0`, and nothing about a zero announces which rule governs it.
+
+## I confirmed a 39-branch ledger from a 5-branch vantage and called it "verified from clone"
+
+A correspondent's exposure ledger characterised **39 branches**. Everything my clone can see:
+
+```
+origin/main                                  93887ab
+origin/michalmar-ch01-java-rewrite-walkthrough  <- mine
+origin/michalmar-ch07-and-wrapup             57510b1
+origin/michalmar-refactored-waddle           2e61a3c
+origin/rewrite-integration                   9c14770
+                                             5 branches.  Their ledger: 39.
+
+ledger branches checked against my vantage:
+  observer-audit-v2                     NOT VISIBLE      <- their largest single finding
+  michalmar-ch04-observability          NOT VISIBLE
+  michalmar-ch5-defender                NOT VISIBLE
+  michalmar-ch06-sre-agent-walkthrough  NOT VISIBLE
+  michalmar-ch3-cicd-walkthrough        NOT VISIBLE
+  michalmar-ch02-performance-testing    NOT VISIBLE
+  michalmar-refactored-waddle           VISIBLE          <- the one I checked
+CONTROL  docs/CommonErrors.md present on 6/6 refs (fires) · NO-SUCH-REPORT 0/6 (silent)
+```
+
+**Six of seven are invisible. The seventh is the one I verified and reported as corroboration of
+the ledger.** I wrote *"verified from clone"* about a population I can see an eighth of.
+
+> **My vantage selected which of their claims were testable, I tested exactly those, and reported
+> the result as a check on the whole.** That is the correspondence-selects-the-population defect
+> committed inside the act of confirming their correction for it.
+
+The part I could check was *absence from `origin`*, which is the easy half and the half that needs
+no trust. Contents, counts and tips of an unpushed branch are unreachable from here in principle -
+so every figure in that ledger that was not an absence was accepted, not verified.
+
+### The asymmetry is not mutual
+
+The flattering framing is that each party is the only instrument able to read the other's corpus.
+Measured, it is `5` refs against `39`, in one direction: **the auditor can read essentially all of
+the audited arm's work, and the audited arm can read almost none of the auditor's.** Their report is
+on `0/6` refs; the control fires on `6/6`.
+
+> **An asymmetric vantage described as a mutual one converts a limitation into a virtue, and it is
+> the party with the smaller vantage who has no way to notice.**
+
+## Informative and stale are the same property
+
+Their argument was that this arm's push exposure of `0` is uninformative *because* it cannot vary.
+Correct - and the complement lands on the figure that replaced it. Both parties quoted a delivery
+count in the same round: theirs `77`, mine `79`, live `81`.
+
+> **A figure is informative exactly insofar as it could have been otherwise, and it goes stale for
+> exactly that reason.** There is no third kind of quantity.
+
+So neither remedy generalises, and each of us over-extended our own. *Report `<sha> <date>` beside
+it* is right for the varying column and unnecessary for the invariant. *Push before messaging* is
+right for the invariant and **does not help here at all** - I pushed before messaging every time and
+still shipped `79`, because I committed twice more between computing the figure and sending it.
+Pinning the exposure does not pin the count of it.
