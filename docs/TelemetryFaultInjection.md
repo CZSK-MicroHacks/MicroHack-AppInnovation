@@ -30,12 +30,34 @@ success signals, logged without an exception, go to **`AppTraces`**. Querying on
 `AppTraces` returns zero rows for all four failure signals and looks exactly like missing
 instrumentation.
 
-The signal name also lives in a different place in each table:
+The signal name also lives in a different place in each table, **and in a different form**:
 
-| Table | Where the signal name is |
-| --- | --- |
-| `AppTraces` | `Message` |
-| `AppExceptions` | `Properties['OriginalFormat']` |
+| Table | Where the signal name is | What the value actually looks like |
+| --- | --- | --- |
+| `AppTraces` | `Message` | `catalog.query.completed` — the bare signal name |
+| `AppExceptions` | `Properties['OriginalFormat']` | `catalog.query.failed filter={Filter}` — the **message template**, placeholders included |
+
+**This is the third trap, and it defeats the fix for the first two.** `OriginalFormat` is
+the *unformatted* template, so the obvious query still returns zero:
+
+```kusto
+// Returns 0 rows even when the signal is present.
+AppExceptions | where tostring(Properties['OriginalFormat']) == "catalog.query.failed"
+```
+
+Match the prefix, or split off the first token — never `==`:
+
+```kusto
+AppExceptions
+| extend sig = tostring(split(tostring(Properties['OriginalFormat']), ' ')[0])
+| where sig == "catalog.query.failed"
+```
+
+Measured values at the time of writing: `catalog.query.failed filter={Filter}`,
+`catalog.performance.failed workFactor={WorkFactor}`,
+`catalog.import.failed rejected={Rejected}`, and `catalog.database.failed` with no
+placeholder. **Do not rely on any given signal being bare** — the presence of a suffix
+depends on whether that call site had structured parameters.
 
 **Resolve the workspace by name.** The resource group holds a workspace for each stack,
 so `az monitor log-analytics workspace list ... --query "[0].customerId"` may hand you the
@@ -207,8 +229,9 @@ union withsource = SrcTable AppTraces, AppExceptions
 Query gotchas worth knowing in advance:
 
 - `$table` is not resolvable here. Use `union withsource = ...`.
-- `of` and `last` are reserved words. `extend of = ...` and `summarize last = ...` both
-  fail to parse. Use other names.
+- `of`, `last` and `first` are reserved words. `extend of = ...`, `summarize last = ...`
+  and `summarize first = ...` all fail to parse with `SYN0002 A recognition error
+  occurred`. Use other names — `ofmt`, `lastSeen`, `firstSeen`.
 - `tostring(Properties['x'])` is safe whether `Properties` arrives as a dynamic column or
   as a JSON string.
 
