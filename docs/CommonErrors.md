@@ -1119,6 +1119,48 @@ Mechanism A and mechanism B are different bugs that produce a byte-identical art
 every recorded instance the claim they would have supported was not merely unproven but **the
 exact opposite of the truth** — zero versus 28, or a document said to be silent that is not.
 
+### Mechanism D — the right query, at the wrong commit
+
+Every remedy above checks that the query *ran* and that the file *exists*. None of them checks
+**which version of the file was searched**, and that is a separate way to publish a confident
+inversion.
+
+Two sub-cases, both verified here:
+
+**Rev-skew.** A claim is made against one commit and checked against another. `docs/CommonErrors.md`
+is silent on `PIPESTATUS` at the workshop baseline `4bf59f7` and discusses it at this file's later
+revisions — same path, same query, opposite answers, and `git cat-file -e` passes at both because
+the file exists in each:
+
+```bash
+git grep -c 'PIPESTATUS' 4bf59f7 -- docs/CommonErrors.md   # no output — silent here
+git grep -c 'PIPESTATUS' HEAD    -- docs/CommonErrors.md   # matches — not silent here
+```
+
+No hit count is quoted above on purpose: this entry keeps changing that number, so a count written
+here would be stale by the commit that records it. **That is the mechanism, operating on the
+sentence describing it.**
+
+Checking a report's claim at your own tip is the common form. A finding filed at `d5325e8` and
+adjudicated at `9c14770` — **38 commits later** — reads as false when it was true when written.
+
+**Tree-vs-commit.** Omit the rev and `git grep` searches the **working tree** — including
+uncommitted edits — which is not any commit at all, and therefore not an object a reader can
+reproduce your result from:
+
+```bash
+git grep -c 'some-token' -- docs/CommonErrors.md        # working tree, uncommitted edits included
+git grep -c 'some-token' HEAD -- docs/CommonErrors.md   # the commit; can differ from the line above
+```
+
+The rule this yields is about adjudication, not shell:
+
+> **A claim about a commit can only be checked at that commit.** State the rev in the claim,
+> name it in the query, and when testing someone else's claim use *their* rev, not your tip.
+
+Absence of a rev in a `git grep` is therefore not a neutral default. It silently selects the one
+object that no one else can see.
+
 ### When to mechanise this rule instead of documenting it
 
 Four rounds of this entry were caught by a person noticing at the right moment. The fifth was
