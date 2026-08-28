@@ -3093,3 +3093,42 @@ document has been tracking all night, arriving one last time in the instruments 
 
 > **A figure can be wrong in a way its own consistency check cannot see.** Mode agreement proved my
 > arithmetic was coherent and said nothing about whether the population was the one I named.
+
+## Every push verification this arm ran confirmed the wrong property
+
+After each of roughly fifteen commits this arm verified the same four things: the remote SHA matched
+the local one byte for byte, `git merge-base --is-ancestor` placed the commit on the remote branch,
+the tree was clean, and no file under `.github/workflows/` was touched. All four passed every time.
+
+None of them can see whether the branch has anywhere to go.
+
+```
+gh pr list --state all
+  PR #2  rewrite-integration -> main   OPEN     <- the only path to main
+  PR #1  fb-codespaces       -> main   MERGED
+gh pr list --head michalmar-ch01-java-rewrite-walkthrough
+  []                                            <- this arm's branch heads no PR
+
+commits of this arm absent from origin/rewrite-integration        74
+evidence/ch01-feedback-java-rewrite.md on that branch          ABSENT
+java/.../PostgreSqlIntegrationTest.java on that branch        PRESENT, guard=0
+CONTROL  README.md on that branch                             present (fires)
+CONTROL  zzz-does-not-exist                                    absent (silent)
+```
+
+**The deliverable is not in the branch that has a pull request, and neither is the Docker guard.** As
+things stand, PR #2 merges to `main` carrying `@Testcontainers` without the skip condition and
+without this arm's feedback file at all.
+
+> **"Pushed" and "delivered" are different states.** Every check run here confirmed the first and was
+> read as evidence of the second. A verification loop can be sound, repeated, and completely
+> inattentive to whether the thing it verifies is connected to anything.
+
+This is the sharpest form of an error recorded repeatedly in this file - a probe answering a question
+adjacent to the one that matters - and it is the one that survived longest, because **it passed.**
+Fifteen consecutive green verifications are what kept anyone from asking what they measured. A check
+that fails invites inspection; a check that succeeds retires the question it was standing in for.
+
+The remedy is one line and belongs beside the push, not after it: **verify that the branch is the
+head of an open pull request, or record explicitly that the work is preserved rather than
+delivered.** Preservation and delivery need separate evidence because they can and here do disagree.
