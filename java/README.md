@@ -22,9 +22,10 @@ fail in ways that never name their cause, and both already have documented resol
 
 - **Maven reports that no compiler is available** — the host resolved a legacy JRE without
   `javac`. See entry 101: build inside the digest-pinned Microsoft OpenJDK image with the
-  documented Testcontainers socket overrides. That entry explicitly says *do not install an
-  unpinned JDK and do not skip the integration test*, so a tarball or Homebrew cask is the
-  wrong answer even when it appears to work.
+  documented Testcontainers socket overrides, and do not skip the integration test. Entry
+  101's *do not install an unpinned JDK* is written about that build image, so if you install
+  a JDK on the host instead, pin the version explicitly rather than taking whatever `brew`
+  resolves to.
 - **`psql is required for database verification`** — see entry 45, and put keg-only `libpq`
   on `PATH`:
 

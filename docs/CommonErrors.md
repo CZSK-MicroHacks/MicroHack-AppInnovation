@@ -950,18 +950,44 @@ JDK, or a JRE, and no file under `challenges/` references this registry at all.
 **Fix.** Follow the entries that already exist rather than inventing a route:
 
 - **No compiler / legacy JRE — entry 101.** Build inside the digest-pinned Microsoft OpenJDK
-  image with the documented Testcontainers socket overrides. That entry explicitly says *do
-  not install an unpinned JDK and do not skip the integration test*, so an ad-hoc tarball or
-  a Homebrew cask is the wrong answer even when it appears to work.
+  image with the documented Testcontainers socket overrides, and do not skip the integration
+  test. Entry 101 also says *do not install an unpinned JDK*; that sentence sits in a
+  container-build context, where "unpinned" means *not digest-pinned*, so read it as
+  governing the build image. It does not by itself settle whether a version-pinned host
+  install is acceptable. If you do install on the host, pin the version explicitly, and see
+  the non-TTY cask entry below.
 - **`psql` missing — entry 45.** Prepend `/opt/homebrew/opt/libpq/bin` to `PATH`.
 
 The `psql` crash is safe to recover from: it happens before any write, and the corpus was
 verified still at 198 figures afterwards. Re-run the profile from the start.
 
+## `brew install --cask microsoft-openjdk@17` fails when you are not at an interactive terminal
+
+**Symptom.** The cask aborts with a sudo/password error. Common in an agent session, a CI
+step, or any non-TTY shell.
+
+**Cause.** The cask runs a `.pkg` installer, which needs an interactive `sudo` prompt.
+
+**Fix.** Use the tarball, which needs no elevation at all:
+
+```bash
+mkdir -p ~/.local/jdk && cd ~/.local/jdk
+curl -sSL -o msjdk17.tar.gz \
+  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
+tar xzf msjdk17.tar.gz
+export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
+```
+
+This is the host-install route. Prefer entry 101's container build; if you take this route,
+note the tarball URL pins 17.0.20 explicitly, which is what "pinned" means for a host install.
+
 **Do not add a third entry for either symptom.** Both were re-derived from scratch during the
-rewrite walkthrough and written up here as new findings — one of them contradicting entry
-101's resolution — because the walkthrough searched the runbook it was executing and never
-searched this registry. Search this file before adding to it.
+rewrite walkthrough and written up here as new findings, because the walkthrough searched the
+runbook it was executing and never searched this registry. Search this file before adding to
+it. The duplicate JDK entry was first removed on the grounds that it *contradicted* entry
+101; on review that was an overreach — entry 101's prohibition is scoped to the build image,
+so the host-install route above is a legitimate companion to it, not a competitor. Two
+entries answering adjacent symptoms are fine so long as each says which case it is for.
 
 ## Do not infer a document's silence from a filtered search
 
