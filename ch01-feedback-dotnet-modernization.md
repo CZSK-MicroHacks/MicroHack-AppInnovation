@@ -3215,3 +3215,103 @@ name. Combined with the pointer at `:250` — which is real, and which I was wro
 absent — the accurate statement is: **the .NET Copilot attendee's own document never names
 the variable, and the document it points to explains what the variable means but not that it
 is already set.** The route exists; it does not lead anywhere that resolves the failure.
+
+## Close-out inventory: my own committed evidence contradicts my own published claim
+
+A close-out audit question — *"have you committed any artifact I would not have seen?"* —
+made me read my own evidence directory instead of my own report. The two disagree.
+
+### The discrepancy
+
+`evidence/acceptance-report.json`, the only acceptance artifact on this branch:
+
+```
+status      : failed
+checks      : 22  →  21 passed, 1 failed
+failing     : image-storage
+startedAt   : 2026-08-27T19:45:53Z
+git history : committed once, at f7880c5, never modified since
+```
+
+This report asserts, at `:1386`, *"acceptance genuinely green at **22/22**."* That run happened
+and I reported it in good faith — it followed the traversal-classifier fix and the `cp1252`
+fix, both of which are real and both of which are in the tree.
+
+**Its report was never persisted.** The string `22/22` does not appear in any file under
+`evidence/`. Every committed artifact on this branch reflects the pre-fix, `status: failed`
+state. The working tree is clean, so the file on disk is byte-identical to the one committed
+at `f7880c5` — the later run did not overwrite it and then get reverted; it never landed here
+at all.
+
+**Mechanism not established.** I can show what is on disk and what is not. I cannot show
+whether the 22/22 run wrote to a different path, wrote nowhere, or wrote here and was lost
+before `git add`. The impact does not depend on which.
+
+### Why this is the highest-severity item in my own record
+
+An auditor who clones this branch and opens the evidence directory — which is the thing
+evidence is *for* — finds a **failed** acceptance report. Nothing in that file says it is a
+deliberately preserved pre-fix capture. Nothing says a later run superseded it. The
+supersession exists only in prose, in a 3200-line document, and in chat messages.
+
+So the branch supports two mutually exclusive readings, and **the artifact-based reading is
+the one that loses**:
+
+| Reader | What they conclude |
+| --- | --- |
+| Reads `evidence/acceptance-report.json` | The run failed acceptance |
+| Reads this report at `:1386` | The run reached 22/22 |
+
+I made this worse at `:2236`, where I wrote *"**Keep both artifacts.**
+`evidence/f73-traversal-gate-capture.md` preserves the 21/22 failure."* That sentence
+presupposes a second artifact holding the green result. **There is no second artifact.** The
+capture document preserves the failure, and so does the report next to it. I described a
+two-artifact arrangement I had not actually created, and then reasoned from it.
+
+### It is my own Finding 23, landed in my own evidence
+
+Finding 23 says the acceptance suite, when it dies, *"leaves the previous report on disk
+untouched"* — so a stale report is indistinguishable from a current one, and an attendee can
+ship the wrong result believing it is the right one.
+
+**That is exactly what my branch does.** A stale report sits at the canonical path,
+structurally valid, schema-conformant, and wrong about the run it appears to describe. I
+filed the defect, understood it well enough to write it up, and still shipped an instance of
+it — because the defect's whole point is that the artifact gives the reader no signal.
+
+I do not think this weakens Finding 23. It is the strongest available evidence for it: the
+person most primed to catch it did not, for nine days, and only found it when a third party
+asked an inventory question that forced a read of the artifact rather than the narrative.
+
+### What I am not doing about it
+
+I am **not** re-running acceptance to produce a green artifact. The run is closed and
+adjudicated; generating a 22/22 report now would postdate the report that describes it, and
+would be indistinguishable from having had it all along. That is the fabricable-evidence
+class this audit exists to find, and manufacturing an instance of it to tidy my own record
+would be the worst possible response.
+
+The correct remedy is the cheap one, and it is a material recommendation for the workshop:
+
+> **A preserved failure capture must say so inside the artifact.** `evidence/acceptance-report.json`
+> should carry a field — or the workshop should require a sibling marker — distinguishing
+> *"this run failed"* from *"this failure is retained deliberately and a later run
+> superseded it."* Absent that, any deliberately-kept negative capture is indistinguishable
+> from an unnoticed failure, and the more diligent the attendee is about preserving
+> pre-fix evidence, the more likely their evidence directory is to misrepresent them.
+
+### Inventory of what exists only here
+
+Twenty-four files are present on `michalmar-refactored-waddle` and absent from
+`origin/rewrite-integration`, including this entire report and every evidence artifact:
+
+- `ch01-feedback-dotnet-modernization.md` — the primary deliverable
+- `evidence/` — 20 files: acceptance, telemetry (4 raw + 2 rendered), migration, target
+  output, runtime tests, task results, two `.trx` baselines, assessment, plan, rollback
+  runbook and revision, CVE summary, registry, and two capture documents
+- `dotnet/Dockerfile` and `dotnet/src/LegoCatalog.App/Services/AzureBlobImageStore.cs` —
+  Track A outputs
+
+**41 commits on this branch are unreachable from `origin/rewrite-integration`.** Nothing was
+merged back. Everything the facilitator knows about this track arrived as prose in chat
+messages; none of it arrived as an artifact they could open.
