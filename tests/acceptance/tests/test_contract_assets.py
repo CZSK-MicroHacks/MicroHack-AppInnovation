@@ -5448,6 +5448,87 @@ def _shell_commands(markdown: str) -> list[str]:
 AUTHORING_GUARD = "test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches"
 
 
+def test_performance_key_provisioning_binds_its_two_writers(repo_root: Path) -> None:
+    """One logical key has two independent writers; the prose must bind them.
+
+    `--performance-api-key` becomes the Container App secret the application
+    enforces on `/perftest/*`; `az keyvault secret set --name PERFTEST-API-KEY`
+    becomes the value the load test presents. Nothing in the deployment ties the
+    two together, and `infra/README.md` used to call the second one "the only
+    value here that is genuinely yours to supply" -- wording that licenses
+    inventing a fresh key at the moment the two must agree.
+
+    Divergence is silent until a run, then loud and misattributed: every sample
+    returns 401, the error rate is 100%, the failure criteria trip, and both
+    troubleshooting tables sent the reader to Key Vault RBAC and to whether the
+    secret "holds the key" -- questions that answer "yes" while the run fails.
+    A cause that is anticipated but misattributed is worse than one that is
+    absent, because the reader stops on a wrong answer instead of continuing.
+
+    This guard requires the binding to be stated where the key is written and
+    the divergence to be named where the failure surfaces. It matches on meaning
+    rather than on formatting, because the previous generation of this kind of
+    guard was defeated by requiring a backtick.
+    """
+    provisioning = (repo_root / "infra" / "README.md").read_text(encoding="utf-8")
+    assert "PERFTEST-API-KEY" in provisioning, "provisioning doc no longer sets the secret"
+
+    binding = re.search(
+        r"not a fresh value invented here|byte-identical to\s+the value already passed",
+        provisioning,
+    )
+    assert binding is not None, (
+        "infra/README.md sets PERFTEST-API-KEY without stating that it must equal the "
+        "value already passed as --performance-api-key. Two writers, one value, and "
+        "the reader is left free to invent a second key at the point they must agree"
+    )
+
+    # Both troubleshooting corpora, enumerated rather than globbed: a narrowing here
+    # would be indistinguishable from a repository that had shrunk.
+    documents = sorted(
+        path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/ch02/README.md",
+                "solutions/ch02/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert len(documents) == 2, f"expected both ch02 documents, walked {documents}"
+
+    for path in documents:
+        text = (repo_root / path).read_text(encoding="utf-8")
+        # Scope to the failure row itself. Searching the whole document would let
+        # unrelated prose elsewhere satisfy the match -- the guard would read as
+        # "the failure row names divergence" while asserting only "the file
+        # contains these words somewhere", which is the defect it exists to catch.
+        rows = [
+            line
+            for line in text.splitlines()
+            if line.startswith("|") and re.search(r"error count|error rate", line, re.IGNORECASE)
+        ]
+        assert rows, f"{path} no longer documents the nonzero-error-count failure"
+        assert any(
+            re.search(r"diverge|different values|equals the Container App secret", row)
+            for row in rows
+        ), (
+            f"{path} documents the nonzero-error-count failure without naming key "
+            "divergence as the cause of a total failure. The reader is routed to "
+            "Key Vault RBAC, which answers 'yes' while every sample still 401s"
+        )
+
+
 def test_rewrite_runbooks_deselect_the_reference_tree_authoring_guard(
     repo_root: Path,
 ) -> None:

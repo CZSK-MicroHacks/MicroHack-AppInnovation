@@ -179,10 +179,38 @@ the vault stores `PERFTEST-API-KEY`, and `az load test create` binds that secret
 `PERFTEST_API_KEY` alias the JMeter plan resolves through `${__GetSecret(...)}`.
 
 `KEY_VAULT_NAME` is the `keyVaultName` output of the deployment above, so the secret
-lands in the vault that deployment just created. `PERFTEST_API_KEY` is the only value
-here that is genuinely yours to supply, and it is guarded rather than defaulted — a
+lands in the vault that deployment just created. It is guarded rather than defaulted — a
 default would publish a known key into a vault the workflow identity can read.
 `--output none` keeps the value off the terminal.
+
+**`PERFTEST_API_KEY` is not a fresh value invented here.** It must be byte-identical to
+the value already passed as `--performance-api-key` when the application was deployed,
+because that argument becomes the Container App secret `performance-api-key` that the
+application enforces on `/perftest/*`. This vault secret is only how the load test
+*presents* that key; the application is the party that *checks* it. Two independent
+write paths reach one logical value, and nothing in the deployment binds them, so
+supplying a new value here produces a vault and an application that disagree.
+
+The failure is silent until a load run, and then it is loud and misattributed: every
+sample returns `401`, the error rate is 100%, `failureCriteria` trips, and the run
+fails for a reason no error message names. Verify the two agree before the first run —
+this compares them without printing either:
+
+```bash
+KEY_VAULT_NAME=$(jq -er '.keyVaultName.value' <<<"$PERF_OUTPUTS")
+: "${RESOURCE_GROUP:?Set the workshop resource group}"
+: "${CONTAINER_APP_NAME:?Set the deployed Container App name}"
+
+aca=$(az containerapp secret show --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" --secret-name performance-api-key \
+  --query value --output tsv)
+kv=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" \
+  --name PERFTEST-API-KEY --query value --output tsv)
+[ "$aca" = "$kv" ] && echo "keys agree" || echo "KEYS DISAGREE - the load test will 401 on every sample"
+```
+
+If they disagree, set the vault secret to the value the application already enforces.
+Changing the application's secret instead forces a new revision and restarts the app.
 
 Challenge 2 reads two values from this deployment: `loadTestResourceId` becomes
 `LOAD_TEST_RESOURCE_ID`, and the secret identifier
