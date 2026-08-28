@@ -2240,3 +2240,57 @@ because **a synthesis is exactly the kind of claim that outruns its evidence**, 
 what would have forced the count.
 
 Recorded in its honest form: **four verified, two reported**, and the pattern holds across the four.
+
+### Naming the ref does not repair `git log --diff-filter=A`
+
+The prescribed terminator for absence checks was "establish the file with `git log --diff-filter=A`
+rather than with the `cat-file` under test," later amended to "and name the ref explicitly, because
+`git log -- path` silently resolves to HEAD." The amendment is necessary and **not sufficient.**
+Constructed in a four-commit throwaway repository, no corpus required:
+
+```
+file present at HEAD:                                      PRESENT
+git log --diff-filter=A -- target.json      (implicit)     0 commits
+git log --diff-filter=A HEAD -- target.json (EXPLICIT)     0 commits   <- amendment does not help
+  + --full-history                                         0 commits   <- nor does the usual remedy
+  + --diff-merges=first-parent                             8 commits   <- finds it, and 7 others
+```
+
+`git log` does not diff merge commits by default. A file that first enters a tree through a **merge
+resolution** therefore has no add-commit at any ref, and the two obvious repairs - naming the ref,
+and `--full-history` - both still return zero. The only flag that finds it makes the instrument
+over-report by diffing every merge.
+
+> **A guard can have two independent failure modes that produce the identical output, and fixing the
+> one you found leaves the other in place, still silent.** The amendment is correct about the defect
+> it names and provides no protection at all against the one beside it.
+
+### A constructed mechanism is not a live defect, and saying so is the discipline
+
+Having proved the above, the honest next question is whether it happens **here**:
+
+```
+tracked files at HEAD ......................... 771
+with no add-commit via --diff-filter=A ........   0
+positive control (known-present, failure-shaped)  1 commit   <- instrument works
+```
+
+**Zero live instances.** This history contains no merge that introduces a file, so the residual
+failure mode is latent, not active - and for the case actually in dispute the amendment *is*
+sufficient in practice.
+
+This corrects a rule stated earlier in this document. Constructed evidence was described there as
+strictly stronger than found evidence, because it establishes that a defect *must* occur rather than
+merely that it *did*. That is over-stated. They answer different questions, and neither answers the
+one that decides whether to act:
+
+| evidence | question it answers |
+|---|---|
+| found in a corpus | did this happen? |
+| constructed from the mechanism | can this happen at all? |
+| population survey | is it happening **here**, and how often? |
+
+> **A construction proves possibility and says nothing about incidence.** Reporting a constructed
+> mechanism without its population count is how a latent defect gets filed with the urgency of a
+> live one - the same over-claim as reporting a single found instance as if it were a pattern,
+> arrived at from the opposite direction.
