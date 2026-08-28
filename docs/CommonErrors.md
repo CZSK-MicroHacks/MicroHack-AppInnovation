@@ -2000,3 +2000,53 @@ inside an unverified restriction.
 Practical form: **verify the premises that shrink the work with the same instrument you would use on
 a premise that grows it** - and note that a wrong path in such a premise fails silently, because
 nobody re-derives the boundary they have already agreed to work inside.
+
+### A positive control proves the instrument sees the corpus, not that it sees the defect
+
+The guard adopted for absence answers - *pair every zero with a positive control* - was tested here
+against the defect it was written for. It does not close it. Measured across this repository's
+markdown, with instrument A collapsing whitespace only and instrument B markdown-aware:
+
+```
+probe                                   A       B      verdict
+plain control   "address"               26      26     AGREE
+plain control   "instrument"            69      69     AGREE
+target phrase (carries backticks)        1       3     *** DISAGREE ***
+```
+
+**The plain controls pass under both instruments.** They certify instrument A as able to read the
+files, while instrument A is blind to two of the three occurrences of the actual target - because
+the target is written with inline emphasis inside it and the controls are not. **A control that does
+not carry the property responsible for the failure cannot detect that failure.** Plain text has no
+emphasis to be split by, so it can never exercise emphasis-splitting.
+
+And choosing a valid one is not free: an emphasis-bearing candidate tried here returned `0` under
+both instruments - it simply was not in the corpus. **A control must be known-present *and*
+failure-shaped, and the second requirement is what makes people settle for the first.**
+
+**The sibling probe has the same structure, one level down.** It disambiguates an absence by asking
+whether a file that must exist, exists - using `cat-file`, which reports its own failures as
+absence:
+
+```
+sibling candidate at 4bf59f7            4bf59f7    integration branch
+handoff.py                              present    present        <- valid
+workshop/toolchain.lock.json            present    present        <- valid
+docs/TelemetryFaultInjection.md         ABSENT     present        <- FALSE ALARM
+```
+
+A sibling added *after* the audited revision reads `ABSENT` for an entirely innocent reason, and the
+probe then reports that the instrument is pointed at the wrong tree when it is pointed correctly.
+**The check that resolves absence emits absence.**
+
+So the guard needs its own qualifier, and it is not recursive without one:
+
+> **A positive control terminates the regress only when its presence is established by something
+> other than the instrument under test, and when it carries the property that would cause that
+> instrument to fail.** For a revision probe, establish the sibling was added at or before the
+> audited revision (`git log --diff-filter=A`) - do not infer it from the same `cat-file` you are
+> trying to validate.
+
+The general form, which is why this family has been so persistent: **every guard proposed against
+absence has itself been an instrument capable of returning absence.** Terminating it requires a step
+of a different kind, not a more careful step of the same kind.
