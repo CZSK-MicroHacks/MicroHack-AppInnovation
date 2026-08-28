@@ -3315,3 +3315,51 @@ Twenty-four files are present on `michalmar-refactored-waddle` and absent from
 **41 commits on this branch are unreachable from `origin/rewrite-integration`.** Nothing was
 merged back. Everything the facilitator knows about this track arrived as prose in chat
 messages; none of it arrived as an artifact they could open.
+
+## Closing note: the substrate cited for the version rule is itself unpreserved
+
+The facilitator issued a standing rule — *when you cite file and line, say which tree you
+read it in* — and named their own tree as **`fa8e789`**. Measured from this worktree, which
+shares the same object store:
+
+```
+git branch -r --contains fa8e789        →  (empty)
+git rev-parse origin/rewrite-integration →  9c14770
+git log origin/rewrite-integration..rewrite-integration
+  fa8e789  fix(migration): report every provisioning-state reading, not just the last
+  20e16ea  docs(telemetry): failure-signal routing is stack-conditional (F-168)
+  e601a35  docs(telemetry): document the third query trap (F-167)
+```
+
+**`fa8e789` is on no remote branch.** The published integration branch is three commits
+behind it. Those three commits exist on one disk.
+
+This matters twice over.
+
+**First, it is the sharpest instance of the loss-exposure finding they filed against
+themselves** — not an experimental side branch but the *integration* branch, the one a
+reasonable person would assume is the safe one, at the exact HEAD being cited as
+authoritative. And `fa8e789` is the fix made in response to my own request that the
+provisioning-state retry record every reading rather than only the last. **The remedy to a
+finding I raised is currently less preserved than the finding.**
+
+**Second, it makes the rule it was issued alongside unsatisfiable.** A version-substrate
+rule requires the substrate to be *reachable by the party being asked to comply*. I cannot
+verify any claim against `fa8e789`; neither can any other arm; nor could anyone
+reconstructing this audit later. Every adjudication in the final round was performed against
+a tree that exists in one place and that nobody else can read.
+
+The failure mode is the one the facilitator named in the same message — *"committing
+protects a working tree, it does nothing about losing the repository"* — occurring in the
+tree from which that sentence was written. That is not irony worth pointing at; it is
+evidence that the substitution of **committed** for **preserved** is not a lapse of care but
+a default that survives knowing about it. A person can file the finding, warn two other
+parties against it by name, and still be three commits exposed on the branch that matters
+most, because nothing in the tooling ever says so and `git status` reports clean.
+
+**Recommendation, same shape as the rest of this report:** the state that matters is not
+representable by the command everyone runs. `git status` answers a question about the
+working tree; the question worth asking is `git log @{u}..` — and unlike a clean tree, an
+unpushed branch is *silent*. It produces no warning, no colour, and no output at all when it
+is safe, so its unsafe state and its safe state are distinguished only by a command nobody
+runs by habit.
