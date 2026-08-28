@@ -2333,17 +2333,29 @@ not. It read: *`handoff.py` is a substring of `test_migration_handoff.py`, so an
 matches a different file three times.* Decomposed exhaustively at that same revision:
 
 ```
-e16f24a   total 7   substring confounder 0   path-qualified 3   bare 4   (sums)
+e16f24a   docs/CommonErrors.md   total 7   substring confounder 0   path-qualified 3   bare 4  (sums)
+e16f24a   REPO-WIDE              total 8   substring confounder 1   path-qualified 3
 ```
 
-**Zero substring matches.** All three excluded items were **path-qualified citations** - the exact
+🔴 **The scope line above was added later and it changes the charge.** The published figure named no
+file. **Within `docs/CommonErrors.md` there are zero substring matches; repo-wide there is one**
+(`docs/ImplementationLog.md:1274`). So the correspondent's stated mechanism was **real in the corpus
+they had** and absent only in a narrower one this document never disclosed. **The charge is
+downgraded from a fabricated cause to a scope disagreement**, and the original wording is left below
+so the downgrade can be checked against it.
+
+**Zero substring matches** *in this file*. All three excluded items were **path-qualified citations** - the exact
 practice this document spends its length demanding. The anchor `[^A-Za-z_/]` excludes `/`, so it
 discards `catalog_acceptance/handoff.py` for the same reason it discards an accident, and the two
-land in one indistinguishable bucket.
+land in one indistinguishable bucket. **That half stands unaffected by the scope correction:** the
+anchor does discard the good practice, at either scope.
 
-> **The gap was real, the number was right, and the mechanism named for it contributed nothing.** A
-> correct measurement with a fabricated cause is harder to catch than a wrong measurement, because
-> the arithmetic checks out and the explanation is the part nobody re-derives.
+> **The gap was real and the number was right.** The mechanism named for it was **partly** right -
+> it accounts for one exclusion of four, not zero of four, and only outside this file. A correct
+> measurement with a wrong cause is harder to catch than a wrong measurement, because the arithmetic
+> checks out and the explanation is the part nobody re-derives. **A correct measurement whose scope
+> is unstated is harder still, because it can convict the other party of inventing something that is
+> sitting in a file you did not search.**
 
 Of the four bare mentions, three are legitimate - the citation is the subject of the sentence, shown
 ambiguous on purpose - leaving one defect, which stands.
@@ -2479,7 +2491,20 @@ positive controls, phrasings used in correspondence
 **Three populations - 4, 11, 23 - and no instrument produces 11.** The ordinal was not measured from
 the tracked corpus, from the section headings, or from any enumeration that exists. It was a running
 count held in the author's head and published one increment at a time into a corpus with no
-revisions, and the controls confirm the tree never carried the sequence at all.
+revisions.
+
+> 🔴 **The final clause of this paragraph was struck.** It read *"and the controls confirm the tree
+> never carried the sequence at all."* **That is false, and the controls do not support it.** The
+> phrase `Ninth and tenth instances` was present in this file from `76eade9` through `813b1cc` and
+> was removed by the author at `a4135dc` - one commit before the control was run at `5e64a26`. The
+> `0` is a true reading at the ref probed; the conclusion drawn from it was about the whole history,
+> which the measurement never touched. **The withdrawal itself stands** - no instrument produces 11
+> - but one of its stated grounds was a correct measurement with a false cause, which is the defect
+> this document charges most often. See the two entries below.
+
+The figures above were taken in `docs/CommonErrors.md` while this entry was being drafted; at
+`5e64a26` the same instrument returns **38**, not 39, and repo-wide **99**. The block is left as
+published with its scope and ref now named, because the discrepancy is the subject of the next entry.
 
 > **An ordinal is a claim about the size of a population, stated without ever naming the
 > population.** It is the most citable form a figure can take - compact, confident, and carrying an
@@ -2549,3 +2574,67 @@ That sentence is an absence claim, so it carries what this document requires of 
 
 It is the first negative result reported in this audit, and it is subject to every rule filed
 against the positive ones - which is the point at which the family stops being about `git` at all.
+
+### Correcting a document before measuring it deflates the population you then report on
+
+A correspondent filed the inflating case: **a measurement published into the corpus it measures is
+falsified by its own publication.** Their decomposition went `45 -> 53` purely from writing it down,
+and among the new confounders was the clause documenting the confounder.
+
+Run against this tree, the same class appears **with the sign reversed**, which is the more dangerous
+half because it manufactures evidence of absence:
+
+```
+phrase "Ninth and tenth instances" in docs/CommonErrors.md
+  b230edb 0 | e16f24a 0 | 76eade9 1 | def1efe 1 | 813b1cc 1 | a4135dc 0 | 5e64a26 1
+                          ^ written                            ^ struck    ^ control ran here
+control at 5e64a26 = 0    <- TRUE at that ref
+conclusion drawn = "the tree never carried the sequence at all"   <- FALSE
+```
+
+The phrase lived in this file for three commits. **The author removed it at `a4135dc` and measured at
+`5e64a26`**, then read the resulting zero as evidence about the original state.
+
+> **A measurement taken after your own correction can read the correction as evidence about what was
+> there before it.** The absence is real, the ref is right, the control is sound - and the answer is
+> to a question the measurement never asked.
+
+It is the same shape as the inflating case and invisible for the same reason: **the number is correct
+at the ref.** It is also mode 1 of the `git log` pair - a true answer about one ref, generalised by
+the reader to a scope the probe never covered - now with **history** as the scope rather than a branch.
+
+**Remedy, and it is not ref-citation alone:** a claim about whether something *ever* existed is a
+claim over a range of refs and must be measured over one - `git log -S` across the range, not
+`git grep` at a point. A point probe cannot answer a historical question no matter which point it names.
+
+### A ref-cited figure that fails to reproduce indicts the instrument, not the corpus
+
+Testing whether the ref-citation remedy actually protects, the two ref-carrying figures in this
+document behave differently, and the difference is the useful part:
+
+```
+.json @4bf59f7      published 130   re-derived now 130 130 130   REPRODUCES
+handoff.py @e16f24a published 7/0/3/4  re-derived now 8/1/3      DOES NOT
+tree sha of e16f24a fixed: e01f5d5b...   -> the corpus CANNOT have changed
+```
+
+Since the tree at a named ref is immutable, **a ref-cited figure that fails to reproduce cannot be
+corpus drift.** It is necessarily the instrument. Scoping resolved it at once:
+
+```
+@e16f24a  docs/CommonErrors.md      total 7  confounder 0  path-q 3   <- the published figure, exact
+          docs/ImplementationLog.md total 1  confounder 1  path-q 0
+controls: known-present = 1   failure-shaped = 0
+```
+
+> **Naming the ref does not make a figure reproducible; it makes irreproducibility diagnostic.** A
+> bare figure that fails to reproduce is ambiguous between corpus drift and instrument change. A
+> ref-cited one that fails can only be the instrument.
+
+🔴 **And the finding is against the author.** The figure was correct - for one file. It was published
+as a statement about the corpus with the file never named, and used to charge a correspondent with
+**fabricating** a cause on the ground that *"zero substring matches existed."* Repo-wide at that ref
+**one exists** (`docs/ImplementationLog.md:1274`), so their stated cause was real in the scope they
+had and false only in the undisclosed narrower one. **The charge is downgraded from fabrication to a
+scope disagreement**, and it is this document's own most-filed defect - an undisclosed corpus -
+landing on the single most severe accusation it makes.
