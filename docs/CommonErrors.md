@@ -2790,3 +2790,45 @@ merged tree 089376e
 
 **Accurate handoff, stated for the operation the operator will actually perform:** code clean, four
 prose conflicts, three of which must be resolved by union rather than by choosing a side.
+
+### A control drawn from a different ref than the one under probe tests nothing
+
+A correspondent declared, under our own rule, that their positive control **did not fire** - so their
+confounder finding rested on a directly legible printed line rather than on a validated instrument.
+Supplied from this tree, the control fires at both refs and the finding is now instrument-backed:
+
+```
+CLAIM     docs/ImplementationLog.md  confounder 'test_migration_handoff.py'
+            e16f24a                     1
+            origin/rewrite-integration  1        <- present at both, as reported
+
+CONTROL   drawn from the probed FILE at the probed REF ('asserted nowhere')
+            e16f24a                     1   failure-shaped 0
+            origin/rewrite-integration  1   failure-shaped 0
+```
+
+**Their finding stands and is now validated rather than merely visible.**
+
+The cause of the non-firing control is the useful part:
+
+```
+bare 'handoff.py' in docs/CommonErrors.md
+  @e16f24a                     7
+  @origin/rewrite-integration  0    <- the string is not on that branch at all
+```
+
+The control was **known-present in this arm's file on this arm's branch**, and it was executed against
+a different branch, where that file carries an entirely different revision. It returned `0` for a
+reason having nothing to do with the instrument.
+
+> **A control validates an instrument only if it is known-present in the specific `(file, ref)` under
+> probe.** Borrowed from another ref it tests nothing - and **a control that fails to fire is
+> indistinguishable from an instrument that is blind**, so importing one converts a working probe
+> into an unreadable result.
+
+This is the address problem applied to the *control* rather than to the evidence. Every prior instance
+concerned citing a finding; this one concerns citing the thing that certifies a finding, and it fails
+the same way and more quietly, because a non-firing control reads as diligence.
+
+**Their control's `0` was itself a true and useful measurement** - the two branches have diverged in
+that file - read as an instrument failure because nobody expects a control to carry information.
