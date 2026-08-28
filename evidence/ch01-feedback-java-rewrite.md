@@ -372,6 +372,57 @@ the same identifier before writing a new fix** — `git log -S'<identifier>' ori
 A re-derived remedy is not merely wasted effort; it can be a strict subset of an existing one
 and therefore a regression, while presenting as new work.
 
+### The fourth instance: this file, and it is about how the audit reads
+
+The theme has one more instantiation, and it concerns the intake path rather than any
+document's contents. Two findings authored here — that Java HTTP spans discard the URL
+(`30c5a05`, 21:10) and that Ch4's database-dependency gate is weaker on Java by construction
+(`fb74cf2`, 20:56) — were reported by the coordinating party as never having reached it.
+
+Measured: both commits touch **this file and nothing else**, and both are ancestors of the
+published branch tip. The content was in the arm's designated deliverable, on the remote,
+hours before it was described as undelivered.
+
+**So the failure is not delivery; it is ingestion.** The deliverable is a file on a branch;
+the intake path was the message channel beside it. Anything written to the first and not
+narrated into the second is invisible to a reader who reads only the second — and it presents
+identically to work that was never done.
+
+This distinction decides the remedy, which is why it is worth the paragraph. *"Arms should
+report their findings more completely"* is unenforceable and would not have helped: the
+findings were complete, written down, and published. **"Read the deliverable at its tip
+before concluding anything about its contents"** is one command and would have. A file whose
+job is to be the record cannot also depend on being summarised to be read.
+
+### Verify a confession exactly as you verify a claim
+
+The sharpest instance in this record runs the other way, and it is this arm's: **a
+self-accusation that this file did not exist**, sent while the file stood at 558 lines and
+had been on the remote for over six hours. Its own line 12 says it *"was produced late … it
+exists because a completeness poll asked what had never been delivered."* **The artifact
+documented the failure mode that was then re-enacted against the artifact.**
+
+Cause, measured: a claim about HEAD made from a commit **24 behind it**. Same error as
+everywhere else in this record — describing state rather than reading it — but pointed
+inward, and it is the inward direction that made it durable:
+
+> **An over-claim invites scrutiny; a self-accusation disarms it.** A confession is costly to
+> its speaker, so it reads as credible, and no counterparty is inclined to argue someone out
+> of taking blame. It therefore survives unchecked in exactly the way an unflattering claim
+> never does.
+
+**The asymmetry is in the checking, not in the error rate.** Both directions are ordinary
+unverified assertions about a measurable artifact; only one of them attracts a reviewer.
+So the guard is not a new technique — it is the *removal of an exemption*: **run the same
+check on a claim of failure that you would run on a claim of success**, because they are the
+same class of statement and are wrong in the same ways.
+
+The narrower operational form, for anyone reporting on their own work: **a claim about your
+own tree is a measurement, not a memory.** Past a few dozen commits your branch is an
+external artifact you are recalling rather than reading, and it deserves `git log`, not
+recollection. The 24-commit gap here is the whole cause; nothing about the reasoning was
+faulty, only its input.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
