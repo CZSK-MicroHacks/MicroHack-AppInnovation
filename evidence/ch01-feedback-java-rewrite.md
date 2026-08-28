@@ -248,16 +248,15 @@ to analyse request telemetry; on the Java track the columns that identify *which
 was called are empty by construction, so the documented analysis cannot be performed the
 documented way.
 
-**The route is not lost, only relocated.** `http.route` is populated for every request,
-because `/healthz` and `/readyz` are `@GetMapping` handlers
-(`web/HealthController.java:25,30`) and so set Spring's `BEST_MATCHING_PATTERN`. It lands in
-`customDimensions`, not in a top-level column. Recovering it:
-
-```kql
-requests
-| extend route = tostring(customDimensions["http.route"])
-| summarize count() by route, operation_Name
-```
+**The route is not lost, but the recovery path stated in the first version of this entry was
+wrong, and the facilitator refuted it by execution.** `http.route` *is* populated on the span
+for every request, because `/healthz` and `/readyz` are `@GetMapping` handlers
+(`web/HealthController.java:25,30`) and so set Spring's `BEST_MATCHING_PATTERN`. But it does
+**not** reach the `requests` table: `customDimensions` is null on all 1 077 Java request
+records, so the query published here previously —
+`requests | extend route = tostring(customDimensions["http.route"])` — **returns empty**.
+The route survives only on the metrics table, via `CatalogTelemetry.recordHttp`, which is not
+a table the material tells anyone to query.
 
 **Bearing on the empty dependency table.** Server spans and `db.client` spans are created by
 the same `Tracer`, from the same SDK instance, exported through the same pipeline. An export
@@ -265,3 +264,58 @@ fault cannot drop one span kind and keep the other. So if server spans are arriv
 empty dependency table means the two qualifying call sites were never executed — a traffic
 gap, not an instrumentation gap. The query above decides it: probe routes only means
 absent traffic; `/` or `/figure/{id}` present with no dependencies means a real defect.
+
+## Late finding — four of the five shipped evidence queries filter a resource attribute
+## through a span-attribute column, on both tracks
+
+**Substrate: `fb74cf2`/`30c5a05`, `workshop/observability/queries.kql` and both reference
+apps. The static half is executed. The Azure-side mapping behaviour is read-not-run and
+rests on the facilitator's live measurement, cited below.**
+
+Four of the five queries in `workshop/observability/queries.kql` — `error-rate`, `latency`,
+`database-dependency-failures`, `cold-starts` — carry this clause:
+
+```kql
+| where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__"
+```
+
+`Properties` on `AppRequests` and `AppDependencies` is populated from **span** attributes.
+`azure.containerapps.revision.name` is emitted by both applications as a **resource**
+attribute, and never as a span attribute:
+
+* Java sets it through `otel.resource.attributes`
+  (`config/CatalogResourceIdentity.java:20`, applied at `CatalogApplication.java:33`).
+* .NET sets it inside `ConfigureResource(...).AddAttributes(...)`
+  (`Program.cs:80`).
+* Neither stack ever calls `setAttribute`/`SetTag` with it — verified on both trees with
+  positive controls confirming the searches matched.
+
+Azure Monitor promotes a fixed subset of resource attributes to dedicated columns and does
+not copy the remainder into `Properties`. The same queries rely on exactly that promotion
+elsewhere and get it right — `AppRoleName` for `service.name`, `AppVersion` for
+`service.version`. The defect is the one non-standard attribute being expected to survive
+by a route the standard ones do not use.
+
+`replica-count` is the only query unaffected: it reads `AzureMetrics` and applies no
+`Properties` filter.
+
+Every affected query ends with a guard of the form `| where value > 0` or
+`| where totalRequests > 0 and failedRequests > 0`. **The failure mode is therefore an empty
+result set, which is indistinguishable from a healthy window in which nothing failed.**
+
+**Corroboration, measured by the facilitator, not by this arm:** `customDimensions` is null
+on all 1 077 Java request records; the Ch4 arm separately measured
+`azure.containerapps.revision.name` present on `AppMetrics` (5 510 rows) and absent from
+`AppRequests`, `AppDependencies` and `AppTraces`. The metrics/traces split is consistent
+with resource attributes being carried into `Properties` for metrics but not for traces.
+
+**This is not a Java finding.** Both stacks emit the attribute identically, so the clause
+cannot match on either track.
+
+### A distinction worth keeping separate
+
+`db.system.name` is a genuine **span** attribute (`CatalogTelemetry.startDatabaseSpan`), so
+it would reach `AppDependencies.Properties` normally. Its measured absence is explained by
+`AppDependencies` being empty on the Java component — the traffic gap — rather than by any
+stamping rule. Grouping it with the revision attribute treats one structural defect and one
+empty-table artefact as a single mechanism; only the revision attribute is permanent.
