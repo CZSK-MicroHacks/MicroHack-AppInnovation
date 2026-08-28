@@ -1607,3 +1607,30 @@ one figure has a 1-in-4 chance of drawing the only one that cannot fail. So:
 The general form is the one this document keeps arriving at from new directions: a check returned
 a true signal about an adjacent question. Here the adjacent question was *"how many times does
 this string appear"* standing in for *"how many integrity assertions does this file make"*.
+
+### A charitable reading is an unverified claim too
+
+Late in the same review, a reviewer declined to chase a correction with: *"if you'd rather leave
+that entry as-is that's defensible, since your sentence is true of `runtimes.*`."* The sentence
+was **"its complete installer set is"** those two keys. That is not true of `runtimes.*`; it is
+an unscoped claim about the file, and it is false. **The charitable reading rescued it by
+supplying a qualifier the text did not contain.**
+
+This is the mirror of the rule recorded earlier about self-accusation. Both are ordinary
+assertions about a measurable artifact, and both escape checking for social rather than technical
+reasons:
+
+| direction | why it survives |
+|---|---|
+| self-accusation | costly to the speaker, so it reads as credible, and nobody argues |
+| charitable reading | costly to contest, since disputing it means insisting you were *more* wrong |
+
+**Neither is a new class of error and neither needs a new technique.** They are the same
+verification everything else gets, applied to two cases that quietly exempt themselves — the
+remedy is removing the exemption, not adding a rule. In this instance the correct response was to
+refuse the charity and confirm the sentence had been wrong as written.
+
+The same reviewer had already been unable to see the fix, having read the branch two commits
+behind tip — so the charity was offered about a defect that no longer existed, on the strength of
+a reading of text that had already been replaced. **Stale read, then generous inference, and the
+two failures compose: neither alone would have produced a wrong conclusion about the artifact.**

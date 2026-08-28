@@ -528,6 +528,15 @@ database image in the same file is pinned by hash or signature — counted as ex
 **19 `sha256`, 5 `sha512`, 6 `digest`, 6 `signature`**, plus 10 `signaturePublisher` Authenticode
 assertions.
 
+**A positive result, recorded because an audit that reports only defects is not a measurement.**
+`baseInfra/terraform/README.md` makes a universal claim — *"Every tool/database installer is the
+exact URL from `workshop/toolchain.lock.json`, with digest verification and Authenticode publisher
+verification where the lock declares a publisher."* Tested by walking the parsed lock for every
+object carrying a `url` key and checking each for a sibling integrity key: **15 objects carry a
+URL, 15 have integrity, zero are bare.** The claim holds, and its hedge — *where the lock declares
+a publisher* — is exactly the right one, since only 6 objects declare `signature`. This is the
+strongest universal assertion the material makes about the lock and it survives contact with it.
+
 *(An earlier revision of this paragraph said "exactly two installer entries" and gave the
 integrity figures as 27 / 5 / 6 / 16. Both were instrument defects. The installer `grep` for
 `"[a-zA-Z]*Installer"` piped through `sort -u` requires a capital `I`, so it never matched the
