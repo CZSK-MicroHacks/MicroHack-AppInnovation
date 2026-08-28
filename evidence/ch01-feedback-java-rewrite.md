@@ -549,6 +549,17 @@ citation is disputed, `git ls-tree -r --name-only <rev> | grep '<basename>$'` **
 re-reading the line. If the file has two homes, the disagreement is about addressing and not
 about content — and no amount of re-reading either copy will surface that.
 
+**And this document was carrying an instance of it.** Sweeping every line citation here
+against the duplicated basenames turned up two *adjacent bullets* in the telemetry section
+that resolved to different trees: `CatalogApplication.java:33` was the `java/` copy (the
+reference's line 33 is blank), while `Program.cs:80` was the **`solutions/reference/`** copy —
+in `dotnet/` that same statement is `:64`, and `:80` there is an unrelated lambda. Both
+citations were correct; the pair was incoherent, and nothing in either one showed it. Fixed
+by prefixing the tree. Worth stating plainly: **I wrote the section describing this hazard
+and had already committed two instances of it in the same file**, which is the same result as
+every other finding here — naming a defect does not confer immunity from it, and only the
+mechanical sweep found them.
+
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
 it was *confirmed* carelessly. Confirmation is where the effort feels already spent, which is
@@ -662,9 +673,11 @@ Four of the five queries in `workshop/observability/queries.kql` — `error-rate
 attribute, and never as a span attribute:
 
 * Java sets it through `otel.resource.attributes`
-  (`config/CatalogResourceIdentity.java:20`, applied at `CatalogApplication.java:33`).
+  (`config/CatalogResourceIdentity.java:20` — same line in both trees — applied at
+  `java/…/CatalogApplication.java:33`).
 * .NET sets it inside `ConfigureResource(...).AddAttributes(...)`
-  (`Program.cs:80`).
+  (`dotnet/src/LegoCatalog.App/Program.cs:64`; the same statement is `:80` in the
+  `solutions/reference/` copy).
 * Neither stack ever calls `setAttribute`/`SetTag` with it — verified on both trees with
   positive controls confirming the searches matched.
 
