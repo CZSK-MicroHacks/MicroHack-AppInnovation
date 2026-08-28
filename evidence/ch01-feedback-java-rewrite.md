@@ -519,12 +519,26 @@ machine.** Nothing in the rewrite guidance says the reference is a different maj
 The failure surfaces as import errors in files whose paths they recognise.
 
 **The installer asymmetry is the aggravator, and it is workshop-wide rather than Java-only.**
-The lock contains exactly two installer entries — `windowsSourceSdkInstaller` and
-`windowsSourceRuntimeInstaller` — and **zero** target-runtime installers (verified: the
-string `targetRuntimeInstaller` has 0 occurrences). Both stacks contract a target runtime
-(.NET 8→10, Java 17→21) that has **no pinned, hash-verified acquisition path**, while every
-JAR, NuGet package, Maven distribution and database image in the same file is pinned by hash
-or signature — 27 `sha256`, 5 `sha512`, 6 `digest`, 16 `signature`.
+The lock contains **five** installer keys — two under `runtimes.*` (`windowsSourceSdkInstaller`,
+`windowsSourceRuntimeInstaller`) and three under `databases.*` — and all five are Windows `x64`.
+There are **zero** target-runtime installers (verified: the string `targetRuntimeInstaller` has
+0 occurrences). Both stacks contract a target runtime (.NET 8→10, Java 17→21) that has **no
+pinned, hash-verified acquisition path**, while every JAR, NuGet package, Maven distribution and
+database image in the same file is pinned by hash or signature — counted as exact JSON keys:
+**19 `sha256`, 5 `sha512`, 6 `digest`, 6 `signature`**, plus 10 `signaturePublisher` Authenticode
+assertions.
+
+*(An earlier revision of this paragraph said "exactly two installer entries" and gave the
+integrity figures as 27 / 5 / 6 / 16. Both were instrument defects. The installer `grep` for
+`"[a-zA-Z]*Installer"` piped through `sort -u` requires a capital `I`, so it never matched the
+three keys named literally `installer`, then deduplicated by key name rather than path,
+collapsing three distinct `databases.*.installer` entries into one. Worse, the four integrity
+figures came from **three different instruments**: 27 is raw string occurrences of `sha256`,
+which counts the `sha256:` prefix inside every digest **value**; 6 is exact keys named `digest`;
+16 is key names *containing* `signature`, i.e. 6 `signature` plus 10 `signaturePublisher`. Only
+`sha512` was instrument-independent at 5 — and that agreement is exactly what made the list look
+homogeneous. **A single token on which every instrument agrees is a false control.** All figures
+above are now one instrument: occurrences of an exactly-named key in the parsed JSON.)*
 
 **Correction to an earlier draft of this section, because the causal claim was wrong.** This
 document previously called that target gap "the direct cause" of the hand-rolled JDK install
@@ -543,13 +557,23 @@ lock's own `hosts` block contracts two of them:
 |---|---|---|
 | OS | **macOS ≥ 13.0**, arm64 + x86_64 | Windows Server 2025 Datacenter |
 | Docker | **pinned** — Desktop 4.37.1, Engine 27.4.0 | **none pinned** |
-| runtime installers | **zero** | 2, both `windowsSource…` |
+| *runtime* installers | **zero** | 2, both `windowsSource…` |
 
 So macOS is not an unsupported platform whose absence is out of contract — **it is a
 first-class host that the same file provisions carefully enough to pin a Docker engine for,
 and then ships no runtime installer for.** That is an internal inconsistency within one
 document, not a gap at its edge. Measured on this machine: `sw_vers` 26.6.2 arm64, Docker
 Engine **27.4.0** — matching `hosts.coordinator.dockerEngineVersion` exactly.
+
+**Resist the tempting stronger version of this claim, because the same file refutes it.**
+"All five installers are Windows" invites the reading that the lock is simply a Windows
+artifact — and that reading is answerable: `tools.terraform.platforms` ships a `darwin/arm64`
+download with a `sha256`, and `databases.postgresql.localContainer.platforms` ships a
+`linux/arm64` digest. Cross-platform acquisition is **solved twice in this file**, once for a
+tool and once for a database, both pinned. It is left unsolved only for `runtimes.dotnet` and
+`runtimes.java`, which carry no `localContainer` or `platforms` key at all — and which are the
+two components an attendee cannot proceed without. **The larger count produces the weaker
+argument;** the narrow claim is the one that survives contact with the file.
 
 **That same block also predicts the Testcontainers asymmetry this delivery treated as an
 anomaly.** `coordinator` pins a Docker engine; `workshopVm` pins none. `PostgreSqlIntegrationTest`

@@ -1577,3 +1577,33 @@ The durable statement is narrower than either count: cross-platform acquisition 
 this file, for a tool and for a database, and is unsolved only for the two language runtimes —
 which are the components an attendee cannot proceed without. **A count is not a finding; check
 what the larger number does to the argument before adopting it.**
+
+### A token every instrument agrees on is a false control
+
+The same entry published four integrity figures as one list — `27` `sha256`, `5` `sha512`,
+`6` `digest`, `16` `signature` — and they came from **three different instruments**:
+
+| token | published | what actually yields that number |
+|---|---|---|
+| `sha256` | 27 | raw string occurrences, counting the `sha256:` prefix inside every digest **value** |
+| `sha512` | 5 | raw, exact-key and name-contains **all agree** |
+| `digest` | 6 | occurrences of a key named exactly `digest` |
+| `signature` | 16 | key names *containing* `signature`: 6 `signature` + 10 `signaturePublisher` |
+
+Exact-key counts are `19 / 5 / 6 / 6`. Not one of the three published non-`sha512` figures is
+wrong *as a measurement* — each is the correct output of some defensible instrument. **The list
+is wrong because it is four answers to four different questions, presented as four answers to
+one.**
+
+**What let it survive is the token that agreed with itself.** `sha512` is 5 under every
+instrument, so any spot-check that happened to land on it confirmed the list. A reviewer sampling
+one figure has a 1-in-4 chance of drawing the only one that cannot fail. So:
+
+> When several figures are presented as a set, **state the instrument once and derive all of them
+> with it**. If a figure disagrees under a second instrument, the disagreement is the finding.
+> And do not treat a token where instruments agree as evidence about the others — agreement there
+> is a property of that token, not of the method.
+
+The general form is the one this document keeps arriving at from new directions: a check returned
+a true signal about an adjacent question. Here the adjacent question was *"how many times does
+this string appear"* standing in for *"how many integrity assertions does this file make"*.
