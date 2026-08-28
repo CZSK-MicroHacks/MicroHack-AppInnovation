@@ -1022,3 +1022,25 @@ Run against the baseline this reports `none` — the table is exactly complete, 
 **Why it is worth a rule.** Silence claims are unfalsifiable from inside the search that
 produced them, so they survive review that a positive claim would not. The generalized form
 of the mistake is verifying your own query instead of the artifact.
+
+**The harder variant: a well-formed filter answering the wrong question.** The rule above
+catches a filter that *could not* have matched the counter-evidence. It does not catch a
+filter that would have worked perfectly — for a question you did not ask. Searching
+`docs/Troubleshooting.md` for `javac|JDK|JRE` returns zero, and that is a correct answer to
+*does this file discuss JDKs*. It was then used to support *therefore it does not link the
+error registry* — a different claim, refuted by one hit for `CommonErrors` in that same file
+(`docs/Troubleshooting.md:211`). Nothing was wrong with the query; the question was
+substituted underneath it.
+
+> **Search for the thing being denied, not for the subject matter around it.**
+
+Write the denied proposition down first, then write the query that would return its
+counter-example. If your claim is *no handoff instance declares a rewrite path*, the query
+is `"path"\s*:\s*"[^"]*rewrite` over **every** file — not a filename glob for `*handoff*`,
+which cannot see an instance that is named something else. Run against the baseline that
+search returns only `workshop/contracts/challenge-paths.json`, and the sharper true statement
+falls out of it: seven JSON files *enumerate* `copilot-rewrite` as a legal value and none is
+an instance of one.
+
+A corollary, learned by making the mistake: **counting a filter's hits is not reading them.**
+A three-term search that returns 1, 7 and 2 has not been read until all ten rows have been.
