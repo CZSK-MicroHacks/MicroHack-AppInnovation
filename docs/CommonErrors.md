@@ -2943,10 +2943,15 @@ reader who resolves it can tell which of the two they are holding.
 
 ## The casing defect has a second member, and the evidence first offered for it was a homonym
 
+> **WITHDRAWN in its central claim - see "The class had one member and it is unreachable" below.
+> There is no second member. The correction of the homonym in this entry is sound and stands; the
+> conclusion it was used to support does not.**
+
 A correspondent generalised the `activeRevisionsMode` casing defect into a class - any schema `const`
 naming an Azure-derived enum - and nominated `principalType` in
-`workshop/contracts/azure-target-output.schema.json:581` as a second member. **The nomination is
-correct. The evidence offered for it was drawn from the wrong resource.**
+`workshop/contracts/azure-target-output.schema.json:581` as a second member. ~~**The nomination is
+correct.**~~ **The nomination is refuted.** The evidence offered for it was drawn from the wrong
+resource - and so was the evidence offered against it here.
 
 The cited witness was `infra/main.json:767`, `"principalType": "User"`. Every occurrence of
 `principalType` in that file belongs to `Microsoft.Authorization/roleAssignments`:
@@ -3132,3 +3137,72 @@ that fails invites inspection; a check that succeeds retires the question it was
 The remedy is one line and belongs beside the push, not after it: **verify that the branch is the
 head of an open pull request, or record explicitly that the work is preserved rather than
 delivered.** Preservation and delivery need separate evidence because they can and here do disagree.
+
+## The class had one member and it is unreachable
+
+Two parties confirmed a casing class with two members. Tested properly, one member does not exist and
+the other cannot be reached by anyone the workshop is written for.
+
+### Member 2 is refuted, and the refuting object was named after the schema that describes it
+
+Both parties grounded `principalType` on a *resource*. The schema does not describe a resource.
+
+```
+schema      azure-target-output.schema.json:564  "$defs": { "entraAdministratorPrincipal": ... }
+                                           :580     "principalType": { "const": "user" }
+
+postgresql.bicep:51  resource entraAdministrator ... /administrators
+                :56    principalType: 'User'      <- what BOTH parties grounded on
+postgresql.bicep:78  output entraAdministratorPrincipal object = {
+                :81    principalType: 'user'      <- NAME-MATCHED to the $defs, and lowercase
+```
+
+**The `$defs` and the Bicep `output` carry the same identifier**, `entraAdministratorPrincipal`. The
+output emits `'user'`. The `const` is `"user"`. **They agree exactly, and the schema is correct.**
+
+The correspondent read line 81 as a sibling *resource* emitting into `main.json:1556`; that address is
+the output's `"type": "object"` declaration. Neither of us read the eight lines above the number we
+were quoting.
+
+> **The rule this entry previously filed - re-ground a field-name generalisation on "the resource
+> that emits it" - contains the error.** A schema over deployment output is satisfied by `output`
+> declarations, not by resource properties, and the word *resource* sent two parties past the object
+> that settled it. Re-ground on **whatever emits into the artifact the schema validates**, and locate
+> it by **name correspondence** - here the `$defs` key and the output key were the same string, which
+> was the available signal and neither party used it.
+
+Both spellings are correct in their own domain: ARM's enum for `flexibleServers/administrators` is
+`User`; this workshop's own output contract says `user`. **Two casings for one property name is not
+prima facie a collision.**
+
+### Member 1 survives the same test and then loses its severity
+
+```
+environment.bicep  outputs: targetOutput, virtualNetworkResourceId   -- no output emits `mode`
+                   :667  activeRevisionsMode: 'Single'   (resource property, the only producer)
+```
+
+No name-matched output exists, so member 1 is a real defect. But:
+
+```
+files mentioning        challenges/  solutions/     CONTROL evidence/   failure-shaped
+azure-target-output          3            6            13 / 13              0
+cicd-evidence                0            0            (as above)           0
+cicd-evidence appears only in workshop/contracts/*.json and in docs this audit itself wrote
+```
+
+**No attendee is instructed to produce `cicd-evidence.json` anywhere in the workshop.** It was rated
+FORCED here because a prescribed validation command exists - but the prescription is in the acceptance
+suite, not in any attendee instruction. **A suite validating a schema is not evidence that anyone
+produces the artifact**, and the inference from one to the other is the adjacent-artifact error at
+the severity layer rather than the evidence layer.
+
+### Why the class looked worse than the sum of its members
+
+> **The severity and the defect are anti-correlated.** The member with a real attendee-facing capture
+> path is not broken. The member that is broken has no attendee-facing capture path. **Neither member
+> is both** - and a class assembled from one member contributing reachability and another
+> contributing brokenness inherits an urgency that no member possesses.
+
+The conjunction was never tested because each member was admitted on a different property. **Test a
+class on the conjunction of the properties that make it matter, not on the union of them.**
