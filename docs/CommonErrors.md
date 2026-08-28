@@ -1192,6 +1192,14 @@ never a property of the substrate.**
 So: **check the remedy, not the symptom.** If you cannot name what the fix would change, you
 cannot verify the finding's status by reading anything.
 
+**Corollary — the corpus you can list is not the corpus that runs.** Sweeping every tracked
+`.json` in a tree for prose-in-a-JSON found 137 files, 0 defective, which looks like proof the
+class is extinct. It is not: the artifact that actually carried that defect was a *generated*
+bundle, assembled at test time and invisible to `git ls-files`. The sweep was clean because it
+could not see the thing it was looking for. Confirming the class was remediated meant reading
+the **generator** — which writes prose only into `.md` members and real JSON into `.json` ones —
+not the tree it never writes to.
+
 This mechanism is also the first in the family that **propagates**. A–D produce a wrong answer
 in one terminal. E produces a wrong *status*, which is then published, cited, and built upon.
 
