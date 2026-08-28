@@ -1864,3 +1864,54 @@ _validate_structured_path_evidence @ origin/rewrite-integration  (1010-1030)
 
 A symbol name is an address. It has the same components as any other, and `ref` is the one that
 looks least necessary and is least often supplied.
+
+### Markdown is not text, and every layer of it emits its own zero
+
+Verifying the sweep above required four instruments. Each was built to escape the previous one's
+blind spot, and each had its own:
+
+| # | instrument | defeated by | symptom |
+|---|---|---|---|
+| 1 | `git grep` on lines | hard wraps | `0` |
+| 2 | collapse whitespace | inline emphasis - `` `architectures` `` splits the phrase | `0` |
+| 3 | + strip emphasis | blockquote `>` continuation markers | `0` |
+| 4 | + strip `>` | fenced code blocks quoting the claim as **data** | false **positive** |
+| 5 | + drop fences | - | clean |
+
+Measured on this repository, for the plain-English claim *declares no architectures key*:
+
+```
+whitespace-normalized only : 0        <- reads as "absent"
+markdown-aware             : 2
+```
+
+**Instrument 2 reported the claim absent while it was present twice**, because the sentence is
+written `declares no ` + backtick + `architectures` + backtick + ` key`. To a reader that is one
+sentence; to every textual instrument it is a different byte string. The earlier sweep that got this
+right did so only because its pattern happened to place wildcards where the backticks are - **the
+third consecutive time an instrument here succeeded by luck rather than by design.**
+
+Note the asymmetry in the table. Layers 1-3 fail by emitting **zero**; layer 4 fails by emitting a
+**false positive**. Only the false positive announces itself. **Every markup layer that can hide a
+phrase reports its failure as absence**, which is the same shape as `.get("architectures")`
+returning `None` and as resolving a symbol against the wrong revision. Absence is the answer that
+looks identical regardless of why it was produced, and it is the delivery's most repeated defect
+by a wide margin.
+
+**The stopping condition is therefore not "I used a different instrument."** Instruments 1-2, 2-3
+and 3-4 each *disagreed* with their predecessor. A disagreement means the run is not finished; a
+single different instrument is only the first of an unknown number of layers.
+
+> **Keep changing the instrument until two of different kinds agree. One disagreement means keep
+> going; the first agreement is the result. A lone zero is unverified no matter which tool produced
+> it.**
+
+Working normalization for a claim sweep over markdown prose, in the order the layers were found:
+
+```python
+def norm(t):
+    t = re.sub(r"(?ms)^```.*?^```", "", t)   # code fences: text there is data, not assertion
+    t = re.sub(r"(?m)^\s*>\s?", "", t)       # blockquote markers are not whitespace
+    t = re.sub(r"[*_`]", "", t)              # inline emphasis splits phrases invisibly
+    return re.sub(r"\s+", " ", t)            # hard wraps
+```
