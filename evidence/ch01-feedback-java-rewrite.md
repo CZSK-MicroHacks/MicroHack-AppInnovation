@@ -192,6 +192,43 @@ made. Listed in the order they happened:
 5. **A residue of (3) survived into this file** and into a second document after the claim
    had been retracted once. Found by re-reading rather than by anyone asking.
 
+### Remedy shape, if this arm's JDK fix is taken
+
+Recorded because the fix spans two commits with opposite shapes, and taking only the first
+would ship a claim this arm retracted. Measured against `origin/rewrite-integration`.
+
+The contradiction is live on the delivery branch: the tarball route appears **6 times** there
+(3 in `java/README.md`, 3 in `docs/CommonErrors.md`) against **0** at `4bf59f7`, while entry
+101's *"do not install an unpinned JDK"* is present at both. It was introduced, not inherited.
+
+The two legs are not the same defect and need different treatment.
+
+- **`java/README.md` is the defect.** It is the guide every off-VM reader is sent to, and it
+  prescribed the tarball as *the* way to acquire prerequisites, competing with entry 101.
+  `1fa80cf` **deletes** that block — this arm's HEAD has 0 tarball hits in that file — and
+  replaces it with pointers into entries 101 and 45. It cherry-picks **cleanly**, and on its
+  own it closes the routing half.
+- **`docs/CommonErrors.md` is not a duplicate route.** Its tarball sits inside the *non-TTY
+  cask* entry, which answers a different symptom — `brew install --cask` aborting without a
+  TTY — and notes the tarball yields exactly the pinned `17.0.20+8`. That entry is defensible
+  and should survive; deleting it strips a working escape hatch. What the delivery branch
+  lacks is the **subordination**: `git grep 'host-install route' origin/rewrite-integration`
+  exits 1, against 2 hits at this arm's HEAD.
+
+So the fix to take is `1fa80cf`'s `java/README.md` plus **`8033b29`'s** registry text, not
+`1fa80cf`'s. `1fa80cf`'s registry half asserts that *"an ad-hoc tarball or a Homebrew cask is
+the wrong answer even when it appears to work"* — a blanket prohibition on host installs that
+`8033b29` retracted two commits later, narrowing entry 101's *unpinned* to *not digest-pinned*
+and re-admitting the tarball as a subordinate route. Cherry-picking `1fa80cf` alone imports
+the retracted claim and removes the escape hatch; its `docs/CommonErrors.md` half also
+conflicts, reproduced against `origin/rewrite-integration` directly.
+
+**This arm described the fix as a deletion, which was accurate for `1fa80cf` and stale for its
+own HEAD.** The guard that resolves it is the one this arm contributed a round earlier —
+*diff the revs before diffing the quote* — and neither party applied it, because both
+assumed a single-branch disagreement could not be a revision disagreement. It can, when a
+branch corrects itself. The disposition is **superseded, not refuted**.
+
 Two further self-catches concerned the write-up rather than the findings: a commit that
 recorded the rule below but not the corollary it was derived from, caught by grepping the
 commit for the thing it was believed to contain and finding nothing.
@@ -206,6 +243,32 @@ durably in `docs/CommonErrors.md` rather than only in correspondence:
 > it.** Two corollaries, each learned by violating it — *counting a filter's hits is not
 > reading them*, and *a non-zero exit is not a zero result*, since a broken query and a real
 > negative both print nothing.
+
+> **A measurement is only evidence for the claim whose property it tests.** Naming the
+> property first, then choosing the instrument, is the whole discipline; choosing an
+> instrument that is merely *nearby* produces a confident number about a different question.
+
+Worked instance, in the direction that is easy to miss. To establish whether commits are
+published, the reachable-looking check is:
+
+```bash
+git rev-parse @{u}                     # tests LOCAL TRACKING CONFIG
+git ls-remote origin michalmar-ch01-java-rewrite-walkthrough   # tests REMOTE EXISTENCE
+```
+
+The first fails on a branch that was pushed from a different worktree, or pushed with an
+explicit refspec, and it fails **identically** to a branch that was never pushed. It is a
+correct measurement of the wrong property. Only the second contacts the remote.
+
+The consequence is asymmetric and the dangerous direction is the less obvious one. A
+*stale-behind* report under-claims work that exists, and the correction is cheap.
+**An unreachable-when-reachable report invites someone to re-derive a fix that is already
+published** — duplicated remediation, and a second copy that can drift from the first.
+
+The general form: **"I measured it" is not a defence if the instrument answers an adjacent
+question.** That is the same failure as reading a signal type out of an attribute name, and
+as reading an audience rule out of an ownership identifier — three instances in this arm's
+record of an artefact being consulted for a property it does not carry.
 
 The property worth carrying forward is where these failures occurred. **Every one of them
 arose in the verification step, not the discovery step.** Nothing here was found carelessly;
