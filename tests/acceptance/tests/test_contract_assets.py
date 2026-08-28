@@ -1064,7 +1064,15 @@ def test_handoff_bundle_cross_file_consistency(
     for relative_path in handoff["evidence"]["pathEvidence"]:
         path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("path evidence fixture\n", encoding="utf-8")
+        # Members the registry names as JSON are parsed by the validator, so prose
+        # is not a fixture for them -- it is a file that is JSON in name only.
+        if path.suffix == ".json":
+            path.write_text(
+                json.dumps({"fixture": relative_path}),
+                encoding="utf-8",
+            )
+        else:
+            path.write_text("path evidence fixture\n", encoding="utf-8")
     runtime_example = load_json(contracts / "runtime-test-evidence.example.json")
     runtime_results = "\n".join(
         f'<UnitTestResult testId="runtime-{index}" '

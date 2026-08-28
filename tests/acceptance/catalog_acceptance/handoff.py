@@ -1007,6 +1007,29 @@ def _validate_migration_report(
         raise ValueError("; ".join(failures))
 
 
+def _validate_structured_path_evidence(resolved_path: Path) -> None:
+    """Reject path evidence that is a JSON file in name only.
+
+    Every other artifact the handoff consumes is parsed and schema-validated. The
+    path-evidence loop checked only existence and nonzero size, so a two-byte
+    ``{}`` -- or a file containing the single character ``x`` -- satisfied a
+    registry entry whose filename the contract pins with ``const``. Markdown
+    members stay existence-only, which is the honest limit for a narrative;
+    members the registry names as JSON are parsed and required to carry content.
+    """
+    try:
+        payload = load_json(resolved_path)
+    except Exception as error:
+        raise ValueError(
+            f"handoff path evidence named as JSON is not parseable: {resolved_path}"
+        ) from error
+    if not isinstance(payload, (dict, list)) or not payload:
+        raise ValueError(
+            "handoff path evidence named as JSON must carry a nonempty object or "
+            f"array: {resolved_path}"
+        )
+
+
 def validate_handoff(
     handoff_path: Path,
     contracts_directory: Path,
@@ -1127,6 +1150,8 @@ def validate_handoff(
             raise ValueError(
                 f"handoff path evidence must be a nonempty regular file: {resolved_path}"
             )
+        if resolved_path.suffix == ".json":
+            _validate_structured_path_evidence(resolved_path)
     required_paths = [
         iac_path,
         runbook_path,
