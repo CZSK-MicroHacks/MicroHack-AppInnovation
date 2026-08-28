@@ -500,7 +500,7 @@ function Install-CommonTools {
     $VsCodeRoot = 'C:\Program Files\Microsoft VS Code'
     $CodeCommand = Join-Path $VsCodeRoot 'bin\code.cmd'
     $InstalledVsCodeVersion = if (Test-Path $CodeCommand) {
-        (& $CodeCommand --version | Select-Object -First 1).Trim()
+        (@(& $CodeCommand --version | Select-Object -First 1) -join '').Trim()
     }
     else {
         $null
@@ -521,7 +521,7 @@ function Install-CommonTools {
         throw 'The pinned Visual Studio Code installer did not create code.cmd.'
     }
     Add-MachinePath -Path (Join-Path $VsCodeRoot 'bin')
-    if ((& $CodeCommand --version | Select-Object -First 1).Trim() -ne $Artifacts.VsCode.Version) {
+    if ((@(& $CodeCommand --version | Select-Object -First 1) -join '').Trim() -ne $Artifacts.VsCode.Version) {
         throw 'Visual Studio Code version verification failed.'
     }
 
@@ -592,7 +592,7 @@ function Install-CommonTools {
     $GitRoot = 'C:\Program Files\Git'
     $GitCommand = Join-Path $GitRoot 'cmd\git.exe'
     $InstalledGitVersion = if (Test-Path $GitCommand) {
-        ((& $GitCommand --version) -replace '^git version\s+', '').Trim()
+        ((@(& $GitCommand --version | Select-Object -First 1) -join '') -replace '^git version\s+', '').Trim()
     }
     else {
         $null
@@ -619,7 +619,7 @@ function Install-CommonTools {
     # ships bash, curl and the coreutils, but only under usr\bin, which the installer does
     # not add to PATH.
     Add-MachinePath -Path (Join-Path $GitRoot 'usr\bin')
-    if (((& $GitCommand --version) -replace '^git version\s+', '').Trim() -ne $Artifacts.Git.Version) {
+    if (((@(& $GitCommand --version | Select-Object -First 1) -join '') -replace '^git version\s+', '').Trim() -ne $Artifacts.Git.Version) {
         throw 'Git version verification failed.'
     }
 
@@ -628,7 +628,7 @@ function Install-CommonTools {
     $JqRoot = 'C:\Program Files\jq'
     $JqCommand = Join-Path $JqRoot 'jq.exe'
     $InstalledJqVersion = if (Test-Path $JqCommand) {
-        ((& $JqCommand --version) -replace '^jq-', '').Trim()
+        ((@(& $JqCommand --version | Select-Object -First 1) -join '') -replace '^jq-', '').Trim()
     }
     else {
         $null
@@ -639,7 +639,7 @@ function Install-CommonTools {
             -Algorithm SHA256 -ExpectedHash $Artifacts.Jq.Hash
     }
     Add-MachinePath -Path $JqRoot
-    if (((& $JqCommand --version) -replace '^jq-', '').Trim() -ne $Artifacts.Jq.Version) {
+    if (((@(& $JqCommand --version | Select-Object -First 1) -join '') -replace '^jq-', '').Trim() -ne $Artifacts.Jq.Version) {
         throw 'jq version verification failed.'
     }
 
@@ -650,7 +650,7 @@ function Install-CommonTools {
     if ($LASTEXITCODE -ne 0) {
         throw 'uv failed to install the pinned Python 3.12.10 runtime.'
     }
-    $PythonPath = (& $UvCommand python find 3.12.10).Trim()
+    $PythonPath = (@(& $UvCommand python find 3.12.10 | Select-Object -First 1) -join '').Trim()
     if (-not (Test-Path $PythonPath)) {
         throw 'uv did not resolve the pinned Python 3.12.10 runtime.'
     }

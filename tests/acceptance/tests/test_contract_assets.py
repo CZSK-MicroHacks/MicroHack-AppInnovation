@@ -5162,3 +5162,28 @@ def test_every_application_source_file_is_tracked_by_git(repo_root: Path) -> Non
         "every clone and the local test counts overstate what anyone else can run:\n  "
         + "\n  ".join(sorted(stray))
     )
+
+
+def test_no_unguarded_trim_on_native_command_output(repo_root: Path) -> None:
+    """Reject `.Trim()` applied straight to a native command's output.
+
+    A native command that prints nothing yields AutomationNull, and a pipeline
+    whose output is `-replace`d yields an empty `System.Object[]`. Calling
+    `.Trim()` on either raises a terminating error under
+    `$ErrorActionPreference = 'Stop'`, which preempts the specific diagnostic
+    the surrounding code was written to emit. Collecting into `@(...)` and
+    joining first yields an empty string, so the intended check runs.
+    """
+    offenders: list[str] = []
+    for number, line in enumerate(_provisioner(repo_root).splitlines(), start=1):
+        if ".Trim()" not in line or "(&" not in line:
+            continue
+        if "-join" in line:
+            continue
+        offenders.append(f"{number}: {line.strip()}")
+
+    assert not offenders, (
+        "`.Trim()` is applied to unguarded native command output; wrap the "
+        "pipeline in `(@(...) -join '')` so empty output degrades to an empty "
+        "string instead of a null-reference error:\n" + "\n".join(offenders)
+    )
