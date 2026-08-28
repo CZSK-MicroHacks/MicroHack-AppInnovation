@@ -312,10 +312,47 @@ with resource attributes being carried into `Properties` for metrics but not for
 **This is not a Java finding.** Both stacks emit the attribute identically, so the clause
 cannot match on either track.
 
-### A distinction worth keeping separate
+### Correction: the consequence above is superseded on the integration branch
 
-`db.system.name` is a genuine **span** attribute (`CatalogTelemetry.startDatabaseSpan`), so
-it would reach `AppDependencies.Properties` normally. Its measured absence is explained by
-`AppDependencies` being empty on the Java component — the traffic gap — rather than by any
-stamping rule. Grouping it with the revision attribute treats one structural defect and one
-empty-table artefact as a single mechanism; only the revision attribute is permanent.
+The clause quoted above is complete and verbatim **for this arm's tree and for the frozen
+baseline `4bf59f7`**, where it has no second leg. On the delivery branch it does:
+
+```kql
+| where tostring(Properties["azure.containerapps.revision.name"]) == "__REVISION_NAME__"
+     or AppRoleInstance startswith "__REVISION_NAME__"
+```
+
+Occurrences of `AppRoleInstance startswith` — `4bf59f7`: **0**. This arm's HEAD: **0**.
+`origin/rewrite-integration`: **4**. The leg was added by `ac78017`, *"F-126: make the frozen
+observability queries satisfiable"*. Measured live by the facilitator, the first leg returns
+**0** rows and the second returns **1 077**, so on the delivery branch the four queries work
+and this arm's stated consequence does not hold there.
+
+**The mechanism is nonetheless unfixed at that tip.** `ac78017` touched five files —
+queries, contracts, workbook, tests — and **no application source**. The revision name is
+still emitted as a resource attribute only (`CatalogResourceIdentity.java:20` at
+`origin/rewrite-integration`) and still never as a span attribute (verified there, exit 1).
+
+So the surviving defect is sharper than a fragility: **the first leg was never alive.** It
+is written against an attribute that neither application has ever set on a span, at any
+revision inspectable here, so it cannot have contributed a row. The fallback is not
+redundancy held in reserve — it is the whole mechanism, and the dead leg is the one that
+names the concept. Revision scoping now rests on the ACA replica naming convention
+`<revision>-<hash>-<suffix>` rather than on telemetry the application controls.
+
+### Correction: `db.system.name` is not a span attribute on .NET
+
+An earlier version of this entry claimed that `db.system.name` would reach
+`AppDependencies.Properties` on both stacks, and that its absence was an empty-table
+artefact. **That is true for Java and false for .NET.** On .NET the name is passed to a
+metric tag (`CatalogTelemetry.cs:67`, `RecordDatabase`) and a log scope (`:113`,
+`LogDatabaseFailure`), and the file contains no `SetTag`/`AddTag` at all — so it never
+reaches a span there either. The facilitator's live measurement settles it: 2 157 .NET
+dependency rows with populated `customDimensions` and zero carrying `db.system.name`, which
+a non-empty table cannot explain away.
+
+The correct generalisation is theirs, not the one first written here: this is **signal-type
+mis-routing in the application** — resource attributes, metric tags and log scopes all read
+by the queries as span attributes — rather than any per-table platform behaviour. Three
+mis-routings, one indistinguishable empty result, and an authoring defect rather than a
+platform quirk.
