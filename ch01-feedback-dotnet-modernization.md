@@ -3363,3 +3363,60 @@ working tree; the question worth asking is `git log @{u}..` — and unlike a cle
 unpushed branch is *silent*. It produces no warning, no colour, and no output at all when it
 is safe, so its unsafe state and its safe state are distinguished only by a command nobody
 runs by habit.
+
+## Credit I cannot substantiate, and a figure that overcounts me
+
+Two closing corrections, both against attributions made *in my favour*.
+
+### F-261 and the `uv --no-config` reasoning are not in this report
+
+The facilitator credits this track with a finding about the single bare `uv run` at
+`solutions/ch01-copilot-rewrite/dotnet/README.md:524`, and with disproving my own hypothesis
+by locating `docs/CommonErrors.md:266` entry 38 — thereby supplying the positive control for
+the delivery's main conclusion.
+
+Both citations **resolve exactly in my tree.** `:524` is a bare `uv run python -m
+catalog_acceptance.telemetry_evidence_cli`, and `:266` is *"38. Incompatible user `uv.toml`
+blocks repository tests"* with the rationale sitting adjacent to the remedy, exactly as
+described. So the substrate is right and the reasoning is sound.
+
+**But none of it is in this report.** `uv --no-config` occurs once, at `:2745`, as a row in
+the hand-fix table — *"the machine's `uv.toml` uses a key the installed uv rejects"*. There
+is no finding, no `:524`, no `:266`, no entry 38, and no mention of `workshop/golden/README.md`
+anywhere in this document.
+
+**I cannot establish that the work is mine.** Two readings fit:
+
+1. I did it in conversation during a segment that was later compacted, and never wrote it
+   into the deliverable. The exact line-number agreement with my pre-fix tree is weak support
+   for this.
+2. Another arm reading the same substrate produced it and it was attributed here. The
+   assigned document is `ch01-copilot-**rewrite**`, which is not this track's path — this
+   track is `ch01-copilot-**modernization**` — and a separate rewrite arm exists.
+
+I applied this same check when F-154 and F-155 were attributed to me, and there I *could*
+confirm authorship from this file before accepting. Here I cannot, so I am not accepting.
+Earlier in this run I noted that a track wrongly *accepting* credit is harder to catch than a
+track wrongly denied it, because nobody is harmed at the moment it happens and the recipient
+has no incentive to look. This is that case, and the only defence available is the recipient
+checking.
+
+**If reading 1 is correct, it is the second instance of a pattern this track has already
+filed against itself.** The 22/22 acceptance result also exists only in conversation, with no
+artifact in this tree. Two substantive claims surviving as narrative and not as evidence, in
+the record of a run whose entire subject is the difference between those two things.
+
+### The 66/41 figures include work that is not mine
+
+The facilitator published *"66 commits since baseline `4bf59f7`, 41 files added"* as a measure
+of this branch's output. Both numbers are correct on that basis and both **overcount me**:
+
+| Basis | Commits | Files added | What it measures |
+| --- | --- | --- | --- |
+| `4bf59f7..HEAD` | 66 | 41 | everything reachable from my HEAD, **including five merges of the facilitator's own branch** |
+| `origin/rewrite-integration..HEAD` | 44 | 24 | what exists here and **not** on the shipping branch |
+
+The second pair is the honest measure of this track's distinct output. I flagged this basis
+as overcounting when I corrected my own earlier use of it; the correction did not reach the
+figure before it was published, which is a small instance of the delivery's own conclusion —
+**recorded is not routed** — pointing back at the party that drew it.
