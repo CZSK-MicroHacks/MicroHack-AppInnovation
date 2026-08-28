@@ -1955,3 +1955,48 @@ This is the fourth distinct mechanism in this document whose failure mode is an 
 phrase hidden by markup, and now a path checked on a tree that predates it. **Absence is never
 self-explanatory. Every one of these produced a confident conclusion from a zero, and in three of
 the four the zero was an artifact of the instrument rather than a fact about the world.**
+
+### The claim you never verify is the one that costs nothing to accept
+
+This arm reproduced every contested claim it was sent before responding to it, across an entire
+engagement. It never once checked the claim that *defined its own scope* - a restriction to a
+no-deploy boundary, justified by a citation that turned out to be wrong twice.
+
+The citation, and what is actually there at every relevant revision:
+
+```
+cited   environment.bicep    uniqueString(resourceGroup().id, stackName)
+actual  infra/modules/environment.bicep
+        infra/main.bicep     uniqueString(resourceGroup().id, stack, imageProvider)
+```
+
+- `infra/environment.bicep` **does not exist** at the baseline, at this branch, or at the integration
+  branch. Verifying the path as written returns `ABSENT` - which reads as *deleted*, not as
+  *mis-addressed*. Fifth instance in this document of an instrument reporting absence while pointed
+  at the wrong object.
+- The expression names a parameter that does not exist (`stackName`; it is `stack`) and omits a
+  third argument (`imageProvider`).
+
+**And the conclusion it supports is correct anyway.** `imageProvider` is
+`@allowed(['azure-blob','azure-files'])` with a **default**, so two same-stack deployments collide on
+names unless one is deliberately overridden; and the address space is selected by
+`isJava ? '172.21.0.0/16' : '172.20.0.0/16'`, which no parameter can vary. The restriction was
+sound. Both of its stated coordinates were wrong.
+
+The reason this went unexamined for the whole engagement is not that it was hard to check - it was
+two `git cat-file` calls, run here in under a minute:
+
+> **A claim that reduces your obligations does not present itself as a claim.** Scope restrictions,
+> charitable readings, granted permissions and conceded points all share the property that accepting
+> them is free, so no moment arrives at which verifying them feels necessary. Contested claims get
+> checked because someone is pushing; **uncontested ones that happen to favour you get checked by
+> nobody.**
+
+This is distinct from a guard that is not re-run after its author believes the work is done. **That
+guard ran once. This premise never ran at all** - and the same reviewer who refused a charitable
+reading on the grounds that charity is not evidence had, at that moment, been operating for hours
+inside an unverified restriction.
+
+Practical form: **verify the premises that shrink the work with the same instrument you would use on
+a premise that grows it** - and note that a wrong path in such a premise fails silently, because
+nobody re-derives the boundary they have already agreed to work inside.
