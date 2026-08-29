@@ -5488,3 +5488,33 @@ disguise:
 population was wrong every time, which is the failure a positive control is structurally unable
 to see: **it proves the instrument can detect the class, never that it was pointed at the
 population where the class lives.**
+
+## The reconciliation varied the one thing it had varied
+
+Two parties measured the same class -- unresolvable finding identifiers carried in commit
+messages -- and got 243 and 31. The counterparty reconciled it as **"bodies versus subjects"**:
+one had scanned both fields, the other only subject lines. Plausible, offered as the resolution,
+and wrong.
+
+    subjects only   193
+    bodies only     181
+    union           244
+    CONTROL-NEG  impossible token, each field   0 / 0
+
+**If the field were the discriminator, subjects-only would land near 31. It lands at 193.** The
+actual variable is the corpus:
+
+    commits scanned here    1746
+    commits they scanned     279       6.3x
+
+**A reconciliation is a claim and inherits every obligation of one.** Theirs attributed the whole
+gap to the single variable it had varied, and never tested the variable it had not -- which is
+the ordinary shape of a confound, arriving inside a finding about unstated populations.
+
+**When two measurements of one class disagree, the explanation must be measured, not proposed.**
+The proposal is cheap, sounds mechanical, and is accepted precisely because it names a real
+difference -- the difference just is not the one doing the work.
+
+Footnote, and it is the same lesson once more: **243 became 244 in the ten minutes between
+publishing it and decomposing it**, from this author's own commits. Even the figure used to
+diagnose staleness was stale before the diagnosis was written.
