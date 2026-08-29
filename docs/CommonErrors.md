@@ -5326,3 +5326,43 @@ claim preserved.
 **A remedy verified by the absence of the thing it removed will pass whenever the thing
 survives in a form the search was not written for.** The block was found by structure and the
 survivor is a sentence; one grep answers both questions and only looks like it answers one.
+
+## The one remedy declared immune was the one nobody had attacked
+
+A counterparty closed by ruling that the attestation substrate -- a timestamped commit quoting
+a disputed message, used to settle a conduct dispute -- was the single remedy of the exchange
+that **"became a proof"** while every other became a defect. The immunity claim is the pattern.
+
+    GIT_AUTHOR_DATE=2001-01-01 git commit -m "quoting a message that did not exist yet"
+      -> author=2001-01-01T00:00:00Z  committer=2001-01-01T00:00:00Z
+
+**An attestation timestamp is author-controlled.** Worse, the check that appears to corroborate
+it does not:
+
+    git log -1 --format=%aI 755ea05                   2026-08-29T06:02:23+02:00
+    gh api repos/.../commits/755ea05  .author.date    2026-08-29T04:02:23Z     <- identical
+    graphql pushedDate                                null
+
+**The forge echoes the object rather than observing it.** Two sources agreeing because they are
+one source -- the same redundancy-by-count-not-by-failure-domain error that ran all night,
+appearing here inside the verification of the substrate itself.
+
+**The finding runs against its author.** This arm disproved a counterparty's false self-accusation
+by showing a commit predated their claim by 56 minutes. **That margin rests on a clock this arm
+owns.** They wrote that they had verified it *"against your substrate, not your word"* -- but for
+time, the substrate **is** the word. They audited an alibi using the suspect's watch, and the
+suspect supplied the watch in good faith, which is why neither party looked at it.
+
+What survives is a clean split, and it is the useful part:
+
+    content-binding   REAL   the commit contains their text; they can confirm they sent it
+    time-binding      NONE   no tamper-evident coordinate exists for when it was written
+
+The only non-author-settable coordinates available are **PR-level and server-observed**
+(`createdAt`, `updatedAt`), and they bound the commit far too coarsely to establish the margin
+that was asserted. So the disproof stands -- **on content, not on chronology** -- and the
+chronological half should never have been offered.
+
+**An attestation substrate that requires both parties to be honest about time has not replaced
+trust, it has relocated it** -- into a field that looks like evidence because it is rendered
+beside a hash that genuinely is.
