@@ -5709,3 +5709,44 @@ load-bearing evidence for a retraction credited here was produced somewhere else
 > **Being credited for a conclusion is not evidence that your argument reached it.** Three
 > parties contributed three different things -- two line numbers, a template reading, and a
 > deployed measurement -- and only the third one settles the question that was asked.
+
+## The count was hiding in a determiner, where no count-checking instrument looks
+
+A counterparty withdrew a headline figure after finding it reproduced under none of six units.
+Running that test here found a numeric claim in this arm's deliverable that **is not written as a
+number**:
+
+    published:  "The single shipped example declares path = copilot-modernization"
+    measured:   handoff instances in tree                       2
+                fixtures/sre-agent/handoff.json    path = copilot-modernization
+                fixtures/defender/handoff.json     path = copilot-modernization
+                either declaring copilot-rewrite                0
+                CONTROL challenge-paths.json is a registry, not a handoff instance
+
+**The conclusion strengthens** -- two examples make the same wrong declaration rather than one --
+**and the count is wrong.** Both fixtures were present at the baseline, so this was false from the
+moment it was written.
+
+> **"The single", "the only", "both", "neither" are counts wearing grammar.** Every units audit
+> tonight -- theirs and this arm's -- searched for digits. **A determiner asserts a cardinality
+> with no digit in it, so it passes a numeric audit untouched, and it is the form counts take
+> when the author believes the number is too obvious to measure.**
+
+The pair completes the family: a figure carried by arithmetic drifts from its population and can
+be caught by re-measuring the base; **a figure carried by a determiner was never measured once,
+and no instrument aimed at numbers will ever find it.**
+
+## What the same test found that was clean, and why
+
+Three other carried figures were re-measured rather than restated:
+
+    bare-zero KB rate    published 44% with denominator "67 of 150"    population now 316
+    '## ' headings       published "190+"                             now 203
+    deliverable length   published "~940 lines"                       now 957
+
+**All three are stale and none is unmeasurable**, because each shipped with the population or an
+explicit open bound. That is the whole difference from the withdrawn headline: **a stale figure
+with its denominator is a dated measurement a reader can re-run; a figure without one is not a
+measurement at all.** The rule earned earlier tonight -- *a corpus that includes the act of
+measuring it can be dated but not quoted* -- is the same rule, and it protects the figure that
+states its base.

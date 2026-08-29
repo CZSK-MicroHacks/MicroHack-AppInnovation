@@ -122,10 +122,15 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    `evidence/`. Producing the evidence artifact required a hand-copy the material does not
    describe.
 6. **The handoff schema enumerates `copilot-rewrite-java`, but no `copilot-rewrite` instance
-   ships anywhere in the tree.** The single shipped example declares
-   `path = copilot-modernization`, and it cannot validate in the location it ships in,
+   ships anywhere in the tree.** **Both** shipped examples --
+   `fixtures/sre-agent/handoff.json` and `fixtures/defender/handoff.json` -- declare
+   `path = copilot-modernization`, and neither can validate in the location it ships in,
    because the validator folds the handoff's own repo-relative path into the required
    evidence set while the registry pins a different filename.
+
+   > **This read "the single shipped example" until it was re-measured: there are two, and both
+   > declare the same path, so the conclusion strengthens and the count was wrong. A count
+   > written as a determiner is not searchable as a count.**
 7. **Prerequisite recovery off the VM is documented, but described as something else where
    it is linked.** The answers exist as `docs/CommonErrors.md` entries 45 and 101. Every
    challenge README routes troubleshooting to `docs/Troubleshooting.md` (12 links), which
