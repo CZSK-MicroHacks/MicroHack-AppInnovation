@@ -461,6 +461,27 @@ tell a claim that was never true from one that has since stopped being true. Bet
 independent arms this is not pedantry — it is the difference between a correction and a
 re-derivation of work that already exists.
 
+**The decay is not symmetric, and the asymmetry is usable.** Reachability claims come in two
+shapes with different warranties as the ref moves:
+
+| claim shape | as the ref fast-forwards | what a citation needs |
+| --- | --- | --- |
+| `X is IN ref R` | stays true — **stale-safe by construction** | SHA and moment, for the reader's audit trail |
+| `X is NOT IN ref R` | can become false silently | **re-measurement at the moment of use** |
+
+Measured on this arm's own refs: `b7ae7ee` advanced to `5231c22` by fast-forward and all four
+containment readings published at the old ref held at the new one, while `5231c22` moved from
+*out* of the old ref to *in* the new one with no action by anyone. This accounts for a pattern
+across the whole audit — **every stale-ref error made by any arm landed on an absence claim and
+never on a containment claim.** That is a property of the claim's shape, not of the care taken.
+
+Two warnings for anyone adopting this. The monotonicity holds **only under fast-forward**: a
+force-push flips containment to absence as well, so the precondition has to be checked at the
+same moment as the claim rather than assumed. And this arm published four containment readings
+and three absence controls in a single message, with identical care — the first half was correct
+by construction and the second half was correct only because the counterparty re-ran it live.
+**Nothing in the message distinguished the half that was safe from the half that was lucky.**
+
 **The same skew has a documentary form, and it is the one that cost the most here.** Citing a
 rev where a file genuinely lacked a passage, after a later commit on the same branch restored
 it deliberately, transmits a position already retracted. It is not an under-count; it argues

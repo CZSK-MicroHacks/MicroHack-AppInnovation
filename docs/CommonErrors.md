@@ -6655,3 +6655,96 @@ instrument that could find anything -- and the one time it fired, it was correct
 > **A check that has passed a hundred times is not thereby weak; it is untested against you until
 > you change something it covers.** Its silence had been evidence of my compliance, and I had begun
 > reading it as evidence of its own emptiness.
+
+## Containment survives a moving ref; absence does not
+
+The facilitator handed me an asymmetry I had been relying on without naming, and it is the
+ref-decay counterpart to the preservation/delivery axis:
+
+    "X IS IN ref R"      stays true as R advances      stale-safe by construction
+    "X is NOT IN ref R"  can become false silently     must be re-measured live
+
+Measured on the real refs from the exchange. `b7ae7ee` had advanced to `5231c22` by
+fast-forward, and all four containment readings I published at the old ref still held at the
+new one. The converse fired immediately: `5231c22` is *out* of `b7ae7ee` and *in* `5231c22` --
+an absence became a containment with no action by whoever published the absence.
+
+This explains a pattern neither of us had accounted for: **every stale-ref error made tonight,
+by either party, landed on an absence claim and never once on a containment claim.** Not
+because absence was measured more carelessly, but because containment cannot decay in that
+direction and absence can. The error rate was a property of the claim shape, not of the care.
+
+### The precondition is load-bearing, and it was not verified when the rule was stated
+
+The rule holds *under fast-forward*. I built the rewrite case to find its edge:
+
+    commit c2, advance to c3       c2 in HEAD: IN
+    reset --hard HEAD~2, recommit  c2 in HEAD: out    <- containment FLIPPED
+    control: c2 object still exists (reachable and exists are different questions)
+
+So containment is monotone only while the ref advances by fast-forward. Under a force-push
+both directions decay, and the stale-safety disappears exactly when it is least expected --
+because nothing in the act of citing a SHA records whether the ref you cited it against was
+later rewritten. **A rule whose safety depends on a precondition needs the precondition
+checked at the same moment as the claim, or it is an assumption wearing a proof's clothing.**
+
+### My own residue, which is the half worth keeping
+
+Four containment readings and three absence controls went out in one message, same command,
+same care. The containment half was safe by construction. **The three absence controls were
+not verified at the time I published them** -- the ref had already moved -- and they hold
+only because the facilitator re-ran them live afterwards.
+
+> **One half of that message was correct by construction and the other half was correct by
+> luck, and nothing in the message distinguished them.** I could not have told you which was
+> which, because I did not know the two halves had different warranties.
+
+Publishing an unverified absence control is precisely the class I had spent the night filing
+against other people's work. The generous reading offered to me was that the re-derivation
+was redundant rather than wrong; the accurate reading is that it was **both** -- I was also
+undercounting my own case, reporting `4 of 4` where the live figure was `8 of 8`, because two
+qualifying commits postdated the message I was re-deriving from.
+
+> **Independent confirmation and duplicated work are the same event, distinguishable only by
+> whether the corrector announced.** And a re-derivation can be weaker than the record it
+> duplicates while feeling stronger, because deriving it yourself supplies confidence that
+> reading it would not have.
+
+## Blank is not zero: `grep -c` prints nothing for a file with no matches
+
+Re-measuring five of my own published absence claims, two rows came back **empty** rather
+than `0`:
+
+    git grep -c 'sliceId' HEAD -- <file>     ->  no output at all, exit 1
+    git show HEAD:<file> | grep -c 'sliceId' ->  0
+
+Both files genuinely contain zero occurrences, so the conclusion was right. But the display
+could not distinguish *"the token is absent"* from *"the command failed and printed nothing"*
+-- and I was running it inside an audit whose entire purpose was validating absence claims.
+
+The controls are what saved it: the same idiom against a token that is present returned `2`
+and `4`, proving the instrument fires. **A null from a silent command is only information once
+you have shown the same command is capable of speech.** Without that, an empty cell and a
+broken pipeline render identically, and the empty cell is the one that gets read as evidence.
+
+## A merged PR does not reach a dirty working checkout, and git will not clobber it
+
+The operator handoff warned that ten uncommitted modifications sit in a working checkout and
+that "merging PR #3 will meet these". Two of the ten are the file pair my branch also changes,
+so I tested what actually happens rather than accepting the shape of the warning:
+
+    upstream advances (PR merged) while local checkout is dirty on the same file
+    git pull  ->  error: Your local changes ... would be overwritten by merge
+    exit (measured directly, not through a pipe) = 1
+    local file after: UNCHANGED
+    control: same pull with a clean file succeeds and updates the content
+
+Three corrections follow. The collision is **2 of 10 files, not 10**. It does **not** occur at
+merge time -- a GitHub merge is server-side and cannot touch a working tree. And git **refuses
+rather than overwrites**, so the failure mode is a blocked pull, not silent data loss.
+
+> **The residual risk is not in the merge or in the pull; it is in the operator's reflex when
+> the pull is refused.** A `git checkout --` or a `stash` reached for to clear the block is the
+> only step in the sequence that can actually destroy the work, and it is the only step the
+> warning did not mention. Naming the hazard at the merge points attention one step upstream
+> of where the loss can happen.
