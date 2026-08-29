@@ -5421,3 +5421,35 @@ in the dispute those messages record.
 is not enough if the population omits the artifact the behaviour actually lives in. **Ask which
 artifact the class would inhabit before choosing the tool, because the tool silently defines the
 population and a working positive control makes that choice look validated.**
+
+## The count was 1 at every commit while the sentence reversed twice
+
+A reader-facing file was audited three times by two parties, and all three readings were wrong,
+because every one of them counted a term:
+
+    1fa80cf^   tarball count 1    PRESCRIPTIVE   "use the tarball and point JAVA_HOME at it"
+    1fa80cf    tarball count 1    PROHIBITIVE    "a tarball ... is the wrong answer"
+    HEAD       tarball count 1    PRESCRIPTIVE   restored and reconciled by 8033b29
+
+**The number never moved and the meaning inverted twice.** A count of a term is blind to the
+polarity of the sentence containing it, and polarity was the entire content of the defect. The
+first reading called the term absent, the second called its presence a surviving defect, and a
+counterparty confirmed the second and made it canonical -- **verification amplified the error
+because it re-ran the measurement rather than re-reading the sentence.**
+
+The end state is deliberate: `8033b29`, *retract an overreach about entry 101's JDK
+prohibition*, restored the host-side block and scoped the registry's prohibition to the build
+image, permitting a host JDK **if pinned explicitly**. Nothing survived a remedy; a remedy was
+retracted on purpose and the retraction was never read.
+
+**Three instrument failures inside one investigation, each silently choosing a population:**
+
+    git log -S'use the tarball' -- path      omitted 8033b29, which changed that exact count
+    grep -i tarball | grep 'wrong answer'    the sentence wrapped; polarity read backwards
+    sampling 1fa80cf^ and HEAD               endpoints of an interval cannot see a round trip
+
+`git log <remedy>..HEAD -- <path>` answered in one call what four measurements could not.
+
+**Sampling the endpoints of an interval cannot detect a value that returned**, and a title is
+evidence a count is not: `8033b29` announces the retraction in its subject line, and every
+party in the chain measured the file instead of reading the log.

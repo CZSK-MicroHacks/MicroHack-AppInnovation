@@ -36,7 +36,9 @@ mkdir -p ~/.local/jdk && cd ~/.local/jdk
 curl -sSL -o msjdk17.tar.gz \
   "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
 tar xzf msjdk17.tar.gz
-export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
+# the tarball expands to a build-suffixed directory (jdk-17.0.20+8). Derive it rather than
+# hard-coding the +8, which the download URL above does not tell you.
+export JAVA_HOME="$(echo ~/.local/jdk/jdk-17.0.20*/Contents/Home)"
 
 # psql 18.6, required by the full acceptance profile's database checks.
 brew install libpq

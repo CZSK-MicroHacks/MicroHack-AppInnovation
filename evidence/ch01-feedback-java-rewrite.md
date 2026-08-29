@@ -226,14 +226,15 @@ The two legs are not the same defect and need different treatment.
 
 - **`java/README.md` is the defect.** It is the guide every off-VM reader is sent to, and it
   prescribed the tarball as *the* way to acquire prerequisites, competing with entry 101.
-  `1fa80cf` **deletes** that block. **CORRECTED: the remedy is partial.** The
-  superseded claim here read *"this arm's HEAD has 0 tarball hits in that file"*; measured,
-  HEAD has **1**, at `java/README.md:34`, and it is a prescription -- "use the tarball and
-  point JAVA_HOME at it" -- which is the competing-route defect the finding was about.
-  Deleting the block removed the section and not the instruction. CONTROL-POS the term
-  matches 4 tracked files at HEAD, so the search reaches the material; the count at
-  `1fa80cf^` was also 1, so the deletion never moved this figure. The commit does still
-  replace the block with pointers into entries 101 and 45. It cherry-picks **cleanly**, and on its
+  `1fa80cf` **deletes** that block. **CORRECTED TWICE; this is the accurate account.** The
+  first claim here read *"this arm's HEAD has 0 tarball hits in that file"*; the second
+  called the remedy partial because HEAD has 1. **Both are wrong, in opposite directions.**
+  The term count is **1 at every commit in the interval** -- `1fa80cf^`, `1fa80cf`, HEAD --
+  while the *polarity* went PRESCRIPTIVE -> PROHIBITIVE -> PRESCRIPTIVE. `8033b29`, titled
+  *retract an overreach about entry 101's JDK prohibition*, deliberately restored the
+  host-side block and reconciled it: entry 101's prohibition is scoped to the build image,
+  so a host JDK is permitted **if pinned explicitly**, which the block does. **HEAD is the
+  considered end state, not a survival.** CONTROL-POS the term reaches 4 tracked files. It cherry-picks **cleanly**, and on its
   own it closes the routing half.
 - **`docs/CommonErrors.md` is not a duplicate route.** Its tarball sits inside the *non-TTY
   cask* entry, which answers a different symptom — `brew install --cask` aborting without a
