@@ -4044,3 +4044,84 @@ That is a positive data point for the facilitator's own argument — mechanical 
 disciplined attention — produced from the same session, minutes apart, in both directions. It is
 also the fourth time credit has been offered to this arm and the second time part of it had to be
 returned, which is a rate worth recording next to the rest.
+
+## The mechanical-guard rule, applied to my own remedies, and corrected
+
+The facilitator accepted the returned credit and filed the paired-success result, adding the
+consequence that cuts against themselves: *several of my own remedies are phrased as things to
+remember rather than steps to run, and by your own evidence that form doesn't work.* I supplied the
+evidence for that rule. Applying it only to their document would be the exact error they filed
+against themselves two rounds ago — publishing a rule and exempting the brief that carries it.
+
+So I ran it against mine. **The first probe did not fire**, which is worth recording because it
+nearly produced a clean bill of health:
+
+```
+grep -E '^\s*[-*]?\s*\*?\*?(Remedy|Fix|Recommendation|Mitigation):'   0 hits
+```
+
+Zero, from a 4,046-line document containing 26 uses of the word *remedy*. Not a result — a probe
+matching a format I never used. The vocabulary check that replaced it (`Remedy` 26, `Fix` 167,
+`Recommend` 22) is what made the audit possible at all.
+
+### The classification, and where it breaks
+
+My **material** remedies are mechanical without exception: re-add the role membership and confirm
+`/readyz` (`:1151`, `:1156`); make a preserved failure capture carry a field that says so
+(`:3296`); untrack the compiled artifact so the drifted state is unreachable. Each names an
+artifact and an operation. None asks anyone to be careful.
+
+My **methodological** remedies are not, and one of them is the rule the facilitator adopted verbatim
+as the report's method finding:
+
+> `:3751` — *"The remedy is measuring something whose outcomes differ across the hypotheses — and
+> the check for that is to ask, before running it, what result would change my mind?"*
+
+That is a question to ask yourself. It is precisely the form my own evidence at `262a158` says does
+not work.
+
+### But the discriminator is not imperative-versus-attentional, and this is the part I had wrong
+
+Both of my rules are imperatives. Only one of them fired. The difference is **what has to happen for
+the rule to be invoked at all**:
+
+| Rule | Trigger | Fired? |
+|---|---|---|
+| audit any credit received | *a message arrives crediting me* — external, unmissable | **yes**, at `788ed38` |
+| ask what would change my mind | *I notice this measurement is contestable* — self-classification | no, at `4c86e54` |
+| say which tree you are citing (facilitator's, `:3321`) | *I notice I am citing a file* — self-classification | no, at `262a158` |
+
+The citation rule is the decisive case. It **already existed**, I had just measured the asymmetry it
+protects against, and it still did not fire — because its trigger requires me to classify what I was
+doing as *citing a file*, and I had classified it as *paraphrasing their prose*. The rule was sound
+and unmissed; the classification step in front of it was wrong.
+
+> **A guard fires on events you cannot fail to notice. It does not fire on categories you have to
+> classify yourself into correctly — because the misclassification and the error are the same act.**
+> "Audit any credit received" works because credit arriving is an observable event. "Ask whether
+> this measurement discriminates" cannot work, because a measurement only looks contestable once
+> you have already suspected the thing the rule exists to make you suspect.
+
+Stated against my own document: my headline methodological remedy is well-reasoned and badly
+formed, and I cannot repair it by rewording it more forcefully. The repairable version attaches it
+to an unmissable event rather than to a judgment — *every claim about another party's repository
+state is checked against a ref before it is sent* triggers on "I am about to send a claim," which
+is observable, where "is this measurement discriminating?" is not.
+
+### Why this matters for the workshop rather than only for us
+
+It settles the shape of the remedy both arms independently landed on. **A pre-start source-provenance
+check is well-formed for exactly this reason**: it hangs off *the workshop beginning*, which the
+attendee cannot fail to notice. Neither of us articulated why that one was the right shape while
+"be careful your evidence is genuine" is not — and it is the same property.
+
+It also condemns a family of guidance in the material by form rather than by content. Any instruction
+of the shape *be careful*, *make sure*, *verify that*, or *check whether* delegates the trigger to
+the attendee's own classification of their situation, and on this session's evidence that step fails
+in exactly the cases that matter — the ones where the wrong answer looks right. The instructions that
+survive are the ones bound to an event: a challenge starts, a command exits, a file is written.
+
+**Recorded against my own brief:** of my methodological remedies, the material ones are correctly
+formed and the reflexive ones are not. That asymmetry is not a coincidence either — remedies aimed at
+an artifact inherit the artifact's trigger, and remedies aimed at one's own reasoning have to invent
+one.
