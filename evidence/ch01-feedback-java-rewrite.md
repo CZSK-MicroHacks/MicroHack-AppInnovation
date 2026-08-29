@@ -226,15 +226,20 @@ The two legs are not the same defect and need different treatment.
 
 - **`java/README.md` is the defect.** It is the guide every off-VM reader is sent to, and it
   prescribed the tarball as *the* way to acquire prerequisites, competing with entry 101.
-  `1fa80cf` **deletes** that block. **CORRECTED TWICE; this is the accurate account.** The
-  first claim here read *"this arm's HEAD has 0 tarball hits in that file"*; the second
-  called the remedy partial because HEAD has 1. **Both are wrong, in opposite directions.**
-  The term count is **1 at every commit in the interval** -- `1fa80cf^`, `1fa80cf`, HEAD --
-  while the *polarity* went PRESCRIPTIVE -> PROHIBITIVE -> PRESCRIPTIVE. `8033b29`, titled
-  *retract an overreach about entry 101's JDK prohibition*, deliberately restored the
-  host-side block and reconciled it: entry 101's prohibition is scoped to the build image,
-  so a host JDK is permitted **if pinned explicitly**, which the block does. **HEAD is the
-  considered end state, not a survival.** CONTROL-POS the term reaches 4 tracked files. It cherry-picks **cleanly**, and on its
+  `1fa80cf` **deletes** that block. **CORRECTED FOUR TIMES. The three superseded readings
+  were: the term is absent at HEAD; its presence is a surviving defect; the count is 1 at
+  every commit. All three are false.** Re-measured at every ref:
+
+      e48f3c3 1 | 1fa80cf^ 1 | 1fa80cf 1 | 8033b29 0 | f113283 1 | HEAD 2
+      prohibitive sentence present only at 1fa80cf
+
+  `1fa80cf` deleted the block and added a prohibition. `8033b29`, *retract an overreach
+  about entry 101's JDK prohibition*, removed the prohibition and left **no** mention.
+  **The block returned at the merge `f113283`, not at any commit that authored it** -- so
+  the reconciled text at HEAD, prose permitting a pinned host JDK above a block that pins
+  explicitly, **has no authoring commit.** It was assembled by conflict resolution. That is
+  why four measurements by two parties disagreed: **there is no single commit to read.**
+  HEAD is 2 because the repair in this arm's own fix commit adds the word again. It cherry-picks **cleanly**, and on its
   own it closes the routing half.
 - **`docs/CommonErrors.md` is not a duplicate route.** Its tarball sits inside the *non-TTY
   cask* entry, which answers a different symptom — `brew install --cask` aborting without a

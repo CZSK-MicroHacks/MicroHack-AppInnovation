@@ -38,7 +38,7 @@ curl -sSL -o msjdk17.tar.gz \
 tar xzf msjdk17.tar.gz
 # the tarball expands to a build-suffixed directory (jdk-17.0.20+8). Derive it rather than
 # hard-coding the +8, which the download URL above does not tell you.
-export JAVA_HOME="$(echo ~/.local/jdk/jdk-17.0.20*/Contents/Home)"
+export JAVA_HOME="$(ls -d ~/.local/jdk/jdk-17.0.20*/Contents/Home | head -1)"
 
 # psql 18.6, required by the full acceptance profile's database checks.
 brew install libpq

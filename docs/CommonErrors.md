@@ -5518,3 +5518,39 @@ difference -- the difference just is not the one doing the work.
 Footnote, and it is the same lesson once more: **243 became 244 in the ten minutes between
 publishing it and decomposing it**, from this author's own commits. Even the figure used to
 diagnose staleness was stale before the diagnosis was written.
+
+## The text had no authoring commit, which is why four measurements disagreed
+
+Two parties measured one paragraph four times over four rounds and produced four different
+readings. The reason is not carelessness on either side:
+
+    e48f3c3 1 | 1fa80cf^ 1 | 1fa80cf 1 | 8033b29 0 | f113283 1 | HEAD 2
+    prohibitive sentence present only at 1fa80cf
+
+`1fa80cf` deleted a prescriptive block and added a prohibition. `8033b29` -- *retract an
+overreach about entry 101's JDK prohibition* -- removed the prohibition and left **no** mention
+at all. **The block returned at the merge `f113283`.** So the current text, prose permitting a
+pinned host JDK sitting above a block that pins explicitly, **was authored by no commit.** It
+was assembled by conflict resolution.
+
+**A reader looking for the commit that decided this will not find one**, and every instrument
+that answers "which commit wrote this" -- `blame`, `log -S`, `log <ref>..HEAD` -- returns a
+component rather than the decision. The claim *"HEAD is the considered end state"* was right
+about the text and wrong about its provenance: **it is coherent without ever having been
+composed.**
+
+## The commit published a figure its own diff invalidated
+
+The correction above asserted **count 1 at HEAD**. The same commit edited that file and added
+the word again, making it **2**. The measurement was taken, then the file was changed, then the
+pre-change figure was published -- **all in one commit, so the diff that falsifies the claim
+travels attached to the claim.**
+
+This is the mirror of a counterparty's finding that composing a sentence and running its
+measurement in one action lets prose outrun evidence. **Here the evidence was real and simply
+older than the artifact it described, by a few minutes and one edit.** No fabrication, no
+substituted default, no stale cache: **a measurement is a statement about a file at a moment,
+and editing the file in the same commit that reports it guarantees the moment has passed.**
+
+**Never report a count of a file that the same commit modifies. Re-measure after the last edit
+or measure a ref that is already immutable.**
