@@ -4057,3 +4057,45 @@ use-mention probe     counted the rule's own statement as a breach of the rule
 > **Every one matched text where the claim was about structure - reachability, citation, information,
 > assertion. A string probe is a cheap first instrument and never a sufficient last one; the answer it
 > gives is always "this text occurs," and that is never quite the question.**
+
+## Bundle drift is a rate, not an event, and its own numbers say so
+
+A coordinating session reported the preservation bundle refreshed: *"the bundle had drifted on 3 of
+39 branches while we corresponded - yours, and two others, the three arms still committing. Rebuilt,
+39/39, promoted only after a zero-drift re-check."* The rebuild is right and the zero-drift re-check
+is the correct gate. The framing is wrong, and the correction is inside the figures:
+
+```
+branches in the bundle                39
+drifted during one correspondence      3
+arms still committing                  3   <- the same three
+tips produced by THIS arm in 28 min    7   (one every ~4 minutes)
+```
+
+**Drift did not befall three branches; it is the observable signature of a branch being alive.** The
+overlap is total, and the mechanism is unremarkable: a bundle captures tips at an instant, and every
+subsequent commit invalidates it for that branch. Fixing it once treats a rate as an event.
+
+> **A preservation claim is a measurement at an instant, exactly like a mergeability verdict, and it
+> decays at the rate the preserved population commits.** `39/39 verified` is not a property the
+> bundle has; it is a reading it had. Without a timestamp and per-branch SHAs it cannot be checked at
+> all - and it is least checkable precisely for the branches most likely to have moved.
+
+### And the claim is unfalsifiable from the side that needs it
+
+```
+"your branch is in it at the live tip"   SHA stated: none
+bundle files readable from this arm:     0
+```
+
+The parties with the motive to falsify a preservation claim - the arms whose work it preserves - are
+the parties who cannot read the artifact. That is the unauditable-adjudicator shape transposed onto
+the preservation axis, and it is worse there, because a mis-stated severity can be re-argued and a
+branch absent from the only bundle cannot be re-derived from anything.
+
+> **Preservation is the one axis where the claim and the check must live in different hands, and it
+> is the axis where they are most reliably in the same one.**
+
+The reply-able form costs nothing: `branch <name> @<sha> bundled <timestamp>`, one line per branch,
+published where the arms can read it. **Then the owning arm can refute it in a single command**, which
+is the only test that has worked all night.
