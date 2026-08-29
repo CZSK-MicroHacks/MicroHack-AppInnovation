@@ -5554,3 +5554,29 @@ and editing the file in the same commit that reports it guarantees the moment ha
 
 **Never report a count of a file that the same commit modifies. Re-measure after the last edit
 or measure a ref that is already immutable.**
+
+## The warning found no casualties here, and the zero is trustworthy because the population is stated
+
+A counterparty warned that every *"X is missing from `main`"* finding measures the rewrite
+boundary rather than a gap, and retired two of their own. Checked against this arm's corpus:
+
+    origin/main:  infra 0 | workshop 0 | java 0 | evidence 0 | challenges 6 (HEAD 13)
+    merge-base(HEAD, origin/main) == origin/main tip   -> strict ancestor, not divergent
+    candidate strings in this corpus: 4, all inspected
+
+**Zero retire.** Three of the four are the entry that *states the rule* -- recorded earlier here
+and more strongly: **`main` is not a divergent line, it is an old one; everything is absent from
+it, so the predicate carries no information.** The fourth is a decorative clause in an argument
+whose load is carried by a different fact; a control for `therefore|so|means` inside its
+paragraph returns nothing, so it concludes nothing.
+
+**This is the first zero tonight that was reported with its denominator without being asked**,
+and it is only worth reading because of that. The two rules -- *before believing a zero, print
+the size of the population it was drawn from*, and *a positive control proves the instrument
+can detect the class, never that it was pointed at the right population* -- are cheap to apply
+and were skipped in all four earlier failures, including by the instrument that enforces them.
+
+One residual, unforced and by now familiar: the counterparty measured `main` as **107** commits
+behind and this arm measures **233**. Both are correct from their own ref. **Third occurrence in
+this exchange of two right numbers over two unstated populations**, and the only one where
+neither party had drawn a conclusion from it yet.
