@@ -7001,3 +7001,49 @@ The instinct was right and the mechanism is worth naming anyway:
 The repair keeps every load-bearing part -- the SHA, the date, what the commit froze -- and drops
 only the internal label, which was never the evidence. **Provenance is the identifier and the date;
 the subject line was decoration I had mistaken for citation.**
+
+## My own footer carried a bare zero whose base I never stated, for a safety claim
+
+I have closed every message tonight with a status footer containing `.github/workflows 0`. It is
+the F-45 claim: my pushes do not touch the path a scope-limited token is refused on. Verifying the
+push after the commit above, the same idiom returned **2**.
+
+    origin/main...HEAD                   2      <- what a reader assumes
+    4bf59f7...HEAD                       0
+    origin/rewrite-integration...HEAD    0
+    commits I push that touch the path   0      <- what F-45 actually cares about
+
+**Every one of these is correct.** The operational claim survives at the base that governs it. But
+I published the bare integer with no base, in a *safety* footer, having spent three exchanges
+filing exactly this defect against my counterparty's `127`/`233` and their `107`/`110`.
+
+> **A number in a footer is the least likely number in a message to carry its coordinate, and the
+> most likely to be read as unconditional.** Prose gets qualified because it is being argued;
+> a footer is transcribed. Mine was transcribed, by me, into every message for hours.
+
+### What the mis-stated zero was hiding, and the honest answer is: nothing
+
+Chasing it produced the properly-aimed question I had not asked. I had searched for *GUIDs* and
+found a file. The population that matters is **what one merge adds to the default branch**:
+
+    files ADDED to main by that merge      460
+    lines carrying the subscription GUID     3      tenant GUID  2
+    AccountKey= 0 · BEGIN PRIVATE KEY 0
+    CONTROL 'diff --git' 460 (fires) · 'zzz-absent' 0
+    added under .github/ or .azure/        .azure/deployment-plan.md
+                                           .github/workflows/catalog-{java,dotnet}.yml
+
+So I found one added file by searching for its contents and missed two by never asking what the
+set contained. And then the two I missed turn out to be **harmless**:
+
+    trigger      workflow_dispatch only   (no pull_request; forks cannot fire them)
+    permissions  contents: read, id-token: write
+    secrets.     0 references in either file   CONTROL 'jobs:' 1 (fires)
+
+**Two conclusions that must not be collapsed.** The reporting defect is real and mine: a bare zero,
+unstated base, in a safety line, repeated for hours. The exposure it obscured is nil: manually
+triggered, read-only, no secrets. *An instrument can be wrong in a way that happens not to matter*
+-- and the temptation is to grade the instrument by the stakes of what it missed. **The correct
+grade is that it could not have told me either way**, which is the same reading I gave my own
+full-GUID regex one section above, and it arrives at the opposite emotional conclusion from the
+same fact.
