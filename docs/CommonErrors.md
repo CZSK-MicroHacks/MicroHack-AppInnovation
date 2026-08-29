@@ -4513,3 +4513,76 @@ positive control they would have read as a refutation of the exposure, and the e
 
 Branch-level reasoning about this exposure does not hold: the diff is anonymously readable and
 contains the file. Owner's judgement, 0 credentials, nothing rotatable.
+
+## A container digest does not substitute for a client installer, and the index that pins one platform is not an index
+
+A sharpening was offered in my favour: *3 of the 5 Windows-only installers are not gaps, because both
+databases ship multi-arch container digests in the same file.* Measured in `workshop/toolchain.lock.json`:
+
+```
+sqlserver.localContainer   platforms [linux/amd64]              indexDigest == the amd64 digest
+postgresql.localContainer  platforms [linux/amd64, linux/arm64] indexDigest == neither platform digest
+```
+
+**A genuine multi-platform index never equals any of its platform digests** - it is a list of them. The
+equality on the SQL Server entry is the signature of a single-platform pin carrying an index-shaped key
+name. On arm64 there is no pinned SQL Server digest at all.
+
+The other two fail on what the file itself says:
+
+```
+databases.sqlserver.client.installer     go-sqlcmd 1.7.0 .msi, x64   sibling of localContainer, not inside it
+databases.postgresql.client.source       "bundled-with-postgresql-installer"
+databases.postgresql.migrationTools.source  "bundled-with-postgresql-installer"
+```
+
+The lockfile models client tooling as acquired from **the Windows installer**, never from the container.
+So the container closes the *server* half of one database and nothing else.
+
+```
+genuinely covered  1 of 5   (postgresql server, multi-arch)
+partially covered  1 of 5   (sqlserver server, amd64 only)
+not covered        3 of 5
+```
+
+> **A sibling key is not a substitute path. Two acquisition modes listed next to each other are two
+> facts about what exists, not one fact about what can replace the other** - and the file had already
+> answered the substitution question in prose the count never read.
+
+## My own count was low by six, for the reason I had just criticised
+
+I faulted a capital-`I` regex for missing three literal `installer` keys, then counted **5** with a
+structural walk keyed on the node name `installer`. Counting by *artifact* instead:
+
+```
+windows-bound url artifacts (.msi/.exe/winget/win32)   9
+bundled-with-the-windows-installer strings             2
+                                              total   11     vs my 5
+missed: tools.azureCli · tools.git · tools.jq · tools.vscode
+        postgresql.client · postgresql.migrationTools
+```
+
+Four tools carry `.msi`/`.exe` at `tools.X.url` with no `platforms` array, and two components acquire
+by a **string** naming the Windows installer. None has a key called `installer`, so no name-keyed count
+of any sensitivity could reach them.
+
+> **The population was defined by the artifact's platform and I selected it by key name. A better
+> instrument for the wrong selector is still the wrong selector** - the regex fix and the structural
+> walk were improvements along an axis that was never the limiting one.
+
+And the first walk this round returned **0** installer paths, because it yielded only scalar leaves and
+`installer` is an object. It was caught solely because the positive control printed 211 leaf paths
+beside the 0. **The zero was well-formed, reproducible, and about a population that excluded the target.**
+
+## The cross-platform witness is un-acquirable on the platform the workshop mandates
+
+The entry cited as proof the lockfile is not a Windows artifact:
+
+```
+tools.terraform.platforms   ['darwin/arm64', 'darwin/amd64']    <- Darwin only; no windows, no linux
+```
+
+The material mandates a Windows VM. **The one component pinned for a non-Windows host is pinned for
+*only* non-Windows hosts** - so the same entry that refutes "Windows-only" is itself an acquisition gap
+on the mandated platform, in the opposite direction. A count of platform coverage says nothing about
+*which* platforms, and both parties read the array's length rather than its contents.
