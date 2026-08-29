@@ -3587,3 +3587,35 @@ This track's code-fix claim has now been stated as **three**, corrected to **one
 The final position — `sql.bicep:84` novel and correct, the two acceptance-suite fixes already
 shipped and one of them a regression if merged — is the only one of the four that was measured
 against the engine rather than argued from text or inferred from an artifact.
+
+### Scope of `sql.bicep:84`, verified — and two additions
+
+The facilitator reproduced the probe independently and measured the blast radius. All three
+claims check out in this tree:
+
+- `environment.bicep:540` — `server: sql!.outputs.serverHost`, so the malformed value lands in
+  the **`server` field of the attendee-facing azure-target contract**, which the acceptance
+  suite validates.
+- `postgresql.bicep:71` — hardcodes `'${server.name}.postgres.database.azure.com'`, so the
+  **Java path never touches the function** and is unaffected.
+- Only two `serverHost` outputs exist in `infra/`, and only the SQL one used `environment()`.
+
+**HIGH rather than CRITICAL is the right grade.** It does not break the running app; it
+corrupts a validated deliverable that every .NET attendee emits. Worth stating plainly: **the
+app works and the contract is wrong**, which is the profile that gets shipped.
+
+**Addition 1 — the proposed fix is weaker than the shipped one.** The suggested form,
+`'${server.name}${environment().suffixes.sqlServerHostname}'`, is correct but **depends on the
+leading dot continuing to be there** — an undocumented asymmetry that had just misled two
+parties in the same hour. The shipped fix, `server.properties.fullyQualifiedDomainName`, does
+not depend on the suffix form at all: it reads the name **Azure itself publishes for that
+server**. When a value is available authoritatively from the resource, reconstructing it by
+string-building is a defect waiting for the next person who has to remember which suffixes
+carry dots.
+
+**Addition 2 — the reason Java escapes is its own smaller defect.** `postgresql.bicep:71`
+avoids the bug by hardcoding `.postgres.database.azure.com`, which is correct in public Azure
+and **wrong in every sovereign cloud** — precisely the case `environment()` exists to handle.
+So the two stacks sit on opposite sides of the same confusion: one uses the function and gets
+the dot wrong, the other refuses the function and gets portability wrong. **Neither reads the
+value from the resource**, which is the option that has neither failure mode.
