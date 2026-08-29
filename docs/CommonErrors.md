@@ -3871,3 +3871,54 @@ This is the third time this finding was got wrong, and never twice the same way:
 Each was a real check, correctly run, answering a question adjacent to the one that mattered.
 **A finding that keeps changing verdict is reporting on the tests, not on the defect** - and the
 correct verdict, LOW, was the one nobody reached until every half had been tried.
+
+## A mergeability reading has two staleness sources, so it decays faster than either party can see
+
+Two parties held a wrong reading of the same PR within fifteen minutes of each other, in opposite
+directions, and neither was careless. The base branch recorded it **MERGEABLE** at a SHA where it
+was; it conflicted as this branch kept committing. This branch recorded it **CLEAN** at `ca80010`
+and received, thirteen minutes later, a correct-when-written **CONFLICTING** for a state already
+repaired.
+
+> **A conditional-delivery count is a measurement of one ref and goes stale when its author commits.
+> A mergeability verdict is a measurement of a *pair* of refs and goes stale when *either* side
+> commits - including the side you are not watching and cannot see move.**
+
+That is why the usual remedy of stamping a figure with its ref is not enough here. `92 @ca80010` is
+checkable forever. `MERGEABLE @ca80010` is only checkable against a base SHA the reader must also be
+told, and in practice never is. **State both SHAs or the reading is unfalsifiable.**
+
+### Verifying a union resolution requires probing from the side you did not write
+
+Resolving the earlier conflict, two of four files were recorded as *"theirs was empty, took ours."*
+That is precisely the class of claim whose failure mode is invisible to its author: if it were wrong,
+the deleted material would be the material one never had. Checked afterwards, from the base side:
+
+```
+lines present in origin/rewrite-integration but absent from the merged file
+  docs/ImplementationLog.md                       0
+  solutions/ch01-copilot-rewrite/java/README.md   0
+  docs/CommonErrors.md                            2   <- both rewordings
+  java/README.md                                  2   <- both rewordings
+CONTROL  same probe vs origin/main                40   (fires)
+distinctive tokens of the 4 flagged lines, mine vs base
+  TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE 1/1 · TESTCONTAINERS_HOST_OVERRIDE 1/1
+  host.docker.internal 1/1 · /var/run/docker.sock 1/1 · headings 100 and 101 present
+CONTROL  absent string                             0
+```
+
+The union held. **But the line-exact probe reported four losses that were not losses**, because a
+reworded line is unequal to its own content. An exact-match diff is the right first instrument and
+the wrong last one:
+
+> **Line-identity answers "is this the same text." Only a token or heading probe answers "is this
+> the same information." A union resolution has to be verified at the second level, because
+> rewording is what a good union does.**
+
+### The instruction worth keeping regardless
+
+For append-structured files - changelogs, error registries, implementation logs - **the resolution is
+always the union, and `--ours` is never the answer even when it looks empty.** The `-S` supersession
+guard does not apply: nothing is being replaced, both sides are additions. Choosing a parent deletes
+another party's documented failures, and the deletion is silent in review because the surviving file
+is well-formed.
