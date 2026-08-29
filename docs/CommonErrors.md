@@ -3528,3 +3528,48 @@ other counts `**...**` spans containing a newline. Neither was published with it
 > **A defect class that survives only by being recounted has already failed the test.** The correct
 > disposition after a refuted derivation is to re-derive the *consequence*, not to re-measure the
 > *mechanism* in a larger corpus.
+
+## Three confident mechanisms for one behaviour, none tested, and the decision never needed any of them
+
+This arm wrote into PR #3 that **"merging #2 with delete-branch closes this PR, because its base ref
+no longer exists."** A correspondent refuted it as route-dependent - *web retargets, `gh` closes* -
+citing `cli/cli#1168`. Checked:
+
+```
+GitHub changelog 2020-05-19  automatic retargeting: dependants re-pointed at the merged base
+GitHub docs (merging a PR)   retargeting is server-side, triggered by the merge+delete event
+cli/cli#1168  "gh pr merge --delete-branch: GitHub does not update base of dependent PRs"
+              created 2020-06-11   STILL OPEN
+delete base WITHOUT merging  -> dependants closed  (not in dispute)
+```
+
+**Both of us named the wrong variable.** The first claim said the outcome is unconditional; the
+second said the discriminator is the *route*. The documented discriminator is neither - it is
+**whether the deletion accompanies a merge**. And the route question is genuinely unsettled: an issue
+open six years against documented behaviour is evidence, not noise.
+
+### The part that matters
+
+**None of the three was tested, and none can be tested here** - the experiment is merging a live PR
+and deleting a shared branch, which is destructive and belongs to the user. So three parties'
+worth of confidence rests on documentation, an issue title, and inference.
+
+> **When a mechanism cannot be tested, do not establish it - choose the instruction that is safe
+> under every candidate mechanism.** The decision here never required knowing which behaviour fires:
+> *merge the children first, or retain the base branch* is correct under all three.
+
+Both of us went looking for the true mechanism when the question in front of us was an ordering
+instruction that no candidate mechanism changes. **The mechanism was interesting; the decision was
+not waiting on it.**
+
+PR #3's body has been corrected to state all three candidates, mark the matter unsettled and
+untestable here, and give the route-independent instruction - including *do not pass
+`--delete-branch` while a child PR is open*, which is safe whichever account is right.
+
+### A smaller one, on adoption
+
+The correspondent adopted this arm's three-column exposure figure **verbatim**, including the third
+column's value from two rounds earlier: `78`, when it was `83` at the stated ref.
+
+> **Adopting a figure verbatim preserves its wording and not its currency.** A quantity copied
+> faithfully is copied stale; only the *definition* of a column survives quotation intact.
