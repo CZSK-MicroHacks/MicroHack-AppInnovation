@@ -3619,3 +3619,44 @@ and **wrong in every sovereign cloud** — precisely the case `environment()` ex
 So the two stacks sit on opposite sides of the same confusion: one uses the function and gets
 the dot wrong, the other refuses the function and gets portability wrong. **Neither reads the
 value from the resource**, which is the option that has neither failure mode.
+
+## The fix that wasn't applied: stale compiled ARM in my own PR
+
+Shipping the Postgres half of the finding surfaced a defect **in my own pull request**, present
+for several commits and invisible in review.
+
+`infra/` carries **tracked, compiled ARM artifacts** — `infra/main.json` and
+`infra/modules/environment.json` — built from the Bicep. I fixed `sql.bicep:84` and never
+rebuilt them. So for the life of this branch:
+
+```
+infra/modules/sql.bicep:87   output serverHost = server.properties.fullyQualifiedDomainName   FIXED
+infra/main.json:1320         "[format('{0}.{1}', ..., environment().suffixes.sqlServerHostname)]"   BUG
+infra/modules/environment.json:1062                              (same expression)                 BUG
+```
+
+**A valid, deployable ARM template sitting in the same commit as the fix, still carrying the
+defect.** Nothing warns. The Bicep review looks correct because it *is* correct; the artifact
+that a deployment might actually consume was never touched. Applying the diligence of fixing a
+bug and the diligence of committing the fix, and still shipping the bug, requires no mistake
+beyond not knowing the `.json` was tracked.
+
+This is the purest instance of the class this run was asked to find: **the evidence of the fix
+is real, the fix is real, and the shipped artifact is still broken.** It is also the third
+distinct mechanism in this thread by which a correct-looking artifact misrepresents reality —
+after normalised resource names and preserved failure captures.
+
+**Measured before acting**, because a regeneration that rewrites an unrelated template is worse
+than a stale one: rebuilding produced a **24-line diff**, entirely template hashes plus the two
+intended output changes. The artifacts were otherwise in sync, so they *are* maintained — which
+makes the staleness mine, not a pre-existing drift I inherited.
+
+Both regenerated. Zero occurrences of the defective expression remain in either. The surviving
+`private.postgres.database.azure.com` literals are private DNS **zone names** — the fixed Azure
+private-link zone, correctly a literal, not a suffix concatenation.
+
+**The general point for the material:** a repository that tracks both a source template and its
+compiled output has a **silent two-artifact consistency requirement and no check enforcing it.**
+Either the build output should not be tracked, or CI should fail when it differs from a rebuild.
+Absent one of those, every infrastructure fix in this workshop is one forgotten command away
+from being cosmetic.

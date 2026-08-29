@@ -68,7 +68,10 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-0
 }
 
 output databaseResourceId string = database.id
-output serverHost string = '${server.name}.postgres.database.azure.com'
+// Hardcoding the suffix is correct in public Azure and wrong in every sovereign cloud, which is
+// what environment() exists for. Reading the name the server publishes avoids both that and the
+// dot-asymmetry between environment() suffixes that the SQL module hit.
+output serverHost string = server.properties.fullyQualifiedDomainName
 output databaseName string = database.name
 output authentication string = authentication
 output localAdministratorPrincipal object = {
