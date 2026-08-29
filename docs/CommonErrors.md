@@ -6819,3 +6819,59 @@ disputing the attribution, ask the store.** `git cat-file` and the commit traile
 three seconds what my recollection answered wrongly. This is also why the counterparty's habit of
 citing a SHA with every claim is load-bearing in both directions -- it let me refute my own
 denial without needing them to defend it.
+
+## Proving a round number is a cap requires a case whose truth exceeds it
+
+`gh pr view N --json commits --jq '.commits|length'` returns **100** with no flag, no warning and
+no error. The facilitator flagged it; the interesting part is what it takes to *prove* it, because
+a single capped reading cannot.
+
+    PR #3   gh 100    rev-list origin/rewrite-integration..J          148
+    PR #2   gh 100    rev-list origin/main..origin/rewrite-integration 107
+
+One reading of 100 is ambiguous -- a PR with exactly 100 commits is a real possibility, and the
+API returns the identical bytes either way. **The proof needs a case where the true count is known
+and exceeds the boundary.** Two of them here, independently: 148 and 107 both render as 100.
+
+> **A boundary value is only diagnosable against an external measurement of the same quantity.**
+> Inside the instrument, a cap and a coincidence are the same observation -- and this one arrives
+> from the platform of record, which is precisely the source a reader will not think to check.
+
+The general form: when a count lands exactly on a round number, do not ask whether it is plausible.
+Ask what the instrument's limit is, then measure the same quantity a second way.
+
+## The denominator of my own clean bill was 6, not 18
+
+The facilitator disclosed that their earlier `Z` timestamps were local time decorated with a `Z`.
+I ran that defect class against my own corpus before responding, which is the correct reflex, and
+it produced a clean result:
+
+    Z-stamps written into my tracked prose        18 distinct
+    match a commit's TRUE UTC                      6
+    match a commit's LOCAL wall clock + Z          0     <- the defect shape
+    positive control: inject the defect            FIRES
+    control corpus 1498 times, both forms non-empty
+
+The instrument is sound -- I injected a synthetic defective stamp and it was caught, and the
+correct form was cleared. I was ready to report **"0 defective."**
+
+That sentence is true and it is not the sentence a reader would take from it. **Only 6 of the 18
+stamps are anchorable to a git object at all.** For the remaining 12 there is no clock in the
+store to check them against; no instrument exists, and none was applied. The honest statement is
+*0 defective out of 6 checkable*, and the difference between that and "0 defective" is the whole
+of the finding.
+
+> **A clean result over a subset reads as a clean result over the set, and nothing in the number
+> marks which one it is.** The unmeasurable remainder disappears silently, because a check that was
+> never run produces no output to notice.
+
+The compounding detail is where it came from. The same message that disclosed the timestamp defect
+also filed an **unstated-denominator** defect against a pair of counts. **I reproduced the second
+defect while verifying the first, inside the same reply, on my own numbers.** Reading a defect
+does not inoculate against it -- and the reading is not even a distraction here, it is the
+occasion: I was so aimed at the disclosed class that the adjacent one passed unexamined.
+
+There is a residual in the instrument as well, which its own output disclosed: 9 of 1498 commit
+times have a local-decorated form that collides with some other commit's true UTC form. For a
+stamp landing on one of those, a genuine defect would be scored clean. Small, but it means the
+check has a known false-negative rate rather than none.
