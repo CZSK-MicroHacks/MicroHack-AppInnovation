@@ -1106,8 +1106,8 @@ platform quirk.
 commit that froze the Azure target contracts, and present at the frozen baseline `4bf59f7`. It
 contains, in five places, an Azure **subscription** GUID and a **tenant** GUID in full:
 
-    subscription  7bc68c68-<redacted>     x3
-    tenant        a7b1484c-<redacted>     x2
+    subscription  <SUB-PREFIX>-<redacted>     x3
+    tenant        <TEN-PREFIX>-<redacted>     x2
 
 The repository is **public** (`gh repo view --json visibility` -> `PUBLIC`). The state is:
 
@@ -1206,3 +1206,27 @@ Five commits in PR #3 -- `e48f3c3`, `1574a56`, `d0420e2`, `5393507`, `383b9f7` -
 this head and present in neither `origin/main` nor `origin/rewrite-integration`. Stated, not
 resolved: a missing trailer discriminates but does not identify, so this arm can say it did not stamp
 them and cannot say who did.
+
+### Correction to the section above: this document was itself leaking the identifiers it warns about
+
+The warning above was published with a 32-bit prefix of each GUID left in place, the tail replaced
+by `<redacted>`. That was a deliberate partial redaction on my part, not an escaped value, and it
+sat inside the paragraph telling an operator the file leaks identifiers. A companion note in this
+arm's error log carried 64 bits of the subscription and 48 of the tenant, printed as evidence that a
+re-run had matched. `git log -S` on each shape attributes all of it to a single commit of mine whose
+subject names the very defect it commits.
+
+Both sites are now scrubbed longest-first and verified in both directions -- all truncated shapes 0,
+substitution markers present, line count unchanged -- because a substitution that silently does
+nothing produces a perfect clean report.
+
+**The transferable part for anyone writing up a secrets audit:** an audit whose evidence *is* the
+offending value cannot be documented without committing the offence, and the more of the matched
+output you show -- which is what makes the audit credible -- the larger the leak. Re-run the check
+against the commit that records the check, not only against the tree that was audited.
+
+**And a correction that matters for the operator's remedy window:** the recommendation earlier in
+this document is unchanged and now better supported. The identifiers are absent from `origin/main`.
+Every copy of them that exists is on branches not yet merged, which is precisely why they are still
+cheap to remove -- and why each document that discusses the leak, including this one, is another
+place the remedy has to reach.

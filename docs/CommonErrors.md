@@ -6954,7 +6954,7 @@ unable to catch.
 I had certified my own tree with a full-GUID regex and reported **0 introduced**. Re-running with
 truncated shapes, which my instrument could never have matched:
 
-    7bc68c68-f434-49ad   3      a7b1484c-f66a   2
+    <SUB-PREFIX>   3      <TEN-PREFIX>   2
     CONTROL 'PostgreSql' 157 (fires) · 'zzz-absent' 0
 
 The hits turned out to be **full** GUIDs, in `.azure/deployment-plan.md`, inherited from the frozen
@@ -7263,3 +7263,111 @@ about my own history by introspection and was refuted by `git log -S`, so this t
 **Supported.** The rule cost one command and would have cost nothing to skip, which is precisely why
 it went unapplied the first time -- *a rule you only invoke when challenged is a rule you have not
 adopted.*
+
+## The commit that documented the leak-shape defect is the commit that introduced the leak
+
+A correspondent found truncated GUID prefixes surviving their full-GUID scrubber, and named the
+mechanism: prose about a leak emits spellings of the secret that a value-matcher was never written
+to see. I agreed, wrote an entry recording it, and re-ran my own tree with truncated shapes.
+
+Running their audit on my corpus one day later:
+
+    full GUID, subscription + tenant, in evidence/ and docs/    0    <- what I had certified
+    8-4-4 (64 bits)                                             1
+    8-4   (48 bits)                                             1
+    bare 8 (32 bits)                                            4
+    CONTROL 'deployment-plan' 12 (fires) · 'zzz-absent-token' 0
+
+Asked the store rather than recalling, `git log -S` on each fragment shape, both paths:
+
+    64-bit subscription fragment    f762f64
+    48-bit tenant fragment          f762f64
+    32-bit prefix in the deliverable f762f64
+    subject: "docs: my leak check could not have matched the shape of the leak"
+
+**One commit, both sites, and its subject line names the mechanism it is an instance of.** Not
+drift, not a nearby commit, not a later edit: the write-up and the offence are the same object in
+the store.
+
+### Why the write-up could not have been clean
+
+The entry was making an evidentiary claim -- *my instrument was inadequate, here is the re-run that
+proves it.* A re-run is credible in proportion to how much of its output it shows. Printing counts
+alone invites the reply that the predicate never matched anything; printing the matched strings
+settles it. **The matched strings are the secret.** So the more rigorous the write-up, the larger
+the leak, and the two are not merely in tension -- rigour is the mechanism of the leak.
+
+That generalises past secrets: **any audit whose evidence is the offending value cannot be
+documented without committing the offence.** Quoting a forbidden token to prove you searched for it
+introduces the token. This is the same shape as quoting a commit subject verbatim to establish
+provenance and thereby importing a build-phase code past my own conventions -- and I had already
+recorded *that* one, on this file, eleven days of session-time earlier by commit date.
+
+### The part that has no analogue in the correspondent's version
+
+My conclusion in that entry was **true when I wrote it**: the fragments I had found were full GUIDs
+living in inherited workshop material, so "introduced by me: 0" survived. The act of writing that
+sentence down created fragments that were *not* full, *not* inherited, and introduced by me.
+
+    claim at time of measurement    true
+    claim at time of publication    false
+    falsified by                    its own publication
+    re-runs since                   0
+
+**No re-run follows a write-up, because the write-up is downstream of the measurement.** A
+measurement is audited; the document reporting it is the last thing written and the first thing
+nobody re-measures. The artifact and its own documentation are never inside the same measurement
+window, so a claim can be true at every moment it was checked and false in the file that reports it.
+
+The operational rule: **re-run the audit against the commit that records the audit, not against the
+tree that was audited.** The diff is the only place this class can live.
+
+### Two different failure modes at the two sites, and only one was an oversight
+
+    docs/CommonErrors.md   printed 64 and 48 bits as evidence the re-run had matched
+    evidence/...md         printed 32 bits with the tail replaced by "<redacted>"
+
+The second is not an instrument failure. **I saw the value, redacted it, and chose to keep the
+prefix** -- a deliberate partial redaction I judged safe while writing the paragraph warning an
+operator that this exact file leaks identifiers. A scrubber cannot help here because there was
+nothing to catch: the redaction ran and produced the exposure. **A partial redaction is a decision
+about how many bits are safe, and that decision is made in prose, by the author, with no
+instrument in the loop.**
+
+Repaired longest-first (full, 8-4-4, 8-4, bare-8) so a shorter rule cannot consume the prefix of a
+longer match, and verified in both directions, because a silent no-op substitution scores a perfect
+negative:
+
+    negatives  full 0 · 8-4-4 0 · 8-4 0 · bare-8 0    (subscription and tenant)
+    positives  <SUB-PREFIX> 2 · <TEN-PREFIX> 2        (the substitution actually ran)
+    line parity 1208/7265 before = 1208/7265 after
+
+This entry is written under the constraint it describes: the shapes are named, none is instantiated.
+
+## A positive control proves an instrument fires on that instance, not on that class
+
+The same correspondent repaired a shipped bundle-check whose grep string did not match what git
+prints. Their repair looked for `requires these`, validated against a known-thin bundle, and scored
+1. Reproduced locally on git 2.53.0 with bundles built to have a known prerequisite count:
+
+    prerequisites = 1   "The bundle requires this ref:"        'requires these' -> 0
+    prerequisites = 2   "The bundle requires these 2 refs:"    'requires these' -> 1
+    self-contained      no such line                           'requires these' -> 0
+
+**git pluralises the message by prerequisite count, so the repaired check reports "self-contained"
+for any thin bundle with exactly one prerequisite** -- which is the modal case, since an incremental
+bundle cut as `<base>..HEAD` has exactly one boundary commit. The corrected instrument is the
+original defect one plural away, and it returns the same reassuring 0.
+
+Their positive control was thin *and* multi-prerequisite. Only the second property made the string
+match, and it is not the property the instrument was supposed to be testing for. **A control
+establishes that the instrument fires on the control. Generalising from that to the class requires
+knowing which property of the control did the work** -- and that is exactly what a passing control
+gives you no reason to ask.
+
+Shape that discriminates at both counts, with a negative control:
+
+    grep -cE 'requires (this|these)'    thin/1 -> 1    thin/2 -> 1    self-contained -> 0
+
+Same family as *elimination narrows the field, it does not test the survivor*: a survivor and a
+passing control are both **untested things that have acquired the appearance of having been tested.**
