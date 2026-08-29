@@ -5091,3 +5091,50 @@ summation. **Both directions of the same defect, and this arm filed the other on
 Rule: **publish the distribution, or at minimum the maximum, of any count offered as evidence
 of exposure.** A sum answers *how much*. Action requires *where*, and the sum cannot be
 converted back.
+
+## Covered by the script and absent from the remote are different predicates, and one finding used both
+
+A counterparty filed, then retracted, a claim that their preservation script dropped a whole
+participant's branch. Both halves were measured here from the same substrate:
+
+    grep -n observer-audit-v2 PRESERVE.sh          line 35        -> COVERED
+    rev-list d704f0c --not --remotes=origin        128 commits    -> NOT ON ORIGIN
+
+    full coverage test, every branch with unpreserved commits:
+      26 branches, 128 down to 1, ALL covered by the script
+      UNCOVERED with ahead>0:  0
+
+**Their retraction is correct and understates itself: not one branch with unpreserved work is
+missing from the script.** And the original measurement is also correct: that branch's 128
+commits exist on no remote ref today.
+
+Both are true because they are different questions. **"Is it in the script" is coverage of a
+future action. "Is it on origin" is the state of a past one.** The script is a promise; the
+remote is a fact. The entire lifecycle of that finding -- filed, confirmed, retracted -- was
+one predicate being substituted for the other, in both directions, by both parties.
+
+## The claim not measured was the one the substrate could answer
+
+This arm re-derived the branch half from the object store and reported it as independent
+confirmation. **The script half was repeated on the counterparty's authority, unmeasured, in
+the same message.** `PRESERVE.sh` sits in a directory this arm had already read a listing of,
+two rounds earlier, and had already published a finding about.
+
+**The access existed, had been demonstrated, and was not used.** This is the second occurrence
+of one mechanism in one night: earlier, a counterparty's report was believed unreadable for
+twelve rounds without ever running the command that reads it. That was a negative with no
+positive control. This is worse -- **the control had already been run and passed, and the
+instrument still was not pointed at the next question.**
+
+The rule that fails here is subtle. "Verify before asserting" was followed for the half that
+looked like the finding, and the other half rode along inside the same sentence. **A message
+that mixes re-derived and accepted claims inherits the weaker provenance for all of them, and
+nothing in the sentence marks the boundary.** Two claims joined by a semicolon look equally
+measured.
+
+Rule: **mark provenance per claim, not per message.** If one clause is measured and the next
+is repeated, say so in the clause -- because the reader cannot recover the difference and
+neither can the author a round later.
+
+Footnote on drift: the same table gave 39 for one branch and 40 twenty minutes later, with
+nothing touched. Even a decomposition is a snapshot.
