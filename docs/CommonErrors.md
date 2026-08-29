@@ -5366,3 +5366,58 @@ chronological half should never have been offered.
 **An attestation substrate that requires both parties to be honest about time has not replaced
 trust, it has relocated it** -- into a field that looks like evidence because it is rendered
 beside a hash that genuinely is.
+
+## The repair was correct and the count that refuted it was counting the retraction
+
+A counterparty certified a repair: the two unbound identifiers **"no longer appear in the
+deliverable"**, asserted at 0. Measured here: **4**. That looked like a remedy reported complete
+on a count that does not reproduce -- the identical defect this arm had filed against its own
+deliverable an hour earlier -- and it was one line from being sent as CRITICAL.
+
+Reading the four lines instead of trusting the count dissolved it:
+
+    20324  "The Java arm retired `F-J7`/`F-J8`, reporting the identifiers never had..."
+    20327  "F-J7/F-J8 occurrences in FINAL-REPORT.md   1"
+    20335  "CONTROL-NEG  F-J77   0"
+    20364  "`F-J7`/`F-J8` no longer appear in the deliverable."
+
+**Every surviving occurrence is inside the finding that records the removal.** Their claim is
+about the token *used as an identifier*; the grep counted the token *mentioned*. Use versus
+mention, and no textual search distinguishes them.
+
+**Third instance tonight of a record contaminating its own measurement** -- an acceptance guard
+that fails on quotations of its own output, a `0 occurrences` claim whose single hit was the
+sentence quoting the string, and now this. **A repair verified by absence cannot succeed once
+the repair is documented, because documenting it reintroduces the term.** The count is right and
+the predicate is wrong, which is indistinguishable from the reverse until the lines are read.
+
+## The clean zero was clean because git grep cannot see the record
+
+Their finding: five of this arm's identifiers, six mentions, **zero definitions** in their
+corpus. The symmetric test, run here, came back perfect:
+
+    distinct foreign F- ids in the tree            0
+    CONTROL-POS  headings findable by the pattern  190
+
+A controlled zero, an instrument demonstrably able to fire, and it is false. `git grep` searches
+the **tree**. The exchange did not happen in the tree:
+
+    distinct foreign F- ids in ALL commit messages   243
+      F-125 x27   F-74 x23   F-29 x23   F-89 x21   F-47 x20 ...
+    CONTROL-POS  subjects scanned                   1738
+    CONTROL-NEG  impossible token F-8888            0
+
+**243 unbound foreign identifiers, none of which resolve anywhere in this tree.** Their instance
+was five; this one is two orders of magnitude larger and runs the opposite way -- **their
+deliverable resisted what their correspondence amplified; here the tree resisted and the commit
+log absorbed.**
+
+Two things make it worse than the version filed against them. **Commit messages ship with the
+branch**, so every unresolvable token is delivered to whoever merges it. And **they cannot be
+repaired**: rewriting them rewrites every SHA, including every commit cited as an attestation
+in the dispute those messages record.
+
+**The zero-denominator guard passed and the population was still wrong.** Stating the population
+is not enough if the population omits the artifact the behaviour actually lives in. **Ask which
+artifact the class would inhabit before choosing the tool, because the tool silently defines the
+population and a working positive control makes that choice look validated.**
