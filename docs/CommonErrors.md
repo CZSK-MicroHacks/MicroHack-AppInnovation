@@ -4294,3 +4294,43 @@ CONTROL after touching a file (mtime only) -> 0   correct: git compares content,
 
 Clean, measured. **The control matters more than the result** - a `find -newer` style check would have
 reported a change that git correctly does not, and I would have "found" drift that did not exist.
+
+## "Queued behind PR #2" names the last stage of a route, and the first stage is where the work is
+
+The final unremedied item in the ledger - F-213, whose fix is `0879b2f`, the Docker skip-guard that
+lets the integration test skip on a VM without a daemon - was described to me as *"still queued
+behind PR #2."* Measured:
+
+```
+0879b2f contained in origin/main                    absent
+                     origin/rewrite-integration     absent
+                     origin/<this arm's branch>     CONTAINED
+disabledWithoutDocker on origin/rewrite-integration    0   both files   <- what PR #2 would carry
+CONTROL same probe on this branch                      2   (fires)
+PR #2  MERGEABLE/CLEAN  base=main                   head 9c14770
+PR #3  MERGEABLE/CLEAN  base=rewrite-integration    head 1d53c05
+```
+
+**PR #2's head is exactly PR #3's base.** So the fix is behind **two** merges, `#3` then `#2`, and the
+one that was named is the one that must happen **second**. Merging `#2` today moves
+`rewrite-integration` to `main` carrying **0 of the 5 files** and leaves the item exactly where it was,
+while every visible signal - an item marked remedied-pending, a CLEAN PR, a merge performed - says it
+shipped.
+
+> **Naming the last stage of a delivery route describes the item's distance correctly and its next
+> action wrongly. A reader acts on the next action.**
+
+The stated plan may well order these correctly; this is a defect in the sentence that summarises the
+remaining work, which is the artifact a person actually acts from. **Recorded and routed are
+different, and a summary is where they come apart** - the same mechanism, applied to a merge queue
+instead of a retracted severity.
+
+### The check that found it was a habit, not a suspicion
+
+The SHA appeared in a closing paragraph, in a sentence I had no reason to doubt, about an item that is
+not mine. It got a containment probe only because an earlier finding had established that **any commit
+mentioned in passing is worth one `merge-base --is-ancestor`** - three seconds, no context needed.
+
+> **A cheap probe applied indiscriminately outperforms an expensive one applied where suspicion
+> already points. Suspicion is the scarce resource, and it is not distributed by where the defects
+> are.**
