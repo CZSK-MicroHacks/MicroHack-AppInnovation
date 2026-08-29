@@ -67,7 +67,8 @@ dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=characterization.trx" \
   --results-directory "$PWD/.workshop-tmp/dotnet-characterization"
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 cd ../..
 ```
 
@@ -93,7 +94,7 @@ Write `evidence/bounded-plan.md` before asking for code. A suitable sequence is:
 3. local/Blob image abstraction and image-key security;
 4. external configuration, managed identity, health, readiness, and bounded
    performance;
-5. telemetry and the existing non-root Container Apps image.
+5. telemetry, then the non-root container image you author in checkpoint 4.
 
 For every slice, list exact files, tests, exclusions, and how to return to the last
 passing commit. A human must approve the plan and must review schema, security,
@@ -101,8 +102,9 @@ dependencies, configuration, errors, and each generated diff.
 
 **Suggested prompt, not proof**
 
-> Read `workshop/contracts`, `tests/acceptance`, the current .NET tests, and
-> `dotnet/Dockerfile`. Propose only the next bounded slice. Preserve Azure SQL, one
+> Read `workshop/contracts`, `tests/acceptance`, the current .NET tests, and — once
+> checkpoint 4 has authored it — `dotnet/Dockerfile`. The baseline ships no Dockerfile,
+> so omit it on the earlier slices. Propose only the next bounded slice. Preserve Azure SQL, one
 > application container, Blob images, ACA readiness, external configuration, routes,
 > failure behavior, and telemetry. Do not edit frozen interfaces or add services.
 > Name exact tests and wait for approval before generating a diff.
@@ -130,7 +132,8 @@ dotnet test dotnet/LegoCatalog.sln \
   --logger "trx;LogFileName=$SLICE_NAME.trx" \
   --results-directory "$PWD/.workshop-tmp/dotnet-$SLICE_NAME"
 cd tests/acceptance
-uv --no-config run pytest -q tests/test_contract_assets.py
+uv --no-config run pytest -q tests/test_contract_assets.py \
+  --deselect tests/test_contract_assets.py::test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches
 uv --no-config run python -m catalog_acceptance \
   --profile smoke \
   --base-url "$CATALOG_BASE_URL" \

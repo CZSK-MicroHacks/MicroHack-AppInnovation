@@ -1,14 +1,14 @@
 # Challenge 2: make the catalog survive a traffic spike
 
 **By the end of this chapter you will have watched your catalog add capacity by itself
-under 40 concurrent users, serve every request without a single error, and give the
+under 80 concurrent users, serve every request without a single error, and give the
 capacity back when the traffic stopped — with the metrics to prove all three.**
 
 ## Why this matters
 
 On the Windows VM there was one instance of the catalog and one way to survive a busy
 day: hope, followed by a change request for a bigger machine. Nobody in the retailer
-could answer "what happens at 40 concurrent shoppers?" because there was no safe way to
+could answer "what happens at 80 concurrent shoppers?" because there was no safe way to
 find out and no metric to look at afterwards.
 
 You are about to answer that question with a number. This chapter retires the scaling
@@ -83,7 +83,7 @@ concurrent requests by `concurrentRequests` `50` and keeps the answer between `1
 
 ```mermaid
 flowchart LR
-    LT[Azure Load Testing<br/>40 virtual users, 300 s] -->|HTTPS GET /perftest/catalog| REV
+    LT[Azure Load Testing<br/>80 virtual users, 300 s] -->|HTTPS GET /perftest/catalog| REV
     REV[Revision] --> R1[Replica 1]
     REV -.scale rule: http, 50 concurrent.-> R2[Replica 2]
     REV -.-> R3[Replica 3]
@@ -107,7 +107,7 @@ describes, and come away with evidence that it scaled out, stayed correct, and r
 Concretely, you must show that the existing revision:
 
 - serves one sampler: HTTPS `GET /perftest/catalog`;
-- completes 40 virtual users for 300 seconds with zero errors;
+- completes 80 virtual users for 300 seconds with zero errors;
 - has one replica before load, two or three during the observed run timestamps,
   and one after load;
 - stays inside the target's scale contract: rule `http`, type `http`, minimum `1`,
@@ -150,7 +150,7 @@ for ten minutes so Azure Monitor writes a one-replica data point at `PT1M` grain
 
 ### 3. Run the bounded load test
 
-The checked-in plan is deliberately small and deterministic: one sampler, 40 users, a
+The checked-in plan is deliberately small and deterministic: one sampler, 80 users, a
 300-second scheduler, an HTTP `200` assertion, stop-on-error behaviour, and both redirect
 modes disabled — a redirect stays a 3xx and therefore fails the assertion rather than
 quietly passing. The hostname is injected as an environment variable; the API key reaches
@@ -223,13 +223,20 @@ The frozen interfaces behind those two commands are
 
 You are done when all of the following are true:
 
-- [ ] The load run finished in status `DONE` with 40 virtual users, 300 seconds, and an
+- [ ] The load run finished in status `DONE` with 80 virtual users, 300 seconds, and an
       error count of exactly zero.
 - [ ] `evidence/load/raw/replicas.json` shows one replica immediately before load, two or
       three inside the observed load window, and one again afterwards — every value
       within `1..3`.
 - [ ] The database metric peaks above its pre-load baseline, so you can point at the
       moment the web tier's extra replicas reached the data tier.
+- [ ] You have written down the run's **throughput** next to its replica count, and you
+      can say whether the extra replicas raised it. If throughput is flat while replicas
+      tripled, the app tier was never the constraint — say so, and name what was.
+- [ ] You can name the revision your evidence belongs to **and** the image digest it ran.
+      The revision name is not durable: any app-setting change creates a new revision and
+      moves traffic to it, so a name recorded today may not describe what ran. The digest
+      does.
 - [ ] `/healthz` and `/readyz` both return exactly `200` after recovery, from the handoff
       URLs.
 - [ ] `evidence/load-test-report.json` exists, was written by the renderer, and
@@ -268,7 +275,11 @@ Work in this order, and let each step gate the next:
    window, then keep polling replicas until the last non-null value is `1`.
 5. Hash everything, render, validate.
 
-If your replica series has more than one time series in it, you forgot the filter.
+If your replica series has more than one time series in it, you forgot the filter. A
+series can also be wrong while being the only one present: an unfiltered query returns
+whichever revision Azure lists first, and an inactive revision reports a flat `0`. One
+series is necessary, not sufficient — check that the `revisionName` on it is the one
+serving traffic.
 
 </details>
 
@@ -292,8 +303,8 @@ Every command, with its fail-closed assertions, is in
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `az load` says the resource does not exist, or `PERFTEST_API_KEY_SECRET_URI` is unset | `infra/perf-testing.bicep` has not been deployed, or the `PERFTEST-API-KEY` secret value was never set in the vault it creates | Deploy the template and set the secret — see [infra/README.md](../../infra/README.md). Do not improvise a substitute resource |
-| The run finishes with a nonzero error count | The sampler got a 3xx or a 4xx — usually a missing or wrong `x-api-key`, or a URL that redirects | Confirm the Key Vault secret holds the catalog's performance-test key and that the Load Testing resource's identity can read it. Redirects are intentionally not followed |
-| Replicas never exceed one | The app absorbed 40 users below the `concurrentRequests` `50` threshold, or you filtered on the wrong revision | Check that the `revisionName` filter matches the handoff revision exactly, and confirm the run really executed against your host |
+| The run finishes with a nonzero error count | The sampler got a 3xx or a 4xx. A **100%** error rate almost always means the vault key and the key the application enforces are different values — they are written by two independent paths and nothing binds them | Ask the facilitator to confirm the vault secret `PERFTEST-API-KEY` equals the Container App secret `performance-api-key`; those are compared without printing either value. A partial error rate is a genuine application error, not a key problem. Redirects are intentionally not followed |
+| Replicas never exceed one | 80 users sustained against the `concurrentRequests` `50` threshold should reach two or three replicas, so a flat series means the load never arrived: the run targeted a different host, or you filtered on the wrong revision | Check that the `revisionName` filter matches the handoff revision exactly, and confirm the run really executed against your host |
 | Replicas rise only after `LOAD_END` | Metric lag, or the load window was taken from your polling clock instead of the engine timestamps | Use `executionStartDateTime`/`executionEndDateTime` from the run response and re-pull the metric |
 | The validator rejects a digest | A raw file was edited, reformatted, or re-captured after hashing | Re-hash the exact bytes you captured; never hand-edit normalized evidence |
 | `.testRunStatistics.Total.medianResTime` is null or absent | The field is optional in the Azure Load Testing run response | Take the median response time from the run's own dashboard in the portal instead. Do not re-capture `test-run.json` to obtain it — the digest in `capture.json` is bound to the bytes you already hashed |
@@ -306,9 +317,9 @@ Read your own numbers out of `evidence/load-test-report.json` and say them out l
 
 | | Legacy VM | Your Container App |
 | --- | --- | --- |
-| Catalog response, median | your `catalogMedianMs` — one instance, no load, over the VM's loopback | **_your `medianResTime`_ ms** — under 40 concurrent users, over public HTTPS |
+| Catalog response, median | your `catalogMedianMs` — one instance, no load, over the VM's loopback | **_your `medianResTime`_ ms** — under 80 concurrent users, over public HTTPS |
 | Response to a traffic spike | One instance, forever | **1 → 2 or 3 replicas**, automatically, inside the 300-second run |
-| Errors under 40 concurrent users | Unknown — never safely tested | **0** |
+| Errors under 80 concurrent users | Unknown — never safely tested | **0** |
 | Capacity after the spike | Whatever you bought stays bought | **Back to 1 replica** within 15 minutes |
 | Database under the spike | Same box as the web tier | A separate managed service whose **peak rose above baseline** and stayed healthy |
 | Evidence | A screenshot, maybe | A digest-bound report re-derived from raw Azure responses |
@@ -319,10 +330,25 @@ is the honest part of the story — it shows that scaling the web tier moved pre
 the data tier, which is exactly the conversation the retailer could never have when both
 lived on one Windows box.
 
+Push that row harder before you accept the headline. "It scaled out" and "it got faster"
+are two different claims, and this run only established the first. Put your throughput
+next to your replica count: if replicas went from one to three and throughput did not
+move, the extra replicas bought nothing, and the constraint lives somewhere behind them.
+On this stack it usually does — the workshop database is a single-vCore serverless tier,
+and it is entirely normal to see it pinned near 100% CPU while the web tier is still
+accepting work. Latency then rises roughly in step with concurrency, because the extra
+requests are queueing rather than being served.
+
+That is not a failed run; it is the run telling you which tier to spend money on. An
+attendee who records "autoscaling works" and stops has measured the elasticity of the
+tier that was not the bottleneck. The one who compares throughput across replica counts
+and correlates it against the database metric can say what to scale next, which is the
+answer the retailer is actually paying for. Write down whichever of the two you found.
+
 The first row is the one you carried in from Challenge 0, and it is the only row where
 both numbers are yours. State the caveat alongside them: Challenge 0 timed the catalog
 page over the VM's own loopback with nothing else happening on that box, and this chapter
-timed `GET /perftest/catalog` over public HTTPS with 40 users arriving at once. They are
+timed `GET /perftest/catalog` over public HTTPS with 80 users arriving at once. They are
 not the same measurement, so the claim to make is not that the move made the catalog
 faster. It is that a question the retailer used to answer with an opinion now has a
 recorded before and a recorded after — and that you can say what each one measured.

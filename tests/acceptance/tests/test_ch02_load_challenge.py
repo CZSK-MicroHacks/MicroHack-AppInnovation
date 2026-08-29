@@ -3,6 +3,7 @@
 from copy import deepcopy
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ElementTree
@@ -54,7 +55,7 @@ def _assert_bounded_jmeter(path: Path) -> None:
         for element in thread_group
         if element.tag in {"stringProp", "boolProp"}
     }
-    assert thread_properties["ThreadGroup.num_threads"] == "40"
+    assert thread_properties["ThreadGroup.num_threads"] == "80"
     assert thread_properties["ThreadGroup.duration"] == "300"
     assert thread_properties["ThreadGroup.scheduler"] == "true"
     assert thread_properties["ThreadGroup.on_sample_error"] == "stoptestnow"
@@ -236,7 +237,7 @@ def test_guides_require_raw_capture_renderer_and_common_validator() -> None:
         "/perftest/catalog",
         "/healthz",
         "/readyz",
-        "40",
+        "80",
         "300",
         "app_cpu_billed",
         "cpu_percent",
@@ -393,3 +394,132 @@ def test_renderer_rejects_delayed_post_run_scale_out(
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "failed"
     assert "in-load scale-out" in result["error"]
+
+
+SCALE_RULE = ROOT / "infra/modules/environment.bicep"
+
+
+def _scale_rule_numbers() -> tuple[int, int]:
+    """Return ``(concurrentRequests, maxReplicas)`` from the Container Apps scale rule."""
+    source = SCALE_RULE.read_text(encoding="utf-8")
+    concurrent = re.search(r"concurrentRequests:\s*'(\d+)'", source)
+    maximum = re.search(r"maxReplicas:\s*(\d+)", source)
+    assert concurrent is not None, f"no concurrentRequests in {SCALE_RULE}"
+    assert maximum is not None, f"no maxReplicas in {SCALE_RULE}"
+    return int(concurrent.group(1)), int(maximum.group(1))
+
+
+def test_the_load_profile_can_actually_trigger_the_scale_rule() -> None:
+    """The shipped load must be able to produce the replica evidence the challenge demands.
+
+    Challenge 2 requires ``evidence/load/raw/replicas.json`` to show "one replica
+    immediately before load, two or three" during it. Whether that evidence is
+    *obtainable* is pure arithmetic: the KEDA HTTP scaler asks for
+    ``ceil(concurrent / concurrentRequests)`` replicas, so a virtual-user count at or
+    below the threshold pins the app at one replica no matter how long it runs.
+
+    Both numbers were frozen independently -- the user count by this module, the
+    threshold by the bicep and the shared-challenge contract -- and nothing compared
+    them. Shipped, they were 40 against 50: the participant could execute the documented
+    run perfectly, get a green ``DONE`` with zero errors, and still be unable to produce
+    the required artifact. The challenge's own troubleshooting table named this exact
+    arithmetic as a cause and offered a remedy only for the *other* cause.
+
+    This test is the comparison that was missing. It fails if either number drifts to
+    where the evidence gate stops being satisfiable.
+
+    The user count is not arbitrary. Two warm digest-pinned runs against the deployed
+    .NET app measured the window directly: 40 concurrent held one replica with zero
+    errors, and 160 concurrent scaled to three but returned 2.06% HTTP 500s. Challenge 2
+    requires *both* zero errors and two-or-three replicas, so neither measured point
+    satisfies it. Throughput is database-bound at ~22 rps -- latency tracks Little's Law,
+    ``p50 ~= concurrency / rps`` -- so driving harder deepens the queue instead of raising
+    throughput, and the errors are queue depth, not app-tier capacity. 80 sits at the
+    geometric midpoint of the two measured points, asks for two replicas rather than
+    pinning the ceiling at three, and predicts a p50 near 3.6s against the 7.6s where
+    errors appeared.
+    """
+    thread_group = ElementTree.parse(JMETER).getroot().iter("ThreadGroup")
+    threads = [
+        int(prop.text or "0")
+        for group in thread_group
+        for prop in group.iter("stringProp")
+        if prop.get("name") == "ThreadGroup.num_threads"
+    ]
+    assert len(threads) == 1, f"expected exactly one thread group, found {len(threads)}"
+    users = threads[0]
+
+    concurrent_requests, max_replicas = _scale_rule_numbers()
+    desired = -(-users // concurrent_requests)
+
+    assert desired >= 2, (
+        f"{users} virtual users against a concurrentRequests threshold of "
+        f"{concurrent_requests} asks for {desired} replica(s), so the run can never show "
+        "the two-or-three replicas Challenge 2 requires as evidence; raise the user count "
+        "above the threshold or lower the threshold"
+    )
+    assert desired <= max_replicas, (
+        f"{users} virtual users ask for {desired} replicas but maxReplicas is "
+        f"{max_replicas}, so the scale-out saturates and the run cannot demonstrate the "
+        "rule it is teaching"
+    )
+
+
+USER_CLAIM = re.compile(
+    r"(\d+)\s+(?:concurrent\s+)?(?:virtual\s+)?(?:users|shoppers)\b"
+    r"|\.virtualUsers\s*==\s*(\d+)"
+    r"|\"virtualUsers\"\s*:\s*(\d+)"
+)
+
+
+def _documented_user_counts(path: Path) -> list[tuple[int, str]]:
+    """Every user-count claim in a prose file, with the line that makes it."""
+    found: list[tuple[int, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        for match in USER_CLAIM.finditer(line):
+            value = next(group for group in match.groups() if group is not None)
+            found.append((int(value), line.strip()))
+    return found
+
+
+def test_every_documented_user_count_matches_the_shipped_load_profile() -> None:
+    """Prose user counts must be derived from the JMX profile, not frozen beside it.
+
+    The load profile's virtual-user count appears in the JMeter plan, in both guides, and
+    in the contract note. Those were pinned independently, each correct at the time it was
+    written and none of them tied to the others. Retuning the profile therefore left stale
+    claims behind in exactly the places a substitution pattern did not anticipate --
+    ``40 concurrent users`` and ``.virtualUsers == 40`` both survived a sweep for
+    ``40 users``. One of the survivors was a jq assertion in the solution, so the
+    documented validation contradicted the shipped plan and would have failed for anyone
+    following it.
+
+    Pinning each site again would reproduce the fault on the next retune. This pins the
+    *relation* instead: the JMX plan is the single source, and every prose claim is
+    checked against it, so a future change to the profile fails here rather than
+    surviving as a contradiction.
+    """
+    threads = ElementTree.parse(JMETER).getroot().find(
+        ".//*[@name='ThreadGroup.num_threads']"
+    )
+    assert threads is not None and threads.text, "no thread count in the JMeter plan"
+    expected = int(threads.text)
+
+    stale: list[str] = []
+    examined = 0
+    for guide in (*GUIDES, ROOT / "workshop/contracts/README.md"):
+        for value, line in _documented_user_counts(guide):
+            examined += 1
+            if value != expected:
+                stale.append(f"{guide.relative_to(ROOT)}: {value} != {expected} -- {line}")
+
+    # Without this the guard passes on an empty enumeration, so a rewording that stopped
+    # matching the pattern would silently retire the check instead of failing it.
+    assert examined >= 6, (
+        f"only {examined} documented user counts found across the ch02 guides and the "
+        "contract note; the pattern has stopped matching the prose it is meant to police"
+    )
+    assert not stale, (
+        "documented user counts disagree with the shipped JMeter profile:\n  "
+        + "\n  ".join(stale)
+    )

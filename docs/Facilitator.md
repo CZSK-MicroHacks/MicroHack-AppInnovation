@@ -1019,6 +1019,38 @@ anything.
 Always finish a `-target` or `-replace` session with a full untargeted plan
 (`terraform plan -var-file local.tfvars`) so you can see what the targeted runs left behind.
 
+### Clean up after yourself on a participant VM
+
+If you use `az vm run-command **create**` to inspect or repair a participant VM, **delete the
+named command when you are finished.** A named run-command is a persistent child resource of
+the VM, and a VM accepts one run-command at a time. One left behind in
+`executionState: Pending` holds the participant's channel **indefinitely — unlike an orphaned
+`invoke`, it does not self-clear.** The participant then sees
+`Conflict: Run command extension execution is in progress` on every command they try, with no
+indication that a facilitator action caused it. This happened during the pilot and cost the
+participant an hour before the cause was found.
+
+```bash
+# 1. enumerate — `list` carries names only, never an execution state
+az vm run-command list -g rg-user007 --vm-name vm-java-user007 --query "[].name" -o tsv
+
+# 2. ask each one by name; `--expand instanceView` on `list` returns null, so `show` is required
+az vm run-command show -g rg-user007 --vm-name vm-java-user007 \
+  --run-command-name <your-stuck-command-name> --instance-view \
+  --query "{exec:instanceView.executionState, start:instanceView.startTime}"
+
+# 3. delete the one reading Pending
+az vm run-command delete -g rg-user007 --vm-name vm-java-user007 \
+  --run-command-name <your-stuck-command-name> --yes
+```
+
+Deleting is non-destructive — it removes the registration, not the VM or its extensions — and
+the participant's next command works immediately. Prefer `az vm run-command invoke` for
+one-shot facilitator inspection: it leaves nothing behind to forget. The day-of card carries
+the same check under [Is this participant healthy?](DayOfCard.md#is-this-participant-healthy),
+because the symptom reaches you as "my commands are hanging" rather than as anything you would
+think to look for.
+
 ---
 
 ## Teardown

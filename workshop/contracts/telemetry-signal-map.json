@@ -21,7 +21,13 @@
     "$comment": "The contract name is never a literal value for the first two. `AppDependencies | where Name in ('db.client','http.server')` returns count 0.",
     "http.server": {
       "table": "AppRequests",
-      "selector": "table membership only"
+      "selector": "table membership only",
+      "attributeStorage": {
+        "http.route": "Name column, formatted '<METHOD> <route template>'",
+        "http.request.method": "Name column prefix",
+        "http.response.status_code": "ResultCode column (string)",
+        "note": "AppRequests does not carry these as attributes; derive them from the columns."
+      }
     },
     "db.client": {
       "table": "AppDependencies",

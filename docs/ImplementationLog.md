@@ -1782,3 +1782,119 @@ second-order defect created by our own fix is still our defect, and this entry c
   mutation probe that reports a clean pass without first proving its own edit landed is
   indistinguishable from a guard that does not work.** This is the same lesson as the earlier
   precise-anchor finding, and it recurred anyway.
+
+## Challenge 1 Path 1B walked end to end as a participant, Java slice
+
+- **What was actually executed.** Checkpoints 1 through 4 were run for real on an Apple
+  Silicon laptop rather than the provisioned VM: JDK 17.0.20+8, Docker 27.4.0, PostgreSQL
+  18.6 by digest. `./java/mvnw test` returned **34 passed in 25.6 s**, which includes the
+  fourteen frozen `Contract.*` runtime display names the runbook promises. The full
+  acceptance profile returned **22/22 checks, status `passed`**, and the report validated
+  against `acceptance-report.schema.json`. The documented outage drill behaved exactly as
+  written: with the database stopped `/healthz` stayed 200 while `/readyz` and the
+  performance endpoint returned 503, and readiness recovered on its own once the database
+  came back. Checkpoints 5 through 8 were validated structurally only — no Azure deploy —
+  and the report says so plainly rather than implying a full run.
+
+- **The first command in the runbook failed on a clean checkout, and it had never passed.**
+  `test_every_provisioning_script_is_reachable_from_a_document` asserted that at least 200
+  documents were searched; the repository contains 197 tracked `.md`/`.ps1`/`.json`/`.yml`
+  files. `git log -S` placed the assertion in the same commit that introduced the guard, so
+  it was **born red** and only ever passed on a tree carrying three or more untracked extra
+  documents — an author's populated `evidence/` directory does it. The participant's own
+  `mkdir -p evidence` creates no files, so every participant hits 197. The threshold is a
+  liveness check on the walk, not a content assertion, so it was lowered to 150. This is the
+  single change made outside documentation, and it is justified: a guard that fails on a
+  correct clean checkout is the failure mode this log has already recorded twice.
+
+- **The headline finding: the rewrite path quietly assumes divergence from the frozen
+  contract surface.** `test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches`
+  compares `java/` against `solutions/reference/java/` and requires any differing shared file
+  to appear in a nine-entry `MODERNIZATION_SURFACE`. That set was derived from the
+  *modernization* diff. **42 of the 50 tracked Java source files are therefore frozen and 8
+  are editable.** Of the five slices the rewrite runbook itself suggests, only one is fully
+  legal. The companion assertion
+  `reference_files - legacy_files == MODERNIZATION_ADDITIONS[stack]` lists `Dockerfile` among
+  the reference's additions, so **authoring `java/Dockerfile` — checkpoint 4, the whole point
+  of the checkpoint — breaks the same test**, and it breaks it with both diagnostic lines
+  printing `[]`, which tells the participant nothing. The test's own guidance is to edit
+  `MODERNIZATION_SURFACE`, which the challenge forbids because `tests/acceptance` is
+  read-only.
+
+- **Why the fix is a deselect rather than a threshold.** This guard protects repository
+  authoring integrity; it is not a participant gate, and on the rewrite path it cannot be
+  one. Both rewrite runbooks now prescribe the contract-assets run with that single test
+  deselected and explain in prose why. A pytest marker was rejected deliberately: the
+  `tests/acceptance` tree is frozen for participants and the reconciliation meta-tests assert
+  on suite shape, so a marker is a larger blast radius than a `--deselect` flag for the same
+  outcome. Proved in both directions — a simulated mid-rewrite tree with `java/Dockerfile`
+  authored and a non-surface file edited went from **2 failed** to **101 passed, 1
+  deselected**.
+
+- **Three ordering and location defects that cost a participant real work.** Challenge
+  checkpoint 4 said to author the `Dockerfile` "at the repository root" while
+  `challenge-paths.json` pins `java/Dockerfile` and the runbook enforces `java\Dockerfile` —
+  the challenge was the sole outlier and now defers to the registry. The runbook's section 4
+  pushed the branch and derived `$SourceCommit` *before* checking the Dockerfile exists, so a
+  participant publishes a commit Challenge 3 cannot build from; the guards now run first. And
+  the challenge counts eight checkpoints while the runbook counts six sections with no
+  translation between them, so both documents cross-reference in a numbering the other does
+  not use — a mapping table now sits at the top of the runbook.
+
+- **A mutation probe on the frozen oracle, one caught and one missed.** Dropping the startup
+  import state from the readiness calculation was **caught** by the frozen
+  `Contract.Health.ReadinessReportsImportFailure`. Widening `catch (DataAccessException)` to
+  `catch (Exception)` — an item on the challenge's own stop-and-replan list — was **not
+  caught**; all 34 tests stayed green. The static suite is blind to the smell list, which is
+  the strongest available argument for the path's mandated human `review-checklist.md`, and
+  the material should say so rather than leaving it implied.
+
+- **A laptop-versus-VM asymmetry worth naming.** The Testcontainers-based
+  `PostgreSqlIntegrationTest` **passes on this laptop**, giving 34/34, where the VM-based
+  track had to exclude it and gets 28/34. No document states which number is expected, so a
+  participant cannot tell a real regression from a environment difference. The reference
+  Dockerfile also builds on JDK 21 while the baseline pins JDK 17.
+
+## The runtime evidence template landed, but not on the path that needed it
+
+- **The template works, proved rather than assumed.** `runtime-test-evidence.template.json`
+  was exercised for `java-postgresql` on a real build: copy the stack object, replace
+  `sourceCommit`, `artifact` and `command`, and stop. **Three fields edited, zero of the
+  fourteen `tests` entries retyped.** The result passed both gates — schema validation
+  against `runtime-test-evidence.schema.json`, and `_validate_runtime_results`, which parses
+  the native Surefire XML and requires all fourteen identities present and passing. The
+  template is correct and it removes the hand transcription it was meant to remove.
+
+- **It was announced in the documents that describe the work and missed the documents that
+  direct it.** Two of three challenge briefs named the template; **none of the six runbooks
+  did**, and the runbooks are what participants execute. All six still said to create the
+  file "against `runtime-test-evidence.schema.json`" — and a schema constrains values, it
+  does not supply them, so that instruction is precisely the one that produces hand
+  transcription. Following the rewrite runbook as written would have reproduced the original
+  defect on a seventh arm. Swept across all six runbooks upstream once the distinction was
+  named; the rewrite brief also now enumerates the six shared files inline instead of
+  deferring the list to `challenge-paths.json`.
+
+- **Worth recording for sequencing: this artifact needs no Azure.** The runtime report is
+  produced entirely from a local build and test run, so it can be generated and validated
+  before any deployment exists. It was generated here on a no-deploy arm.
+
+### Rebase onto the upstream fixes, and a self-inflicted regression worth recording
+
+The upstream branch adjudicated two of the findings above and fixed them in its own words
+(checkpoint 4 now names the stack directory and the registry file; slice 5 now says "the
+non-root container image you author in checkpoint 4"). Rebasing this branch onto that work
+conflicted in `solutions/ch01-copilot-rewrite/java/README.md`.
+
+Resolving that conflict to the upstream copy of the whole file **discarded three unrelated
+fixes that lived in the same file**: the contract-assets deselect at both call sites, the
+checkpoint-to-section map, and the section 4 reordering. The subtlety is that taking
+upstream's side of a conflict is safe when the conflict lands in a later commit — the earlier
+commits are already applied to the tree — but destructive when it lands in the *first*, where
+that file's entire contribution is still unapplied. The overlap was two paragraphs; the loss
+was most of the commit.
+
+It was caught by grepping the resolved tree for each fix rather than assuming the rebase had
+preserved them, which is the same check that found the half-landed template reference.
+Restored in a follow-up commit, keeping upstream's wording verbatim everywhere the two
+actually overlapped.

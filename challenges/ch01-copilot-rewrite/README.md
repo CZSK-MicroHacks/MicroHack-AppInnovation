@@ -180,8 +180,10 @@ Use these checkpoints in order:
    diff before accepting it. Record the review in `review-checklist.md`, then run the
    relevant native tests, static contract tests, and a shared live acceptance profile
    against the running application. Commit every accepted slice.
-4. **Container checkpoint.** Author the selected stack's `Dockerfile` at the repository
-   root and prove it on paper before any registry exists: non-root execution, port `8080`,
+4. **Container checkpoint.** Author the selected stack's `Dockerfile` in that stack's
+   directory — `java/Dockerfile` or `dotnet/Dockerfile`, the paths
+   `workshop/contracts/challenge-paths.json` pins and the contract tests read — and prove
+   it on paper before any registry exists: non-root execution, port `8080`,
    `/healthz`, `/readyz`, external configuration, digest-pinned base images, and exactly
    one application container. The image itself is built in checkpoint 7 with
    `az acr build` — it builds inside Azure Container Registry, so the VM's missing Docker

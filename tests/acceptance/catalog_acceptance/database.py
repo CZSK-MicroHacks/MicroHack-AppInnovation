@@ -84,13 +84,22 @@ def _run_client(
 ) -> str:
     """Run a database client and return stdout without exposing credentials.
 
-    Both clients are pinned to UTF-8 because they emit the server encoding
-    verbatim; decoding either through the Windows locale silently mojibakes any
-    non-ASCII row, and on cp1252 hosts raises inside ``subprocess``'s reader
-    thread, which returns ``stdout=None`` instead of failing.
+    Both clients are pinned to UTF-8. The seed catalog is UTF-8 and the columns
+    are national-character types, so UTF-8 is the only decoding under which a
+    comparison against the catalog can be correct; anything else either
+    mojibakes the row or fails outright.
+
+    An earlier version pinned only ``psql`` and left ``sqlcmd`` on the
+    interpreter default "because it has always been validated against it". It
+    had not been: the only profile that loads the non-ASCII fixture had never
+    been run on a cp1252 host. There the fixture's ``\u00c1`` (UTF-8 ``0xc3 0x81``)
+    hits ``0x81``, which is undefined in cp1252, and the decode fails far from
+    here -- historically as an ``AttributeError`` on ``None`` with no mention of
+    encoding. The decode error is therefore caught and named.
 
     Raises:
-        RuntimeError: If the client is missing, fails, or times out.
+        RuntimeError: If the client is missing, fails, times out, or emits
+            output that is not valid UTF-8.
     """
     decoding = {"encoding": "utf-8", "errors": "strict"}
     try:
@@ -109,6 +118,12 @@ def _run_client(
         raise RuntimeError(f"{client_name} database query failed") from error
     except subprocess.TimeoutExpired as error:
         raise RuntimeError(f"{client_name} database query timed out") from error
+    except UnicodeDecodeError as error:
+        raise RuntimeError(
+            f"{client_name} output was not valid UTF-8; the row cannot be compared "
+            f"against the UTF-8 catalog. On Windows set the client to emit UTF-8 "
+            f"rather than the console code page."
+        ) from error
     return result.stdout
 
 

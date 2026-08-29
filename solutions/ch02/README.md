@@ -198,7 +198,7 @@ This is the ~10-minute wait. Azure provisions a load engine, runs the plan for e
 300 seconds, and deprovisions; the poll loop below is fail-closed on any status other
 than the known in-flight set.
 
-The JMX has one HTTPS `GET /perftest/catalog` sampler, 40 users, a 300-second
+The JMX has one HTTPS `GET /perftest/catalog` sampler, 80 users, a 300-second
 scheduler, HTTP `200` assertion, stop-on-sample-error behavior, and both
 redirect modes disabled. The hostname comes from `CATALOG_BASE_HOST`; the API
 key comes only from Azure Load Testing `GetSecret`.
@@ -257,7 +257,7 @@ jq -e --arg testId "$TEST_ID" --arg runId "$TEST_RUN_ID" '
   and .testRunId == $runId
   and .status == "DONE"
   and .duration == 300000
-  and .virtualUsers == 40
+  and .virtualUsers == 80
   and .testRunStatistics.Total.sampleCount > 0
   and .testRunStatistics.Total.errorCount == 0
 ' "$RAW/test-run.json" >/dev/null
@@ -513,7 +513,7 @@ changed raw data, or changed assets fail closed.
 | --- | --- | --- |
 | `LOAD_TEST_RESOURCE_ID` or `PERFTEST_API_KEY_SECRET_URI` is unset, or `az resource show` cannot find the resource | `infra/perf-testing.bicep` has not been deployed to this resource group | Deploy it and set the `PERFTEST-API-KEY` secret value, then re-run step 1. See [infra/README.md](../../infra/README.md) |
 | `az load test create --secret` cannot resolve the secret | The load test's system-assigned identity lacks `Key Vault Secrets User`, or the secret value was never set | Redeploy `infra/perf-testing.bicep` (it creates that role assignment) and confirm `az keyvault secret show --name PERFTEST-API-KEY` returns a value |
-| The run ends with `errorCount` above zero | The sampler received a 3xx or 4xx — usually a wrong or unreadable `x-api-key` | Confirm the Key Vault secret holds the catalog performance-test key and the Load Testing identity can read it. Redirects are intentionally not followed, so a 3xx fails the `200` assertion |
+| The run ends with `errorCount` above zero | The sampler received a 3xx or 4xx. If **every** sample failed, the vault key and the key the application enforces have diverged — the two are written by independent paths and nothing binds them | Compare them without printing either: `az containerapp secret show --secret-name performance-api-key` against `az keyvault secret show --name PERFTEST-API-KEY`. If they differ, set the vault to the application's value. A 100% error rate is divergence; a partial rate is a genuine application error. Redirects are intentionally not followed, so a 3xx fails the `200` assertion |
 | The replica jq assertion fails on time-series length | The metric query was issued without the `revisionName` filter, or against the wrong resource | Re-issue with `--filter "revisionName eq '$APP_REVISION'"` against `APP_RESOURCE_ID` |
 | Replicas never return to one inside 900 seconds | The recovery poll started before the engine finished deprovisioning, or traffic is still arriving | Confirm the run is `DONE` and nothing else is calling the app, then re-run the recovery loop |
 | The validator reports digest drift | A raw file was re-captured, reformatted, or pretty-printed after hashing | Re-hash the exact bytes now on disk and re-render; never hand-edit normalized evidence |
@@ -524,7 +524,7 @@ The broader diagnostic workflow is in
 ## What a completed run shows
 
 `evidence/load-test-report.json` now carries the chapter's headline numbers: replicas
-moving `1 → 2` or `3` and back to `1`, zero errors across 40 virtual users for 300
+moving `1 → 2` or `3` and back to `1`, zero errors across 80 virtual users for 300
 seconds, and a database peak above its own pre-load baseline. Those are the figures to
 read aloud in the debrief — they are the first quantitative answer the retailer has ever
 had to "what happens when it gets busy?".

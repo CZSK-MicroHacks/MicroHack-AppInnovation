@@ -349,3 +349,159 @@ def test_reconciled_navigation_has_no_broken_local_links() -> None:
         "finding navigation that this guard is supposed to be protecting"
     )
     assert not broken, "\n".join(broken)
+
+
+def test_run_command_conflict_documents_both_orphan_classes() -> None:
+    """Keep the cheap, recoverable orphan check ahead of the unrecoverable one.
+
+    Two different failures produce the same `Conflict` message. A *named* run-command
+    stuck in `Pending` is listable and deletable and clears instantly; an orphaned
+    `invoke` is neither and must be waited out. Documenting only the second -- which is
+    what the page did before the pilot found the first -- sends a reader who could have
+    been unblocked in one command into an hour of waiting instead.
+    """
+    troubleshooting = (ROOT / "docs" / "Troubleshooting.md").read_text(encoding="utf-8")
+
+    named_check = troubleshooting.find("az vm run-command list")
+    invoke_probe = troubleshooting.find("az monitor activity-log list")
+    assert named_check != -1, (
+        "Troubleshooting.md no longer tells a blocked reader to list named run-commands; "
+        "the recoverable orphan class has become invisible"
+    )
+    assert invoke_probe != -1, "the activity-log probe for the invoke orphan is missing"
+    assert named_check < invoke_probe, (
+        "the listable, instantly-fixable orphan check must come before the probe for the "
+        "one that can only be waited out -- a reader stops at the first thing that applies"
+    )
+
+    for required in (
+        "az vm run-command delete",
+        "executionState",
+        "does not self-clear",
+    ):
+        assert required in troubleshooting, (
+            f"Troubleshooting.md no longer contains {required!r}, which the named-orphan "
+            "remedy depends on"
+        )
+
+    facilitator = (ROOT / "docs" / "Facilitator.md").read_text(encoding="utf-8")
+    assert "az vm run-command delete" in facilitator, (
+        "Facilitator.md no longer tells facilitators to delete named run-commands they "
+        "leave on participant VMs, which is how the pilot's blockage was caused"
+    )
+
+
+def test_run_command_docs_never_project_instance_view_from_a_list() -> None:
+    """Keep the documented orphan check executable against the real Azure CLI.
+
+    `az vm run-command list` has no `--show-details` flag, and its response carries
+    `instanceView: null` even when asked with `--expand instanceView`. A documented
+    command that projects `instanceView.executionState` out of a *list* therefore either
+    errors with `unrecognized arguments` or silently renders an empty column -- and the
+    execution state is the only field that distinguishes the recoverable orphan from the
+    unrecoverable one. `show --instance-view` is the call that carries it.
+    """
+    offenders: list[str] = []
+    for name in ("Troubleshooting.md", "DayOfCard.md", "Facilitator.md"):
+        text = (ROOT / "docs" / name).read_text(encoding="utf-8")
+        for block in text.split("```")[1::2]:
+            if "run-command list" not in block:
+                continue
+            if "--show-details" in block:
+                offenders.append(f"{name}: `run-command list --show-details` is not a flag")
+            if "instanceView" in block and "run-command show" not in block:
+                offenders.append(f"{name}: `run-command list` cannot project instanceView")
+    assert not offenders, (
+        "documented run-command orphan checks cannot run as written: "
+        + "; ".join(sorted(set(offenders)))
+    )
+
+
+def test_run_command_conflict_tells_you_to_retry_before_escalating() -> None:
+    """Keep the cheapest cause of `Conflict` ahead of the expensive ones.
+
+    Measured on an idle VM with no named run-commands and no other caller: five
+    invocations ~33s apart all succeeded, and three fired 1-2s apart immediately
+    after all returned `Conflict`. The message usually means the caller's own
+    previous command is still tearing down, which clears in seconds. Routing that
+    person to an orphan hunt or an hour-long wait costs them the difference.
+
+    Asserting on the measured claim rather than on the word "retry", which already
+    appeared in the table above this section and made an earlier version of this
+    guard pass without the fix it was written for.
+    """
+    text = (ROOT / "docs" / "Troubleshooting.md").read_text(encoding="utf-8")
+    marker = "az vm run-command` returns `Conflict"
+    start = text.find(marker)
+    assert start != -1, "the run-command Conflict section is gone"
+    section = text[start : start + 8000]
+    disclaimer = section.find("not evidence of an orphan")
+    named = section.find("named* run-command")
+    assert disclaimer != -1, (
+        "Troubleshooting.md no longer states that a single Conflict is not evidence of "
+        "an orphan, which is the measured, cheapest-first advice"
+    )
+    assert named != -1, "the named-orphan check is gone"
+    assert disclaimer < named, (
+        "the retry-first advice must precede the named-orphan hunt: a single Conflict is "
+        "not evidence of an orphan, and the orphan hunt is the more expensive path"
+    )
+
+
+def test_ch00_baseline_filename_is_derived_from_the_stack_variable():
+    """Challenge 0 tells participants to change two values when switching stacks.
+
+    The evidence filename must therefore come from ``$stack`` rather than being
+    hardcoded, or following the instruction literally files a Java measurement under
+    the .NET name (F-102).
+    """
+    text = (ROOT / "challenges" / "ch00" / "README.md").read_text(encoding="utf-8")
+
+    assert 'Set-Content "evidence/ch00-$stack-baseline.json"' in text, (
+        "challenges/ch00 must derive the baseline evidence filename from $stack"
+    )
+    assert "Set-Content evidence/ch00-dotnet-baseline.json" not in text, (
+        "challenges/ch00 still hardcodes the .NET baseline filename"
+    )
+    for hardcoded in (
+        "throw 'The .NET baseline HTTP checks failed.'",
+        "throw 'The .NET provisioning marker does not match the frozen baseline.'",
+    ):
+        assert hardcoded not in text, (
+            f"challenges/ch00 still hardcodes a .NET-specific failure message: {hardcoded}"
+        )
+
+
+def test_ch01_warns_that_modernizing_can_end_the_legacy_application():
+    """Challenge 1 may edit configuration in the tree the legacy app boots from.
+
+    When it does, the workshop's "before" system stops permanently and silently, and
+    the wrap-up later asks for a comparison against it (F-103). The two stacks diverged
+    during the trial run -- Java repointed in place and died, .NET did not -- so the
+    warning must be conditional rather than absolute, and must still name the surviving
+    record and the preserving copy.
+    """
+    text = (ROOT / "challenges" / "ch01" / "README.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+
+    assert "can end the legacy application" in lowered, (
+        "challenges/ch01 must warn that the legacy application can stop running"
+    )
+    assert "ends the legacy application" not in lowered, (
+        "the warning must not claim the loss is certain -- the .NET arm modernized "
+        "without it, so an absolute claim is false and teaches attendees to ignore it"
+    )
+    assert "legacy-source" in text, (
+        "challenges/ch01 must offer the copy that preserves the legacy tree"
+    )
+
+    warning = lowered.index("can end the legacy application")
+    body = lowered[warning : warning + 1600]
+    assert "challenge 0" in body, (
+        "the warning must point back to Challenge 0 evidence as the surviving record"
+    )
+    for config in ("application.properties", "appsettings.json"):
+        assert config in body, (
+            f"the warning must name {config} -- the edit that causes the loss is "
+            "otherwise unguided, and no other document mentions these files"
+        )

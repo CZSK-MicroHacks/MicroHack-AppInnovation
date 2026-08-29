@@ -11,6 +11,7 @@ from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 
 from catalog_acceptance.manifest import repository_root
 from catalog_acceptance.sre_evidence import (
+    validate_recovery_time,
     render_sre_agent_evidence,
     validate_sre_agent_evidence,
 )
@@ -81,6 +82,16 @@ def build_validate_parser() -> argparse.ArgumentParser:
         required=True,
         help="repository-relative workshop contracts directory",
     )
+    parser.add_argument(
+        "--recovery-time",
+        type=Path,
+        default=None,
+        help=(
+            "repository-relative evidence/ch06-mttr.json; when given, its "
+            "arithmetic is recomputed and its recovery instant is compared "
+            "against the resolved alert the report seals"
+        ),
+    )
     return parser
 
 
@@ -119,6 +130,12 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
             root / args.contracts,
             root,
         )
+        if args.recovery_time is not None:
+            result["recoveryTime"] = validate_recovery_time(
+                root / args.recovery_time,
+                root / args.report,
+                root,
+            )
     except (OSError, ValueError, JsonSchemaValidationError) as error:
         return _print_failure(error)
     print(json.dumps({"status": "passed", **result}, sort_keys=True))

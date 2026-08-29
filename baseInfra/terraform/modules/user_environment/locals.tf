@@ -87,9 +87,11 @@ locals {
       "$r=New-Object IO.StreamReader($g)",
       "try{$s=$r.ReadToEnd()}finally{$r.Dispose();$g.Dispose();$m.Dispose()}",
       ". ([ScriptBlock]::Create($s))",
-      # A bare call leaves the extension green even when the bootstrap throws, which hides a
-      # completely unprovisioned VM behind a successful deployment. `exit` is used rather than
-      # try/catch only because this command is already close to the guard below.
+      # `exit 0` only normalises the success path. The protection against a green extension
+      # over a failed bootstrap is not here: it is `$ErrorActionPreference='Stop'` above,
+      # combined with the `$LASTEXITCODE` throw at the end of Invoke-ProvisioningBootstrap
+      # in baseInfra/scripts/bootstrap-provision-vm.ps1. Either one throwing halts this
+      # command before `exit 0` is reached, so the extension reports failure.
       "Invoke-ProvisioningBootstrap -Stack '${stack}' -SourceCommit '${var.source_commit}' -SourceArchiveSha256 '${var.source_archive_sha256}'",
       "exit 0"
     ])

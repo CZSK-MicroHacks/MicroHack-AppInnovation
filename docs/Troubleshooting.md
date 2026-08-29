@@ -17,7 +17,7 @@
 | `docker` is "not recognized" on the VM | No Docker daemon — deliberate; builds run in ACR | [Workshop VM failures](#3-workshop-vm-failures) |
 | A commit SHA does not match what a validator expects | Two different SHAs exist on the VM | [Workshop VM failures](#3-workshop-vm-failures) |
 | A command needs a resource that does not exist | Facilitator prerequisite not provisioned | Ask your facilitator; see [`Facilitator.md`](Facilitator.md) |
-| `az vm run-command` returns `Conflict: Run command extension execution is in progress` | One command at a time per VM — possibly your own orphaned invocation. **Do not deallocate before reading this** | [Workshop VM failures](#3-workshop-vm-failures) |
+| `az vm run-command` returns `Conflict: Run command extension execution is in progress` | One command at a time per VM — possibly your own orphaned invocation. **List named run-commands first; do not deallocate** | [Workshop VM failures](#3-workshop-vm-failures) |
 
 ## How to think about a failure
 
@@ -108,11 +108,62 @@ action.
 **An orphaned run-command is the case that catches people.** Stopping the local `az`
 process — `Ctrl-C`, closing the terminal, losing the Bastion session — **does not cancel
 the invocation on the VM.** It keeps executing until it finishes or hits the service-side
-execution limit, holding the channel the whole time with nothing attached to it. This has
-been observed blocking a VM for over 35 minutes.
+execution limit, holding the channel the whole time with nothing attached to it. A measured
+occurrence held a VM for **60 minutes 48 seconds**.
 
-The only way to tell the two `Updating` cases apart is to ask whether anything other than
-run-command has actually touched the VM:
+**Before anything else: retry two or three times over about a minute.** In measured back-to-back
+testing on an idle VM with **no** named run-commands present and no other caller, the channel
+flapped: five sequential invocations about 33 seconds apart all succeeded, and three fired 1–2
+seconds apart immediately afterwards **all returned `Conflict`**. The message very often means
+*your own previous run-command is still tearing down*, which clears in **seconds**. It is the
+most common cause and the cheapest to rule out, so rule it out first — a single `Conflict` is
+not evidence of an orphan.
+
+Escalate only if it persists across several minutes:
+
+**Then check for a stuck *named* run-command — this one is instantly fixable.** There are
+two kinds of orphan and they are not equally bad. A command started with
+`az vm run-command create` is a tracked resource with a name, so it can be listed and
+deleted. A command started with `az vm run-command invoke` is not, and cannot.
+
+```powershell
+az vm run-command list -g <your-resource-group> --vm-name <your-vm-name> --query "[].name" -o tsv
+```
+
+- **Empty output** → no named command is involved. Continue to the probe below; you are in
+  the `invoke` case, which is the unrecoverable one.
+- **Any name listed** → check that command's execution state. `list` does **not** carry it:
+  the list endpoint returns `instanceView: null` even with `--expand instanceView`, so you
+  have to ask for each command by name.
+
+  ```powershell
+  az vm run-command show -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-stuck-command-name> --instance-view `
+    --query "{name:name, prov:provisioningState, exec:instanceView.executionState, start:instanceView.startTime}"
+  ```
+
+- **`exec: Pending` with an empty `start`** → that named run-command was registered
+  and never ran. It holds the channel **indefinitely — it does not self-clear.** Delete it:
+
+  ```powershell
+  az vm run-command delete -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-stuck-command-name> --yes
+  ```
+
+  This is non-destructive: it removes only the stuck registration, not the VM and not the
+  CustomScript extension. In one measured occurrence the very next `invoke` succeeded with
+  **no wait at all**; in another, deletion was followed by a few more seconds of `Conflict`
+  while the extension finished tearing down. Retry for a minute before concluding the
+  deletion did not help.
+- **`exec: Succeeded`** → that command is finished and is not your blocker. Continue to the
+  probe below.
+
+Note that `provisioningState` on the *command* reads `Succeeded` even while `executionState`
+is `Pending`, and the **VM's** `provisioningState` reads `Succeeded` too. Neither field
+reveals this. `executionState` is the one that does.
+
+If the list came back empty, the only remaining way to tell the two `Updating` cases apart
+is to ask whether anything other than run-command has actually touched the VM:
 
 ```powershell
 az monitor activity-log list -g <your-resource-group> --offset 12h `
@@ -120,7 +171,30 @@ az monitor activity-log list -g <your-resource-group> --offset 12h `
 ```
 
 - **Output is empty** → nothing is operating on the VM. You are waiting on your own
-  orphaned command. **Wait for it. Do not deallocate.**
+  orphaned `invoke`. **Wait for it. Do not deallocate.**
+
+  The wait is bounded. One measured occurrence ran **60 minutes 48 seconds** — 57
+  consecutive `Conflict` responses with `provisioningState: Updating` — and then cleared to
+  `Succeeded` on its own. Budget an hour, not indefinitely. If you are past that and the
+  probe is still empty, escalate to your facilitator rather than deallocating.
+
+  **You do not have to sit idle for that hour.** `invoke` is *rejected* while the channel is
+  held, but a **named** run-command is *queued* instead — measured: with a named command
+  deliberately holding the channel, `invoke` returned `Conflict` while
+  `az vm run-command create` submitted successfully and returned its output once the holder
+  finished.
+
+  ```powershell
+  az vm run-command create -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-queued-command-name> --script '<your-script>' --no-wait
+  az vm run-command show -g <your-resource-group> --vm-name <your-vm-name> `
+    --run-command-name <your-queued-command-name> --instance-view --query "instanceView.output"
+  ```
+
+  This does **not** shorten the wait — the queued command still runs only after the channel
+  frees, so treat it as "submit and collect later", not as a bypass. **Delete it when you have
+  your output**, or you become the named-orphan case above for whoever uses the VM next.
+
 - **Output lists operations** → a real platform operation is in progress. Wait and retry.
 
 Scope the query to the VM as shown. Filtering only on `operationName` will also match your

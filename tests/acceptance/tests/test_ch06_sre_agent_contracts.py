@@ -14,6 +14,7 @@ import pytest
 
 from catalog_acceptance import sre_evidence
 from catalog_acceptance.sre_evidence import (
+    validate_recovery_time,
     build_sre_agent_evidence,
     render_sre_agent_evidence,
     validate_sre_agent_evidence,
@@ -1094,3 +1095,74 @@ def test_sre_agent_cli_commands_are_registered() -> None:
         registry["evidence"]["validatorCommand"].split()[3]
         == "catalog-validate-sre-agent-evidence"
     )
+
+
+def test_the_recovery_figure_is_bound_to_the_alert_the_report_seals() -> None:
+    """The headline number must not be checkable only against itself.
+
+    ``evidence/ch06-mttr.json`` sits outside the frozen evidence contract, so
+    before this guard nothing in the workshop read it: the minutes could be
+    edited by hand, or both timestamps invented, and every automated check still
+    passed. Recomputing the arithmetic alone is not enough, because two invented
+    timestamps agree with each other. The recovery instant is therefore compared
+    against ``incident.alertResolvedAt``, which the sealed report already
+    carries from the same captured alert.
+    """
+    root = Path(__file__).resolve().parents[3]
+    report = root / "workshop/contracts/sre-agent-evidence.example.json"
+    sealed = json.loads(report.read_text(encoding="utf-8"))["incident"][
+        "alertResolvedAt"
+    ]
+    scratch = root / "workshop/contracts/fixtures/_mttr_guard_probe.json"
+
+    def check(document: dict[str, object]) -> str | None:
+        scratch.write_text(json.dumps(document), encoding="utf-8")
+        try:
+            validate_recovery_time(scratch, report, root)
+        except ValueError as error:
+            return str(error)
+        return None
+        
+    try:
+        honest = {
+            "detectedAt": "2026-08-20T15:06:05Z",
+            "recoveredAt": sealed,
+            "minutesToRecovery": 2,
+        }
+        assert check(honest) is None, "the honest derived figure must be accepted"
+
+        # Sub-second precision is what Azure Monitor actually returns; the guides
+        # strip it, but the validator must not reject a figure that kept it.
+        assert check({**honest, "detectedAt": "2026-08-20T15:06:05.417Z"}) is None
+
+        edited = check({**honest, "minutesToRecovery": 99})
+        assert edited is not None and "99" in edited, (
+            "editing the minutes by hand must be rejected"
+        )
+
+        invented = check(
+            {
+                "detectedAt": "2026-08-20T15:08:00Z",
+                "recoveredAt": "2026-08-20T15:09:30Z",
+                "minutesToRecovery": 1,
+            }
+        )
+        assert invented is not None and "seals" in invented, (
+            "two self-consistent invented timestamps must still be rejected; "
+            "this is the check that arithmetic alone cannot make"
+        )
+    finally:
+        scratch.unlink(missing_ok=True)
+
+
+def test_both_guides_tell_the_attendee_to_bind_the_recovery_figure() -> None:
+    """A validator nobody is told to run is not a control."""
+    root = Path(__file__).resolve().parents[3]
+    for relative in (
+        "challenges/ch06-sre-agent/README.md",
+        "solutions/ch06-sre-agent/README.md",
+    ):
+        page = (root / relative).read_text(encoding="utf-8")
+        assert "--recovery-time evidence/ch06-mttr.json" in page, (
+            f"{relative} must invoke the validator against the recovery figure"
+        )

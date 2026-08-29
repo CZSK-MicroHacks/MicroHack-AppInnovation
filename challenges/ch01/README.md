@@ -28,6 +28,25 @@ from a verified archive by the provisioner. **That directory is what "the reposi
 root" means in this and every other workshop document** — start each terminal with
 `cd C:\MicroHack\source`.
 
+> **This chapter can end the legacy application, and that is one-way.** The legacy catalog
+> boots from the same tree you are about to modernize. If you repoint its configuration in
+> place — editing `application.properties` or `appsettings.json` inside `C:\MicroHack\source`
+> — it stops running on the VM and nothing later restarts it. If instead you supply the new
+> connection details from outside the tree, the legacy app keeps working. **The material does
+> not tell you which to do, and no step re-checks the baseline afterwards, so if it stops you
+> will not be told.** Both outcomes happened during this workshop's own trial run.
+>
+> **Everything you will ever be able to say about "before" is the evidence you captured in
+> Challenge 0.** If you have not written `evidence/ch00-<stack>-baseline.json` and
+> `evidence/ch00-pain-<stack>.json`, go back and do it now — the wrap-up in Challenge 7 asks
+> you to compare against numbers you may no longer be able to re-measure.
+>
+> If you want the old application available for a side-by-side demonstration later, copy the
+> tree **before** you change anything:
+> ```powershell
+> Copy-Item C:\MicroHack\source C:\MicroHack\legacy-source -Recurse
+> ```
+
 **What the VM has, and deliberately does not.** The image is fully pinned, and Git is part
 of that pin: the provisioner initializes `C:\MicroHack\source` as a repository holding one
 baseline commit of the extracted archive, so `git status`, `git add`, `git commit`, and

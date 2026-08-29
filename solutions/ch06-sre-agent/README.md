@@ -501,8 +501,14 @@ uv --no-config run catalog-validate-sre-agent-evidence \
   --handoff evidence/modernization-contract.json \
   --report evidence/sre-agent-report.json \
   --contracts workshop/contracts \
+  --recovery-time evidence/ch06-mttr.json \
   --repository-root ../..
 ```
+
+`--recovery-time` recomputes `minutesToRecovery` from the two timestamps in
+`evidence/ch06-mttr.json` and checks its `recoveredAt` against
+`incident.alertResolvedAt` in the sealed report. Editing the minutes by hand, or
+inventing a pair of timestamps that agree with each other, both fail here.
 
 Do not edit `evidence/sre-agent-report.json`.
 
