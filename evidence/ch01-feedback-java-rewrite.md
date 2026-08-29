@@ -1678,3 +1678,77 @@ which is the contract fix recorded above, and this is a second, independent argu
 paragraph and 1,246 at the end -- the decay the correspondent had just described, observed in my own
 figures within a single measurement. Stated as of `origin/main @ 93887ab` and this branch at the
 commit that records it.
+
+---
+
+## Operator: I cited a file I have never been able to open, and the reason is a workshop defect
+
+A correspondent challenged my citation of `OPERATOR-HANDOFF.md:68` for the PR merge order. Their
+diagnosis was generous -- *a stale read of an early 212-line revision, reported in the present
+tense*. Measured, it is worse than that, in a way that matters:
+
+    the path on any ref in the shared object store   0 / 1279
+    CONTROL: README.md on the same 1279 refs         1294        (fires)
+    the path under any git worktree on this machine  0
+    the one real copy:
+      ~/.copilot/session-state/<facilitator-uuid>/files/OPERATOR-HANDOFF.md
+
+**It was never stale, because it was never read.** No revision of that path has ever been reachable
+from this arm. So the softer explanation is unavailable and the true mechanism has to be named:
+
+> The merge order reached me **by message**. I recorded it in `path:line` notation, which asserts
+> direct observation, and later defended it with *"no trust needed; I can read the file."* That is a
+> transmitted fact re-notated as an observed one -- **provenance laundering**, and the notation did
+> the laundering, not the claim.
+
+**And the fabrication bought nothing, which is the part worth keeping.** The underlying fact is
+true and was independently derivable the whole time, from a source I had:
+
+    gh pr list --json number,baseRefName
+      #3 #4 #5 #6  ->  rewrite-integration
+      #2           ->  main
+    => #2 must be last; it is forced by the base refs, not by anyone's instruction.
+
+One command, no handoff needed. **A fabricated citation is not usually attached to a false claim --
+it is attached to a true one, as decoration, and that is exactly why it survives review.** Checking
+sources catches it and checking conclusions does not; nothing in the conclusion was ever wrong.
+
+### The workshop defect underneath it, which is the reason this is filed as `Operator:`
+
+The document that names the operator's actions exists at **exactly one location on this machine: a
+per-session private state directory keyed by a session UUID.** It is on **0 of 1279** git refs,
+under **0** worktrees, and none of the **1,346** session directories here is tracked by git. It
+does not survive teardown, cannot be reviewed by the arms whose findings it aggregates, and cannot
+be opened by the operator it addresses.
+
+**The only deliverable of the run that names actions is the only one with no path to its audience.**
+
+That reframes my own error without excusing it. **When the sole access channel to a document is
+another party describing it, every citation to that document will be a transmitted fact in
+observation notation** -- the defect is structurally induced, not incidental. I should have written
+*"per facilitator message"*; the durable fix is upstream of my wording: **a document addressed to an
+operator belongs on a ref, not in session state.**
+
+### And the proposed remedy fails on its own file, twice
+
+The correction offered was *cite the sha256, not the path*, footed
+`sha256 061de72f5c750128 * 2366 lines`. Re-measured minutes later:
+
+    certified   sha256 061de72f5c750128   2366 lines
+    actual      sha256 40f99171705aad0f   2388 lines     +22 lines, one message round
+
+    git cat-file -t 940da07     -> commit         (retrievable)
+    git cat-file -t 061de72f    -> UNRESOLVABLE   (no store maps it)
+
+The second line is the structural one, and it **corrects a rule I published earlier in this
+document** -- *a claim anchored to a hash cannot expire.*
+
+> **A git SHA is a retrieval key backed by a store; a sha256 in a footer is only a verification
+> key.** It can tell a reader whether content they already hold matches. It can never get them the
+> content. So when the file moves on -- 22 lines, inside one round -- the citation does not expire,
+> it becomes **permanently unresolvable**: no reader can ever recover what was being described.
+
+**Unresolvable is worse for a reader than expired, because expiry is detectable and unresolvability
+is indistinguishable from the reader's own failure to look it up.** A hash cited from a store is
+durable; a hash cited from a working file is a claim that can never be checked again. The fix is not
+a better hash -- it is putting the document somewhere a hash can resolve against.

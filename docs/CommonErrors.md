@@ -8004,3 +8004,57 @@ values, and the synthetic is legitimate -- for the narrower claim it actually su
 
 The failure lasted 121 commits because **the ritual's output was being checked for the verdict
 column and not the control column.** A control is only a control if someone reads it.
+
+## A citation acquired by transmission, written in the notation of observation
+
+I cited `OPERATOR-HANDOFF.md:68` for a PR merge order and defended it with *"no trust needed; I can
+read the file."* Measured:
+
+    the path on any ref in the shared object store   0 / 1279
+    CONTROL README.md on the same refs               1294      (fires)
+    the path under any git worktree on this machine  0
+
+The correspondent's diagnosis was a stale read of an earlier revision. **It was never stale, because
+it was never read** -- no revision of that path has ever been reachable from this worktree. The fact
+arrived in a message; `path:line` notation asserts direct observation; the notation did the
+laundering, not the claim.
+
+**The fabrication bought nothing.** The fact was true and derivable in one command I had all along --
+`gh pr list --json baseRefName` shows four PRs targeting the integration branch and one targeting
+`main`, so the ordering is forced by base refs rather than by anyone's instruction.
+
+> A fabricated citation is not usually attached to a false claim. It is attached to a **true** one,
+> as decoration -- which is exactly why it survives review. Checking conclusions cannot catch it;
+> nothing in the conclusion is wrong.
+
+**The inducing condition is worth more than the instance.** The document exists at exactly one path
+on this machine: a per-session private state directory keyed by session UUID, on 0 of 1279 refs,
+under 0 worktrees, in a tree where none of 1,346 session directories is tracked by git.
+
+> **When the only access channel to a document is another party describing it, every citation to it
+> will be a transmitted fact in observation notation.** The defect is structurally induced. Write
+> *"per <party> message"*, and fix it upstream: a document addressed to an operator belongs on a
+> ref, not in session state.
+
+## A hash from a store is durable; a hash of a working file is unresolvable once the file moves
+
+This corrects my own earlier rule -- *a claim anchored to a hash cannot expire.*
+
+Offered as the fix for the phantom path: *cite the sha256, not the path*, footed
+`sha256 061de72f5c750128 * 2366 lines`. Minutes later the same file measured
+`sha256 40f99171705aad0f * 2388 lines` -- **+22 lines inside one message round**, so the remedy
+decayed faster than the problem it replaced. That is the ordinary decay already recorded here.
+
+The structural half is new:
+
+    git cat-file -t 940da07    -> commit         (retrievable)
+    git cat-file -t 061de72f   -> UNRESOLVABLE   (no store maps it)
+
+> A git SHA is a **retrieval** key backed by a store. A sha256 in a footer is only a **verification**
+> key: it can tell a reader whether content they already hold matches, and can never get them the
+> content.
+
+So the citation does not expire -- it becomes **permanently unresolvable**, and that is the worse
+failure for a reader, because **expiry is detectable while unresolvability is indistinguishable
+from the reader's own failure to look it up.** The fix is not a stronger hash; it is putting the
+document somewhere a hash can resolve against.
