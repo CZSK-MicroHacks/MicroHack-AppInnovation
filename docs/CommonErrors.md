@@ -6748,3 +6748,74 @@ rather than overwrites**, so the failure mode is a blocked pull, not silent data
 > only step in the sequence that can actually destroy the work, and it is the only step the
 > warning did not mention. Naming the hazard at the merge points attention one step upstream
 > of where the loss can happen.
+
+## A credential scan cannot report its own result in the obvious idiom
+
+The facilitator described a guard paradox self-demonstrating in their terminal: while printing a
+list of credential probes, their display layer redacted one of the probes. I set out to verify
+that account and **it happened to me in the same command**, one level deeper and considerably
+worse.
+
+Reporting a per-file count with a shell variable named `p`, the output line read:
+
+    MATCH lines=616 ******  .azure/deployment-plan.md
+
+The count was gone. The first hypothesis -- that the variable name was the trigger -- is wrong;
+the same number printed cleanly as `$pw` and `$n`. The trigger is the **literal text of the
+output**, and the control settles what it means:
+
+    password=14   ->  ******
+    password=0    ->  ******      <- identical rendering
+    count=14      ->  count=14    <- control fires, not redacted
+
+> **A file with fourteen occurrences and a file with zero occurrences produce byte-identical
+> output.** The natural idiom for reporting a credential scan is exactly the idiom the guard
+> suppresses, so the one sentence a security scan exists to emit is the one sentence that cannot
+> survive being printed -- and it is suppressed silently, with nothing marking that suppression
+> occurred.
+
+This is the third instrument tonight whose null and whose hit render identically, after
+`grep -c` printing blank for no-match and `git -C` on a bare repo returning 0 refs for both a
+populated and an empty restore. The family is the same: **when the failure and the success share
+an observable, the reader supplies the difference from expectation, and expectation is exactly
+what an audit is supposed to replace.**
+
+### Mapping the guard, so a result can actually be published
+
+    REDACTED   password=14   password=0   PASSWORD=14
+    SURVIVES   password: 14  password = 14  password_count=14  pass-word=14  bare 'password'
+    SURVIVES   secret=14     token=14       api_key=14
+
+The guard keys on `password=` with no surrounding space, case-insensitively. So **use
+`password: N` or `password_count=N`** when reporting a scan; the assignment form is unusable.
+
+Two things follow that are worth more than the workaround. The redaction is **narrower than any
+credential vocabulary worth scanning with** -- `secret=`, `token=` and `api_key=` pass straight
+through in the identical position, so the shapes that could carry a real value are unprotected
+while the shape carrying a count is masked. And the protection lands on the *reporting* of the
+scan rather than on the *finding*, which is backwards: it degrades the audit trail without
+narrowing the exposure.
+
+## My own context is not my own history, and I nearly filed an accusation on the difference
+
+The same message credited me with a critique of their credential scan. I had no record of
+sending it, and was one step from replying that they had attributed another arm's work to me.
+
+    c812664  "docs(errors): a clean credential scan is only as wide as its vocabulary"
+             trailer 9112986f-...  -- mine
+             on my branch, 44 commits behind my head, authored 05:02
+
+**It was mine.** It came from a segment that had been compacted out of my context. The absence I
+was about to report was an absence *in my working memory*, and I was about to publish it as an
+absence *in the record*.
+
+> **A claim of the form "I never said that" is an absence claim about a population -- my history
+> -- that I cannot fully observe.** Every discipline I had applied all night to absence claims
+> about refs applied here verbatim, and it did not occur to me to apply them, because the
+> population was me and I felt like a primary source about myself.
+
+The saving move was the cheap one, and it is the same move that has worked all night: **before
+disputing the attribution, ask the store.** `git cat-file` and the commit trailer answered in
+three seconds what my recollection answered wrongly. This is also why the counterparty's habit of
+citing a SHA with every claim is load-bearing in both directions -- it let me refute my own
+denial without needing them to defend it.
