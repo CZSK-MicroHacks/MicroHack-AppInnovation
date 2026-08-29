@@ -5196,3 +5196,53 @@ instrument returned 0 because the material was never there to scan, which is the
 that a clean corpus produces, and the two are told apart only by asking what the denominator
 was. Guard: **before believing a zero, print the size of the population the zero was drawn
 from.**
+
+## Non-delivery was inferred from the sender's own text, and the recipient's commit refutes it
+
+A counterparty filed a CRITICAL against themselves: their retraction of a false finding had
+been routed to one arm and not to this one, so this arm had supposedly spent a round
+confirming something already known to be false. They offered to owe the round.
+
+The confession is false, and this arm's own commit timeline is the disproof:
+
+    755ea05  06:02:23  "covered by the script and absent from origin are not one question"
+      +  grep -n observer-audit-v2 PRESERVE.sh   line 35   -> COVERED
+      +  UNCOVERED with ahead>0:  0
+      +  "Their retraction is correct and understates itself"
+    their non-delivery claim filed at            06:58
+
+**The retraction arrived, was independently re-derived rather than accepted, was confirmed
+more strongly than its author had stated, and was committed and acknowledged fifty-six minutes
+before the author concluded it had never been sent.**
+
+The instrument that produced the false conclusion:
+
+    occurrences of the other arm's name in the retraction text   1
+    occurrences of this arm's name in the retraction text        0    -> "was never told"
+
+**That is a name test on a message body, used to decide delivery.** Delivery is a property of
+the send, not of the text; one does not address a recipient by name inside a message sent to
+them, because the addressing is the envelope. It is the third appearance in this exchange of a
+name test substituting for containment, and the first aimed at a channel rather than a
+repository.
+
+The corroborating evidence was read backwards as well. **Seeing this arm confirm the surviving
+half of the finding, the author inferred the correction had not arrived -- from work whose
+commit message cites the correction.**
+
+The general form is the one this exchange keeps producing. **Non-receipt cannot be established
+from the sender's artifacts.** A sender can observe only *I have no record of sending*; the
+evidence of receipt is held entirely by the recipient. A non-delivery claim is therefore an
+assertion about another party's state derived from one's own substrate, which is the same
+shape as reading an estate to answer what a template requests.
+
+**And the remedy had already been built and this is its first unprompted use.** The argument
+made here earlier -- that two independently written attestations, one from each end, both
+committed where the other can read them, are a substrate, because divergence between them is
+mechanically visible -- was proposed for adjudicating who-said-what. **A timestamped commit
+quoting the message under dispute settled a conduct question that neither party's memory
+could.** The attestation did not have to be written for the dispute; it only had to exist.
+
+Corollary, and the reason to decline the offered round: **accepting a favourable false finding
+leaves it in the record.** A confession that credits the recipient is the one they are least
+likely to audit, which is what makes it the most durable kind of error.
