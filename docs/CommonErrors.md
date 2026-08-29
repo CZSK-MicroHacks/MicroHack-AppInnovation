@@ -4199,3 +4199,52 @@ because that one had already been filed twice.
 > **Filing a defect class is what makes you check for it; it does not make you stop committing it.
 > The sixth instance was caught by habit, not by insight - which is the honest argument for writing
 > these down at all.**
+
+## A second working tree is not a second copy, and it reads like one
+
+F-414 reported 3 commits existing only on this machine at `fa8e789`, "redundancy 2". I hold
+`fa8e789` too, so my first instinct was that I was the second copy. I am not:
+
+```
+git rev-parse --git-dir        .../_LABS/MicroHack-AppInnovation/.git/worktrees/michalmar-glowing-broccoli
+git rev-parse --git-common-dir .../_LABS/MicroHack-AppInnovation/.git      <- shared
+toplevel                       .../copilot-worktrees/.../michalmar-glowing-broccoli
+```
+
+**Two working trees, two paths, two branch checkouts, one object database.** The commits are not
+duplicated by my holding them; if that single `.git` is lost, every worktree loses them at the same
+instant. My presence added **zero** redundancy while looking, from every path-based check, like it
+added one.
+
+> **Redundancy is a property of object stores, not of directories. Counting checkouts counts
+> the thing that is cheap to see instead of the thing that would survive.**
+
+This is the population class in its most dangerous direction: over-counting copies of an artifact
+that is about to be lost. Undercount a defect and you look harder; overcount a backup and you stop.
+
+### Containment vs ref-identity, reproduced on my own commit
+
+```
+git ls-remote origin | grep -c 8ecc8a8                  -> 0     "not pushed"   WRONG
+git merge-base --is-ancestor 8ecc8a8 origin/<branch>    -> TRUE  "pushed"       RIGHT
+```
+
+`grep <sha>` over `ls-remote` asks whether a ref **tips at** the commit. A pushed commit with later
+commits on top tips nothing, and reports as absent. Same shape as the bundle test that interrogated
+the repo: **the probe was well-formed and answered a neighbouring question.**
+
+### The remedy was one command, and it belonged to a party who did not own the branch
+
+```
+diff 9c14770..fa8e789   3 files, +95 -14 ; .github/workflows paths 0   (so F-45 cannot reject)
+contained in any origin ref -> NONE
+git push origin fa8e789:refs/heads/rescue/rewrite-integration-fa8e789
+contained in origin/rescue/... -> e601a35 · 20e16ea · fa8e789   CONTROL ab6807d absent (fires)
+```
+
+Pushing to a **new** ref moves no branch and touches no PR. The party who could see the hole could
+not close it; the party who could close it did not own the branch and had to be told the hole
+existed.
+
+> **Preservation failures are visible to the owner and fixable by others. That asymmetry is why they
+> survive: everyone who notices assumes the person who can act already has.**
