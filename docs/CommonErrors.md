@@ -6498,3 +6498,68 @@ protecting the only unbacked copy of their work, where it printed the reassuring
 
 > **A defect in a verifier is worth more than the same defect in a result, because the verifier is
 > what everyone else is trusting instead of looking.**
+
+## The distinction that was load-bearing five times, applied where the substrate collapses it
+
+A counterparty reported that this branch was the estate's only unique-work branch absent from every
+bundle, and closed the gap. I verified the artifact rather than accept a claim about my own work's
+survival, using the idioms established earlier tonight.
+
+    bundle verify (from INSIDE a repo)   "records a complete history"
+    clone --bare, count with --git-dir   refs 1 · commits 301 · direct rc 0
+    c30a67d PRESENT · CONTROL deadbee... absent (fires)
+    fsck, run by me, direct exit         0
+    tree  bundle 1978c72c == mine 1978c72c
+    docs/CommonErrors.md  blob match · 405803 B both
+    commits in c30a67d not in the bundle 0 · evidence/ files at tip 18
+
+Every figure reproduces. **The interesting result is that two of my checks were incapable of
+failing.**
+
+### 🔴 Content-addressing collapses reference-vs-content
+
+All night the sharpest instrument has been *the reference is not the content*: paths vs content in a
+safety claim, `git status` modification vs uniqueness of work, validity vs distinguishability under
+a schema. So I compared trees and blobs after confirming the commit was present.
+
+**Given `fsck` exit 0 and the commit object present, that comparison could not have come out any
+other way.** A git commit SHA covers its tree; an intact object graph containing `c30a67d`
+*is* proof that every byte reconstructs. **In a content-addressed store the distinction I was
+applying does not exist.**
+
+> **A distinction that has been load-bearing five times is still not universal. Re-applying it where
+> the substrate already collapses it yields a check that cannot fail -- which reads exactly like
+> confirmation and carries no information.**
+
+### 🔴 And my control confirmed sensitivity, not relevance
+
+I did control the tree comparison, against the previous commit's tree, and it fired. That felt like
+diligence. It was not:
+
+> **Varying the input proves the instrument discriminates between inputs. It does not prove the
+> instrument can detect the failure you are testing for.** My control showed the comparison can tell
+> two different trees apart; the failure I was actually guarding against -- the bundle silently
+> failing to preserve my content -- had already been excluded by `fsck` one step earlier. **A
+> failure-shaped control has to be shaped like the failure, not merely unlike the input.**
+
+That is the demand I have made of every negative tonight, and the first time I notice my own control
+was aimed at variation rather than at the hazard.
+
+### The mechanism they reported, which is worth more than the gap
+
+Two preservation sweeps, an hour apart, by a third arm:
+
+    sweep A  "is it on origin?"     -> this branch: YES, cleared
+    sweep B  "is it in a bundle?"   -> population = the branches NOT on origin
+                                       this branch excluded BY sweep A's answer
+
+**Neither sweep was wrong, and the gap is the intersection of their exclusions.** Two instruments
+whose blind spots are each other's coverage produce a hole that no single audit of either can find.
+
+And the counterparty's own `0 exposed` was **true and useless**: a branch in exactly one failure
+domain is not exposed *at rest*, and that domain was the one with open operator actions queued
+against it.
+
+> **Redundancy counted at rest says nothing about redundancy under a planned operation.** This
+> applies directly here: this branch sits in a merge sequence with an ordering constraint against
+> `origin`, which is the substrate that was being counted as its single copy.
