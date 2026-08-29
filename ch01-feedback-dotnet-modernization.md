@@ -4276,3 +4276,71 @@ side.** My document contains zero instances of the form, so there is nothing to 
 it postdates my authoring the rule. That is not a clean bill of health either — it is a measurement
 that could not have produced a positive, which is the class of instrument I spent the night filing
 against.
+
+## Why the rationale escaped me: the instrument's unit was smaller than the meaning's
+
+The facilitator retracted F-520 in full and offered a mechanism for their three misses:
+*"having already opened the file does not reduce the probability that the rationale is in it —
+proximity felt like coverage."* My own earlier account was different: *I stopped reading at the
+point the answer became inferable.* Both are plausible. **Measured against my own session, both
+are wrong for the case I actually missed.**
+
+```
+ch01/README.md  L88 len= 89  "...format assert would deploy the wrong source without ever"
+                L89 len= 74  "saying so. Supply them on the command line instead, *after* the file —"
+                L90 len= 88  "`--parameters '@C:\protected\<file>.json' --parameters sourceCommit=…` —"
+                L91 len= 90  "because a later `--parameters` overrides an earlier one..."
+                L92 len= 85  "you forgot one is that guard working, not a broken file..."
+
+my instrument:  grep -n 'protected' | cut -c1-160
+does L91 match 'protected'?   0
+```
+
+**Line 90 is 88 characters, so `cut -c1-160` truncated nothing.** Truncation is not the mechanism.
+And I did not stop early on a hunch — **line 91 was never in my output at all**, because it does
+not contain the word I searched for.
+
+> The rationale is a single sentence spanning `L88`–`L92`. My keyword appears on exactly one of
+> those lines. **A line-oriented instrument was applied to sentence-oriented content, and returned
+> a complete-looking result that omitted the clause answering the question.**
+
+The detail that makes it undeniable: **the line I did read ends in an em-dash.** `L90` terminates
+with `—`, a visible, unambiguous signal that the sentence continues, and it was sitting in my
+terminal. I read the hit and not the punctuation at the end of it.
+
+### The general form, and why the facilitator's control beats both diagnoses
+
+> **For prose, grep's unit of return (a line) is smaller than the unit of meaning (a sentence or
+> paragraph). A clean hit list therefore omits rationale systematically, not occasionally — and it
+> looks complete, because every line it returned genuinely matched.**
+
+This is why their *diagnosis* is weaker than their *control*. They credited F-690's save to
+**"printing full text instead of counting matches, not doubt."** That control catches my case
+exactly, and it does not depend on either of our mechanisms being right. The event-bound form:
+**when a search hits prose, read the enclosing paragraph rather than the matching line** — or make
+`-A`/`-B` context the default on Markdown. It fires on the search returning a hit, which is
+unmissable, and it requires no judgement about whether the answer might continue.
+
+Recorded against my own review: I killed their finding correctly, then explained my own gap twice
+with mechanisms that measurement does not support. **The conclusion was right both times and the
+account of how I got there was wrong both times** — which is the fourth instance tonight of a
+sound conclusion arriving attached to an unsound mechanism.
+
+### Ref audit, because their message contained a constraint I could have resolved in my own favour
+
+They wrote that recording on my own branch is my judgement, and separately that *"the no-push
+rule stands."* That is ambiguous, and the convenient reading is available. Rather than infer,
+I measured which refs carry work I authored:
+
+```
+5c9a616 c8889e6 af000c1 788ed38 23c6df4  ->  origin/michalmar-refactored-waddle   (only)
+origin/main contains 5c9a616                 NO
+origin/rewrite-integration contains it       NO
+CONTROL origin/michalmar-refactored-waddle   YES
+```
+
+**Nothing I authored is on any ref but my own.** Two earlier probes were non-discriminating and
+I discarded them: `ls .git/logs/...` silently fell through to a `for-each-ref` fallback listing
+*fetched* refs, and the reflogs live in a **git-common-dir shared by every worktree of this
+clone**, so their push entries are not attributable to me. Only *"does a ref that is not mine
+contain a commit I wrote"* separates the hypotheses.
