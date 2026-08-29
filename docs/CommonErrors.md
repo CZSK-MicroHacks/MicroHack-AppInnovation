@@ -7707,3 +7707,62 @@ looked at:
 
 Same family as *a tree-level scrub is invisible to a tree-level audit because it worked* -- the
 surface you are not measuring on is not reported as unmeasured, it is reported as clean.
+
+## A written null carries the literal it found nothing of, and becomes a later scan's positive
+
+A correspondent swept by secret *class* rather than by the two values they knew, and the single
+`BEGIN PRIVATE KEY` hit on any public ref was a line in **this file** -- inside a result reporting
+that there were none.
+
+    occurrences of the literal in docs/CommonErrors.md   1
+    ...inside a reported ZERO result                     1
+    actual key blocks (literal + base64 body)            0
+    CONTROL 'zzz-no-such-class'                          0
+
+**Their 1 was my 0.** Same family as *the commit that documented the leak-shape defect introduced the
+leak*, with two differences that make it the sharper instance: it produced a **false positive**
+rather than a false clean, and it crossed between parties -- **my null manufactured their alarm.**
+
+Triggers this corpus has now accumulated, counted rather than assumed:
+
+    BEGIN PRIVATE KEY 1 · AccountKey= 1 · client_secret 1 · password 26 · CONTROL absent-class 0
+
+There is a real tension here with no clean resolution on the producer side:
+
+> **A reproducible audit must print its predicate. A printed predicate is a false-positive trigger
+> for every scan that runs afterwards. You cannot have both, and the document gets more dangerous
+> the more rigorous it is.**
+
+The remedy is on the consumer side and it is the joint rule: **count and the document becomes
+evidence; print and it resolves in one line.**
+
+## A tip-level sweep cannot see a file that was deleted, and that is where the credential was
+
+Chasing the correspondent's `config.tfvars.example` finding produced something larger, and the route
+matters because two of my own defects are on it.
+
+First I searched `challenges/ infra/ workshop/` and reported the string absent. **The file is in
+`baseInfra/terraform/`.** An unaimed search returning a confident absence -- the defect this file
+has documented repeatedly, committed again while checking someone else's work. Re-aiming it produced
+a per-ref object listing, and the listing contained a filename that was **not** an `.example`:
+
+    baseInfra/terraform/config.auto.tfvars   blob 7c6f009c...   2 cleartext password assignments
+    reachable from ALL 7 public refs including origin/main   CONTROL fa8e789 -> rescue only
+    anonymous blob API, tokens unset  HTTP 200   CONTROL bogus SHA  HTTP 404
+
+Terraform auto-loads `*.auto.tfvars`, so this was never a template to copy -- it is a real variables
+file committed with real values and later removed from the tip.
+
+> **It survived because it is absent from every tip tree, and every leak sweep run tonight, by every
+> arm, ran over tip trees.** The measurement surface that would have found it -- history -- was
+> never used by anyone, and its absence was never reported, because a surface you do not measure on
+> reports clean rather than unmeasured.
+
+Third member of that family, and the most expensive: *a tree-level scrub is invisible to a
+tree-level audit*, *a file-level audit cannot see a commit message*, and now *a tip-level audit
+cannot see a deleted file*. All evening the identifiers were the subject, and they are absent from
+`main`; the credentials were reachable from `main` the whole time.
+
+Applied correctly this once: the blob SHA and path are recorded, the values are not. **Evidence
+sufficient to act, insufficient to leak** -- which is the resolution to the tension recorded
+directly above, and the first time in this file it was reached before writing rather than after.

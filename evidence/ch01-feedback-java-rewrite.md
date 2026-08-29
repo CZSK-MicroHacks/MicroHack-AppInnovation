@@ -1456,3 +1456,57 @@ match 0, tenant-prefix match 0 -- and is allowlisted here with that reason recor
 because it is published by instruction: **153 commits on this branch carry one, and 25 distinct
 session identifiers appear in trailers across all refs.** No leak audit performed by any arm tonight
 could see them, because every such audit ran over trees and this value lives in the commit stream.
+
+## Operator: a cleartext credential file is reachable from `main` and anonymously fetchable now
+
+This supersedes the ordering in the sections above. Everything earlier in this document concerns
+**identifiers** -- a subscription GUID and a tenant GUID -- which are absent from `main`. This item
+concerns **credentials**, and they are reachable from `main`.
+
+    file      baseInfra/terraform/config.auto.tfvars      (NOT a .example file)
+    blob      7c6f009c5021e6177ac8e02dd71f21881f250d8d
+    contents  10 lines, of which 2 assign cleartext values: admin_password, entra_user_password
+    added by  677f89c f29ecb7 3268cd9 66fd3cc
+    reachable from  ALL 7 public refs, including origin/main
+    CONTROL   fa8e789 -> reachable from origin/rescue/... only (discriminates)
+
+    anonymous blob API, GITHUB_TOKEN and GH_TOKEN unset   HTTP 200, 2 password lines returned
+    CONTROL  bogus blob SHA                               HTTP 404
+
+The values are deliberately not quoted here. This document established earlier that an audit whose
+evidence *is* the offending value cannot be written without committing the offence; the blob SHA and
+the path are sufficient for the operator to act and are not themselves the secret.
+
+Terraform **auto-loads any `*.auto.tfvars`**, so this is not a template a participant is expected to
+copy and edit. It is a real variables file that was committed with real values and later removed
+from the tip. It is in no live tree, which is why it survived: **every leak sweep run tonight, by
+every arm, ran over trees at the tip.** Nothing at the tip can see it. It took a history search.
+
+**Recommended ordering, replacing the one given earlier:**
+
+1. **Rotate `admin_password` and the Entra user password.** Whether these are still live cannot be
+   determined from the repository, which is exactly why rotation rather than assessment is the
+   correct first move.
+2. Rotate the subscription and tenant identifiers as previously recorded.
+3. Only then scrub, and note that scrubbing the tip does nothing here -- the blob is reachable by
+   SHA from `main`, so the remedy is history rewrite or repository replacement, both of which the
+   earlier sections argue against for the identifier case. **The argument does not transfer**: it was
+   grounded on the identifiers being low-marginal-exposure, and a cleartext admin password is not.
+
+### The related finding this was reached through, and its correct disposition
+
+`baseInfra/terraform/config.tfvars.example` on `origin/main` line 23 carries
+`entra_user_password = "WorkshopPassword123!"` beside `entra_user_domain =
+"yourcompany.onmicrosoft.com"`. The domain fails loudly if copied unchanged; the password succeeds
+silently, so every attendee estate built from `main` shares one publicly known password.
+
+**This is already fixed on the rewritten material and the fix is blocked only by the merge.** On
+`HEAD` and on `rewrite-integration` the file has **0** hardcoded password assignments and
+substitutes a per-participant `random_password` with `force_password_change = true`
+(`baseInfra/terraform/README.md:52-53`), with `entra_user_password_length` defaulting to 24 and
+validated to 16-64. Control: `entra_user_domain` is present on both, so the delta is the password
+line specifically and not a missing file.
+
+So the disposition is **merge ordering, not a material change request** -- the remedy exists and is
+waiting. That distinction matters, because filing it as a workshop change would duplicate work
+already done and would leave the actual defect, the credential blob above, untouched.
