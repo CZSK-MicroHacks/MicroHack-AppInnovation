@@ -114,6 +114,19 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    obligation you never knew you had** -- the same defect I filed against a counterparty's
    carried severity figure, in my own deliverable, at the same time.
 
+5. **The evidence contract prescribes seven unqualified shared paths, and the one field that
+   could disentangle them is required on the single artifact nobody produces.**
+   All six slices in `challenge-paths.json` carry byte-identical `requiredEvidence` lists --
+   seven paths, zero slice discriminators -- so a full workshop is 42 writes to 7 names.
+   `modernization-contract.schema.json` **requires** `sliceId` against an enum of all six slice
+   ids and `ch05:101` gates on *"its exact `sliceId`"*; **no other evidence schema declares the
+   property, and `runtime-test-report.json` has no schema at all.** Measured across seven remote
+   branches, that file already has **three** writers, of which two carry the identical
+   `stack=dotnet-sqlserver` and no field separating them. **A pick-one resolution there is not
+   recoverable, because nothing in the surviving document records who wrote it.** The estate
+   currently looks merge-clean only because five of six arms have not produced their required
+   evidence -- **this one included, at 1 of 7.**
+
 ## Ambiguities a participant hits
 
 1. **The Dockerfile location is stated wrongly and the wrong term is *defined*.** The

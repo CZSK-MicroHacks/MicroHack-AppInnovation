@@ -5848,3 +5848,62 @@ is prose with no schema and no deploy-dependent field and was simply never writt
 **Fetch the list of what you owe from the artifact that defines it, then diff.** Do not enumerate
 it from recollection, and especially not while auditing someone else for carrying an unmeasured
 figure.
+
+## The one mechanism for telling arms apart is mandated on the artifact nobody wrote
+
+A counterparty accepted the 42-writes-to-7-names census and concluded **"six collisions exist that
+nobody has written yet."** True in letter. Measured across the estate, the implication inverts.
+
+    occupancy of the 7 required names, 7 remote branches
+      runtime-test-report.json     writers 3   <- ch01-java-rewrite, refactored-waddle, reimagined-fishstick
+      azure-target-output .......  writers 1       all five: refactored-waddle alone
+      migration-report ..........  writers 1
+      acceptance-report .........  writers 1
+      telemetry-report ..........  writers 1
+      rollback-runbook.md .......  writers 1
+      modernization-contract.json  writers 0
+    per branch: refactored-waddle 6/7 · ch01-java-rewrite 1/7 · reimagined-fishstick 1/7
+                ch07-and-wrapup 0/7 · rewrite-integration 0/7 · main 0/7
+
+**The surface is not unwritten. One arm holds five names alone.** The other five collisions are one
+completed delivery away, and the event that triggers them is **an arm satisfying its contract.**
+
+> 🔴 **The estate is merge-clean because almost every arm is under-delivering.** Cleanliness that is
+> purchased by incompleteness reverses sign the moment anyone does the work. **My own PR is clean
+> partly because I shipped 1 of 7** -- I was reporting on a hazard my own under-delivery was
+> suppressing.
+
+### And the recovery property is inverted exactly
+
+    modernization-contract.schema.json   sliceId REQUIRED, enum of all six slice ids   writers 0
+    azure-target-output / migration-report / acceptance-report   sliceId: absent from properties
+    runtime-test-report / telemetry-report ......................  NO SCHEMA AT ALL
+    the 3 colliding runtime reports:  sliceId ABSENT in all three
+      refactored-waddle    stack=dotnet-sqlserver
+      reimagined-fishstick stack=dotnet-sqlserver     <- identical; no field separates them
+      ch01-java-rewrite    stack=java-postgresql
+    CONTROL 42 schema files present
+
+**The workshop knows slices must be identified** -- one schema mandates `sliceId` against a
+six-value enum, and `ch05:101` gates on *"its exact `sliceId`"*. **That knowledge is applied to 1 of
+7 artifacts, and not to the one that collides.**
+
+> 🔴 **The only evidence file whose collisions would be recoverable has zero writers; the file with
+> three writers has no path discriminator, no schema, and no slice field -- and two of its three
+> authors are indistinguishable by any value they carry.** Pick-one resolution there is not merely
+> lossy, it is **undetectable afterwards**: nothing in the surviving document records which arm
+> wrote it.
+
+So the upstream fix is not "rename the colliding file". It is **either put the slice id in the
+required paths, or require `sliceId` in every evidence schema** -- and today neither is true of
+`runtime-test-report.json`, the only one that has actually collided.
+
+### Mechanism
+
+> **Asking "what has collided?" measures delivery. Asking "what can collide, and would we know?"
+> measures the specification.** The second question also asks whether the wreckage is legible, and a
+> collision that resolves into a schema-valid document naming no author is the one no later audit
+> can find.
+
+**Check the recoverability of a collision, not only its existence** -- and before reporting a shared
+resource as safe, check whether it is safe or merely unused.
