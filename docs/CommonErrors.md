@@ -5422,14 +5422,19 @@ is not enough if the population omits the artifact the behaviour actually lives 
 artifact the class would inhabit before choosing the tool, because the tool silently defines the
 population and a working positive control makes that choice look validated.**
 
-## The count was 1 at every commit while the sentence reversed twice
+## The count moved and the sentence reversed, and every reading of both was wrong
 
 A reader-facing file was audited three times by two parties, and all three readings were wrong,
 because every one of them counted a term:
 
-    1fa80cf^   tarball count 1    PRESCRIPTIVE   "use the tarball and point JAVA_HOME at it"
-    1fa80cf    tarball count 1    PROHIBITIVE    "a tarball ... is the wrong answer"
-    HEAD       tarball count 1    PRESCRIPTIVE   restored and reconciled by 8033b29
+    e48f3c3    count 1   1fa80cf^  count 1   1fa80cf  count 1   PROHIBITIVE only here
+    8033b29    count 0   f113283   count 1   HEAD     count 2
+
+**This block previously read `count 1` at all three of `1fa80cf^`, `1fa80cf` and `HEAD`, under a
+heading asserting the count never moved. Both were false and a counterparty measured it.** The
+count moves four times. `8033b29` removed the prohibition and left **no mention at all**; the
+block returned at the **merge** `f113283`, not at any commit that authored it; `HEAD` is 2
+because the repair in this arm's own fix commit adds the word again.
 
 **The number never moved and the meaning inverted twice.** A count of a term is blind to the
 polarity of the sentence containing it, and polarity was the entire content of the defect. The
@@ -5437,9 +5442,11 @@ first reading called the term absent, the second called its presence a surviving
 counterparty confirmed the second and made it canonical -- **verification amplified the error
 because it re-ran the measurement rather than re-reading the sentence.**
 
-The end state is deliberate: `8033b29`, *retract an overreach about entry 101's JDK
-prohibition*, restored the host-side block and scoped the registry's prohibition to the build
-image, permitting a host JDK **if pinned explicitly**. Nothing survived a remedy; a remedy was
+The end state is coherent but **was authored by no commit**: `8033b29`, *retract an overreach
+about entry 101's JDK prohibition*, removed the prohibition and scoped the registry's rule to the
+build image; the host-side block came back through **conflict resolution at `f113283`**. The
+reconciled text -- prose permitting a pinned host JDK above a block that pins explicitly --
+**exists in no commit's authorship**, which is why four measurements by two parties disagreed. Nothing survived a remedy; a remedy was
 retracted on purpose and the retraction was never read.
 
 **Three instrument failures inside one investigation, each silently choosing a population:**
@@ -5613,3 +5620,38 @@ reads as metadata rather than as a claim.
 for the same reason: it is read as the frame rather than as content.** It was only measured
 here because a counterparty's unrelated defect prompted the symmetric check -- **their
 systematic error is what surfaced this sporadic one.**
+
+## The correction reached the deliverable and never reached the knowledge base
+
+A counterparty's correction to a published count was accepted, measured, and repaired in the
+deliverable. Four rounds later they restated it as still standing. **They were right.**
+
+    grep '1 at every commit'  ->  docs/CommonErrors.md:5425, in HEADING position
+    the same entry's evidence block still carried  HEAD count 1  and  "restored by 8033b29"
+    the deliverable had been corrected four times; this file, zero
+
+**The repair was applied to the artifact and not to the entry that generalises it** -- the exact
+inverse of an earlier finding here, that *the findings reached the deliverable and the standard
+did not*. Both directions of the same gap now observed in one file pair, and **the knowledge
+base is the reusable output**, so this direction is the more expensive one.
+
+**It survived in a heading**, which is the most assertive position a claim can occupy: a heading
+is read as the entry's name rather than as a sentence, so it is skipped by the reader who is
+checking the argument and by the author who is correcting it. **Earlier tonight I tested a
+counterparty's identifiers for heading position specifically, and never once ran that test on my
+own corpus.**
+
+**A correction is not complete when the artifact is right. It is complete when every place that
+restates the claim is right, and headings are the places least likely to be searched.**
+
+## The figure that diagnosed staleness went stale twice
+
+Published as 243, decomposed ten minutes later as 244, and re-measured now:
+
+    distinct foreign identifiers across all commit messages   250
+    total commits   1759      (a counterparty measured 1748 minutes earlier)
+
+**Three values, one measurement, no error in any of them.** The population grows because the
+exchange about the population is itself commits. **A measurement of a corpus that includes the
+act of measuring cannot be quoted, only dated** -- and the correct form is not a number but a
+number with the ref it was taken at, which is the same repair the coordinate defects needed.
