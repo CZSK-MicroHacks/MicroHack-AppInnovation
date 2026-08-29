@@ -3922,3 +3922,60 @@ always the union, and `--ours` is never the answer even when it looks empty.** T
 guard does not apply: nothing is being replaced, both sides are additions. Choosing a parent deletes
 another party's documented failures, and the deletion is silent in review because the surviving file
 is well-formed.
+
+## "Neither arm saw the other's messages" is true by construction and therefore measures nothing
+
+A correspondent called a cross-arm agreement **the only claim in the report corroborated in the
+strict sense the report defines**, on the ground that the two arms *"never saw each other's
+messages."* That is a compliment, and per the rule filed one message earlier - *the favourable side
+is the side nobody audits* - it needs testing before acceptance. It fails.
+
+```
+rounds in this arm's exchange log                     10
+distinct counterparties across those 10 rounds         1   (the coordinating session)
+rounds originating from any other arm                  0
+direct arm-to-arm messages ever received               0
+```
+
+**The topology is a star.** Every arm corresponds with the coordinator and with nobody else, so
+*"never saw each other's messages"* is satisfied by **every pair of arms, on every topic, at every
+moment**, including pairs that are demonstrably reporting one relayed stimulus twice.
+
+> **A condition satisfied by construction cannot discriminate. Independence-by-non-contact is not
+> independence when both parties are in correspondence with the same third party, because the third
+> party is a channel and channels carry stimulus.**
+
+And the common cause here is nameable rather than hypothetical: this arm's finding was written
+*about* a retraction the coordinator had just relayed, and that retraction was itself about the other
+arm's claim. Whether the same relay reached the other arm is invisible from here and visible from
+exactly one vantage - **the party who asserted the independence, who did not check it.**
+
+Which is the correspondent's own new rule, one message old, applied to its own corroboration:
+*concurrence is not corroboration; two parties agreeing is one measurement reported twice unless they
+measured independently.* **Establishing independence requires ruling out the shared channel, not
+observing that the parties never met.**
+
+## Two probe failures in one command, both mine, both the same shape as the blind probe
+
+Testing the above, the first instrument was wrong and the second control did not fire:
+
+```
+grep 'sql\.bicep'   docs/CommonErrors.md   4    <- all four are 'postgresql.bicep'
+grep -E '(^|[^a-z])sql\.bicep'             0    <- the real count
+CONTROL 'Facilitator' in the exchange log  0    <- control did not fire: the log labels
+                                                  counterparties by finding ID, never by role
+```
+
+Two distinct defects. The first: **a substring match is not a citation match** - `sql.bicep` is a
+suffix of `postgresql.bicep`, so an unanchored probe for a filename reports every longer filename
+that ends with it. Same class as the earlier reachability probe that required an artifact name and a
+schema name to be the same string.
+
+The second is worse and nearly went unnoticed because the *finding* looked right: **the control
+returned 0, and a control returning 0 means the probe is unproven, not that the target is absent.**
+It only surfaced because a zero-valued control is prima facie broken.
+
+> **A control has to be drawn from the vocabulary of the file being probed, not from the vocabulary
+> of the question being asked.** I searched a log for the word "Facilitator" because that is what I
+> call the counterparty; the log calls them by finding ID, because that is what I wrote in it.
+> **I failed to predict my own file's vocabulary.**
