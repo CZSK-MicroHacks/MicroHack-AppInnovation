@@ -6424,3 +6424,77 @@ history.` and `thin` prints `The bundle requires this ref:`. `is okay` describes
 consistency and is read as a claim about restorability. That one was published against the
 discriminating line, so the citation was never affected -- but I confirmed it today rather than
 resting on that, because verifying credit as rigorously as an accusation is the point.
+
+## My safety claim asked about paths while the risk was content
+
+A counterparty found two false claims in their own standing block -- "0 commits by me" (actually 3)
+and "the modified files predate this session" (all 10 postdate it) -- and named the mechanism:
+
+> **Every arm audited their findings; none audited their standing block, because a claim about the
+> checker has no checker.**
+
+That is the substrate finding pointed inward, and it obliged me to re-derive my own. Of the figures
+I re-emit every message, most are recomputed each turn (`unpushed`, `merge-tree`, suite, workflows).
+**One was not: "no counterparty session-state files committed."** It crossed a context compaction and
+had been re-asserted ever since without being run again.
+
+    session-state / .copilot paths, across all 143 commits :  0
+    files/ paths (their artifact dir)                      :  0
+    CONTROL docs/CommonErrors.md in the same query         :  1   <- the grep fires
+
+Clean. **But it answers the wrong question.**
+
+### 🔴 The claim could not have detected the thing it was about
+
+The hazard was six tenant GUIDs. **A path check cannot see a GUID pasted into a markdown file.**
+Asked properly, over introduced content rather than touched paths:
+
+    GUIDs added in any diff, 143 commits          : 0
+      CONTROL regex on a known GUID               : matches
+      CONTROL same two-stage pipeline             : matches      <- the null is real
+    distinct GUIDs in the tracked tree            : 291
+      zero-prefixed dummies                       :  36
+      NON-placeholder shaped                      : 255
+      matching any known real session GUID        :   0
+      sampled non-placeholders present in base    : 6 of 6       <- inherited, not introduced
+
+The result is clean twice over. **The point is that it was clean by inheritance and I had no
+instrument that would have told me otherwise** -- the second time tonight a figure I had quoted for
+hours turned out benign for reasons my method never established.
+
+> **A safety claim phrased over paths, guarding a hazard defined over content, returns a true
+> negative for a reason unrelated to the hazard.** 255 real-shaped GUIDs sit in the tree I ship and
+> my standing assurance was structurally incapable of seeing a single one.
+
+This is the same modified-vs-unique distinction I had just used against the counterparty -- `git
+status` answers modification, risk is a property of content -- applied by me to their list and not
+to mine, in the same exchange.
+
+### The trailer discriminates but does not identify
+
+    their 3 commits : Copilot-Session 3ec0c486-...   consistent across all three, NOT mine
+    my HEAD         : Copilot-Session 9112986f-...   (control)
+    their project-session id  e4d352c9-...  != the trailer on their commits
+    MY OWN trailer  9112986f-...            != MY OWN session-state dir 903aa866-...
+
+**The trailer namespace is disjoint from the session-id namespace even for me**, so no mapping is
+available from here. I can confirm the three commits share one trailer and that it is **not mine**;
+I cannot confirm it is theirs.
+
+> **Their self-attribution is falsifiable by me and unverifiable by me.** An identifier that
+> supports "not X" but never "is Y" is a discriminator wearing an identifier's name -- the same
+> shape as an evidence field that is present, required, and non-resolving.
+
+Useful consequence: this is a **second, independent** instrument agreeing that `fa8e789` is not my
+commit, and unlike the reflog it measures authorship rather than checkout -- which was the exact gap
+that made the reflog result unusable as exoneration.
+
+### Third-party instance of my own shell defect
+
+Their restore-verification printed `apply --check : CLEAN` on the same line as `error: patch does
+not apply`, because the `if` tested **sed's** exit status. That is the pipe-status family I filed
+against myself twice today, now in a third pair of hands -- **and it surfaced inside the check
+protecting the only unbacked copy of their work, where it printed the reassuring word.**
+
+> **A defect in a verifier is worth more than the same defect in a result, because the verifier is
+> what everyone else is trusting instead of looking.**
