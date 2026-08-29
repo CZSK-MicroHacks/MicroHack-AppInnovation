@@ -4125,3 +4125,76 @@ survive are the ones bound to an event: a challenge starts, a command exits, a f
 formed and the reflexive ones are not. That asymmetry is not a coincidence either — remedies aimed at
 an artifact inherit the artifact's trigger, and remedies aimed at one's own reasoning have to invent
 one.
+
+## Killing someone else's finding correctly, from the wrong sources
+
+The facilitator asked for adversarial review of a PROVISIONAL claim: that `imageDigest` is
+documented as absent from the protected parameter files but present as 64 zeros in
+`infra/parameters/*.bicepparam`, so an attendee omitting the CLI override gets a late image-pull
+failure instead of the documented early rejection. They supplied four ways it could be wrong and
+asked to be contradicted.
+
+It is wrong on their check 2. **"The protected parameter files" are `C:\protected\*.json` — nine
+files written by `provision-vm.ps1` at T-1, outside the repository.** The six tracked
+`.bicepparam` files are a different artifact class: `0` references anywhere in `challenges/`,
+sole consumer the `az bicep build-params` compile loop at `infra/README.md:43`. Falsifier and
+control both fired. I sent that, plainly, including that it was their third finding of the night
+with one signature — an artifact that looked wrong and a documented rationale unread.
+
+### Then I checked the citations in their retraction, and two of them convict me
+
+They withdrew it themselves, citing passages I had not read. Verified, both exact:
+
+```
+challenges/ch01/README.md:91   "…because a later --parameters overrides an earlier one."
+infra/README.md:77-79          "The checked-in parameter files contain conspicuous sanitized
+                                values and are for template compilation only."
+```
+
+Those are **direct, participant-facing answers to their checks 1 and 3.** I answered both
+correctly and reached neither from these lines:
+
+| Check | Where the answer is stated | Where I got mine |
+|---|---|---|
+| 1 — does the override win? | `ch01/README.md:91`, reader-facing | `docs/ImplementationLog.md:871-875` |
+| 3 — are the zeros deliberate? | `infra/README.md:77-79`, explicit | inferred: `param sourceCommit string` has no default, plus the `SANITIZED-…-REPLACE-FOR-WHAT-IF` string |
+
+The first is the worse of the two. **`docs/ImplementationLog.md` is the one document this
+repository's own test suite disqualifies as reader-facing** — `test_performance_api_key_is_
+documented_somewhere` excludes it by name, on the grounds that *"the build log records what was
+done, not what a reader must do; it can never be the thing that satisfies a documentation
+requirement."* I sourced a participant-facing answer from the internal log, in a review whose
+whole subject was which artifact the documentation refers to.
+
+### The mechanism is not "didn't read the prose," and that matters for their remedy
+
+Their F-535 concludes: *the control is not more scrutiny of the artifact, it is scrutiny of the
+surrounding prose.* My case shows that is not sufficient, because **I read both files.** I opened
+`challenges/ch01/README.md` and quoted `:81` — the passage that answers checks 1 and 3 continues
+at `:85-92`, four lines further on. I opened `infra/README.md` and read `:25-60`; the sentence
+that settles check 3 outright is at `:77-79`, fourteen lines past where I stopped.
+
+> **I stopped reading at the point the answer became inferable.** Both times, an inference arrived
+> before the explicit statement did, and arriving first is what suppressed the rest of the passage.
+> The failure is not skipping the prose. It is that a sufficient answer terminates the read, and a
+> correct-but-inferred answer feels identical to a sourced one.
+
+That is the same shape as the non-discriminating-measurement finding, one level out: there, a
+measurement consistent with the premise ended the inquiry; here, an inference sufficient for the
+conclusion ended the reading. **In both, the stopping condition is "I can now answer," which is
+satisfied well before "I have found what the material says."**
+
+And it fails the trigger test from the preceding section. *"Read the surrounding prose"* has no
+observable trigger — you cannot notice you stopped early, because stopping felt like finishing.
+The event-bound form does exist: **before publishing a claim about what the material says, ask
+whether the material states it explicitly, and cite that line or record that none exists.** That
+fires on the act of publishing, which is unmissable, and it is checkable afterwards by a second
+party — which is how it was caught here.
+
+### Recorded against my own review
+
+The conclusion I sent was correct and the two live checks (2 and 4) were sourced from primary
+text. But two of four answers were right by inference where the workshop had said so plainly, and
+I diagnosed the facilitator for a milder version of the same thing in the same message. **Being
+the party who kills the finding is not evidence of having read better** — I had read the same
+files and stopped sooner than the answer.
