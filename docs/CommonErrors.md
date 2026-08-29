@@ -3715,7 +3715,10 @@ file, one ref, one word, two instruments, two answers. There the gap was 3.3x an
 is a single occurrence and was carried unchallenged through an entire audit **because it was small
 enough to look like agreement.**
 
-## Challenge 4 prescribes the remedy the workshop elsewhere says cannot work
+## [RETRACTED] Challenge 4 prescribes the remedy the workshop elsewhere says cannot work
+
+**Retracted in full by the entry below. The inference this rests on does not transfer, and the
+original is left standing so the retraction has something to be checked against.**
 
 Two parties disputed whether Challenge 4's `rowCount: const 1` gate is a defect. One held that the
 completion checkbox *"requires the attendee's application to be broken."* I held it dissolved,
@@ -3821,3 +3824,50 @@ read the message, and the evidence says they did not.
 This is the stale-snapshot family again, in its worst position: I built the accusation on the very
 class of error I had spent the night documenting, and the disproof was in timestamps carried inside
 the messages I was accusing.
+
+## Retraction: the ch04/ch01 contradiction was an inference across two different signal classes
+
+The entry above claimed `ch04:343`'s zero-row remedy - *exercise the app under the Challenge 2 load
+window* - is contradicted by `ch01:341`, which states failure signals are *"emitted only from catch
+blocks. A correctly working application never produces them, so no amount of extra traffic will."*
+It flagged its own weak step: *"Stated as inference, not measurement - ch01:341 governs the eight
+telemetry signals, not literally ch04's failedRequests."* **That step is where it fails.**
+
+```
+ch01:341's catch-block signals    catalog.database.failed -> AppExceptions
+                                  exception               -> AppExceptions
+ch04 panels requiring a failure   0 error-rate                -> AppRequests
+                                  2 database-dependency-fail  -> AppDependencies
+ch04 panels reading AppExceptions                             0
+CONTROL panels present                                        5 (1 latency, 3 replica, 4 cold-start)
+```
+
+**Different tables, different emission paths.** `AppExceptions` needs a `catch` block to run, which a
+healthy application never reaches; `AppRequests` and `AppDependencies` record every call including
+the ones that fail under load, which a load profile produces without anyone breaking anything. A
+correspondent's independent measurement on that exact window returned **98 failures**, corroborating
+the mechanism from the deployed side.
+
+> **A quotation that is true of one signal class is not evidence about another, and "failure" naming
+> both is a property of English rather than of the telemetry.** The word matched; the table did not.
+
+### The part worth keeping is the process, not the finding
+
+The inference was **labelled as an inference at the moment it was written**, and that label is the
+only reason this cost ten minutes rather than shipping. But it was still put into an operator-facing
+recommendation - *"publish that instead"* - and a flagged inference carried into a recommendation is
+an unflagged assertion by the time anyone acts on it.
+
+> **Marking a step as unverified discharges the duty to the record, not the duty to the reader.**
+
+### Three wrong answers on one finding, each from a different half-test
+
+This is the third time this finding was got wrong, and never twice the same way:
+
+1. **restored to CRITICAL** on reachability alone - never read the mechanism;
+2. **dissolved** on the presence of a documented remedy - never read the remedy;
+3. **resurrected** on a cross-chapter quotation - never checked the quotation applied.
+
+Each was a real check, correctly run, answering a question adjacent to the one that mattered.
+**A finding that keeps changing verdict is reporting on the tests, not on the defect** - and the
+correct verdict, LOW, was the one nobody reached until every half had been tried.
