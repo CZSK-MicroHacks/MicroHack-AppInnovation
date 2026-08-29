@@ -4198,3 +4198,81 @@ text. But two of four answers were right by inference where the workshop had sai
 I diagnosed the facilitator for a milder version of the same thing in the same message. **Being
 the party who kills the finding is not evidence of having read better** — I had read the same
 files and stopped sooner than the answer.
+
+## The self-incriminating false finding I nearly published
+
+The facilitator adopted the trigger-type repair and filed F-548, offering their own record as
+stronger proof than my case: they authored *"never truncate an enumeration,"* then violated it
+twice afterwards (`head -400`, `head -12`). Their stated evidence includes a count of
+self-classification constructions in their report — *"check whether" 4 · "be careful" 1*.
+
+Two measurements followed, and the second is the finding.
+
+### 1. Their evidence remains unauditable
+
+```
+FINAL-REPORT.md          0/8 remote heads
+control docs/CommonErrors.md  8/8            (probe fires)
+```
+
+Unchanged, and the head count has grown from 6 to 8. Their F-548 is the strongest single datum
+offered for a thesis of mine, and **I cannot check any part of it.** I record it as sound
+reasoning on unverifiable evidence — not doubt, but the same discipline that was correct about
+PR #6, where their prose was accurate and my inference from it was not.
+
+### 2. I ran their probe on my own document and it nearly produced a false confession
+
+```
+check whether 2 · be careful 3 · make sure 1 · verify that 1   =  7
+```
+
+**Seven, against their five.** The clean, self-critical headline was available and would have gone
+unchallenged: *the party who condemned this guidance by form has more of it than the document he
+diagnosed.* I inspected the hits before publishing the number. All four lines:
+
+```
+:3020  "I did not check whether the *paragraph* handed me a…"   narrative, my own past act
+:4072  "None asks anyone to be careful."                         claim about my remedies
+:4116  "…'be careful your evidence is genuine' is not…"          quoting the counter-example
+:4119  "of the shape *be careful*, *make sure*, *verify that*, or *check whether*…"
+```
+
+**Real instances: zero.** Four of the seven raw hits sit on `:4119` — the single line where I
+enumerate the condemned forms in order to condemn them. **The probe counted my condemnation as
+instances of the thing condemned.**
+
+> A probe that fires, returns a plausible non-zero number, and is composed entirely of false
+> positives — found in the exchange whose subject was probe calibration.
+
+### The asymmetry this exposes, which is the mirror of the one already recorded
+
+Every guard built tonight fires on disputes, and the recorded gap was that none fires on claims
+made in one's own favour. **This is the same gap on the opposite side.** A self-incriminating
+finding is *also* unchecked, for the inverse social reason: it reads as rigor, it costs its author,
+and no one interrogates a confession. Had I published *"7, more than yours,"* the facilitator would
+have accepted it — as I would have, in their position.
+
+> **Self-favouring claims escape scrutiny because challenging them is adversarial. Self-damaging
+> claims escape scrutiny because challenging them looks like absolution.** The mechanical rule I
+> adopted after F-271 covers only the first: *audit any credit received.* It has no clause for
+> credit refused, and refusal is the move I have made four times tonight.
+
+The extension is now symmetric and event-bound: **audit any claim that adjusts my own standing,
+in either direction, before sending it.** The trigger is unchanged — a message is about to go out
+— and it now fires on self-accusation as well as on credit.
+
+### What this hands back to them, and the honest null
+
+Their `check whether 4 · be careful 1` is produced by the same probe, on a document that adopted
+my condemn-by-form language and therefore almost certainly quotes the same four terms in the same
+way. **I cannot check it — 0/8 — but the probe over-counted mine by seven-to-zero, and the
+discriminator is one pass: for each hit, is this an instruction to the reader, or a mention of the
+form?** If their five collapses too, F-548's supporting count goes with it while its central
+claim — that authorship of a self-classification rule confers no protection — stands untouched on
+the `head -400` / `head -12` evidence, which does not depend on the count.
+
+And the null result, reported as a null: **I cannot replicate their authorship experiment on my
+side.** My document contains zero instances of the form, so there is nothing to check for whether
+it postdates my authoring the rule. That is not a clean bill of health either — it is a measurement
+that could not have produced a positive, which is the class of instrument I spent the night filing
+against.
