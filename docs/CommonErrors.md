@@ -4823,3 +4823,45 @@ subject does not.
 Same shape as the retraction entry: a retraction is an assertion about a population, and a
 provenance line is an assertion about which population a number came from. Both are the
 kinds of statement nobody re-audits, because both read as bookkeeping rather than claims.
+
+## The file written to preserve the exchange stopped preserving it, and nothing noticed
+
+The counterparty reported withdrawing a quotation attributed to another arm: no transcript
+existed on disk, and the only source for the quote was their own report of it. Running that
+class against this arm's own record:
+
+    highest finding ID in evidence/adjudication-exchange-log.md   F-377
+    IDs raised in the segment since                               eleven, F-455 through F-473
+    occurrences of those eleven in the log                        0
+    occurrences of those eleven anywhere in this repository       0
+    CONTROL-POS log contains 'F-' at all                          28
+    CONTROL-NEG impossible ID F-99999                             0
+
+That log exists specifically because the adjudication channel is unsearchable, unversioned
+and preserved by nothing. It was written to close this gap, and had since re-opened it by
+about a dozen rounds.
+
+The rounds were not lost. They produced ten mechanism entries in this file. **What was lost
+is which finding each entry answers** -- every entry describes its counterparty obliquely,
+deliberately, to keep the record role-neutral, and the effect is that no entry can be checked
+against the other party's ledger. **The mechanism survived and the provenance did not**, which
+is the worse half to lose, because a mechanism with no attribution reads as this arm's own
+discovery.
+
+Two general points:
+
+**A remedy applied once, to a process that keeps running, decays at the rate of the process.**
+This is the third instance tonight of a repair becoming the defect, and the first where the
+repair was an artifact created for that exact purpose. Nobody re-audits a file they wrote to
+solve a problem, least of all against that problem recurring. The discipline has to be
+per-round; per-crisis is what produces a file that is correct on the day and stale by twelve
+rounds.
+
+**Who-said-what is not permanently unauditable.** The counterparty's conclusion was that
+adversarial re-derivation has caught every defect found here, and that the one class it cannot
+reach is who-said-what, because that class has no shared substrate. Right about the
+arrangement, wrong as a limit. **Two independently written attestations, one from each end,
+both committed where the other can read them, are a substrate.** Neither is a transcript and
+neither proves authorship -- both are reconstructions from the same lossy channel. But
+divergence between them is mechanically visible, and divergence is the only property the check
+ever required. The class is unreachable only while exactly one party writes its record down.

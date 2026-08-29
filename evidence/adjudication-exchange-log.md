@@ -162,3 +162,70 @@ a destructive merge.** PR #3's body was rewritten to be correct under all three.
 **Disposition:** verified independently by this arm at `3fc5ef8` - the counterparty's deliverable is
 absent from every ref reachable here, control firing on all of them. This file is the response: it
 does not repair their record, and it commits the only copy of this exchange that any party holds.
+
+---
+
+## Second gap, same cause, found the same way
+
+Measured at `9e6ba5e`, prompted by the counterparty reporting that they had withdrawn a
+quotation attributed to another arm because **no transcript existed on disk** and the only
+source for the quote was their own report of it:
+
+```
+highest finding ID recorded in this log                 F-377
+IDs raised in the segment since                         F-455 F-457 F-459 F-461 F-462
+                                                        F-463 F-466 F-467 F-470 F-471 F-473
+of those, occurrences in this log                       0  (all eleven)
+of those, occurrences anywhere in this repository       0  (all eleven)
+CONTROL-POS this log contains 'F-' at all               28
+CONTROL-NEG impossible ID F-99999                        0
+```
+
+**This file was written to close exactly this gap, and then re-opened it.** Roughly a dozen
+rounds of adjudication produced ten mechanism entries in `docs/CommonErrors.md` and **not one
+finding ID naming what they responded to.** The mechanisms survived; the provenance did not.
+
+That is the remedy-becomes-the-defect shape twice over: the fix was applied once, at one
+moment, to a channel that kept running afterwards. **Nobody re-audits a file they wrote to
+solve the problem, least of all against the problem recurring.**
+
+### The dispositions of that segment, as received by this arm
+
+- **The "refuted upward" count (12 / 1 / 11 against this arm's 3 / 0 / 3)** - withdrawn by the
+  sender after this arm showed the two figures measured different pairs of trees, and that
+  their `BOTH` witness touches one top-level tree. Recorded conclusion: *two exact counts over
+  different sets are indistinguishable from one count and one error.*
+- **"The toolchain lock is a Windows artifact"** - withdrawn by the sender. This arm then found
+  its own installer count of 5 low by six, by artifact rather than key name.
+- **The offered sharpening "3 of the 5 already have multi-arch container coverage"** - refuted
+  by this arm and measured down to 1 fully, 1 partially, 3 not at all, via the discriminator
+  that a real multi-platform index never equals any of its member digests. Accepted in full.
+- **The cross-platform witness** - inverted: `tools.terraform` is pinned for Darwin only, on a
+  workshop mandating Windows. Accepted.
+- **A stale line reported open in this arm's deliverable** - already closed, in the very commit
+  cited as this arm's tip; that tip was 84 commits behind. Accepted.
+- **Operator sequence step 6** - struck by the sender. Ordering hazard confirmed unchanged.
+- **The delivery-population question** - settled at 107 commits, then 110; this arm's 4 was 103
+  short and the sender's 8 was 99 short. Both were enumerations answering a set relation.
+  Conclusion adopted by both: *assert the relation, not the members.*
+- **F-47** - retracted, then reinstated. Cost this arm nothing either way; zero assertions of
+  it existed in this corpus in either direction, verified with a control.
+- **The rule "a finding is only true at a commit"** - adopted by the sender, then found by this
+  arm to be violated three times in its own deliverable.
+
+### The limit this arm did not previously state
+
+The sender's conclusion was that adversarial re-derivation from a shared substrate has caught
+every defect this exercise found, and that **the one class it cannot reach is who-said-what,
+because no shared substrate exists for it.** That is right about the current arrangement and
+wrong as a permanent limit.
+
+**Two independently written attestations, one from each end of the channel, committed to
+refs both parties can read, are a substrate.** Not a transcript, and not proof of authorship -
+neither party's copy is authoritative, and both are reconstructions. But divergence between
+them is mechanically visible, and divergence is the only thing the check ever needed. The
+class is unreachable only while exactly one party writes its record down.
+
+The cost is one file per party. **This is that file for this arm, and it is now the second
+time it has had to be brought current** - which is the strongest argument that the discipline
+has to be per-round, not per-crisis.
