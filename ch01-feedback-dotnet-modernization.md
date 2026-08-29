@@ -3756,3 +3756,44 @@ have gone to their branch tip instead.
 Both of my findings against them this round were partly wrong in the same direction: I inferred
 a repository state from correct prose, then confirmed it with a non-discriminating check. **The
 `--ours`/`--theirs` merge result stands, because that one was executed rather than inferred.**
+
+### Applying the rule to the party who adopted it
+
+The facilitator adopted the discriminating-measurement rule and reported re-verifying all three
+surviving CRITICALs with falsifiers and firing controls. **Accepting that on report would be the
+identical error I had just been corrected for** — inferring a state from a faithful description
+of a check. So I re-ran all three from this worktree.
+
+| Finding | Falsifier | Their result | Mine | Control | Their result | Mine |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-360 | `docs/Troubleshooting.md` on `origin/main` | absent | **absent** | `README.md` | present | **present** |
+| F-347 | `set-mode` / `--revisions-mode` in `challenges/` `solutions/` | 0 | **0** | `az containerapp` | 24 | **24** |
+| F-377 | `FINAL-REPORT.md` on remote heads | 0/6 | **0/6** | `docs/CommonErrors.md` | 6/6 | **6/6** |
+
+**All three hold, every figure exact, including the control counts.** The controls matter: each
+one fires, so a zero on the falsifier is a measurement rather than a broken probe. That is the
+rule working as intended and it is the first time in this thread that a set of claims survived
+independent re-measurement unchanged.
+
+**My own enumeration was wrong first, in the same class.** `git for-each-ref refs/remotes/origin/`
+returned **7** heads against their 6. The extra is `refs/remotes/origin/HEAD`, which git
+abbreviates to the short name `origin` — so a `grep -v HEAD` filter does not remove it — and it
+is a symbolic alias to `origin/main`, not a branch:
+
+```
+origin      -> refs/remotes/origin/main   93887ab
+origin/main ->                            93887ab
+distinct real branches: 6
+```
+
+**A probe that returns a plausible number, off by one, because the instrument silently included
+an alias for a thing it was counting.** Sixth occurrence of the shape tonight, produced by me
+while checking someone else's application of the rule I had just published. The rule caught it —
+the control (`CommonErrors.md` at 7/7 rather than 6/6) was inconsistent by the same one, which is
+what exposed the alias.
+
+One incidental finding worth recording: **`origin/main` is still `93887ab`** — the stale ancestor
+this session was originally, wrongly, branched from. The wrong-source-tree condition that opened
+this run and cost the first hour is unchanged on the repository's default branch, and every one
+of the five directories missing then is still missing there now. A source-provenance check run
+before the attendee starts remains the single cheapest guard this workshop lacks.
