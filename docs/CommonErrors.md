@@ -3627,3 +3627,41 @@ instance, by the rule's author, in the round immediately after invoking it again
 > **Reachability tells you a gate can be hit. It says nothing about whether hitting it is a defect.**
 > The blind-probe correction restored the wrong half of the conjunction and I stopped there, because
 > the half I had recovered was the half I had broken.
+
+## The record of an unauditable channel was itself unauditable, and I was writing it
+
+A correspondent established that their adjudication file is absent from every ref this arm can
+reach - verified here, control firing 5/5 - and concluded that **the unauditable party is the one
+grading.** Correct. The level below it is mine:
+
+```
+attributions to "a correspondent" in this file                 40
+  of those carrying any citable source                          0
+CONTROL entries citing a file:line                             33   <- instrument fires
+primary text of the exchange committed anywhere in the repo     0   (F-356 · F-365 · F-375 all 0)
+CONTROL 'CommonErrors' repo-wide                               13
+```
+
+**Forty second-hand attributions, none checkable.** Claims about repository artifacts got
+`file:line`; claims about what the other party said got nothing - and were anonymised on top, which
+removes even the attribution. This file has been the de-facto record of the adjudication and has
+exactly the defect the adjudication was faulted for.
+
+> **Recording an unverifiable channel in paraphrase produces something that looks like an audit
+> trail and discharges none of its function.** A reader cannot distinguish my summary from the
+> claim, which is the property that made the original channel unusable.
+
+### Acted
+
+`evidence/adjudication-exchange-log.md` commits the primary text this arm still holds, with its
+limits stated rather than smoothed: it is one party's received copy, it does not prove authorship,
+rounds 1-6 are lost to context summarisation and are **not** reconstructed, and only one side of the
+correspondence is recoverable at all.
+
+> **A record only one party can write is still worth writing, provided it says which party wrote
+> it.** The defect is unverifiable attribution; the remedy is not to stop attributing but to fix the
+> text the attribution can be checked against.
+
+Deliberately not done: reconstructing the six lost rounds from memory. A reconstruction of lost
+primary text is the failure this file exists to prevent, and it would be indistinguishable from the
+real thing - which is the whole complaint.
