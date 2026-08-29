@@ -401,8 +401,15 @@ each envelope; do not replace an empty response with seed data.
 IMAGE_PATH='providers/Microsoft.Security/assessments/c0b7cfc6-3172-465a-b378-53c7ff2cc0d5/subAssessments'
 IMAGE_API=2019-01-01-preview
 IMAGE_QUERIED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-IMAGE_RESPONSE=$(az rest --method get \
-  --url "https://management.azure.com${ACR_RESOURCE_ID}/${IMAGE_PATH}?api-version=${IMAGE_API}")
+# Defender for Cloud has deprecated sub-assessments, so this frozen request now answers
+# 404 SubAssessmentsDeprecated and `az rest` exits 1. An error is a result: record what
+# the endpoint returned and set the status to `unavailable`. Never drop the query, and
+# never substitute a seed record to claim completion.
+if ! IMAGE_RESPONSE=$(az rest --method get \
+  --url "https://management.azure.com${ACR_RESOURCE_ID}/${IMAGE_PATH}?api-version=${IMAGE_API}" \
+  2>"$RAW/image-assessment.error.txt"); then
+  IMAGE_RESPONSE=$(jq -n --arg error "$(cat "$RAW/image-assessment.error.txt")" '{error: $error}')
+fi
 jq -n \
   --arg scope "$ACR_RESOURCE_ID" --arg path "$IMAGE_PATH" \
   --arg api "$IMAGE_API" --arg queriedAt "$IMAGE_QUERIED_AT" \

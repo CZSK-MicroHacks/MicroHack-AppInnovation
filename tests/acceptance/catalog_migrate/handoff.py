@@ -145,7 +145,9 @@ def render_handoff(
         acceptance_subject["sourceCommit"] != target["sourceCommit"]
         or acceptance_subject["imageDigest"] != image["digest"]
         or acceptance_subject["revisionName"] != app["revisionName"]
-        or acceptance["baseUrl"] != app["url"]
+        # A base URL pasted from a browser carries a trailing slash the Container
+        # Apps FQDN does not, and the two still name one deployment.
+        or acceptance["baseUrl"].rstrip("/") != app["url"].rstrip("/")
     ):
         raise InvalidInputError("acceptance subject differs from target output")
     image_verification = migration["images"]["verification"]

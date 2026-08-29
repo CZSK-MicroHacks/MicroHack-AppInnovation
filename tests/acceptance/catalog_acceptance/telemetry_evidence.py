@@ -96,8 +96,11 @@ def _check_route_probe(query_id: str, rows: dict[str, Any], problems: list[str])
     ):
         problems.append(
             f"{query_id}/{signal_name}.{key} lacks the matched route-template probe "
-            f"{ROUTE_PROBE}. Exercise GET /figure/{{id}} against a real figure and "
-            f"re-capture."
+            f"{ROUTE_PROBE}. Exercising the route again will not help if it already "
+            f"returned 200: on AppRequests the exporter stores the route template in "
+            f"the Name column ('GET /figure/{{id}}') and the status in ResultCode, not "
+            f"as attributes. Derive them from those columns -- see the http.server row "
+            f"of workshop/contracts/telemetry-signal-map.json."
         )
 
 

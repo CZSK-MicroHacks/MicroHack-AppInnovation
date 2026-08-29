@@ -1064,7 +1064,15 @@ def test_handoff_bundle_cross_file_consistency(
     for relative_path in handoff["evidence"]["pathEvidence"]:
         path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("path evidence fixture\n", encoding="utf-8")
+        # Members the registry names as JSON are parsed by the validator, so prose
+        # is not a fixture for them -- it is a file that is JSON in name only.
+        if path.suffix == ".json":
+            path.write_text(
+                json.dumps({"fixture": relative_path}),
+                encoding="utf-8",
+            )
+        else:
+            path.write_text("path evidence fixture\n", encoding="utf-8")
     runtime_example = load_json(contracts / "runtime-test-evidence.example.json")
     runtime_results = "\n".join(
         f'<UnitTestResult testId="runtime-{index}" '
@@ -2441,6 +2449,7 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
 
     offenders: list[str] = []
     examined = 0
+    visited: set[str] = set()
     for markdown in sorted(repo_root.rglob("*.md")):
         parts = markdown.relative_to(repo_root).parts
         if set(parts) & {".git", "node_modules", ".venv", "bin", "obj", "target"}:
@@ -2453,6 +2462,7 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
             if language.lower() not in executable:
                 continue
             examined += 1
+            visited.add("/".join(parts))
             if not invocation.search(body):
                 continue
             if establishes_cwd.search(body):
@@ -2462,6 +2472,41 @@ def test_acceptance_suite_blocks_are_self_contained(repo_root):
     assert examined >= 40, (
         f"only {examined} executable fences examined; the fence filter is stale and "
         "this guard would pass on a repository full of uncd'd suite invocations"
+    )
+    # The floor above is liveness, not coverage: it sat at 40 against 293 real fences, so
+    # seven eighths of the repository could fall out of the walk without failing it. The
+    # chapter READMEs that name a console script are exactly where an uncd'd invocation
+    # would be written, and git enumerates them without reference to this walk.
+    should_reach = {
+        path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/*/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+        and any(
+            language.lower() in executable and invocation.search(body)
+            for language, body in _fenced_blocks(
+                (repo_root / path).read_text(encoding="utf-8")
+            )
+        )
+    }
+    assert should_reach, "no chapter document invokes the suite; the anchor is stale"
+    assert should_reach <= visited, (
+        "these documents invoke the acceptance suite but the walk never reached them, "
+        "so this guard is reporting on a smaller corpus than the one it concludes "
+        f"about: {sorted(should_reach - visited)}"
     )
     assert not offenders, (
         "these blocks invoke the acceptance suite without a cd inside the block: "
@@ -3893,6 +3938,35 @@ def test_every_provisioning_script_is_reachable_from_a_document(repo_root: Path)
         f"only {len(readable)} documents searched; the walk is not running"
     )
 
+    # The floor above proves the walk is alive, not that it is complete, and a live
+    # walk over a shrunken corpus reports "reachable" for scripts nothing names any
+    # more. This floor was lowered from 200 to 150 when the excluded-directory set
+    # was broadened; the corpus has since grown back past 200 and the floor was never
+    # restored, so it now carries enough slack to hide a quarter of the repository.
+    # Anchoring on the documents that must always be searched is stable as the corpus
+    # grows and still fails the moment a suffix or exclusion drops one of them.
+    anchors = {
+        repo_root / line
+        for line in subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+             "challenges/*.md", "solutions/*.md", "docs/*.md"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if line
+    }
+    assert anchors, "no anchor documents enumerated; the git query stopped matching"
+    missing_anchors = sorted(
+        str(path.relative_to(repo_root)) for path in anchors - set(readable)
+    )
+    assert not missing_anchors, (
+        "these tracked documents are outside the walk, so a script named only by one "
+        "of them would be reported reachable when it is not: "
+        + ", ".join(missing_anchors)
+    )
+
     unreachable: list[str] = []
     for script in scripts:
         mentions = [
@@ -4427,8 +4501,35 @@ def test_every_schema_definition_is_reachable(repo_root: Path) -> None:
     regrows.
     """
     schemas = sorted((repo_root / "workshop" / "contracts").glob("*.schema.json"))
-    assert len(schemas) >= 15, (
-        f"only {len(schemas)} contract schemas found -- this guard is not running"
+    # A floor cannot tell a narrowed glob from a shrunken corpus. This one sat at 15
+    # against 42 real schemas, so the glob could have stopped seeing two thirds of them
+    # and still reported green. Git enumerates the same population by an independent
+    # route, so disagreement between the two is the thing worth asserting.
+    tracked = {
+        Path(path).name
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "workshop/contracts/*.schema.json",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    }
+    assert tracked, "no contract schemas found -- this guard is not running"
+    assert {schema.name for schema in schemas} == tracked, (
+        "the schema glob and git disagree about which contract schemas exist, so this "
+        "guard is checking a different population than the repository contains; "
+        f"glob-only={sorted({schema.name for schema in schemas} - tracked)} "
+        f"git-only={sorted(tracked - {schema.name for schema in schemas})}"
     )
 
     orphans: list[str] = []
@@ -5248,6 +5349,12 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
     challenge explicitly defines as `C:\\MicroHack\\source`. Following the prose
     put the file one directory above every reader of it. Nothing tied the two
     together, so the divergence was invisible to the suite.
+
+    The first version of this guard walked `challenges/` only and required the word
+    to be backticked. Both restrictions were invisible in a passing run, and the
+    same instruction survived in `solutions/ch01-copilot-modernization/dotnet`, in
+    plain prose, for the whole of the delivery. A guard that names a class and
+    inspects one directory reports on the directory while reading as the class.
     """
     registry = json.loads(
         (repo_root / "workshop" / "contracts" / "challenge-paths.json").read_text(
@@ -5261,8 +5368,32 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
     }
     assert len(pinned) >= 2, f"registry pins only {len(pinned)} Dockerfile paths"
 
-    readmes = sorted((repo_root / "challenges").glob("ch01*/README.md"))
-    assert len(readmes) >= 3, f"only {len(readmes)} ch01 challenge readmes found"
+    # Both corpora, enumerated by git rather than by a glob whose narrowing would be
+    # indistinguishable from a repository that had shrunk.
+    readmes = sorted(
+        repo_root / path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/ch01*/README.md",
+                "solutions/ch01*/*/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert len(readmes) >= 3, f"only {len(readmes)} ch01 readmes found"
+    assert any(
+        part.parts[0] == "solutions" for part in (p.relative_to(repo_root) for p in readmes)
+    ), "the walk sees no solution documents; it is reporting on challenges alone"
 
     problems: list[str] = []
     named: set[str] = set()
@@ -5274,8 +5405,9 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
         inspected += 1
         relative = readme.relative_to(repo_root)
         # A document that never states a location is silent, not wrong; the
-        # defect is stating one that disagrees with the registry.
-        if re.search(r"`Dockerfile`[^.]{0,80}?repository\s+root", text, re.DOTALL):
+        # defect is stating one that disagrees with the registry. Backticks are
+        # not required: the surviving instance was plain prose.
+        if re.search(r"\bDockerfile\b[^.]{0,80}?repository\s+root", text, re.DOTALL):
             problems.append(f"{relative}: sends the Dockerfile to the repository root")
         named |= {path for path in pinned if path in text}
 
@@ -5286,4 +5418,602 @@ def test_dockerfile_authoring_instructions_match_the_path_registry(
 
     assert not problems, "Dockerfile instructions disagree with the registry:\n" + "\n".join(
         problems
+    )
+
+
+def _shell_commands(markdown: str) -> list[str]:
+    """Return each shell command in ``markdown`` with backslash continuations joined.
+
+    A command in these runbooks routinely spans several physical lines. Matching per
+    physical line is the mistake that let an unguarded ``.Trim()`` survive a sweep: the
+    parser could not represent the shape of the thing it purported to check. Joining
+    continuations first makes the unit of inspection the command, which is the unit the
+    participant actually runs.
+    """
+    commands: list[str] = []
+    pending: list[str] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.endswith("\\"):
+            pending.append(stripped[:-1].strip())
+            continue
+        pending.append(stripped)
+        commands.append(" ".join(part for part in pending if part))
+        pending = []
+    if pending:
+        commands.append(" ".join(part for part in pending if part))
+    return commands
+
+
+def test_reference_dockerfiles_carry_no_from_platform_selector(
+    repo_root: Path,
+) -> None:
+    """No reference Dockerfile may put a ``--platform`` selector on a ``FROM`` line.
+
+    The workshop mandates ``az acr build`` for every image build, because the
+    provisioned VM has no Docker daemon. ACR Tasks scans a Dockerfile for its base
+    images before building, and that scanner cannot parse ``FROM --platform=...``:
+    it aborts in seconds with ``unable to understand line FROM --platform=...`` and
+    ``failed to scan dependencies``. ``docker build`` parses the same line without
+    complaint, so a local build hides the failure that the mandated build hits.
+
+    Every base image in these two files is digest-pinned, and ACR Tasks already
+    defaults to ``linux/amd64``, so the selector buys nothing that the digest does
+    not already fix.
+
+    Denominator: the Dockerfiles under ``solutions/reference/``, which are the ones
+    the challenges instruct attendees to build with ``az acr build``. That
+    population is asserted to be non-empty below, so a rename cannot silence this
+    guard by emptying it. Complement: ``.devcontainer/Dockerfile`` is deliberately
+    excluded. It is built by the devcontainer tooling rather than by ACR Tasks, and
+    its base image is a floating tag rather than a digest, so neither the failure
+    mode nor the redundancy argument applies to it.
+    """
+    dockerfiles = sorted((repo_root / "solutions" / "reference").rglob("Dockerfile"))
+    assert dockerfiles, (
+        "no Dockerfile found under solutions/reference/ — the guard's population is "
+        "empty, so it would pass without asserting anything"
+    )
+
+    offenders = [
+        f"{path.relative_to(repo_root)}:{number}: {line.strip()}"
+        for path in dockerfiles
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if re.match(r"\s*FROM\s+--platform", line, re.IGNORECASE)
+    ]
+
+    assert not offenders, (
+        "a reference Dockerfile puts --platform on a FROM line, which makes it "
+        "unbuildable by the az acr build the challenges mandate:\n  "
+        + "\n  ".join(offenders)
+        + "\nDrop the selector; the base images are digest-pinned and ACR Tasks "
+        "already builds linux/amd64."
+    )
+
+
+def test_no_document_claims_setting_a_container_app_secret_restarts_the_app(
+    repo_root: Path,
+) -> None:
+    """No document may claim that setting a Container App secret restarts the app.
+
+    ``az containerapp secret set`` succeeds without creating a revision and without
+    restarting anything; it warns that a restart is required and leaves the previous
+    value being enforced. A document that says otherwise sends a reader to a correct
+    remedy and tells them it already took effect, so they read stored-value parity as
+    proof while the application still rejects the key.
+
+    Denominator: every tracked Markdown file. Complement: this pins one false claim
+    out of the corpus; it does not assert the corpus is free of other false claims
+    about CLI behaviour.
+    """
+    claim = re.compile(
+        r"(secret[^.\n]{0,80}(restarts the app|forces a new revision)"
+        r"|(restarts the app|forces a new revision)[^.\n]{0,80}secret)",
+        re.IGNORECASE,
+    )
+    documents = sorted(
+        repo_root / path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "*.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert documents, "Enumeration returned no Markdown; the guard has no population."
+
+    offenders = []
+    for path in documents:
+        if not path.is_file():
+            continue
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if claim.search(line):
+                offenders.append(f"{path.relative_to(repo_root)}:{number}: {line.strip()}")
+    assert not offenders, (
+        "These lines claim that setting a Container App secret restarts the "
+        "application. It does not; the old value stays in force until the revision "
+        "is restarted:\n" + "\n".join(offenders)
+    )
+
+
+def test_key_parity_check_distinguishes_stored_values_from_enforced_values(
+    repo_root: Path,
+) -> None:
+    """The key-parity comparison must say it reads stored, not enforced, values.
+
+    The comparison reads the Key Vault secret and the Container App secret. Both are
+    stored values. A revision serves the secret it started with, so the comparison can
+    print agreement against an application that returns ``401`` on every sample. The
+    section must say so, or its green result is affirmative false evidence.
+
+    Denominator: one file, ``infra/README.md``, the only document carrying this
+    comparison. This is a regression pin, not a survey.
+    """
+    readme = repo_root / "infra" / "README.md"
+    body = readme.read_text(encoding="utf-8")
+    assert "KEYS DISAGREE" in body, (
+        "infra/README.md no longer carries the key-parity comparison; this guard "
+        "has lost its subject and must be re-aimed rather than deleted."
+    )
+    assert "stored" in body and "az containerapp revision restart" in body, (
+        "The key-parity section must state that it compares stored values and must "
+        "give the explicit revision restart, because setting the Container App "
+        "secret does not restart the application."
+    )
+
+
+AUTHORING_GUARD = "test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches"
+
+
+def test_performance_key_provisioning_binds_its_two_writers(repo_root: Path) -> None:
+    """One logical key has two independent writers; the prose must bind them.
+
+    `--performance-api-key` becomes the Container App secret the application
+    enforces on `/perftest/*`; `az keyvault secret set --name PERFTEST-API-KEY`
+    becomes the value the load test presents. Nothing in the deployment ties the
+    two together, and `infra/README.md` used to call the second one "the only
+    value here that is genuinely yours to supply" -- wording that licenses
+    inventing a fresh key at the moment the two must agree.
+
+    Divergence is silent until a run, then loud and misattributed: every sample
+    returns 401, the error rate is 100%, the failure criteria trip, and both
+    troubleshooting tables sent the reader to Key Vault RBAC and to whether the
+    secret "holds the key" -- questions that answer "yes" while the run fails.
+    A cause that is anticipated but misattributed is worse than one that is
+    absent, because the reader stops on a wrong answer instead of continuing.
+
+    This guard requires the binding to be stated where the key is written and
+    the divergence to be named where the failure surfaces. It matches on meaning
+    rather than on formatting, because the previous generation of this kind of
+    guard was defeated by requiring a backtick.
+    """
+    provisioning = (repo_root / "infra" / "README.md").read_text(encoding="utf-8")
+    assert "PERFTEST-API-KEY" in provisioning, "provisioning doc no longer sets the secret"
+
+    binding = re.search(
+        r"not a fresh value invented here|byte-identical to\s+the value already passed",
+        provisioning,
+    )
+    assert binding is not None, (
+        "infra/README.md sets PERFTEST-API-KEY without stating that it must equal the "
+        "value already passed as --performance-api-key. Two writers, one value, and "
+        "the reader is left free to invent a second key at the point they must agree"
+    )
+
+    # Both troubleshooting corpora, enumerated rather than globbed: a narrowing here
+    # would be indistinguishable from a repository that had shrunk.
+    documents = sorted(
+        path
+        for path in subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "challenges/ch02/README.md",
+                "solutions/ch02/README.md",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        if path
+    )
+    assert len(documents) == 2, f"expected both ch02 documents, walked {documents}"
+
+    for path in documents:
+        text = (repo_root / path).read_text(encoding="utf-8")
+        # Scope to the failure row itself. Searching the whole document would let
+        # unrelated prose elsewhere satisfy the match -- the guard would read as
+        # "the failure row names divergence" while asserting only "the file
+        # contains these words somewhere", which is the defect it exists to catch.
+        rows = [
+            line
+            for line in text.splitlines()
+            if line.startswith("|") and re.search(r"error count|error rate", line, re.IGNORECASE)
+        ]
+        assert rows, f"{path} no longer documents the nonzero-error-count failure"
+        assert any(
+            re.search(r"diverge|different values|equals the Container App secret", row)
+            for row in rows
+        ), (
+            f"{path} documents the nonzero-error-count failure without naming key "
+            "divergence as the cause of a total failure. The reader is routed to "
+            "Key Vault RBAC, which answers 'yes' while every sample still 401s"
+        )
+
+
+def test_rewrite_runbooks_deselect_the_reference_tree_authoring_guard(
+    repo_root: Path,
+) -> None:
+    """The rewrite path must not run a guard a correctly-executed rewrite path fails.
+
+    ``test_reference_tree_differs_from_legacy_only_where_the_workshop_teaches`` compares
+    the legacy tree against ``solutions/reference`` and asserts the reference's added
+    files are exactly ``MODERNIZATION_ADDITIONS`` -- which names ``Dockerfile``. Challenge
+    1 checkpoint 4 has the participant author ``<stack>/Dockerfile`` and checkpoint 5 has
+    them commit it, at which point the name is present on *both* sides, the difference
+    shrinks, and the equality breaks. Nothing is undeclared and nothing is missing; the
+    participant simply did their homework.
+
+    That makes it a repository-authoring guard, not a participant gate, and the rewrite
+    runbooks have to deselect it wherever they tell the reader to run the contract
+    assets. The modernization runbooks must keep running it in full, so the requirement
+    is scoped to the rewrite path only.
+    """
+    runbooks = sorted((repo_root / "solutions" / "ch01-copilot-rewrite").glob("*/README.md"))
+    assert len(runbooks) >= 2, f"expected both rewrite runbooks, found {len(runbooks)}"
+
+    inspected = 0
+    offenders: list[str] = []
+    for runbook in runbooks:
+        for command in _shell_commands(runbook.read_text(encoding="utf-8")):
+            if "pytest" not in command or "tests/test_contract_assets.py" not in command:
+                continue
+            inspected += 1
+            if AUTHORING_GUARD not in command:
+                offenders.append(
+                    f"{runbook.relative_to(repo_root)}: {command}"
+                )
+
+    assert inspected >= 4, (
+        f"only {inspected} contract-asset invocations found across the rewrite runbooks; "
+        "the walk is not reaching the commands it is supposed to check"
+    )
+    assert not offenders, (
+        "these rewrite-path commands run the reference-tree authoring guard, which a "
+        "participant fails as soon as they commit the Dockerfile checkpoint 4 asks them "
+        f"to author; deselect {AUTHORING_GUARD}:\n" + "\n".join(offenders)
+    )
+
+
+def test_no_document_prints_the_lead_time_label_the_chapter_disowns(repo_root):
+    """The guard above surveyed the prose; the attendee runs the `jq`.
+
+    `test_lead_time_is_labelled_as_the_interval_it_measures` fixed the front door
+    and the glossary and checked two prose phrasings. It never surveyed the
+    solution, which printed `deployment lead time (commit to live)` from a
+    variable bound to the staging job's `startedAt` — a dispatch time. Challenge 3
+    spends three separate passages disowning exactly that label, so the one place
+    the attendee sees a number was contradicting the chapter that produced it.
+    """
+    offenders = []
+    inspected = 0
+    for path in sorted(repo_root.glob("**/*.md")):
+        if any(part in {".git", "node_modules", "evidence"} for part in path.parts):
+            continue
+        text = path.read_text(encoding="utf-8").lower()
+        inspected += 1
+        if "lead time (commit to live)" in text:
+            offenders.append(path.relative_to(repo_root).as_posix())
+    # The workshop ships far more than this; the floor only has to sit above the
+    # handful of documents that would remain if the glob or the filter broke.
+    assert inspected >= 20, (
+        f"only {inspected} markdown documents were walked; this guard has stopped "
+        "seeing the corpus and would pass on an empty enumeration"
+    )
+    assert not offenders, (
+        "these documents print the lead-time label Challenge 3 disowns, and the "
+        f"interval they measure starts at workflow dispatch: {offenders}"
+    )
+
+
+def test_solution_lead_time_block_matches_the_challenge_it_solves(repo_root):
+    """A solution that relabels the chapter's metric teaches the wrong number."""
+    solution = (repo_root / "solutions/ch03/README.md").read_text(encoding="utf-8")
+    assert "pipeline lead time (dispatch to live)" in solution, (
+        "solutions/ch03 no longer prints the canonical label from challenges/ch03"
+    )
+    assert "$commit" not in solution, (
+        "solutions/ch03 binds a dispatch timestamp to a variable named $commit; "
+        "the name is what made the wrong label look correct"
+    )
+
+
+def test_internal_environment_reachability_reaches_the_chapters_that_hit_it(repo_root):
+    """The consequence was documented only where it is caused, not where it lands.
+
+    `infra/main.bicep` and `infra/modules/environment.bicep` both state, in a
+    parameter description, that an internal environment leaves the app
+    unreachable from "a GitHub-hosted runner or an operator laptop". Two tracks
+    hit exactly those two consequences — Challenge 3's staging smoke probes and
+    Challenge 6's recovery probes — and neither found the note, because neither
+    was reading Bicep. The chapters that own the symptom have to carry it.
+    """
+    for rel in ("challenges/ch03/README.md", "challenges/ch06-sre-agent/README.md"):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        section = text.split("## If it goes wrong", 1)
+        assert len(section) == 2, f"{rel} has no troubleshooting section to carry it"
+        body = section[1].lower()
+        assert "internal" in body, (
+            f"{rel} troubleshooting never mentions the internal environment mode, "
+            "so the attendee meets an unreachable URL with no way to name it"
+        )
+        assert "virtual network" in body or "peered" in body, (
+            f"{rel} troubleshooting names the mode but not where a probe must "
+            "originate, which is the only part that unblocks the attendee"
+        )
+
+
+def test_deprecated_subassessment_query_cannot_abort_the_capture(repo_root):
+    """A frozen request to a since-deprecated endpoint must not kill the capture.
+
+    Defender for Cloud deprecated the sub-assessments endpoint, so the chapter's
+    frozen `GET .../subAssessments?api-version=2019-01-01-preview` now answers
+    HTTP 404 `SubAssessmentsDeprecated` and `az rest` exits non-zero. The capture
+    block runs under `set -euo pipefail`, so an unguarded `IMAGE_RESPONSE=$(az
+    rest ...)` aborts every remaining step. The contract already sanctions
+    `unavailable` as a status, so the honest outcome was reachable in principle
+    and unreachable in practice.
+    """
+    solution = (repo_root / "solutions/ch05-defender/README.md").read_text(encoding="utf-8")
+    assert "IMAGE_RESPONSE=$(az rest" in solution, (
+        "the image-assessment capture no longer exists in the form this guard "
+        "was written against; re-derive the guard rather than deleting it"
+    )
+    guarded = "if ! IMAGE_RESPONSE=$(az rest" in solution
+    assert guarded, (
+        "solutions/ch05-defender captures the image assessment with an unguarded "
+        "command substitution; under `set -euo pipefail` the deprecated endpoint's "
+        "non-zero exit aborts the capture before any status can be recorded"
+    )
+    assert "image-assessment.error.txt" in solution, (
+        "the failed query's error text is discarded, so the envelope cannot show "
+        "what the endpoint actually answered"
+    )
+    assert "unavailable" in solution, (
+        "the solution never names the status the contract reserves for a signal "
+        "that could not be collected"
+    )
+
+
+def test_subassessment_deprecation_reaches_the_chapter_that_hits_it(repo_root):
+    """The empty-response row absorbed the failed-query symptom and misrouted it.
+
+    Challenge 5's troubleshooting table had a row for "returns nothing" whose
+    fix is "Nothing to fix" — correct for an asynchronous empty result, actively
+    wrong for a hard 404 that aborted the run. A participant matching on symptom
+    lands on the wrong cause. The discriminating row has to exist *and* be read
+    first, so the specific symptom is not swallowed by the general one.
+    """
+    text = (repo_root / "challenges/ch05-defender/README.md").read_text(encoding="utf-8")
+    section = text.split("## If it goes wrong", 1)
+    assert len(section) == 2, "challenges/ch05-defender has no troubleshooting section"
+    body = section[1]
+    deprecated_at = body.find("SubAssessmentsDeprecated")
+    assert deprecated_at != -1, (
+        "challenges/ch05-defender troubleshooting never names the deprecation, so "
+        "the attendee meets an aborted capture with no row that matches it"
+    )
+    async_at = body.find("asynchronous")
+    assert async_at != -1, "the asynchronous-findings row is missing"
+    assert deprecated_at < async_at, (
+        "the asynchronous-findings row precedes the deprecation row; a participant "
+        "matching on symptom reaches 'Nothing to fix' before the row that applies"
+    )
+
+
+def test_copilot_runbooks_name_the_environment_contract_they_depend_on(repo_root):
+    """The injected variable names existed only in Bicep the attendee never opens.
+
+    `infra/modules/environment.bicep` is the sole definition of the names the
+    platform injects. The Copilot runbooks said only that the image "takes
+    database, Blob, and telemetry configuration from the environment" and did
+    not route to the reference table that lists them. Binding the database to a
+    conventional `ConnectionStrings__Catalog` or `SPRING_DATASOURCE_URL`
+    instead builds cleanly, passes every test, and deploys successfully, with
+    managed identity and the blob store silently inert -- nothing in the build
+    or the suite reads the platform's environment.
+    """
+    required = (
+        "CATALOG_DATABASE_AUTHENTICATION",
+        "CATALOG_IMAGE_PROVIDER",
+        "CATALOG_BLOB_SERVICE_ENDPOINT",
+        "AZURE_CLIENT_ID",
+    )
+    for rel in (
+        "solutions/ch01-copilot-modernization/dotnet/README.md",
+        "solutions/ch01-copilot-modernization/java/README.md",
+    ):
+        text = (repo_root / rel).read_text(encoding="utf-8")
+        for name in required:
+            assert name in text, (
+                f"{rel} never names {name}, so the attendee must infer the "
+                "environment contract; a wrong guess is green through build, "
+                "test, and deploy"
+            )
+        assert "do not invent your own" in text.lower(), (
+            f"{rel} lists the names without stating that inventing a different "
+            "one fails silently, which is the only part that changes behaviour"
+        )
+
+
+def test_dotnet_runbook_names_the_acceptance_criteria_that_are_not_verified(repo_root):
+    """Three criteria were stated, unverified, and forgeable in one line each.
+
+    NuGet audit suppression (`NoWarn NU1903`), a tag-only container `FROM` that
+    has drifted off the locked digest, and an `IImageStore` implementation that
+    omits the traversal check all leave the build and the whole suite green.
+    In each case the forgery and the honest fix are the same size, so review
+    cannot separate them and the runbook has to say so.
+    """
+    text = (repo_root / "solutions/ch01-copilot-modernization/dotnet/README.md").read_text(
+        encoding="utf-8"
+    )
+    for token in ("NU1903", "IImageStore", "toolchain.lock.json"):
+        assert token in text, (
+            f"the .NET runbook never mentions {token}, so the criterion it "
+            "belongs to stays stated-but-unverified with a green wrong path"
+        )
+    assert "forgery" in text.lower(), (
+        "the runbook lists the criteria without naming that each has a "
+        "same-sized dishonest form, which is the property review cannot see"
+    )
+
+
+def test_recovery_time_claim_matches_what_the_validator_actually_binds(repo_root):
+    """The chapter promised a guarantee one field wider than the check delivers.
+
+    This is a defect in a remedy this delivery published, not in the workshop as
+    received: neither `--recovery-time` nor `validate_recovery_time` exists at
+    `4bf59f7`. Having built the binding, I then described it as covering more
+    than it does.
+
+    `validate_recovery_time` binds `recoveredAt` to the sealed
+    `incident.alertResolvedAt` and recomputes `minutesToRecovery`, but requires
+    only `recovered >= detected` for `detectedAt`. So a pair of timestamps that
+    agree with each other passes whenever `recoveredAt` is correct, yielding any
+    MTTR the participant likes. The chapter claimed such a pair fails. A check
+    described as stronger than it is stops the reader looking at the one field
+    that still depends on them.
+    """
+    source = (repo_root / "tests/acceptance/catalog_acceptance/sre_evidence.py").read_text(
+        encoding="utf-8"
+    )
+    assert "recovered >= detected" in source, (
+        "the detection clock is no longer merely ordered against recovery; "
+        "re-derive this guard rather than deleting it"
+    )
+    assert 'incident.get("detectedAt")' not in source, (
+        "detectedAt now appears bound to the sealed report -- if the binding was "
+        "added, the chapter text may state the stronger guarantee again"
+    )
+    text = (repo_root / "challenges/ch06-sre-agent/README.md").read_text(encoding="utf-8")
+    assert "inventing a pair of timestamps that agree with each other" not in text, (
+        "challenges/ch06 still claims an invented agreeing pair fails; with "
+        "detectedAt unbound that claim is false"
+    )
+    assert "no digest binds" in text, (
+        "the chapter never tells the participant which field is unbound, so the "
+        "one value that still depends on their honesty looks machine-checked"
+    )
+
+
+def test_the_not_measured_permission_is_unconditional_and_sits_at_the_table(
+    repo_root: Path,
+) -> None:
+    """The permission to leave a scorecard row empty must reach the reader who needs it.
+
+    The only permission the chapter gave was conditional -- "if your facilitator gave
+    you a golden handoff" -- and it sat in `Before you start`, above the table. An
+    attendee who simply could not measure a row was not covered by that condition, and
+    the nearest text at the point of use pushed the other way: "the two days were spent
+    producing exactly these numbers". Correct guidance, gated on the wrong condition,
+    sited away from the confusion it answers.
+
+    Nothing reads the scorecard back, so a complete table and an invented one are the
+    same artifact. The chapter has to say that where the attendee is deciding whether
+    to guess, not two sections earlier.
+    """
+    chapter = (repo_root / "challenges" / "wrapup" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    heading = chapter.index("## Fill in your scorecard")
+    table = chapter.index("| What you measured |")
+    preamble = chapter[heading:table]
+
+    assert "not measured" in preamble, (
+        "the permission to mark a row *not measured* must appear between the scorecard "
+        "heading and the table, where the attendee is deciding whether to guess"
+    )
+    assert "unconditional" in preamble, (
+        "the permission must state that it is unconditional; the chapter previously "
+        "gated it on having received a golden handoff"
+    )
+    for reason in ("ran out of time", "failed"):
+        assert reason in preamble, (
+            f"the permission must name {reason!r} as a covered reason, so an attendee "
+            "who was blocked rather than handed a golden bundle knows it applies"
+        )
+    assert "forged" in preamble and "cannot be distinguished" in preamble, (
+        "the preamble must say a full scorecard is indistinguishable from an invented "
+        "one; without that, marking a row *not measured* reads as the weaker answer"
+    )
+
+
+def test_the_facilitator_readout_discloses_what_the_mttr_number_is_worth(
+    repo_root: Path,
+) -> None:
+    """The workshop's closing ritual must not read out an unbound number as a measurement.
+
+    The chapter ends by telling facilitators to collect `minutesToRecovery` from every
+    table and read out the median. That is the single least-bound number the delivery
+    produces: `validate_recovery_time` binds `recoveredAt` to the sealed alert
+    resolution and re-derives the arithmetic, but constrains `detectedAt` only by
+    ordering, so a typed detection time yields a passing number (F-139). The teams
+    whose incident never ran have no file at all, so the median is taken over a
+    denominator nobody states.
+
+    A number read aloud to a room is the one figure from these two days that leaves the
+    building. It has to leave with its provenance attached.
+    """
+    chapter = (repo_root / "challenges" / "wrapup" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    readout = chapter[chapter.index("**Facilitators:**") :]
+
+    assert "detectedAt" in readout, (
+        "the readout must name the field nothing binds; otherwise the median is "
+        "presented as a measured quantity"
+    )
+    assert "have the file at all" in readout, (
+        "the readout must tell facilitators to state how many tables produced the file, "
+        "or the median of the finishers is heard as the median of the room"
+    )
+
+    source = (
+        repo_root
+        / "tests"
+        / "acceptance"
+        / "catalog_acceptance"
+        / "sre_evidence.py"
+    ).read_text(encoding="utf-8")
+    validator = source[source.index("def validate_recovery_time") :]
+    validator = validator[: validator.index("\ndef ")]
+    assert "alertResolvedAt" in validator or "alert_resolved" in validator, (
+        "the recovery validator no longer binds the resolution clock; the readout's "
+        "disclosure describes a validator that no longer exists"
+    )
+    assert "detected ==" not in validator and "== detected" not in validator, (
+        "detectedAt is now compared against something in validate_recovery_time -- if "
+        "the gap has been closed, the facilitator readout and the Challenge 6 prose "
+        "must be updated in the same change, so this guard fails on the improvement "
+        "rather than letting a stale disclosure survive it"
     )

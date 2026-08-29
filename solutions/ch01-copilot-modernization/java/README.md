@@ -240,6 +240,26 @@ externalizes database, Blob, and telemetry configuration. A supported IDE task
 may prepare or review containerization, but the accepted artifact is the
 digest-pinned `java/Dockerfile` you authored.
 
+The platform injects configuration under **these exact names**, defined in
+`infra/modules/environment.bicep` and tabulated in
+[the Java reference](../../reference/java/README.md):
+
+| Variable | Why it must be read by this name |
+| --- | --- |
+| `CATALOG_DATABASE_AUTHENTICATION` | `managed-identity` selects token auth; any other value silently falls back to a password connection the server will refuse |
+| `AZURE_CLIENT_ID` | The user-assigned workload identity the token is requested for |
+| `CATALOG_IMAGE_PROVIDER` | `azure-blob` switches the image store off local disk |
+| `CATALOG_BLOB_SERVICE_ENDPOINT`, `CATALOG_BLOB_CONTAINER` | Where blob images are read from |
+| `CATALOG_DATABASE_HOST`, `CATALOG_DATABASE_NAME`, `CATALOG_DATABASE_PORT` | Target database coordinates |
+| `OTEL_SERVICE_VERSION`, `CONTAINER_APP_REVISION`, `DEPLOYMENT_ENVIRONMENT` | Telemetry correlation |
+
+Read these names, do not invent your own. Externalizing the database to a
+conventional `SPRING_DATASOURCE_URL` instead — or reading blob settings under
+any other key — **builds cleanly, passes the whole test suite, and deploys
+successfully**, because nothing in the build or the tests reads the platform's
+environment. Managed identity and the blob image store are simply inert at
+runtime, and the failure surfaces only as data that never appears.
+
 The build publishes exactly `catalog-java:$SourceCommit`. Never use `latest` or another
 mutable tag.
 

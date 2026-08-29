@@ -51,6 +51,23 @@ class ReleaseRunner:
         raise AssertionError(f"Unexpected command: {argv}")
 
 
+# The registry pins these filenames with ``const`` and names them as JSON, so the
+# validator parses them. A bundle that writes prose into a ``.json`` member is not a
+# complete bundle, which is what the golden rehearsal exists to demonstrate.
+_STRUCTURED_PATH_EVIDENCE = {
+    "managed-database-separation.json": {
+        "database": "sqldb-catalog",
+        "hostedOn": "Azure SQL Database",
+        "separatedFromApplicationHost": True,
+    },
+    "container-build.json": {
+        "image": "catalog",
+        "digest": "sha256:" + "0" * 64,
+        "baseImageIsDigestPinned": True,
+    },
+}
+
+
 def test_frozen_examples_validate_against_migration_schemas(repo_root: Path) -> None:
     """Both migration reports and the operation result remain executable examples."""
     contracts = repo_root / "workshop/contracts"
@@ -124,12 +141,12 @@ def test_render_handoff_uses_stack_specific_migration_provenance(
         paths[name] = path
     for path in (
         "baseline-backup.md",
-        "managed-database-separation.json",
-        "container-build.json",
         "iac-review.md",
         "rollback-runbook.md",
     ):
         (evidence / path).write_text("durable evidence\n", encoding="utf-8")
+    for path, document in _STRUCTURED_PATH_EVIDENCE.items():
+        (evidence / path).write_text(json.dumps(document), encoding="utf-8")
     output_path = evidence / "modernization-contract.json"
     handoff = render_handoff(
         runner=ReleaseRunner(target, rollback_revision),
@@ -541,12 +558,12 @@ def _golden_bundle(repo_root: Path, destination: Path) -> Path:
         paths[name] = path
     for name in (
         "baseline-backup.md",
-        "managed-database-separation.json",
-        "container-build.json",
         "iac-review.md",
         "rollback-runbook.md",
     ):
         (evidence / name).write_text("durable evidence\n", encoding="utf-8")
+    for name, document in _STRUCTURED_PATH_EVIDENCE.items():
+        (evidence / name).write_text(json.dumps(document), encoding="utf-8")
     # The telemetry report cites a result file per query, and the validator opens each
     # one and checks it carries the signals the report claims.
     for query_id, result in telemetry_results.items():
@@ -752,3 +769,162 @@ def test_golden_rehearsal_command_names_the_failing_step_in_its_verdict(
     assert verdict["status"] == "failed"
     assert verdict["step"] == "cross-field-checks"
     assert "surefire-reports" in verdict["error"]
+
+
+def test_render_handoff_accepts_a_base_url_with_a_trailing_slash(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    """A trailing slash on the acceptance base URL still names the same deployment.
+
+    The subject comparison used exact string equality against the Container Apps
+    FQDN, which carries no trailing slash. A participant who copies the URL from a
+    browser address bar gets one, and the render failed with "acceptance subject
+    differs from target output" -- a message that sends them hunting for a revision
+    or digest mismatch that does not exist.
+    """
+    contracts = repo_root / "workshop/contracts"
+    target = load_json(contracts / "azure-target-output.application.example.json")
+    rollback_revision = (
+        f'{target["application"]["containerAppName"]}'
+        f'--baseline-{target["sourceCommit"][:12]}'
+    )
+    commit = target["sourceCommit"]
+    migration = load_json(contracts / "migration-report.postgresql.example.json")
+    migration["sourceCommit"] = commit
+    runtime = {
+        "schemaVersion": "1.1.0",
+        "stack": "java-postgresql",
+        "sourceCommit": commit,
+        "status": "passed",
+        "artifactFormat": "junit",
+        "artifact": "java/target/surefire-reports",
+        "command": "OTEL_SDK_DISABLED=true ./mvnw -q test",
+        "tests": _runtime_tests(contracts, "java-postgresql"),
+    }
+    acceptance = _acceptance(target)
+    assert not acceptance["baseUrl"].endswith("/"), "fixture already ends in a slash"
+    acceptance["baseUrl"] = acceptance["baseUrl"] + "/"
+    telemetry = _telemetry(target, "mh-catalog-java")
+
+    (tmp_path / "workshop/contracts").mkdir(parents=True)
+    for name in ("challenge-paths.json", "challenge-paths.schema.json"):
+        (tmp_path / "workshop/contracts" / name).write_text(
+            (contracts / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data/manifest.json").write_text(
+        (repo_root / "data/manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    paths: dict[str, Path] = {}
+    for name, document in (
+        ("azure-target-output", target),
+        ("migration-report", migration),
+        ("acceptance-report", acceptance),
+        ("telemetry-report", telemetry),
+        ("runtime-test-report", runtime),
+    ):
+        path = evidence / f"{name}.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        paths[name] = path
+    for name in (
+        "baseline-backup.md",
+        "iac-review.md",
+        "rollback-runbook.md",
+    ):
+        (evidence / name).write_text("durable evidence\n", encoding="utf-8")
+    for name, document in _STRUCTURED_PATH_EVIDENCE.items():
+        (evidence / name).write_text(json.dumps(document), encoding="utf-8")
+
+    handoff = render_handoff(
+        runner=ReleaseRunner(target, rollback_revision),
+        target_path=paths["azure-target-output"],
+        migration_path=paths["migration-report"],
+        acceptance_path=paths["acceptance-report"],
+        telemetry_path=paths["telemetry-report"],
+        runtime_path=paths["runtime-test-report"],
+        output_path=evidence / "modernization-contract.json",
+        modernization_path="manual",
+        rollback_revision=rollback_revision,
+        rollback_runbook_path=evidence / "rollback-runbook.md",
+        root=tmp_path,
+    )
+    assert handoff["source"]["commitSha"] == commit
+    # The slash is normalised for the comparison only; it does not leak into the
+    # rendered contract's record of the deployed application.
+    assert handoff["application"]["url"] == target["application"]["url"]
+
+
+def test_json_named_path_evidence_is_parsed_not_merely_counted(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    """Reject path evidence that carries the name of a JSON artifact and prose inside it.
+
+    Every other artifact the handoff consumes is parsed and schema-validated. The
+    path-evidence loop checked existence and nonzero size only, so a single byte
+    satisfied a registry entry whose filename the contract pins with ``const``. The
+    golden rehearsal -- the delivery's own demonstration of a complete bundle --
+    wrote ``durable evidence`` into ``managed-database-separation.json`` and
+    ``container-build.json`` and was declared complete, which is how the gap stayed
+    invisible: the reference bundle modelled the defect.
+
+    Markdown members stay existence-only on purpose. No mechanical check verifies a
+    characterization narrative, and pretending otherwise would be the over-claim this
+    delivery has already filed against itself once.
+    """
+    bundle = _golden_bundle(repo_root, tmp_path)
+    contract = json.loads(
+        (bundle / "evidence" / "modernization-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    json_members = [
+        value
+        for value in contract["evidence"]["pathEvidence"]
+        if value.endswith(".json")
+    ]
+    assert json_members, (
+        "the golden bundle's path evidence no longer names any JSON artifact, so this "
+        "guard would pass without exercising anything"
+    )
+
+    markdown_members = [
+        value
+        for value in contract["evidence"]["pathEvidence"]
+        if value.endswith(".md")
+    ]
+    for member in markdown_members:
+        (bundle / member).write_text("durable evidence\n", encoding="utf-8")
+    step, _ = _first_failing_step(bundle)
+    assert step == "", (
+        "prose in a markdown path-evidence member must remain acceptable; "
+        f"{step} rejected it"
+    )
+
+    for member in json_members:
+        (bundle / member).write_text("durable evidence\n", encoding="utf-8")
+        step, message = _first_failing_step(bundle)
+        assert step, f"prose written into {member} was accepted as JSON evidence"
+        assert "not parseable" in message, message
+        (bundle / member).write_text(
+            json.dumps(_STRUCTURED_PATH_EVIDENCE[Path(member).name]),
+            encoding="utf-8",
+        )
+
+    for member in json_members:
+        (bundle / member).write_text("{}", encoding="utf-8")
+        step, message = _first_failing_step(bundle)
+        assert step, f"an empty object in {member} was accepted as JSON evidence"
+        assert "nonempty object" in message, message
+        (bundle / member).write_text(
+            json.dumps(_STRUCTURED_PATH_EVIDENCE[Path(member).name]),
+            encoding="utf-8",
+        )
+
+    assert _first_failing_step(bundle) == ("", ""), (
+        "restoring real JSON content must make the bundle complete again"
+    )

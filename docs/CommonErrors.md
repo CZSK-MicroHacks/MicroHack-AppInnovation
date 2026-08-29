@@ -935,6 +935,23 @@ is a frozen interface for participants; changing the oracle to fit the code is t
 move the challenge's review checklist exists to prevent. Everything else in the file is a
 real gate and must stay green.
 
+## `RuntimeError: psql is required` from the full acceptance profile
+
+**Symptom.** `catalog_acceptance --profile full` aborts partway through. The smoke profile is
+unaffected.
+
+**Cause.** The full profile shells out to `psql` for its database checks. macOS ships no
+PostgreSQL client, and installing the *server* is unnecessary.
+
+**Fix.** `brew install libpq`, then put it on `PATH` — Homebrew deliberately keg-onlys it:
+
+```bash
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+```
+
+The crash is safe to recover from: it happens before any write, and the corpus was verified
+still at 198 figures afterwards. Re-run the profile from the start.
+
 ## Two macOS setup failures are already answered here — but not where a participant looks
 
 **Symptom.** Off the provisioned VM the Java baseline stops twice: Maven reports that no
@@ -964,6 +981,7 @@ errors you are about to hit, and the following sentence caveats the use it just 
 The `psql` crash is safe to recover from: it happens before any write, and the corpus was
 verified still at 198 figures afterwards. Re-run the profile from the start.
 
+
 ## `brew install --cask microsoft-openjdk@17` fails when you are not at an interactive terminal
 
 **Symptom.** The cask aborts with a sudo/password error. Common in an agent session, a CI
@@ -980,6 +998,9 @@ curl -sSL -o msjdk17.tar.gz \
 tar xzf msjdk17.tar.gz
 export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
 ```
+
+This yields exactly the pinned 17.0.20+8. Check `java -version` before building: an older
+system JDK earlier on `PATH` produces a Maven failure that does not mention the JDK.
 
 This is the host-install route. Prefer entry 101's container build; if you take this route,
 note the tarball URL pins 17.0.20 explicitly, which is what "pinned" means for a host install.
@@ -3742,3 +3763,4 @@ The severity is right and both derivations were wrong. Mine failed the harder wa
 presence of a documented remedy as discharging the defect, without reading the remedy.** That is the
 mechanism-versus-consequence error a third time, in its worst form - the artifact existed, said the
 right kind of thing in the right place, and was wrong.
+

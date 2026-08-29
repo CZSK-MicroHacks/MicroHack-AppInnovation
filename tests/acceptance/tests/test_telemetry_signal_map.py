@@ -50,3 +50,63 @@ def test_every_mapped_signal_names_a_table_and_a_selector() -> None:
 def test_the_map_is_reachable_from_the_material() -> None:
     doc = (REPO_ROOT / "docs" / "TelemetryFaultInjection.md").read_text(encoding="utf-8")
     assert "telemetry-signal-map.json" in doc
+
+
+def test_each_fault_is_verified_restored_by_the_probe_that_showed_it_failing() -> None:
+    """A restore is verified with the request that failed, never a weaker one.
+
+    The page documents that ``/readyz`` returns 200 throughout the step 2 fault
+    because it never reads application data. A probe that cannot observe a fault
+    while it is present cannot observe its removal, so prescribing it as the
+    restore check is a guaranteed false negative. A bare ``/`` is weaker than the
+    ``/?search=`` request the fault section drives, and fails the same way.
+    """
+    root = Path(__file__).resolve().parents[3]
+    page = (root / "docs/TelemetryFaultInjection.md").read_text(encoding="utf-8")
+
+    # Markdown prose wraps, so a restore instruction is a paragraph and not a
+    # line. Scoping this check to single lines is how an earlier draft of this
+    # guard passed against the very document it was written to reject.
+    paragraphs = [p for p in page.split("\n\n") if "**Restore" in p]
+    assert paragraphs, "the restore instructions moved; this guard has gone blind"
+
+    for paragraph in paragraphs:
+        prescription = paragraph.split("Do not verify")[0]
+        assert "/readyz" not in prescription, (
+            "restore verified with /readyz, which the same page says cannot see "
+            f"the fault: {prescription}"
+        )
+        assert "/?search=" in prescription, (
+            f"restore must be verified with the request that failed: {prescription}"
+        )
+
+    # The page must still contain the observation that makes the rule necessary,
+    # otherwise the rule reads as arbitrary and the next editor will undo it.
+    assert "it never reads application data" in page
+
+    order = page.split("## 6. Order of operations", 1)[1]
+    for step in ("3. Step 2. Restore", "4. Step 3. Restore"):
+        line = next((n for n in order.splitlines() if n.startswith(step)), None)
+        assert line is not None, f"{step!r} moved; guard is blind"
+        assert "/?search=" in line, (
+            f"the summarised order must name the same probe as the section: {line}"
+        )
+
+
+def test_the_acceptance_re_run_is_ordered_after_every_fault_is_restored() -> None:
+    """The handoff pins acceptance to ``passed``, so ordering is not optional.
+
+    Without a stated position in the sequence, an attendee can re-run acceptance
+    while a fault is active, get a failing report, and have no instruction saying
+    the order was wrong rather than the application.
+    """
+    root = Path(__file__).resolve().parents[3]
+    page = (root / "docs/TelemetryFaultInjection.md").read_text(encoding="utf-8")
+    order = page.split("## 6. Order of operations", 1)[1]
+
+    assert "acceptance" in order.lower(), (
+        "the order of operations must say where the acceptance re-run belongs"
+    )
+    assert "passed" in order, (
+        "the ordering must state why it matters: the contract pins result=passed"
+    )

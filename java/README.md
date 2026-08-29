@@ -30,6 +30,16 @@ fail in ways that never name their cause, and both already have documented resol
   on `PATH`:
 
 ```bash
+# JDK 17.0.20+8. The Homebrew cask runs a .pkg installer and fails without an
+# interactive sudo prompt, so use the tarball and point JAVA_HOME at it.
+mkdir -p ~/.local/jdk && cd ~/.local/jdk
+curl -sSL -o msjdk17.tar.gz \
+  "https://aka.ms/download-jdk/microsoft-jdk-17.0.20-macos-aarch64.tar.gz"
+tar xzf msjdk17.tar.gz
+export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
+
+# psql 18.6, required by the full acceptance profile's database checks.
+brew install libpq
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 ```
 

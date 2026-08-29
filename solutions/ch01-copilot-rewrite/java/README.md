@@ -139,8 +139,9 @@ dependencies, configuration, errors, and each generated diff.
 
 **Suggested prompt, not proof**
 
-> Read `workshop/contracts`, `tests/acceptance`, the current Java tests, and
-> `java/Dockerfile`. Propose only the next bounded slice. Preserve PostgreSQL
+> Read `workshop/contracts`, `tests/acceptance`, the current Java tests, and — once
+> checkpoint 4 has authored it — `java/Dockerfile`. The baseline ships no Dockerfile,
+> so omit it on the earlier slices. Propose only the next bounded slice. Preserve PostgreSQL
 > Flexible Server, one application container, Blob images, ACA readiness, external
 > configuration, routes, failure behavior, and telemetry. Do not edit frozen
 > interfaces or add services. Name exact tests and wait for approval before

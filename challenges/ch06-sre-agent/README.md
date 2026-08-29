@@ -315,8 +315,22 @@ uv --no-config run catalog-validate-sre-agent-evidence \
   --handoff evidence/modernization-contract.json \
   --report evidence/sre-agent-report.json \
   --contracts workshop/contracts \
+  --recovery-time evidence/ch06-mttr.json \
   --repository-root ../..
 ```
+
+`--recovery-time` recomputes `minutesToRecovery` from the two timestamps in
+`evidence/ch06-mttr.json` and checks its `recoveredAt` against
+`incident.alertResolvedAt` in the sealed report. Editing the minutes by hand
+fails here, and so does moving `recoveredAt`.
+
+`detectedAt` is the one value in this file that no digest binds. The validator
+requires only that it precede `recoveredAt`, so an invented `detectedAt` — with a
+`minutesToRecovery` that correctly matches it — passes. That gap is stated here
+rather than left for you to find, because a check that is described as stronger
+than it is stops you looking at the one field that still needs you to be honest.
+Take `detectedAt` from the `IncidentActivitySnapshot` timestamp in the audit the
+report seals, which is when the agent actually observed the incident.
 
 Do not manually create or edit the normalized report.
 
@@ -401,6 +415,7 @@ Exact prompts, the raw capture commands, and the full evidence assembly are in
 | The validator reports early evidence | You began querying before the alert-bound `IncidentActivitySnapshot` | Recapture the investigation artifacts after the snapshot timestamp and before `AgentResponse`. Ordering is part of the proof. |
 | More than two Container App writes appear in the Activity Log | Someone changed the app during the incident window — a portal click counts | Stop and tell the facilitator; the window has to be re-seeded rather than explained away. |
 | The alert stays `Fired` after a successful rollback | Azure Monitor has not re-evaluated yet | Wait and re-query. Do not force a resolution, and do not stop your recovery clock until the alert actually reads `Resolved`. |
+| `curl` of `/healthz` or `/readyz` never connects, from your laptop, while the app itself is healthy | The Container Apps environment was deployed internal, so ingress is published only inside the virtual network. The facilitator sets this when the subscription blocks public IP creation — check with `az containerapp env list --query "[].{name:name,internal:properties.vnetConfiguration.internal}" -o table` | This is an environment mode, not a failed recovery. Run the probes from a peered host — the migration-source VM — with `az vm run-command invoke`, and record those results as your recovery checks. |
 
 More diagnostics in [the troubleshooting guide](../../docs/Troubleshooting.md).
 

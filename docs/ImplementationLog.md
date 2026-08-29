@@ -1930,3 +1930,4 @@ repository's error registry, then wrote its conclusion back into that registry. 
 survives as a narrower claim is routing, not absence — the challenge READMEs send
 troubleshooting to `docs/Troubleshooting.md`, which contains no mention of `javac`, a JDK or
 a JRE, and nothing under `challenges/` references `docs/CommonErrors.md` at all.
+

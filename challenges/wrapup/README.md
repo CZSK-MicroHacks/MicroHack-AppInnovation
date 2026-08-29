@@ -30,6 +30,16 @@ exactly these numbers. The last two columns name the file, field, or step each v
 from, so no cell needs a guess. Where `<stack>` appears, use `dotnet` or `java` —
 whichever you selected in Challenge 0.
 
+**Any row you did not measure is written as *not measured*, whatever the reason.** That
+covers a golden handoff, a chapter that ran out of time, a step that failed, and a number
+you could have derived but did not. This permission is unconditional and it is not a
+consolation: nothing in this workshop reads your scorecard back, so a full table and a
+forged one are the same artifact, and only a partial table carries information about what
+actually happened. **An honest scorecard with three numbers is stronger evidence than a
+complete one, because the complete one cannot be distinguished from an invented one by
+you, your facilitator, or anybody at the table.** Fill what you measured and mark the
+rest.
+
 | What you measured | Legacy baseline | After modernization | Where the baseline comes from | Where the result comes from |
 | --- | --- | --- | --- | --- |
 | Catalog response, median | | | `evidence/ch00-pain-<stack>.json` → `catalogMedianMs` | `evidence/load/raw/test-run.json` → `.testRunStatistics.Total.medianResTime`, Challenge 2 |
@@ -91,6 +101,16 @@ median. A single team's figure is an anecdote; "the median team in this room rec
 eleven minutes, and none of them had a runbook for it" is the line people repeat back at
 their own organizations. Read out the spread as well, and ask the fastest and slowest
 tables what differed.
+
+Two things before you read anything out. **Ask which tables have the file at all, and say
+that number first.** A team whose incident never ran has no `ch06-mttr.json`, and a median
+taken over the tables that finished is a median over the tables that finished — say so, or
+the room hears it as the median of the room. **And the recovery clock is only half
+checked:** the acceptance validator binds `recoveredAt` to the alert's own resolution
+timestamp and re-derives the arithmetic, but nothing binds `detectedAt`, so a team that
+typed a detection time gets a number that passes. That is fine for a room-level
+conversation and not fine as a figure anyone quotes afterwards. Read it as what the tables
+observed, not as what the workshop measured.
 
 ## What this did not cover
 
