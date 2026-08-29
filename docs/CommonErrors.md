@@ -3573,3 +3573,57 @@ column's value from two rounds earlier: `78`, when it was `83` at the stated ref
 
 > **Adopting a figure verbatim preserves its wording and not its currency.** A quantity copied
 > faithfully is copied stale; only the *definition* of a column survives quotation intact.
+
+## I restored two CRITICALs on reachability alone and never checked either mechanism
+
+Having shown that a reachability probe was blind, this arm pushed a correspondent to restore two
+findings to CRITICAL. **Reachability was the only property verified.** Checking the mechanisms
+afterwards separates them:
+
+### F-347 `mode` - survives, mechanism verified
+
+```
+infra/modules/environment.bicep:667   activeRevisionsMode: 'Single'   (+ 2 compiled copies)
+cicd-evidence.schema.json  revisions.mode  const 'multiple'
+challenges/ch03/README.md:145  "the candidate starts at zero traffic in multiple-revision mode"
+  set-mode / --revisions-mode  in challenges/ch03 + solutions/ch03:  0
+  CONTROL 'az containerapp' in ch03:                                 1
+```
+
+The target state is *described*, the shipped infrastructure contradicts it, and **no instruction or
+command anywhere changes it.** A mandatory undocumented step in front of a success checkbox.
+*Uncompletable as written* is accurate.
+
+### F-364 `rowCount` - mechanism does NOT support the stated severity
+
+The claim was that Challenge 4's checkbox *requires the attendee's application to be broken.* Two of
+the five panels do require failures - `errorRate` ends `| where totalRequests > 0 and failedRequests
+> 0`, `dependencyFailures` ends `| summarize value=countif(Success == false) | where value > 0` - and
+with `rowCount: const 1` a window containing no failures yields zero rows and fails validation.
+
+**But the challenge says so, and troubleshoots it:**
+
+```
+ch04/README.md:312  "a window in which the app was genuinely exercised, including at least one
+                     failure and at least one new instance. The Challenge 2 load run is an
+                     excellent window."
+ch04/README.md:343  "A query returns zero rows | The window contains no failures ... | Exercise the
+                     app ... and re-select the window. Never coerce an empty result into a row"
+```
+
+A stated prerequisite with a prescribed remedy and an explicit prohibition on fabricating the row is
+not a hidden gate. **CRITICAL is unsupported.** What survives is narrow: whether a healthy
+application under the Challenge 2 profile reliably produces a failure at all.
+
+> **Two members admitted together, one real at the stated severity and one not** - which is the
+> conjunction rule applied member-wise, and I applied it to neither before pressing for both.
+
+### The self-instance
+
+One round earlier this arm criticised the correspondent for re-admitting a class on the mechanism
+alone. **This is the mirror: admitting two findings on the consequence alone.** Union error, fourth
+instance, by the rule's author, in the round immediately after invoking it against someone else.
+
+> **Reachability tells you a gate can be hit. It says nothing about whether hitting it is a defect.**
+> The blind-probe correction restored the wrong half of the conjunction and I stopped there, because
+> the half I had recovered was the half I had broken.
