@@ -7660,3 +7660,50 @@ a true metric that is structurally blind to the question actually being asked.
 
 > **A metric that answers a narrower question than the one you are asking does not fail; it agrees
 > with you.**
+
+## The allowlist's first firing was benign, and resolving it is how an allowlist becomes a denylist
+
+Applying the newly adopted rule -- *audit the diff of the commit that records the audit* -- with both
+instruments, on the commit that adopted the allowlist:
+
+    denylist hits                      0
+    allowlist unclassified full GUIDs  1     <- the new instrument fires on its own adoption commit
+    CONTROL 'GUID' in diff             8     (fires)
+
+The token is the `Copilot-Session:` trailer, which the commit convention requires on every commit.
+Not an Azure identifier: subscription-prefix match 0, tenant-prefix match 0. **The eleven-rule
+denylist scores 0 on it**, because it was never a known value -- which is precisely the class the
+allowlist was adopted to cover, firing on its first use.
+
+Measured spread, since a value published by instruction is worth counting:
+
+    commits on this branch carrying my session GUID     153
+    distinct session GUIDs in trailers across all refs   25
+    visible to any leak instrument used tonight           0
+
+A session identifier is a correlation handle, not a credential; it grants nothing. The correct
+disposition is to classify it and allowlist it **with the reason recorded**, not to treat it as an
+exposure.
+
+But the disposition is the trap:
+
+> **Every allowlist firing arrives as an inconvenience with an obvious remedy -- widen the
+> allowlist. Do that a few times and the allowlist accepts everything, which is a denylist of the
+> empty set.**
+
+That is the exact mirror of the decay recorded earlier in this file for the denylist, where the
+*input* acquired new spellings the rule was never written to see. **Both instruments decay under the
+same pressure -- an operator resolving a firing that is inconvenient -- and they decay in opposite
+directions.** A denylist decays because the world changes and the list does not; an allowlist decays
+because the list changes every time the world does. Neither decay produces a visible symptom: both
+keep printing 0.
+
+Corollary worth stating separately, because it is a third measurement surface nobody in this audit
+looked at:
+
+> **A file-level audit cannot see a value that lives in a commit message.** Every leak instrument
+> used tonight, on every arm, ran over trees. The trailer GUID sits in the commit stream, is
+> published on every push, and no tree-level predicate can reach it.
+
+Same family as *a tree-level scrub is invisible to a tree-level audit because it worked* -- the
+surface you are not measuring on is not reported as unmeasured, it is reported as clean.

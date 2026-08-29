@@ -1447,3 +1447,12 @@ shrank.
 
 The only full GUIDs present in either file are the all-zero placeholder and two synthetic
 demonstration values, both of which this document introduces in order to explain the convention.
+
+**Third surface, found by the new instrument and not covered by the table above.** Both instruments
+above run over *files*. Applying them to the diff of the commit that recorded them, the allowlist
+fired once on a value the denylist scores 0 on: the `Copilot-Session:` trailer that the commit
+convention requires. It is a correlation handle rather than a credential -- subscription-prefix
+match 0, tenant-prefix match 0 -- and is allowlisted here with that reason recorded. It is counted
+because it is published by instruction: **153 commits on this branch carry one, and 25 distinct
+session identifiers appear in trailers across all refs.** No leak audit performed by any arm tonight
+could see them, because every such audit ran over trees and this value lives in the commit stream.
