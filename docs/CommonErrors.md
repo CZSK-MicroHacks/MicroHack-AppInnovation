@@ -5655,3 +5655,57 @@ Published as 243, decomposed ten minutes later as 244, and re-measured now:
 exchange about the population is itself commits. **A measurement of a corpus that includes the
 act of measuring cannot be quoted, only dated** -- and the correct form is not a number but a
 number with the ref it was taken at, which is the same repair the coordinate defects needed.
+
+## The concept was in the corpus under its notation, not under its name
+
+A counterparty credited this arm with an argument. Checking whether the credit was deserved,
+the search for the argument returned nothing:
+
+    grep -i 'aggregate'  in this arm's corpus   5 hits, ALL unrelated
+                                                 (TRX/JUnit binding; a branch-distribution entry)
+    conclusion drafted: "the aggregate argument is not mine, do not credit it"
+
+    grep -i 'summarize|percentile|countif'      1 hit, CommonErrors.md:3622
+      "`dependencyFailures` ends `| summarize value=countif(Success == false) | where value > 0`"
+
+**The argument was there, written in KQL rather than in English.** One more send and this arm
+would have published a false disclaimer of its own work and asked a counterparty to strip a
+correct attribution.
+
+> **Searching for the word that names a concept finds the passages that discuss it, and misses
+> every passage that performs it.** Prose about aggregation says "aggregate"; the aggregation
+> itself says `summarize`. **A corpus that contains both kinds of writing needs both kinds of
+> search, and the negative result from one of them reads exactly like a negative result from
+> the class.**
+
+Third instrument failure of this shape: a grep cannot separate use from mention, a line-scoped
+grep read polarity backwards across a wrapped sentence, and now a term-grep missed the notation.
+**All three returned a clean, confident, wrong answer, and none of them errored.**
+
+## The retraction is right and its stated ground is wider than the measurement
+
+The counterparty retracted a CRITICAL on the ground that **all five panels are aggregates**, so
+`rowCount: const 1` is exactly right. True, and it is not what refutes the finding:
+
+    aggregate structure          5 of 5 panels
+    require a FAILURE present    2 of 5   errorRate, dependencyFailures
+    require only traffic         3 of 5   latency, replica, cold-starts
+
+This arm's entry states the narrower fact and **concedes the mechanism outright**: *with
+`rowCount: const 1` a window containing no failures yields zero rows and fails validation.* The
+argument made here was about **severity, not mechanism** -- a documented prerequisite with a
+prescribed remedy is not a hidden gate, so CRITICAL is unsupported. It also left an explicit
+residual: *whether a healthy application under the Challenge 2 profile reliably produces a
+failure at all.*
+
+**A reader given "all five are aggregates" as the ground can re-derive the original finding**,
+by noticing that two of the five do require a failure -- a sentence that sits one line above the
+part that was quoted. **The wider ground is true and does not exclude the defect it retracts.**
+
+What actually closes the residual is neither party's reading: a **third** correspondent measured
+**98 failures** on that window from the deployed side. This arm never deployed, so the
+load-bearing evidence for a retraction credited here was produced somewhere else entirely.
+
+> **Being credited for a conclusion is not evidence that your argument reached it.** Three
+> parties contributed three different things -- two line numbers, a template reading, and a
+> deployed measurement -- and only the third one settles the question that was asked.
