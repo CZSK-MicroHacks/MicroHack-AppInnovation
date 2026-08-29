@@ -1532,6 +1532,11 @@ concerns **credentials**, and they are reachable from `main`.
     blob      7c6f009c5021e6177ac8e02dd71f21881f250d8d
     contents  10 lines, of which 2 assign cleartext values: admin_password, entra_user_password
     added by  677f89c f29ecb7 3268cd9 66fd3cc
+      -- all four by the upstream maintainer, 2025-09-19 .. 2025-10-22
+      -- commits touching this path during this walkthrough: 0    CONTROL 4 ever (fires)
+      -- the blob does NOT contain this deployment's subscription id: 0 occurrences
+         (it carries one older, different GUID)   CONTROL same value in deployment-plan: 3
+      -- baseInfra/terraform/.gitignore now lists '*.tfvars', so the removal was deliberate
     reachable from  ALL 7 public refs, including origin/main
     CONTROL   fa8e789 -> reachable from origin/rescue/... only (discriminates)
 
@@ -1549,14 +1554,33 @@ every arm, ran over trees at the tip.** Nothing at the tip can see it. It took a
 
 **Recommended ordering, replacing the one given earlier:**
 
-1. **Rotate `admin_password` and the Entra user password.** Whether these are still live cannot be
+1. ~~**Rotate `admin_password` and the Entra user password.** Whether these are still live cannot be
    determined from the repository, which is exactly why rotation rather than assessment is the
-   correct first move.
-2. Rotate the subscription and tenant identifiers as previously recorded.
+   correct first move.~~
+   **Struck: correct hazard, wrong actor.** These credentials belong to the **upstream maintainer**,
+   not to the operator this document addresses -- all four introducing commits are theirs, dated ten
+   months before this walkthrough, and no commit in this run touches the path. **Our operator cannot
+   rotate someone else's VM and Entra passwords.** The action is **disclosure to the repository
+   maintainers**, privately, with the blob SHA and path; rotation is then theirs to perform. The
+   severity is unchanged and arguably higher -- this is a pre-existing disclosure in a public
+   workshop repository, so if attendee environments reuse these values, **every past and future
+   attendee is affected**, which is a far larger population than this walkthrough.
+2. **Operator, separately and in parallel:** rotate the subscription and tenant identifiers as
+   previously recorded. This one *is* ours.
 3. Only then scrub, and note that scrubbing the tip does nothing here -- the blob is reachable by
    SHA from `main`, so the remedy is history rewrite or repository replacement, both of which the
    earlier sections argue against for the identifier case. **The argument does not transfer**: it was
    grounded on the identifiers being low-marginal-exposure, and a cleartext admin password is not.
+   Both of those are the maintainers' calls, not the operator's.
+
+> **An audit that establishes severity has not established authority.** Everything measured here --
+> reachability, tip-absence, anonymous fetchability, blob identity -- is a property of the
+> *artifact*. Who may act is a property of the *owner*, and no amount of the first measures the
+> second. I ordered a remedy for nine hours without once asking whose credentials these were.
+
+**And the two items above have different actors, which the original single ordered list concealed.**
+That is the composition defect recorded earlier in this document -- each instruction correct, the set
+wrong -- occurring in the highest-severity section of the document that records it.
 
 ### The related finding this was reached through, and its correct disposition
 

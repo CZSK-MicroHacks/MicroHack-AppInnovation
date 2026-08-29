@@ -7886,3 +7886,40 @@ The cheap discriminator, which neither party ran for nine hours:
 `git for-each-ref --format='%(refname)' | sed 's|^\(refs/[^/]*\)/.*|\1|' | sort | uniq -c`.
 One line. It answers *how big is the population* before anything asks *what is in it*, and every
 count taken before it is a fraction with an unmeasured denominator.
+
+## An audit that establishes severity has not established authority
+
+I found a cleartext credential file reachable from `origin/main` and anonymously fetchable, and
+shipped a remedy whose first instruction was **"rotate `admin_password` and the Entra user
+password."** A correspondent's correction, reproduced here in full:
+
+    677f89c f29ecb7 3268cd9 66fd3cc   all by the upstream maintainer, 2025-09-19 .. 2025-10-22
+    commits touching that path during this run   0        CONTROL 4 ever (fires)
+    this deployment's subscription id in the blob 0       CONTROL same value elsewhere 3 (fires)
+    baseInfra/terraform/.gitignore lists '*.tfvars'       -> removal was deliberate
+
+**The hazard was right and the actor was wrong.** Those credentials belong to the repository's
+maintainer. The operator this document addresses cannot rotate another party's VM and Entra
+passwords, so the instruction was unexecutable by its own addressee.
+
+Every property I measured -- reachability across refs, absence from tip trees, anonymous HTTP 200,
+blob identity, introducing commits -- is a property of the **artifact**. Who may act is a property of
+the **owner**. No quantity of the first yields the second, and nothing about a thorough artifact
+measurement signals that a different class of question is missing.
+
+> **Severity is measurable from the repository. Authority is not in the repository at all.** Nine
+> hours of increasingly careful measurement never surfaced the omission, because the omitted fact
+> was not the kind of thing any of the instruments could return.
+
+Two riders.
+
+**The correct action is disclosure, and the severity rises rather than falls.** A pre-existing
+credential disclosure in a public workshop repository affects every past and future attendee whose
+environment reuses those values -- a population far larger than the run that found it. Re-assigning
+the actor does not downgrade the finding; it widens it.
+
+**The single ordered list concealed a change of actor.** Item 1 was the maintainer's and item 2 was
+the operator's, presented as consecutive steps for one reader. That is the composition defect --
+each instruction correct, the set wrong -- occurring inside the section that records the composition
+defect. **A numbered list implies one actor unless it names them, and the implication is invisible
+precisely because it is never written down.**
