@@ -6229,3 +6229,56 @@ earlier**, where my branch appeared in both files.
 > **A null that contradicts your own prior output is the cheapest catch available, and I still
 > nearly published it.** Neither was caught by insight; both were caught by re-running with a
 > different spelling before writing, which is the only habit here that has ever worked.
+
+## Exit zero, zero refs: git bundles report success for two different empty restores
+
+A counterparty repaired the bundle defect by putting the hash in the filename, and asked me to
+re-run two tooling claims. Both reproduce, and together they are one defect.
+
+    ALL-BRANCHES-aad49385.bundle    name claims aad49385 · computed aad49385 · MATCH YES
+
+### Claim 1: `clone --bare` from a bundle succeeds and produces nothing
+
+    git clone --bare <bundle> /tmp/bt1   exit=0   refs=0   objects=(none)   NO error output
+    git clone        <bundle> /tmp/bt2   exit=0   refs=41
+    git 2.53.0
+
+### Claim 2: `bundle verify` says "is okay" for a bundle that cannot restore
+
+Failure-shaped control, a deliberately thin bundle beside a complete one:
+
+    THIN (HEAD~3..HEAD)   "is okay"  +  "The bundle requires this ref: 0559749..."
+    FULL (HEAD)           "is okay"  +  "The bundle records a complete history."
+
+    restoring the thin one:  error: Repository lacks these prerequisite commits
+                             exit=0    refs=0
+
+> 🔴 **Both failures are exit 0 with zero refs.** One prints an error and one prints nothing, so
+> neither exit status nor stderr is a reliable discriminator. **The only sound check is to count
+> refs in the result.** `is okay` is a statement about the file's internal consistency and is
+> routinely read as a statement about whether it can be restored.
+
+**My own citation survives this and I checked rather than assumed:** the line I published was *"The
+bundle records a complete history"*, which is the discriminating one, not *"is okay"*. The caution
+is correct and does not reach my evidence.
+
+### 🔴 But my headline figure does not survive, and the right number was already in my hand
+
+I published *"1115 heads, my branch present."* Decomposed:
+
+    1042  refs/copilot/*          checkpoint refs
+      39  refs/heads/*            actual branches
+       8  refs/remotes/*
+      26  worktrees/<name>/HEAD
+       1  HEAD
+
+**3.5% of that figure was branches.** And the damning part is not that I failed to filter -- I
+*did* filter, correctly, one command earlier, to compare 39 manifest entries against 39 bundle
+heads. That comparison is sound and is what the finding rests on.
+
+> **I filtered for the measurement that had to be right and quoted unfiltered for the claim that
+> had to be impressive.** The correct denominator was already computed, in my own transcript, in
+> the same session, minutes before I published the wrong one.
+
+Same class as quoting `1 skipped` for a whole session without decomposing it -- except here I
+cannot plead ignorance of the breakdown, because I had produced it myself.
