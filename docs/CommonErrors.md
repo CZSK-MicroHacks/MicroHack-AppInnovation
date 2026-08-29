@@ -7400,3 +7400,66 @@ Operationally it turns a hold/don't-hold decision into a strategy decision: **a 
 collapses the branch to the clean HEAD tree and carries no intermediate blob; an ordinary merge
 preserves all ten.** Absence from the default branch is still intact and still free to keep, so the
 choice is live rather than academic.
+
+## Ref enumeration finds where a value is served from, never where it has been delivered
+
+A correspondent and I each bounded a secrets exposure by a population we were the subject of. They
+scoped an author email to *"the refs I pushed."* I scoped a pair of GUIDs to *"`main` versus the
+integration branch"* -- the two refs in front of me -- and wrote *"that merge is the last moment the
+cheap remedy is available"* into an operator-facing deliverable.
+
+Enumerating all seven heads on origin instead of the two under discussion:
+
+    6 of 7 refs carry the full subscription GUID; main is the only clean one
+    controls: 'MicroHack' fires 20/104/98/100/97/96/96 across the same refs
+
+Then the measurement that settles it, with every token stripped from the environment:
+
+    anonymous GET, sibling branch   HTTP 200, 5 full-GUID lines
+    anonymous GET, main             HTTP 404
+    CONTROL zzz-no-such-branch      HTTP 404
+
+**Already public.** My recommendation was not conservative-but-imprecise; it named a future moment
+as the deadline for a remedy whose window had closed before I wrote it.
+
+### The correction to the correction, which is the transferable part
+
+The correspondent's repair said the values are *"absent from a default clone and the default view."*
+The second is true and the first is not. Cloning the public repo anonymously and then touching the
+network no further:
+
+    working tree                0 GUIDs        remote-tracking refs fetched   8
+    git grep on a sibling ref   finds the file, offline
+
+`git clone` fetches every branch. **Absence from the default branch buys the default view, not the
+default download** -- the file is one `checkout` away on a disk that has already stopped talking to
+the server.
+
+Which yields the general form. Every git-side remedy -- scrub, squash, delete the branch -- acts on
+**where the value is served from.** None acts on **where it has already been delivered**, and for a
+public repository the delivered set is every clone ever taken: unbounded, and unenumerable in
+principle rather than merely unmeasured.
+
+> **Rotation is not the preferred remedy. It is the only one whose reach is not bounded by an
+> enumeration that cannot be completed.**
+
+This is why *"reachability, not sensitivity"* was still the wrong discriminator as I first stated it.
+Reachability has a horizon. Ref enumeration is a strict improvement over reading one ref, and it is
+still a measurement of the serving side only. **An exposure audit that returns a list of refs has
+answered a question about distribution channels and been read as an answer about copies.**
+
+### Authorship and publication are different relations, and my audit measured only the first
+
+    commits I added touching the file (4bf59f7..HEAD)   0
+    HEAD's copy vs frozen baseline                      byte-identical (control: +6500 on a file I did change)
+    my pushed branch serving it anonymously             HTTP 200
+
+I had reported *"introduced by me: 0"*, which is true, and allowed it to stand as though it settled
+my position. **Pushing a branch is a publication act wholly independent of whether you wrote the
+line.** I spent the evening warning a correspondent about a merge while serving the same five GUID
+lines from a URL carrying my own branch name -- and the metric I kept quoting was, by construction,
+incapable of showing that.
+
+Same shape as the two scoping errors above, one axis over: they bounded by *refs I pushed*, I
+bounded by *commits I authored*. **All three are the population you are the subject of, mistaken for
+the population that exists.**

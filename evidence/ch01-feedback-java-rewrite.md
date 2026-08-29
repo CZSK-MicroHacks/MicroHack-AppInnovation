@@ -1181,8 +1181,13 @@ Both were found during this audit and both look like the same problem. They are 
 
 | exposure | on `origin/main` | correct action |
 | --- | --- | --- |
-| subscription + tenant GUIDs in `.azure/deployment-plan.md` | **absent** (`git cat-file -e` fails; file 404s on the API) | **do not merge PR #2 until replaced** -- absence is free to preserve |
+| subscription + tenant GUIDs in `.azure/deployment-plan.md` | absent from `main`, **but live on 6 of the 7 public refs** | **rotate the identifiers first**; git-side steps reduce discoverability only -- see the correction below |
 | author email on six pushed refs | **present since `8488587`, 2025-09-08** | accept; do not rewrite history |
+
+> **Row 1 was corrected after publication.** It originally read *"absent -- do not merge PR #2 until
+> replaced, absence is free to preserve."* That was measured on two refs and is false across the
+> population. The correction, with its measurements, is the subsection immediately below; it changes
+> the recommended action, not merely its wording.
 
 The second is the correction. A collaborating arm scoped its marginal exposure to the arm branches
 and the `rescue/` ref; measured against `origin/main`, the address has been on the public default
@@ -1190,14 +1195,13 @@ branch for about a year, so **withholding branches reduces nothing.** The recomm
 rewrite history during teardown is right, and its ground is stronger than stated: the marginal
 exposure is zero, so a rewrite is pure risk with no benefit.
 
-Severity intuition runs on what kind of value it is. **The action runs on whether the default branch
-already reaches it** -- which is one command, and it reverses the answer. A high-sensitivity value
-already published is a disclosure to accept and document; a low-sensitivity value not yet published
-is the only case where the cheap remedy still exists.
+Severity intuition runs on what kind of value it is. **The action runs on reachability** -- but
+reachability is a property of the whole ref population, and reading it off the one or two refs in
+front of you produces a confident wrong answer, as the correction below shows.
 
 For the workshop this matters directly: the material ships a real subscription and tenant identifier
-in a tracked file, and the branch carrying it is one merge from the default branch of a public
-repository. That merge is the last moment the cheap remedy is available.
+in a tracked file, on six of the seven public refs. ~~That merge is the last moment the cheap remedy
+is available.~~ **Struck -- false.** The values are already served anonymously; see below.
 
 ### Provenance note on this arm's own delivery
 
@@ -1225,8 +1229,83 @@ offending value cannot be documented without committing the offence, and the mor
 output you show -- which is what makes the audit credible -- the larger the leak. Re-run the check
 against the commit that records the check, not only against the tree that was audited.
 
-**And a correction that matters for the operator's remedy window:** the recommendation earlier in
+~~**And a correction that matters for the operator's remedy window:** the recommendation earlier in
 this document is unchanged and now better supported. The identifiers are absent from `origin/main`.
 Every copy of them that exists is on branches not yet merged, which is precisely why they are still
-cheap to remove -- and why each document that discusses the leak, including this one, is another
-place the remedy has to reach.
+cheap to remove.~~ **Struck -- the premise is false**; the identifiers are served anonymously from six
+refs, and the corrected remedy is below. The surviving half stands: **each document that discusses
+the leak, including this one, is another place the remedy has to reach.**
+
+## Correction: the identifiers are already public, and no git-side action can retract them
+
+The recommendation struck above was measured on two refs -- `main` and the integration branch -- and
+generalised to "the public." Enumerating the whole population instead:
+
+    ref                                        full sub-GUID   control 'MicroHack'
+    origin/main                                      0                20
+    origin/michalmar-ch01-java-rewrite-walkthrough   1               104
+    origin/michalmar-ch07-and-wrapup                 1                98
+    origin/michalmar-refactored-waddle               6               100
+    origin/michalmar-reimagined-fishstick            1                97
+    origin/rescue/rewrite-integration-fa8e789        1                96
+    origin/rewrite-integration                       1                96
+
+**Six of seven public refs carry it. `main` is the only clean one** -- and one of the six is this
+arm's own branch.
+
+Unauthenticated retrieval, with every token stripped from the environment:
+
+    raw.githubusercontent.com/.../michalmar-refactored-waddle/.azure/deployment-plan.md   HTTP 200, 5 GUID lines
+    raw.githubusercontent.com/.../michalmar-ch01-java-rewrite-walkthrough/...             HTTP 200, 5 GUID lines
+    raw.githubusercontent.com/.../main/...                                                HTTP 404
+    CONTROL zzz-no-such-branch                                                            HTTP 404
+
+Anyone, with no credentials, can read them now.
+
+### A default clone already carries the objects, so main-absence is presentational only
+
+The natural next claim -- *"still absent from a default clone"* -- is also false. Cloning the public
+repository anonymously and touching the network no further:
+
+    checked-out branch                main
+    full GUIDs in the working tree    0
+    remote-tracking refs fetched      8
+    git grep on a sibling ref         finds .azure/deployment-plan.md, offline
+
+`git clone` fetches every branch. The working tree hides the file; the object store does not contain
+less because of it. **Absence from `main` buys the default *view*, not the default *download*.**
+
+### Why this makes rotation the only remedy, as a matter of enumerability
+
+Deleting the five extra branches, scrubbing, and merging carefully all act on **where the value is
+served from.** None of them acts on **where it has already been delivered** -- and for a public
+repository that set is every clone ever taken, which is unbounded and cannot be enumerated even in
+principle. GitHub additionally keeps commits reachable by SHA after branch deletion, and an open
+pull request pins them.
+
+    remedy                    reaches                              enumerable?
+    rotate in Azure           every copy, including offline ones   n/a -- invalidates the value
+    scrub + squash-merge      future readers of the tree           yes
+    delete the five branches  future fetchers                      yes
+    (nothing)                 existing clones                      NO
+
+**Rotation is not the preferred remedy; it is the only one whose reach is not bounded by an
+enumeration that cannot be completed.** The git-side steps remain worth doing -- they reduce
+discoverability, and merging PR #2 would move the values from *"present in a sibling ref"* to
+*"present in the file an operator opens"* -- but they must not be recorded as having removed the
+exposure.
+
+**Recommended order:** rotate the subscription-scoped credentials and re-evaluate whether the tenant
+and subscription identifiers need to appear in workshop material at all; then scrub before any merge
+to `main`; then delete the branches that exist only as audit artifacts.
+
+### This arm's own position, stated exactly
+
+    commits I added that touch the file (4bf59f7..HEAD)   0
+    HEAD's copy vs the frozen baseline                    byte-identical (control: a file I did change, +6500)
+    my branch serving it anonymously                      HTTP 200
+
+**Authorship 0, publication 1.** The audit I ran measured authorship and I let it stand as though it
+settled my responsibility. It does not: pushing a branch is a publication act independent of whether
+you wrote the line, and this arm has been warning about a merge while serving the same file from a
+URL bearing its own branch name.
