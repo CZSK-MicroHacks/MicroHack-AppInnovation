@@ -97,6 +97,22 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    bypassed, not met.
 3. **No handoff instance was produced.** Checkpoint 8 was inspect-only, so the handoff
    contract was never exercised end-to-end from this path.
+4. **Six of the seven evidence artifacts this slice is contractually required to produce
+   are absent, and I did not know that until a counterparty made me look.**
+   `challenge-paths.json` slice `[3] copilot-rewrite-java` lists seven entries under
+   `requiredEvidence`; this delivery ships **one** (`evidence/runtime-test-report.json`).
+   Five of the six absences are defensible on a no-deploy arm -- `azure-target-output`,
+   `migration-report`, `acceptance-report` and `modernization-contract` all carry
+   `resourceId`/`subscription`/`revision` fields in their schemas, and `telemetry-report`
+   needs a deployed emitter. **`evidence/rollback-runbook.md` is not: it is prose with no
+   schema and no deploy-dependent field, and it was simply never written.**
+
+   **The gate is the count, not the absences.** I published *"two unsatisfied gates"* for many
+   rounds. Two was an accurate count of the gates I had *noticed*; the contract enumerating
+   what this slice owes was never opened. **A self-reported obligation count measured against
+   memory rather than against the specification that creates the obligations cannot detect the
+   obligation you never knew you had** -- the same defect I filed against a counterparty's
+   carried severity figure, in my own deliverable, at the same time.
 
 ## Ambiguities a participant hits
 

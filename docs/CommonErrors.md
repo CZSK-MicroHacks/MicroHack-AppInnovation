@@ -5795,3 +5795,56 @@ load profile does not merely tend to produce no errors; **it defines their prese
 **Check whether the phenomenon is specified before measuring whether it occurs.** Every prior
 population failure tonight was aiming an instrument at the wrong set; this one is reaching for an
 instrument when a file already answered.
+
+## The contract prescribed one filename for six slices, and the merge found one of seven
+
+A counterparty ran a sequential merge simulation and found `evidence/runtime-test-report.json`
+conflicting between two arms, filed as a workshop-content defect: the filename is prescribed
+"identically for all five paths". Verified, corrected, and it is larger than filed.
+
+    grep -n runtime-test-report.json challenge-paths.json  -> 28 55 85 115 146 177   SIX, not five
+    slices: 6   distinct requiredEvidence lists: 1   identical across all six: TRUE
+    slice ids  manual-dotnet manual-java copilot-rewrite-dotnet copilot-rewrite-java
+               copilot-modernization-dotnet copilot-modernization-java     all distinct
+    every one of the SEVEN required paths: discriminator NONE
+    CONTROL absent filename 0
+
+**The contract knows how to name a slice -- the ids are distinct and unique -- and uses none of
+that in the paths.** So the collision surface is not one file: it is **seven filenames written by
+six slices, 42 writes to 7 names.** The merge surfaced one because one is what happened to be
+committed twice.
+
+> **A conflict is a sample, not a census.** It reports the collisions that two parties happened
+> to write, never the collisions the specification permits. Counting from the merge counts what
+> was exercised; counting from the contract counts what is possible.
+
+### And I was the first mover, not the bystander who reported it
+
+    evidence/runtime-test-report.json   base 9c147701 ABSENT · rewrite-integration ABSENT · main ABSENT
+    introduced by 216433e -- MY commit, in MY PR
+    counterparty's sequence: base +#3 OK +#4 OK +#5 CONFLICT  <- against content #3 contributed
+
+I relayed this as a defect in someone else's merge sequence. **The file it dies on is one my own
+PR puts there.** Reporting a collision without checking whether you are one of the colliding
+writers is the same population error as every other one tonight, wearing the costume of
+disinterested review.
+
+### The self-finding this exposed, which is the worse of the two
+
+    challenge-paths.json slice[3] copilot-rewrite-java  requiredEvidence: 7
+    shipped by this arm:                                                 1
+    I had been publishing "two unsatisfied gates" for many rounds.
+
+Two was an honest count of the gates I had **noticed**. The contract that enumerates what this
+slice owes was never opened. Five absences are defensible on a no-deploy arm; `rollback-runbook.md`
+is prose with no schema and no deploy-dependent field and was simply never written.
+
+> 🔴 **An obligation count measured against your own memory instead of against the specification
+> that creates the obligations is structurally blind to the obligation you never knew you had --
+> and it reads as candour, because you are volunteering failures.** Self-reported gaps feel like
+> the one number nobody would inflate. The risk was never inflation; it was that the denominator
+> was never fetched.
+
+**Fetch the list of what you owe from the artifact that defines it, then diff.** Do not enumerate
+it from recollection, and especially not while auditing someone else for carrying an unmeasured
+figure.
