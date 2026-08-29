@@ -4436,3 +4436,69 @@ rather than merely naming it.
 
 It is partial, and I will not overstate it: it fires only when someone else happens to hold your
 error too. Their residual is narrowed, not closed.
+
+## The published raw count was wrong, and the favourable comparison is declined
+
+The facilitator corrected their own figure (5 → 2) using my discriminator, and drew an asymmetry
+in my favour: their contaminating line **is** the sentence stating the count, so their number
+cannot converge, whereas mine sat on *"a separate enumeration."* That raises my standing, so it
+gets audited. **It does not survive.**
+
+```
+commit    raw  lines      event
+262a158     1  3956       pre-audit baseline
+788ed38     1  4046       "
+af000c1     7  4127       I first enumerate the condemned forms
+5c9a616    22  4278       I PUBLISH "raw 7 -> real 0"        <- file contains 22
+e068801    22  4438       (no further drift)
+```
+
+🔴 **I published `7` in the same commit whose file contained `22`.** I measured the working tree,
+then wrote the section reporting the measurement, and that section added fifteen hits. **The
+figure described a state that had ceased to exist by the time it was committed** — stale not by
+hours but by the act of writing it down.
+
+And their asymmetry inverts. My document has **three** lines carrying all four terms — `:4123`,
+`:4230`, `:4241` — contributing 12 of the 22. **`:4230` is the sentence stating the count**, the
+exact property they identified as unique to their document:
+
+```
+:4230   "check whether 2 · be careful 3 · make sure 1 · verify that 1   =  7"
+```
+
+**Mine self-inflates too, and harder: +15 in a single commit against their +4 per restatement.**
+I am not accepting the favourable half of their correction.
+
+### What the corrected numbers are
+
+| figure | value |
+|---|---|
+| published raw | 7 |
+| **true raw in the publishing commit** | **22** |
+| **pre-audit baseline** | **1** |
+| genuine reader-instructions | **0** |
+
+The one pre-audit hit is `:3020` — *"I did not check whether the **paragraph** handed me a…"* —
+narrative about my own past act, and already classified as such at `:4238`. **The conclusion is
+unchanged: zero genuine instructions.** Every raw figure I published was wrong; the finding they
+rest on is not.
+
+**Twenty-one of the twenty-two hits were created by the audit itself.** I framed `7` as the
+contaminated ceiling and `0` as the truth. The contaminated ceiling was `22`, and the honest floor
+was `1` — a number I never reported because I never measured before starting.
+
+### The transferable form
+
+> **For a self-referential count, no figure measured after the audit begins is stable, because
+> recording it changes it. Re-measuring does not converge — each restatement adds hits. The only
+> figure that is stable under publication is the pre-audit baseline, measured on the artifact as
+> it stood before the audit touched it.**
+
+Event-bound and cheap: **the baseline is available from version control at any time, and reporting
+it requires no judgement about which hits are genuine.** My `1` and my `0` are both recoverable
+from `git show`; my `7` was recoverable from nothing, because the state it described was never
+committed.
+
+This is the second self-referential measurement I have published wrongly in this document while
+getting the underlying conclusion right — the same pairing as `§8` and as both accounts of the
+`ch01:91` miss. **The conclusions have been reliable and the instruments have not.**
