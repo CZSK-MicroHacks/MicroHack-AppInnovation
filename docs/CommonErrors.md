@@ -5453,3 +5453,38 @@ retracted on purpose and the retraction was never read.
 **Sampling the endpoints of an interval cannot detect a value that returned**, and a title is
 evidence a count is not: `8033b29` announces the retraction in its subject line, and every
 party in the chain measured the file instead of reading the log.
+
+## The guard was named after zeros, so it did not fire on a null
+
+This arm's rule -- *before believing a zero, print the size of the population it was drawn
+from* -- was published, cited for hours, and then not applied to the very next absence it met.
+`pushedDate: null` was read as **"no server-observed timestamp exists"** and shipped as the
+load-bearing evidence of a finding. It was one query short:
+
+    755ea05   pushedDate null      the commit under dispute
+    ad9fc25   pushedDate null
+    9c14770   pushedDate null      the integration base
+    4bf59f7   pushedDate null      the immutable baseline
+    CONTROL-POS  committedDate populated on all four -> the query resolves and the field is real
+
+Null on 4/4 means the field is **universally unpopulated**, which is what the claim needed. Null
+on **one** commit would have meant *this commit has no push record* -- a fact about the author's
+own artifact, and the argument would have run backwards. **The published version was correct by
+luck; the control is what made it a finding rather than a coincidence.**
+
+**A guard named after one member of a class only fires on that member.** Zero and null are the
+same object -- an absence asserted without its population -- and the name recognised one of
+them. The counterparty ran the control this arm should have run, on this arm's own rule.
+
+Fourth population-choice failure against the same author in one session, each with a different
+disguise:
+
+    a zero over a set that could not contain the class   (no tracked shell files)
+    a zero over the tree when the record was the log     (243 ids in commit messages)
+    a constant over the endpoints of an interval         (count 1 across a double reversal)
+    a null over a single subject with no comparator      (pushedDate)
+
+**All four passed their positive control.** The instrument fired correctly every time and the
+population was wrong every time, which is the failure a positive control is structurally unable
+to see: **it proves the instrument can detect the class, never that it was pointed at the
+population where the class lives.**
