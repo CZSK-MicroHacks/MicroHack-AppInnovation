@@ -425,7 +425,33 @@ error runs in *both* directions, so neither direction is the safe one to guess:
 |---|---|---|
 | local tracking config | "never pushed" | wrong — it was published |
 | tip inequality | "not on origin" | wrong — it was an ancestor |
-| `ls-remote` | "tip is X" | exact |
+| `ls-remote` | "tip is X" | exact — for tip identity |
+| *(absent from this table as first published)* | "so it is delivered" | **wrong — see below** |
+
+**Correction: every instrument above answers preservation, and an operator needs delivery.**
+This table was published as the remedy for reachability confusion and its own population is
+three ways of asking *"is it on origin?"* — a question about whether work survives. The
+question an operator acts on is *"is it on the path to `main`?"*, and the two come apart:
+
+```bash
+git merge-base --is-ancestor <your-sha> origin/<your-branch>   # PRESERVATION: does it survive
+git merge-base --is-ancestor <your-sha> origin/main            # DELIVERY: will it ship
+```
+
+```
+0879b2f · 216433e · 67eaae5     on origin (my branch) YES     on origin/main NO
+CONTROL origin/main vs itself                                 YES  (the check fires)
+```
+
+**Every commit this arm has produced is preserved and none is delivered**, which is correct —
+this branch merges through PR #3 into `rewrite-integration`, and only then through PR #2 into
+`main`. The defect is not the state; it is that nothing in the original table could express it.
+The word `origin/main` did not appear anywhere in this document before this correction.
+
+> **A remedy inherits the blind spot of the instrument that found the defect.** That sentence
+> is this arm's own, written about someone else's fix, and this table is an instance of it:
+> built to correct preservation-reachability errors, it made preservation the only axis and
+> presented the last row as *exact* without stating what it is exact about.
 
 **And a third failure is neither party's error: the tip moves between messages.** A fetch and
 a push that straddle each other produce two honest measurements that disagree, and nothing in

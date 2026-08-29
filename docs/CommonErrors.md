@@ -6563,3 +6563,95 @@ against it.
 > **Redundancy counted at rest says nothing about redundancy under a planned operation.** This
 > applies directly here: this branch sits in a merge sequence with an ordering constraint against
 > `origin`, which is the substrate that was being counted as its single copy.
+
+## Documenting a defect raises every grep-based count of it
+
+A counterparty reconciled our disagreeing counts of `disabledWithoutDocker` -- my **2** against
+their **15** -- and corrected themselves twice, landing on "4 files, 15 occurrences, and `2` is
+neither." Measured here, the decomposition is sharper than either of us had:
+
+    15 occurrences across 4 files
+      docs/CommonErrors.md                 10   PROSE   <- my own writing about it
+      evidence/ch01-feedback-java-rewrite.md 1   PROSE   <- my own writing about it
+      java/.../PostgreSqlIntegrationTest.java 2   CODE   (1 annotation + 1 comment)
+      solutions/reference/.../same           2   CODE   (1 annotation + 1 comment)
+
+    actual annotations: 2      CONTROL 'class PostgreSqlIntegrationTest': .java 2 · .md 0 (fires)
+
+**My `2` was the count of the thing; their `15` was the count of the token.** 11 of 15 are prose,
+and 10 of those are this file -- **the knowledge base recording the defect is the largest single
+source of hits for it.**
+
+> **A token-frequency count of a defect rises as you document the defect.** The better the write-up,
+> the worse the metric looks, and a fix that removed both annotations would still leave 13 hits. Any
+> count that cannot separate a **use** from a **mention** measures attention, not incidence.
+
+Two more code hits are explanatory comments *adjacent to* the annotation -- so even restricting to
+`.java` overcounts 2x. **The only sound population was the narrowest one, and it was mine by
+accident of scope rather than by design**: I had counted files named `PostgreSqlIntegrationTest.java`
+because that was the artifact I cared about, not because I had reasoned about use versus mention.
+
+## My corrective table enumerated three instruments and omitted the question
+
+The same counterparty separated **preservation-reachable** ("is it on origin?") from
+**delivery-reachable** ("is it on `main`'s path?"), and showed that three individually true
+sentences of theirs conjoin into an operationally false one. I checked whether my own deliverable
+does it, expecting to be clean because I had published the corrective table on exactly this subject.
+
+    'origin/main' in evidence/ch01-feedback-java-rewrite.md : 0 occurrences
+    is-ancestor checks against main                         : 0
+
+    0879b2f · 216433e · 67eaae5   on origin YES   on origin/main NO
+    CONTROL origin/main vs itself                           YES (fires)
+
+**All three rows of my table answer preservation, and the last is labelled `exact`.** Exact about
+tip identity -- which the table never says, because the axis it would be distinguished from was not
+in the population. **Every commit this arm has produced is preserved and none is delivered**, and
+nothing in my published remedy could have expressed that.
+
+> 🔴 **A remedy inherits the blind spot of the instrument that found the defect.** That is this
+> arm's own sentence, written about someone else's fix, and the corrective table is an instance of
+> it: built to fix preservation-reachability errors, it made preservation the only axis.
+
+The table is repaired in place with the delivery row, the two commands, and the measurement -- the
+superseded version retained, because a remedy that silently grows a row teaches nothing about why
+it was missing.
+
+> **The strongest evidence that a distinction is hard is finding it absent from the document you
+> wrote to teach it.**
+
+## The first red run of the night, and it was aimed at me
+
+Applying the delivery-row repair above turned the suite red:
+
+    1 failed, 638 passed, 1 skipped
+    test_every_command_block_placeholder_names_who_supplies_it
+      evidence/ch01-feedback-java-rewrite.md: <sha> and <my-branch> in a runnable block
+
+The rule: a placeholder in a runnable block must name who supplies the value -- lead with
+`facilitator-`, `your-` or `owner-`, name a secret, or enumerate legal values. I wrote `<sha>` and
+`<my-branch>`. The *pre-existing* block four lines above used `<your-branch>` and passed all night;
+**my new lines silently adopted a different convention from the ones they sat beside.** Renamed to
+`<your-sha>` / `<your-branch>`; green at 639/1.
+
+> **`<my-branch>` in a document written for someone else is the whole defect in one token.** It reads
+> as a placeholder and behaves as one, but it tells the reader it is *the author's* branch -- which
+> is exactly the audience confusion the guard exists to catch, and I introduced it inside a
+> correction about writing for an operator.
+
+### 🔴 It also corrects something I have repeated all night
+
+I have said many times that this suite *never opens* `evidence/`, citing the runtime-report finding
+where that is true. **This test walks the repository's markdown, including my deliverable.** The
+accurate statement is narrower:
+
+> **The suite does not validate `evidence/runtime-test-report.json` against its schema. It does
+> validate prose conventions across `evidence/*.md`.** "The suite does not check `evidence/`" was a
+> generalisation from one artifact to a directory, and I published it repeatedly.
+
+Nine hours of green runs made the suite feel like a formality I was clearing rather than an
+instrument that could find anything -- and the one time it fired, it was correct and I was wrong.
+
+> **A check that has passed a hundred times is not thereby weak; it is untested against you until
+> you change something it covers.** Its silence had been evidence of my compliance, and I had begun
+> reading it as evidence of its own emptiness.
