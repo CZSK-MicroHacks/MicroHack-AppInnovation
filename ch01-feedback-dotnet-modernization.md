@@ -3660,3 +3660,51 @@ compiled output has a **silent two-artifact consistency requirement and no check
 Either the build output should not be tracked, or CI should fail when it differs from a rebuild.
 Absent one of those, every infrastructure fix in this workshop is one forgotten command away
 from being cosmetic.
+
+### The two-artifact defect is not a memory problem — git manufactures it
+
+The facilitator's F-385 (their headline remedy specified against the Bicep alone, leaving two
+compiled sites unfixed) prompted a further question: **what happens when two parties each fix a
+different Bicep line and each rebuilds the tracked artifacts?** I tested it rather than reasoned
+about it, in a throwaway clone, since guessing is what produced every retraction in this thread.
+
+Setup: their `activeRevisionsMode: 'Single' -> 'Multiple'` fix plus rebuild on one side, this
+branch's two `serverHost` fixes plus rebuild on the other. Merge.
+
+**Git conflicts on both generated files** — loud, not silent, which is the good news and the end
+of the good news. The question is what a competent person does next, and both obvious answers
+are wrong:
+
+| Resolution | `environment.bicep` source | `main.json` `activeRevisionsMode` | `serverHost` fixed form |
+| --- | --- | --- | --- |
+| `--ours` (keep base's artifact) | `'Multiple'` | `Multiple` ✓ | **0 occurrences** ✗ |
+| `--theirs` (keep this branch's) | `'Multiple'` | **`Single`** ✗ | 2 ✓ |
+| **rebuild** | `'Multiple'` | `Multiple` ✓ | 2 ✓ |
+
+**Each naive resolution silently discards the other party's fix from the deployable artifact
+while leaving every Bicep source file reading correctly.** `--theirs` reintroduces F-385 — the
+CRITICAL just filed — as a *merge artifact*. `--ours` reintroduces the double-dot hostname. In
+both cases the source diff reviews perfectly, because the source is perfect.
+
+So the finding is stronger than "someone forgets to rebuild":
+
+> **Version control itself manufactures the broken state during an ordinary merge, and the two
+> standard resolutions both produce a compiled artifact that no build would ever emit and that
+> contradicts its own source.** The only correct resolution — discard both sides and rebuild —
+> is not obvious, not documented, and not what conflict markers suggest.
+
+This also grades the two candidate remedies, which are not equivalent:
+
+- **Fail CI on a rebuild diff** — detects it, after the fact, if CI exists. There is none here.
+- **Untrack the build output** — makes the failure mode impossible. Strictly better.
+
+And it explains why the facilitator's zero-drift measurement on `rewrite-integration` is not
+reassurance. Reproducing byte-identically today shows the invariant currently holds; it says
+nothing about it being *enforced*. **The healthy instance is what licenses the broken one** —
+the same shape as the normalised DNS label, now the fourth time that pattern has appeared in
+this thread.
+
+**This branch's own artifacts were checked against the standard being proposed**: both
+`infra/main.json` and `infra/modules/environment.json` reproduce byte-identically from a fresh
+`az bicep build`. The claim that PR #5's fixes reach the compiled artifacts is a verified
+property, not an assertion.
