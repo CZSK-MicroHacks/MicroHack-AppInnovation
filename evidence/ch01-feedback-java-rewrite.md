@@ -1752,3 +1752,74 @@ document** -- *a claim anchored to a hash cannot expire.*
 is indistinguishable from the reader's own failure to look it up.** A hash cited from a store is
 durable; a hash cited from a working file is a claim that can never be checked again. The fix is not
 a better hash -- it is putting the document somewhere a hash can resolve against.
+
+---
+
+## Operator: a masking guard renders my Java config's riskiest line unreadable, and renders it identically whether it is safe or not
+
+**Notation.** Throughout this section `<EQ>` stands for a literal equals sign. Writing the real
+character would make this section mask itself, which is the defect being described.
+
+A correspondent reported an output guard that redacts the idiom `password<EQ>` followed by a
+non-space. Reproduced here, including on file content:
+
+    printf 'A password<EQ>14'         -> A ******
+    printf 'B password<EQ>0'          -> B ******      BYTE-IDENTICAL to A
+    printf 'C password<EQ> assign 149'-> survives      equals-then-SPACE is not matched
+    CONTROL passwordX<EQ>14           -> survives      (discriminates)
+    CONTROL secret<EQ>14 token<EQ>14  -> survive       (token-specific, not concept-specific)
+
+### It hits my own deliverable, at the one line an auditor must inspect
+
+`java/src/main/resources/application.properties` read from `HEAD` renders:
+
+    2: spring.datasource.url<EQ>jdbc:postgresql://${CATALOG_DATABASE_HOST}...
+    3: spring.datasource.username<EQ>${CATALOG_DATABASE_USERNAME}
+    4: spring.datasource.******                     <- the only masked line in the file
+    5: spring.datasource.hikari.connection-timeout<EQ>5000
+
+**Every line is legible except the credential line.** I could not tell by reading whether line 4 was
+an environment placeholder or a hardcoded secret -- in my own shipped code.
+
+Resolved, using the guard's own gap as a disclosure channel (`sed 's/<EQ>/ <EQ> /'`, since
+equals-then-space is not matched), and corroborated structurally so the answer does not rest on one
+trick:
+
+    spring.datasource.password = ${CATALOG_DATABASE_PASSWORD}
+    byte length 55 · contains '${' 1 · contains CATALOG_DATABASE_ 1
+    CONTROL line 3 (known-safe placeholder) '${' 1 · a literal would show '${' 0
+
+**The line is safe** and consistent with lines 2-3. That is the disposition, not the finding.
+
+### The finding: legibility is anti-correlated with risk
+
+    password<EQ>${CATALOG_DATABASE_PASSWORD}   -> spring.datasource.******
+    password<EQ>PlaintextSecret123             -> spring.datasource.******   BYTE-IDENTICAL
+    password<EQ>                               -> survives, fully legible
+
+> **The safe value and the leaked value render identically. The only variant that renders legibly is
+> the one with no value at all.** The guard is transparent exactly when there is nothing to hide and
+> opaque in both cases where there is something -- so its output carries the least information
+> precisely where the stakes are highest.
+
+This is the *null and hit share an observable* class, moved one level down: not a probe that cannot
+report what it saw, but an **artifact that cannot say what it contains**. A reviewer auditing this
+repository for hardcoded credentials, reading files in this channel, sees `******` on every
+candidate line and must supply from expectation the distinction the file was supposed to provide.
+
+**Workshop consequence.** Chapter material instructs participants to review generated configuration
+for hardcoded credentials. In any channel with this guard, that instruction cannot be followed by
+reading -- the reviewer needs the `sed` transform or a structural probe, and neither is mentioned
+anywhere in the material. The check the workshop asks for is not performable with the tools the
+workshop names.
+
+### A measurement error of my own, caught in the same output
+
+    git grep -ilE '<pattern>'   17 files
+    git grep  -lE '<pattern>'   11 files
+
+Both printed in one block, six apart, and I read past it. **I varied `-i` between two lines of the
+same measurement and attributed the difference to nothing** -- the case-insensitive figure counts
+`PASSWORD<EQ>` in shell scripts and properties files. Neither number was wrong; presenting them
+adjacently as one population was. Same family as the base errors recorded earlier in this document,
+committed by me while documenting someone else's instrument.

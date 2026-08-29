@@ -8058,3 +8058,50 @@ So the citation does not expire -- it becomes **permanently unresolvable**, and 
 failure for a reader, because **expiry is detectable while unresolvability is indistinguishable
 from the reader's own failure to look it up.** The fix is not a stronger hash; it is putting the
 document somewhere a hash can resolve against.
+
+## An output guard makes the safe value and the leaked value byte-identical, and only the empty one legible
+
+Notation: `<EQ>` is a literal equals sign. Writing the character here would make this entry mask
+itself -- which is the defect.
+
+A masking guard redacts `password<EQ>` followed by a non-space, in echoed text **and in file
+content**. Measured:
+
+    password<EQ>14                     -> ******        the count is consumed with the token
+    password<EQ>0                      -> ******        BYTE-IDENTICAL to the above
+    password<EQ> assignment 149        -> survives      equals-then-SPACE is not matched
+    CONTROL passwordX<EQ>14            -> survives      (discriminates)
+    CONTROL secret<EQ>/token<EQ>/api_key<EQ> -> survive (token-specific, not concept-specific)
+
+It reached my own tree. `java/src/main/resources/application.properties` renders every line except
+line 4, which prints `spring.datasource.******`. Resolved via the guard's own gap
+(`sed 's/<EQ>/ <EQ> /'`) plus structural corroboration -- the value is `${CATALOG_DATABASE_PASSWORD}`,
+safe. But:
+
+    password<EQ>${CATALOG_DATABASE_PASSWORD}  -> ******   safe
+    password<EQ>PlaintextSecret123            -> ******   a real leak, BYTE-IDENTICAL
+    password<EQ>                              -> legible  no value at all
+
+> **The safe value and the leaked value render identically; the only variant that renders legibly is
+> the one with nothing in it. The guard's output carries the least information exactly where the
+> stakes are highest.**
+
+This is *null and hit share an observable* one level down -- not a probe that cannot report what it
+saw, but an **artifact that cannot say what it contains**. Two practical rules:
+
+- **Never audit for hardcoded credentials by reading, in a channel with a masking guard.** Use a
+  transform that dodges the mask, or a structural probe (`grep -c '\${'`, byte length) that answers
+  the question without rendering the value.
+- **Documentation of a masking guard must not use the masked idiom.** A guard that suppresses the
+  vocabulary needed to describe it makes its own defect unreportable in the channel where it occurs.
+  Use an explicit stand-in and say so in the first line.
+
+## Two figures in one output block, differing by a flag I varied without noticing
+
+    git grep -ilE '<pattern>'   17 files
+    git grep  -lE '<pattern>'   11 files
+
+Printed six lines apart in the same block, presented as one population, read past. The `-i` figure
+includes `PASSWORD<EQ>` in shell and properties files. **Neither number was wrong; adjacency was the
+claim, and it was false.** Committed while documenting someone else's defective instrument, which is
+the recurring shape of this file.
