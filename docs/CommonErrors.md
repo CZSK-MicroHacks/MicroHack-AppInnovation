@@ -5580,3 +5580,36 @@ One residual, unforced and by now familiar: the counterparty measured `main` as 
 behind and this arm measures **233**. Both are correct from their own ref. **Third occurrence in
 this exchange of two right numbers over two unstated populations**, and the only one where
 neither party had drawn a conclusion from it yet.
+
+## Four correct rows hid the fifth, and nobody audits the header
+
+A counterparty found they had stamped local time as `Z` in every message tonight. Running that
+class against this arm's corpus found the inverse defect in the **deliverable's provenance
+table** -- the block at line 27 that tells a reader what the document is:
+
+    row 1  surefire mtime  21:51:32Z   true UTC 21:51:32Z   OK
+    row 2  383b9f7/5393507 02:13:12Z   true UTC 16:37:17Z / 21:54:55Z   NO SOURCE
+    row 3  d0420e2         02:15:05Z   true UTC 02:15:05Z   OK
+    row 4  1fa80cf         13:41:29Z   true UTC 13:41:29Z   OK
+    row 5  216433e         14:07:29Z   true UTC 14:07:29Z   OK
+    commits on any ref carrying 2026-08-28T02:13:12Z: 0   CONTROL-POS row 3's value: 1
+
+**Their defect is systematic and mine is sporadic, and sporadic is the harder one to find.**
+Theirs is detectable from any single stamp; **mine survives sampling** -- check four rows at
+random and the table passes. **The four correct rows are what hid the fifth: a table that is
+right four times reads as an instrument rather than as five independent assertions, and its one
+unsourced row inherits the credibility of its neighbours.**
+
+The bad value sits **1m53s before row 3's**, which is the shape of a figure written by analogy
+to its neighbour rather than measured. That is a shape, not a proven cause.
+
+**Why it survived the entire exercise: it is in the provenance block.** Both parties spent the
+night auditing findings, counts, SHAs, identifiers, zeros and nulls, and corrected one passage
+two hundred lines below this table **four times**. **Nobody measured the header.** The block
+asserting what the whole artifact is grounded in was the one block never checked, because it
+reads as metadata rather than as a claim.
+
+**A provenance block is the highest-leverage set of claims in a document and the least audited,
+for the same reason: it is read as the frame rather than as content.** It was only measured
+here because a counterparty's unrelated defect prompted the symmetric check -- **their
+systematic error is what surfaced this sporadic one.**

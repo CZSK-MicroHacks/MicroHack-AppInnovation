@@ -27,7 +27,15 @@ so none are reported. Only these anchors are real:
 | Anchor | Timestamp (UTC) | Source |
 | --- | --- | --- |
 | Checkpoint 1 native suite complete, 34 tests | 2026-08-27T21:51:32Z | `evidence/surefire-reports` mtime |
-| Runbook fixes committed | 2026-08-28T02:13:12Z | `383b9f7`, `5393507` |
+| Runbook fixes committed | 2026-08-27T16:37:17Z .. 2026-08-27T21:54:55Z | `383b9f7`, `5393507` |
+
+> **This row previously read `2026-08-28T02:13:12Z`. That value is the true UTC of neither
+> commit it cites (`16:37:17Z`, `21:54:55Z`), is neither commit's local time, is on the wrong
+> day, and matches no commit on any ref in this repository -- 0 exact matches, CONTROL-POS the
+> same search finds row 3's value. It was unsourced. The other four rows were re-measured and
+> are true UTC, honouring the column header. Corrected to the span the two cited commits
+> actually bound.**
+
 | Regressed fixes restored after rebase | 2026-08-28T02:15:05Z | `d0420e2` |
 | JDK guidance retracted | 2026-08-28T13:41:29Z | `1fa80cf` |
 | Evidence committed | 2026-08-28T14:07:29Z | `216433e` |
