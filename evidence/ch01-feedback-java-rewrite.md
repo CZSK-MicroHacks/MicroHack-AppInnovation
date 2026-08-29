@@ -547,14 +547,53 @@ surfaces as import errors in files whose paths they recognise.
 > whole tree. The magnitude was overstated by roughly two fifths.
 
 **The installer asymmetry is the aggravator, and it is workshop-wide rather than Java-only.**
-The lock contains **five** installer keys — two under `runtimes.*` (`windowsSourceSdkInstaller`,
-`windowsSourceRuntimeInstaller`) and three under `databases.*` — and all five are Windows `x64`.
+The lock carries ~~five installer keys~~ **eleven Windows-bound acquisitions** — nine artifacts whose
+URL is a `.msi`, `.exe`, a `winget` reference or a `win32` channel, plus two components acquired by a
+string naming the Windows installer:
+
+```
+runtimes.dotnet · runtimes.java                        source-runtime installers, x64
+databases.sqlserver.windowsService · .client           server .exe and go-sqlcmd .msi
+databases.postgresql.windowsService                    server .exe
+tools.azureCli · tools.git · tools.jq · tools.vscode   no platforms array at all
+databases.postgresql.client · .migrationTools          source = "bundled-with-postgresql-installer"
+```
+
 There are **zero** target-runtime installers (verified: the string `targetRuntimeInstaller` has
 0 occurrences). Both stacks contract a target runtime (.NET 8→10, Java 17→21) that has **no
 pinned, hash-verified acquisition path**, while every JAR, NuGet package, Maven distribution and
 database image in the same file is pinned by hash or signature — counted as exact JSON keys:
 **19 `sha256`, 5 `sha512`, 6 `digest`, 6 `signature`**, plus 10 `signaturePublisher` Authenticode
 assertions.
+
+> **Corrected upward from five, and the reason matters more than the number.** Five is the count of
+> JSON nodes *named* `installer`; eleven is the count of *artifacts bound to Windows*. Six components
+> — `azureCli`, `git`, `jq`, `vscode` and both PostgreSQL client entries — carry no key called
+> `installer` anywhere, so **no name-keyed count at any sensitivity could reach them.** The population
+> is defined by the artifact's platform and the original figure selected by key name. Recorded because
+> an earlier revision of this section had already been corrected once along that same wrong axis.
+
+**The container digests do not close the gap, and only one of the five closes at all.** It is natural
+to answer this with *"the databases ship container images, so non-Windows hosts are covered."* Measured:
+
+```
+sqlserver.localContainer   platforms [linux/amd64]              indexDigest == the amd64 digest
+postgresql.localContainer  platforms [linux/amd64, linux/arm64] indexDigest == neither
+```
+
+A genuine multi-platform index **never equals any of its platform digests — it is a list of them**, so
+the SQL Server entry is a single-platform pin carrying an index-shaped key name, and on `arm64` there
+is no pinned SQL Server digest at all. The two client entries fail on the lock's own prose:
+`sqlserver.client.installer` is a go-sqlcmd `.msi` that is a *sibling* of `localContainer` rather than
+inside it, and both PostgreSQL client components declare `bundled-with-postgresql-installer`. **The
+file models client tooling as acquired from the Windows installer, never from the container.** Coverage
+is **1 of 5 fully, 1 partially (amd64 only), 3 not at all** — a sibling key is not a substitute path.
+
+**And the one cross-platform pin is a gap in the opposite direction.** `tools.terraform.platforms` is
+`darwin/arm64` and `darwin/amd64` — **Darwin only, with no Windows entry** — while `ch01/README.md:26`
+mandates a Windows VM with the source tree at `C:\MicroHack\source`. The single component pinned for a
+non-Windows host is pinned *exclusively* for non-Windows hosts. **Any reading of platform coverage that
+counts the array's length rather than its contents gets this backwards in both directions at once.**
 
 **A positive result, recorded because an audit that reports only defects is not a measurement.**
 `baseInfra/terraform/README.md` makes a universal claim — *"Every tool/database installer is the
