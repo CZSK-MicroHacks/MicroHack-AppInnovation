@@ -81,7 +81,10 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
 }
 
 output databaseResourceId string = database.id
-output serverHost string = '${server.name}.${environment().suffixes.sqlServerHostname}'
+// environment().suffixes.sqlServerHostname already carries a leading dot ('.database.windows.net'),
+// unlike suffixes.storage. Concatenating it after an explicit '.' produced a hostname with an empty
+// DNS label that no resolver accepts. The server resource publishes the authoritative name instead.
+output serverHost string = server.properties.fullyQualifiedDomainName
 output databaseName string = database.name
 output authentication string = 'managed-identity'
 output localAdministratorPrincipal object? = null

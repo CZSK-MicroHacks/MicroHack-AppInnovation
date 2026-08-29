@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0.0",
+  "capturedAt": "2026-08-27T23:35:00Z",
+  "service": "mh-catalog-dotnet",
+  "resourceAttributes": {
+    "service.name": "mh-catalog-dotnet",
+    "service.namespace": "app-innovation",
+    "service.version": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
+    "deployment.environment": "lab",
+    "service.instance.id": "ca-mh-user001-dotnet--release-47acf263d332-5896fb77ff-9rqhl",
+    "azure.containerapps.revision.name": "ca-mh-user001-dotnet--release-47acf263d332"
+  },
+  "queries": {
+    "resources": {
+      "query": "AppMetrics | where Name=='_APPRESOURCEPREVIEW_' | where TimeGenerated>ago(3h) | extend r=tostring(Properties['azure.containerapps.revision.name']) | where r=='ca-mh-user001-dotnet--release-47acf263d332' | project Properties",
+      "resultFile": "evidence/telemetry/resources.json",
+      "expectedSignalNames": [
+        "resource"
+      ]
+    },
+    "traces": {
+      "query": "union (AppRequests|extend sig='http.server'), (AppDependencies|extend sig=iff(DependencyType=='SQL','db.client',Name)), (AppExceptions|extend sig='exception') | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | summarize count() by sig",
+      "resultFile": "evidence/telemetry/traces.json",
+      "expectedSignalNames": [
+        "http.server",
+        "db.client",
+        "exception",
+        "catalog.import",
+        "catalog.query",
+        "catalog.performance"
+      ]
+    },
+    "metrics": {
+      "query": "AppMetrics | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | where Name in ('http.server.request.duration','db.client.operation.duration','catalog.import.records','catalog.query.duration','catalog.performance.duration') | project Name,Sum,ItemCount,Properties",
+      "resultFile": "evidence/telemetry/metrics.json",
+      "expectedSignalNames": [
+        "http.server.request.duration",
+        "db.client.operation.duration",
+        "catalog.import.records",
+        "catalog.query.duration",
+        "catalog.performance.duration"
+      ]
+    },
+    "logs": {
+      "query": "union (AppTraces|extend sig=tostring(Properties['OriginalFormat'])|extend sig=iff(isempty(sig),Message,sig)), (AppExceptions|extend sig=tostring(Properties['OriginalFormat'])) | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | summarize count() by sig",
+      "resultFile": "evidence/telemetry/logs.json",
+      "expectedSignalNames": [
+        "http.server.request",
+        "catalog.database.failed",
+        "exception",
+        "catalog.import.completed",
+        "catalog.import.failed",
+        "catalog.query.failed",
+        "catalog.performance.completed",
+        "catalog.performance.failed"
+      ]
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0.0",
+  "queryId": "metrics",
+  "rows": [
+    {
+      "signalName": "http.server.request.duration",
+      "recordCount": 13,
+      "observedAttributes": [
+        "http.request.method",
+        "http.response.status_code",
+        "http.route"
+      ],
+      "unit": "s",
+      "measurements": [
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/figure/{id}",
+            "http.response.status_code": 200
+          },
+          "value": 0.0134547
+        },
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/readyz",
+            "http.response.status_code": 200
+          },
+          "value": 0.0693425
+        }
+      ]
+    },
+    {
+      "signalName": "db.client.operation.duration",
+      "recordCount": 523,
+      "observedAttributes": [
+        "db.operation.name",
+        "db.system.name"
+      ],
+      "unit": "s",
+      "measurements": [
+        {
+          "attributes": {
+            "db.system.name": "microsoft.sql_server",
+            "db.operation.name": "connect"
+          },
+          "value": 0.0657491
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.import.records",
+      "recordCount": 7,
+      "observedAttributes": [
+        "catalog.import.outcome"
+      ],
+      "unit": "{record}",
+      "measurements": [
+        {
+          "attributes": {
+            "catalog.import.outcome": "rejected"
+          },
+          "value": 1
+        },
+        {
+          "attributes": {
+            "catalog.import.outcome": "inserted"
+          },
+          "value": 1
+        },
+        {
+          "attributes": {
+            "catalog.import.outcome": "skipped"
+          },
+          "value": 1
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.query.duration",
+      "recordCount": 49,
+      "observedAttributes": [
+        "catalog.query.filter"
+      ],
+      "unit": "s",
+      "measurements": [
+        {
+          "attributes": {
+            "catalog.query.filter": "category+search"
+          },
+          "value": 0.0134695
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.performance.duration",
+      "recordCount": 16,
+      "observedAttributes": [
+        "catalog.performance.work_factor"
+      ],
+      "unit": "s",
+      "measurements": [
+        {
+          "attributes": {
+            "catalog.performance.work_factor": 10
+          },
+          "value": 0.5467932
+        }
+      ]
+    }
+  ],
+  "workspaceId": "/subscriptions/7bc68c68-3c40-4cea-bf3b-2b0d1a83b1c0/resourceGroups/rg-user001/providers/Microsoft.OperationalInsights/workspaces/log-mh-user001-dotnet",
+  "capturedAt": "2026-08-27T23:35:00Z",
+  "queryText": "AppMetrics | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | where Name in ('http.server.request.duration','db.client.operation.duration','catalog.import.records','catalog.query.duration','catalog.performance.duration') | project Name,Sum,ItemCount,Properties"
+}

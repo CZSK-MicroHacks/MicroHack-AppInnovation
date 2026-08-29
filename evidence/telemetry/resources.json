@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "queryId": "resources",
+  "rows": [
+    {
+      "signalName": "resource",
+      "recordCount": 3,
+      "observedAttributes": [
+        "azure.containerapps.revision.name",
+        "deployment.environment",
+        "service.instance.id",
+        "service.name",
+        "service.namespace",
+        "service.version"
+      ],
+      "resourceAttributes": {
+        "service.name": "mh-catalog-dotnet",
+        "service.namespace": "app-innovation",
+        "service.version": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
+        "deployment.environment": "lab",
+        "service.instance.id": "ca-mh-user001-dotnet--release-47acf263d332-5896fb77ff-9rqhl",
+        "azure.containerapps.revision.name": "ca-mh-user001-dotnet--release-47acf263d332"
+      }
+    }
+  ],
+  "workspaceId": "/subscriptions/7bc68c68-3c40-4cea-bf3b-2b0d1a83b1c0/resourceGroups/rg-user001/providers/Microsoft.OperationalInsights/workspaces/log-mh-user001-dotnet",
+  "capturedAt": "2026-08-27T23:35:00Z",
+  "queryText": "AppMetrics | where Name=='_APPRESOURCEPREVIEW_' | where TimeGenerated>ago(3h) | extend r=tostring(Properties['azure.containerapps.revision.name']) | where r=='ca-mh-user001-dotnet--release-47acf263d332' | project Properties"
+}

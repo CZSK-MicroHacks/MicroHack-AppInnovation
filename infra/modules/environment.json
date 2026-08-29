@@ -10,7 +10,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "6030714187165815718"
+      "templateHash": "11728013327001058979"
     }
   },
   "parameters": {
@@ -935,7 +935,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "2649742858088584148"
+              "templateHash": "6965314780757423305"
             }
           },
           "parameters": {
@@ -1059,7 +1059,7 @@
             },
             "serverHost": {
               "type": "string",
-              "value": "[format('{0}.{1}', parameters('serverName'), environment().suffixes.sqlServerHostname)]"
+              "value": "[reference('server').fullyQualifiedDomainName]"
             },
             "databaseName": {
               "type": "string",
@@ -1159,7 +1159,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "2791411749539230038"
+              "templateHash": "14814669927439521711"
             }
           },
           "parameters": {
@@ -1273,7 +1273,7 @@
             },
             "serverHost": {
               "type": "string",
-              "value": "[format('{0}.postgres.database.azure.com', parameters('serverName'))]"
+              "value": "[reference('server').fullyQualifiedDomainName]"
             },
             "databaseName": {
               "type": "string",

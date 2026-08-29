@@ -1,17 +1,12 @@
 .git
-.github
-.azure
-baseInfra
-challenges
-solutions
-docs
-infra
-workshop
-tests
-data/categories.json
-data/images
-dotnet/**/bin
-dotnet/**/obj
-dotnet/**/TestResults
-java/target
+**/bin
+**/obj
+evidence
 **/.DS_Store
+
+# 308 MiB of catalog figure images. These are migrated straight into Azure Blob
+# Storage by `catalog-migrate images copy`; the runtime reads them from the blob
+# container, never from the image. Shipping them to the ACR build agent adds
+# minutes to every build and nothing to the result. Only data/catalog.json is
+# copied by dotnet/Dockerfile.
+data/images

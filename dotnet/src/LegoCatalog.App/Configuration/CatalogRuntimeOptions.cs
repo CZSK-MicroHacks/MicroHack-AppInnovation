@@ -14,7 +14,11 @@ public sealed record CatalogRuntimeOptions(
     int PerformanceWorkFactor,
     string ServiceVersion,
     string DeploymentEnvironment,
-    string RevisionName)
+    string RevisionName,
+    CatalogImageProvider ImageProvider,
+    string? BlobServiceEndpoint,
+    string? BlobContainerName,
+    string? WorkloadIdentityClientId)
 {
     public const int DefaultWorkFactor = 10;
     public const int MaximumWorkFactor = 25;
@@ -63,7 +67,33 @@ public sealed record CatalogRuntimeOptions(
             MultipleActiveResultSets = false,
             PersistSecurityInfo = false,
         };
-        if (username is null)
+        var authentication = ParseDatabaseAuthentication(
+            configuration["CATALOG_DATABASE_AUTHENTICATION"]);
+        var workloadIdentityClientId = Optional(configuration, "AZURE_CLIENT_ID");
+        if (authentication == CatalogDatabaseAuthentication.ManagedIdentity)
+        {
+            if (username is not null || password is not null)
+            {
+                throw new InvalidOperationException(
+                    "CATALOG_DATABASE_AUTHENTICATION=managed-identity forbids CATALOG_DATABASE_USERNAME and CATALOG_DATABASE_PASSWORD.");
+            }
+
+            // Refuse to fall back to an unencrypted local connection. Without this the
+            // app would start against a non-Azure host with TrustServerCertificate=true
+            // and look healthy while bypassing the identity the deployment granted.
+            if (!isManagedHost)
+            {
+                throw new InvalidOperationException(
+                    "CATALOG_DATABASE_AUTHENTICATION=managed-identity requires an Azure SQL host.");
+            }
+
+            connection.Authentication =
+                SqlAuthenticationMethod.ActiveDirectoryManagedIdentity;
+            connection.UserID = workloadIdentityClientId
+                ?? throw new InvalidOperationException(
+                    "AZURE_CLIENT_ID is required for managed identity database authentication.");
+        }
+        else if (username is null)
         {
             connection.IntegratedSecurity = true;
         }
@@ -93,6 +123,26 @@ public sealed record CatalogRuntimeOptions(
                 "DEPLOYMENT_ENVIRONMENT must be 'lab' for the workshop contract.");
         }
 
+        var imageProvider = ParseImageProvider(
+            configuration["CATALOG_IMAGE_PROVIDER"]);
+        string? blobServiceEndpoint = null;
+        string? blobContainerName = null;
+        if (imageProvider == CatalogImageProvider.AzureBlob)
+        {
+            blobServiceEndpoint = Required(
+                configuration,
+                "CATALOG_BLOB_SERVICE_ENDPOINT");
+            if (!Uri.TryCreate(blobServiceEndpoint, UriKind.Absolute, out var endpointUri)
+                || endpointUri.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new InvalidOperationException(
+                    "CATALOG_BLOB_SERVICE_ENDPOINT must be an absolute HTTPS URI.");
+            }
+
+            blobContainerName = Required(configuration, "CATALOG_BLOB_CONTAINER");
+            workloadIdentityClientId ??= Required(configuration, "AZURE_CLIENT_ID");
+        }
+
         return new CatalogRuntimeOptions(
             connection.ConnectionString,
             imagesPath,
@@ -102,8 +152,37 @@ public sealed record CatalogRuntimeOptions(
             workFactor,
             Required(configuration, "OTEL_SERVICE_VERSION"),
             deploymentEnvironment,
-            Required(configuration, "CONTAINER_APP_REVISION"));
+            Required(configuration, "CONTAINER_APP_REVISION"),
+            imageProvider,
+            blobServiceEndpoint,
+            blobContainerName,
+            workloadIdentityClientId);
     }
+
+    /// <summary>
+    /// Parses the database authentication mode supplied by the deployment.
+    /// </summary>
+    private static CatalogDatabaseAuthentication ParseDatabaseAuthentication(
+        string? rawValue) =>
+        rawValue?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "local" => CatalogDatabaseAuthentication.Local,
+            "managed-identity" => CatalogDatabaseAuthentication.ManagedIdentity,
+            _ => throw new InvalidOperationException(
+                "CATALOG_DATABASE_AUTHENTICATION must be 'local' or 'managed-identity'."),
+        };
+
+    /// <summary>
+    /// Parses the image provider supplied by the deployment.
+    /// </summary>
+    private static CatalogImageProvider ParseImageProvider(string? rawValue) =>
+        rawValue?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "local" => CatalogImageProvider.Local,
+            "azure-blob" => CatalogImageProvider.AzureBlob,
+            _ => throw new InvalidOperationException(
+                "CATALOG_IMAGE_PROVIDER must be 'local' or 'azure-blob'."),
+        };
 
     /// <summary>
     /// Parses the bounded performance work factor.
@@ -184,4 +263,28 @@ public sealed record CatalogRuntimeOptions(
             ?? (fallbackKey is null ? null : configuration[fallbackKey]);
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+}
+
+/// <summary>
+/// Selects how the application authenticates to its database.
+/// </summary>
+public enum CatalogDatabaseAuthentication
+{
+    /// <summary>Integrated or username/password authentication for the legacy host.</summary>
+    Local,
+
+    /// <summary>Entra managed identity, used for Azure SQL.</summary>
+    ManagedIdentity,
+}
+
+/// <summary>
+/// Selects where catalog images are read from.
+/// </summary>
+public enum CatalogImageProvider
+{
+    /// <summary>Images read from the local filesystem.</summary>
+    Local,
+
+    /// <summary>Images read from Azure Blob Storage.</summary>
+    AzureBlob,
 }

@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.0.0",
+  "queryId": "traces",
+  "rows": [
+    {
+      "signalName": "http.server",
+      "recordCount": 2278,
+      "observedAttributes": [
+        "http.request.method",
+        "http.response.status_code",
+        "http.route",
+        "server.address"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/figure/{id}",
+            "http.response.status_code": 200,
+            "server.address": "localhost"
+          }
+        },
+        {
+          "attributes": {
+            "http.request.method": "GET",
+            "http.route": "/readyz",
+            "http.response.status_code": 200,
+            "server.address": "localhost"
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "db.client",
+      "recordCount": 523,
+      "observedAttributes": [
+        "db.namespace",
+        "db.operation.name",
+        "db.system.name",
+        "server.address"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "db.system.name": "microsoft.sql_server",
+            "db.operation.name": "SELECT",
+            "db.namespace": "catalog",
+            "server.address": "sql-mh-user001-dotnet-kurep3z6.database.windows.net"
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "exception",
+      "recordCount": 12,
+      "observedAttributes": [
+        "exception.message",
+        "exception.type"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "exception.type": "LegoCatalog.App.Services.CatalogImportValidationException",
+            "exception.message": "Record 2 is invalid: category must normalize to a non-empty slug."
+          }
+        },
+        {
+          "attributes": {
+            "exception.type": "Microsoft.Data.SqlClient.SqlException",
+            "exception.message": "The SELECT permission was denied on the object 'Figures', database 'catalog', schema 'dbo'."
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.import",
+      "recordCount": 7,
+      "observedAttributes": [
+        "catalog.import.inserted",
+        "catalog.import.rejected",
+        "catalog.import.skipped"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.import.inserted": 0,
+            "catalog.import.skipped": 1,
+            "catalog.import.rejected": 0
+          }
+        },
+        {
+          "attributes": {
+            "catalog.import.inserted": 1,
+            "catalog.import.skipped": 0,
+            "catalog.import.rejected": 0
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.query",
+      "recordCount": 1678,
+      "observedAttributes": [
+        "catalog.query.filter",
+        "catalog.query.result_count"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.query.filter": "all",
+            "catalog.query.result_count": 198
+          }
+        }
+      ]
+    },
+    {
+      "signalName": "catalog.performance",
+      "recordCount": 1637,
+      "observedAttributes": [
+        "catalog.performance.item_count",
+        "catalog.performance.work_factor"
+      ],
+      "observations": [
+        {
+          "attributes": {
+            "catalog.performance.work_factor": 10,
+            "catalog.performance.item_count": 198
+          }
+        }
+      ]
+    }
+  ],
+  "workspaceId": "/subscriptions/7bc68c68-3c40-4cea-bf3b-2b0d1a83b1c0/resourceGroups/rg-user001/providers/Microsoft.OperationalInsights/workspaces/log-mh-user001-dotnet",
+  "capturedAt": "2026-08-27T23:35:00Z",
+  "queryText": "union (AppRequests|extend sig='http.server'), (AppDependencies|extend sig=iff(DependencyType=='SQL','db.client',Name)), (AppExceptions|extend sig='exception') | where AppRoleInstance startswith 'ca-mh-user001-dotnet--release-47acf263d332' | where TimeGenerated>ago(3h) | summarize count() by sig"
+}

@@ -25,10 +25,16 @@ public static class CatalogEndpoints
 
         endpoints.MapGet(
             "/images/{fileName}",
-            (string fileName, IImageStore imageStore) =>
-                imageStore.TryResolvePath(fileName, out var path)
-                    ? Results.File(path, "image/png")
-                    : Results.NotFound());
+            async (
+                string fileName,
+                IImageStore imageStore,
+                CancellationToken cancellationToken) =>
+            {
+                var content = await imageStore.ReadAsync(fileName, cancellationToken);
+                return content is null
+                    ? Results.NotFound()
+                    : Results.Bytes(content.Value, "image/png");
+            });
 
         endpoints.MapGet(
             "/figure/{id}",

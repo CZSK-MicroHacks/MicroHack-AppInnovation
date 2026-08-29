@@ -1,0 +1,71 @@
+{
+  "application": {
+    "containerAppName": "ca-mh-user001-dotnet",
+    "healthUrl": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io/healthz",
+    "readinessUrl": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io/readyz",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.App/containerApps/ca-mh-user001-dotnet",
+    "revisionName": "ca-mh-user001-dotnet--release-47acf263d332",
+    "url": "https://ca-mh-user001-dotnet.gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io"
+  },
+  "applicationRevisionRole": "release",
+  "containerAppsEnvironmentDefaultDomain": "gentlemushroom-0b2a9e18.swedencentral.azurecontainerapps.io",
+  "containerAppsEnvironmentResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.App/managedEnvironments/cae-mh-user001-dotnet",
+  "containerImage": {
+    "digest": "sha256:647e2500591da30fcedc831ea787ed682aa7b5bd4389fbebdd041f034fe089ee",
+    "repository": "catalog-dotnet",
+    "tag": "47acf263d3320fa3bb41d5469fc3c7428a393fca"
+  },
+  "containerRegistry": {
+    "loginServer": "acruser001dotnekurep3z6.azurecr.io",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.ContainerRegistry/registries/acruser001dotnekurep3z6"
+  },
+  "database": {
+    "applicationPrincipal": {
+      "kind": "managed-identity",
+      "name": "id-mh-user001-dotnet",
+      "principalId": "92355f34-9b47-461c-afe8-bfa26c020bb1"
+    },
+    "authentication": "managed-identity",
+    "database": "catalog",
+    "entraAdministratorPrincipal": null,
+    "family": "azure-sql",
+    "localAdministratorPrincipal": null,
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Sql/servers/sql-mh-user001-dotnet-kurep3z6/databases/catalog",
+    "server": "sql-mh-user001-dotnet-kurep3z6.database.windows.net"
+  },
+  "deploymentStage": "application",
+  "images": {
+    "authentication": "managed-identity",
+    "location": "catalog-images",
+    "provider": "azure-blob",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Storage/storageAccounts/stuser001dotnekurep3z6/blobServices/default/containers/catalog-images"
+  },
+  "location": "swedencentral",
+  "network": {
+    "migrationPrivateDnsZoneLinkResourceIds": [
+      "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net/virtualNetworkLinks/migration-source-pkjpzftb",
+      "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/privateDnsZones/privatelink.database.windows.net/virtualNetworkLinks/migration-source-pkjpzftb"
+    ],
+    "migrationSourceToTargetPeeringResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001/virtualNetworkPeerings/to-vnet-mh-user001-dotnet",
+    "migrationSourceVirtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-user001",
+    "migrationSourceVmResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Compute/virtualMachines/vm-dotnet-user001",
+    "migrationTargetToSourcePeeringResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-mh-user001-dotnet/virtualNetworkPeerings/to-vnet-user001",
+    "virtualNetworkResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Network/virtualNetworks/vnet-mh-user001-dotnet"
+  },
+  "observability": {
+    "applicationInsightsResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.Insights/components/appi-mh-user001-dotnet",
+    "logAnalyticsWorkspaceResourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.OperationalInsights/workspaces/log-mh-user001-dotnet"
+  },
+  "resourceGroup": {
+    "name": "rg-user001",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001"
+  },
+  "schemaVersion": "1.2.0",
+  "sourceCommit": "47acf263d3320fa3bb41d5469fc3c7428a393fca",
+  "stack": "dotnet-sqlserver",
+  "workloadIdentity": {
+    "clientId": "2b4a56de-7d44-4725-921f-0b0a26b8be17",
+    "principalId": "92355f34-9b47-461c-afe8-bfa26c020bb1",
+    "resourceId": "/subscriptions/7bc68c68-f434-49ad-ab3e-b883ec39da86/resourceGroups/rg-user001/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-mh-user001-dotnet"
+  }
+}
