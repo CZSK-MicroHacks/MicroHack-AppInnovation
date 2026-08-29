@@ -1099,3 +1099,43 @@ mis-routing in the application** — resource attributes, metric tags and log sc
 by the queries as span attributes — rather than any per-table platform behaviour. Three
 mis-routings, one indistinguishable empty result, and an authoring defect rather than a
 platform quirk.
+
+## Late finding — the workshop material ships a real subscription and tenant GUID, and one merge puts them on `main`
+
+`.azure/deployment-plan.md` is tracked workshop material, added at `3ba4ace` on 2026-08-19 in the
+commit that froze the Azure target contracts, and present at the frozen baseline `4bf59f7`. It
+contains, in five places, an Azure **subscription** GUID and a **tenant** GUID in full:
+
+    subscription  7bc68c68-<redacted>     x3
+    tenant        a7b1484c-<redacted>     x2
+
+The repository is **public** (`gh repo view --json visibility` -> `PUBLIC`). The state is:
+
+    origin/rewrite-integration   file present, publicly readable   HTTP 200, 32,121 bytes
+    origin/main                  file absent                       HTTP 404 (control fires)
+    git diff main...rewrite-integration -- <file>   ->  A  (added), 5 added lines carry a GUID
+
+So the identifiers are already exposed on a public branch, and **the branch-to-`main` merge is the
+step that publishes them on the default branch** -- the one a reader of the repository sees first
+and the one archives and forks track. Nothing in the merge is at fault; the file simply travels
+with it.
+
+Neither identifier is a credential and neither grants access. The exposure is informational: a
+subscription GUID plus a tenant GUID is enough to *confirm* a target that someone already suspects,
+and to address social-engineering and support-channel attempts precisely. That is a real if modest
+harm, and it is one the workshop can avoid at no cost, because the file is a *plan* and the
+identifiers are not needed for it to be readable -- placeholders carry the same instructional
+content.
+
+**Two remedies, and the cheap one is not the safe one.** Redacting the file at `HEAD` leaves both
+values in history and publicly fetchable by SHA; only a history rewrite or a repository-side purge
+removes them, and that is an owner action, not a participant one. **The immediately useful step is
+the negative one: do not merge this file to `main` until the values are replaced**, since the
+absence on `main` is a property worth preserving and is free to keep.
+
+This arm did not introduce the values and did not modify the file: it is inherited from the
+baseline, absent from this arm's PR diff, and identical to the copy every other arm carries. It is
+reported here because the delivery consequence falls on a merge this arm's work sits behind, and
+because an arm that measured the exposure and stayed silent about it on scope grounds would be
+making exactly the mistake this document has been cataloguing all along -- **preservation-reachable
+and delivery-reachable are different questions, and this one is about delivery.**

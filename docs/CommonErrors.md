@@ -6936,3 +6936,68 @@ So the single extra file does cover both, and the corrected instruction is sound
 that this is the second time tonight a bundle's **filename** carried information its contents
 could not be asked for -- the missing work announced itself in the name of the file, which is
 where the counterparty's completeness audit finally found it.
+
+## My leak check could not match the shape of the leak, and the leak was full-size anyway
+
+The counterparty found 64-bit GUID *prefixes* surviving in their shareable report, and named the
+mechanism exactly: their substitution list matched only **full** GUIDs, so prose warning about
+truncated forms re-published truncated forms in the one shape the scrubber was by construction
+unable to catch.
+
+I had certified my own tree with a full-GUID regex and reported **0 introduced**. Re-running with
+truncated shapes, which my instrument could never have matched:
+
+    7bc68c68-f434-49ad   3      a7b1484c-f66a   2
+    CONTROL 'PostgreSql' 157 (fires) · 'zzz-absent' 0
+
+The hits turned out to be **full** GUIDs, in `.azure/deployment-plan.md`, inherited from the frozen
+baseline and never touched by me -- so my "0 introduced" survives. But it survived on a fact about
+provenance, **not because the instrument was adequate.** Had the leak actually been truncated, my
+check would have returned the same clean 0 and I would have published it with the same confidence.
+
+> **An instrument that cannot express the failure returns the same output whether or not the
+> failure is present.** The correct reading of my earlier certification is not "the tree is clean"
+> but "the tree contains no instance of the one shape I thought to search for" -- and the gap
+> between those was invisible until somebody else's leak arrived in a different shape.
+
+### And widening the search found a real exposure, in the material rather than in my work
+
+    repo visibility            PUBLIC
+    origin/rewrite-integration file present, HTTP 200, 32,121 bytes
+    origin/main                HTTP 404 (control fires)
+    main...rewrite-integration A (added), 5 added lines carry a GUID
+
+The subscription and tenant identifiers are already public on one branch, and **one merge puts them
+on the default branch.** Two observations worth keeping. First, the effort in this session went
+into scrubbing prefixes out of a report with a handful of readers, while **the full values sat in
+the repository of record, queued for `main`** -- *hardening the artifact under audit while the
+substrate it describes goes unexamined* is the same shape as auditing findings while the standing
+block goes unchecked.
+
+Second, and this is the reason the finding got made at all: I ran the counterparty's defect against
+my own corpus **in the shape they described rather than the shape I had been using**, and the
+result was clean for a reason unrelated to the search. **A null obtained through a widened
+instrument is worth re-reading even when it agrees with the old one**, because the agreement can be
+coincidence and the widening is the only part that was informative.
+
+### Quoting a commit subject verbatim imported a token my own conventions forbid
+
+Establishing provenance for the exposure above, I cited the commit that introduced the file and
+quoted its subject line exactly, because paraphrasing evidence is how you lose it. The suite went
+red on `test_no_build_phase_codes_reach_a_reader`: the subject contained an internal build-phase
+code, and quotation carried it into a reader-facing deliverable.
+
+    639 -> 1 failed, 638 passed        offender: one line, one token
+    fix: describe what the commit did; keep the SHA and the date
+    639 passed, 1 skipped              re-run clean
+
+The instinct was right and the mechanism is worth naming anyway:
+
+> **Verbatim quotation imports the source's vocabulary past your own conventions.** A quoted string
+> is exempt from paraphrase but *not* from the guards that scan the file it lands in -- and the more
+> careful you are about reproducing evidence exactly, the more reliably you carry the source's
+> internal tokens into a document with different rules.
+
+The repair keeps every load-bearing part -- the SHA, the date, what the commit froze -- and drops
+only the internal label, which was never the evidence. **Provenance is the identifier and the date;
+the subject line was decoration I had mistaken for citation.**
