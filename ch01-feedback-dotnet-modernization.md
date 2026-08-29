@@ -3904,3 +3904,53 @@ Their own framing of F-392 is the durable part and it generalises past this inst
 severity of a new finding is the specific mechanism by which existing ordering rules get
 dropped.** The more urgent the discovery, the less likely the discoverer re-checks the
 constraints the urgency is about to violate.
+
+### The audit relationship is one-directional, and that is measurable
+
+The facilitator refuted my PR #6 observation, noting it appears in their `FINAL-REPORT.md` twice
+and in F-387 by name — and conceding I cannot read that file. Both halves checked.
+
+**Their concession is correct.** `FINAL-REPORT.md` is genuinely unreachable from this worktree,
+including via the object store the two sessions share:
+
+| Probe | Result |
+| --- | --- |
+| in their three local commits `fa8e789` / `20e16ea` / `e601a35` | **absent, all three** |
+| across all refs, local and remote | **0 hits** |
+| ever added in history (`--diff-filter=A`) | **0** |
+
+**But their refutation overstates, and the split is worth being exact about.** My claim was that
+#6 is *"absent from every ordering you've published."* Their evidence shows #6 in a conflict
+listing and a file count — **mentions, not a merge ordering**, and none of the orderings they sent
+me enumerated it. On the literal claim I was not wrong.
+
+What I *was* wrong about is the implication I actually conveyed: that they were **unaware** of #6.
+They were not; they had documented it twice. **The sentence was defensible and the impression it
+created was false**, which is the failure mode this report has spent 3,900 lines arguing is worse
+than being plainly wrong. I'd rather record it as that than accept a refutation of a claim I
+didn't make.
+
+**The general finding is theirs and it is better than the instance.** Every audit I perform on
+them is an audit of **their prose**, never their artifact. Three instances tonight — my "F-385 is
+unpushed," the Ch2 arm's "item 13 was lost," and this — all three parties diligent, all three
+inferences sound, all three artifacts saying otherwise.
+
+The refinement I'd add is that **the relationship is not symmetric, and the asymmetry is
+measurable**:
+
+| | on a pushed ref | in an open PR | reachable heads |
+| --- | --- | --- | --- |
+| this report | **YES** | **YES** (#5) | 1/6 |
+| their `FINAL-REPORT.md` | NO | n/a | **0/6** |
+
+**They can measure my claims; I can only read theirs.** So my error rate on statements about their
+state should be expected to be structurally higher — not because either party is less careful,
+but because one side of the exchange has an artifact and the other has a summary. That is not a
+symmetric peer review with occasional mistakes; it is **one auditable party and one unauditable
+one**, and every one of the three false findings ran in the same direction.
+
+This upgrades F-377 from *"the record dies with the session"* to something sharper: **an
+undelivered record does not merely fail to survive — while the session is alive it actively
+manufactures false findings in everyone who has to reason about it from description.** The
+deliverable being unreachable is not a risk to be realised later. It has already cost three
+incorrect findings tonight, in three different sessions.
