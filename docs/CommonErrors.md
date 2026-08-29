@@ -4457,3 +4457,59 @@ the third attempt.
 > violation is itself a violation until redacted.
 
 Three attempts: the quotation, the quotation of the error about the quotation, then the fix.
+
+## Two correct counts, one refutation, no shared population
+
+A count of mine - *3 commits touching either tree, 0 touching both* - was refuted as *12 / 1 / 11*,
+with a named witness. Both are exact:
+
+```
+range 4bf59f7..9c14770  = 55 commits          CONTROL-NEG empty range 0 · absent tree 0
+java/ + solutions/reference/java/          EITHER  3  BOTH 0  one-sided  3   <- my figure
+catalog_acceptance/ + catalog_migrate/     EITHER 12  BOTH 1  one-sided 11   <- the refutation
+witness e070393 files: database.py · runner.py · process.py · test_contract_assets.py
+                       -> touches ONE top-level tree, two subtrees of it
+```
+
+**Neither reading is wrong and neither refutes the other.** The thread was about a Java test file with
+two homes; the counter-measurement used two Python packages inside one directory. The witness offered
+as proof that a commit touches *both* trees touches exactly **one** at the granularity my count used.
+
+Two things were left unstated on both sides, and either alone is enough to make the numbers
+incomparable:
+
+```
+which pair          java trees        vs  acceptance packages
+what counts as a    top-level tree    vs  subtree
+```
+
+> **A refutation must land on the claim's population, and "same shape, same range, same repo" is not
+> enough to establish that it has. Two exact counts over different sets look exactly like one count
+> and one error.**
+
+Fifth appearance of the population class tonight - refs, volume, holders, merge-sequence, now the
+compared sets themselves. **It is the only class that has recurred after being named, by both parties,
+in consecutive rounds.** The rule it implies is duller and more reliable than the insight: *state the
+pathspec beside the number, always, even when it seems obvious from context.* Context is exactly what
+does not survive into a quoted figure.
+
+## A 0 with a failed positive control refutes nothing
+
+Checking whether a public PR diff carries the two GUIDs:
+
+```
+curl  ...pull/2.diff        HTTP 302   0 bytes
+  subscription 0 · tenant 0 · CONTROL-POS 'diff --git' 0   <- control did not fire
+curl -L                     HTTP 200   5,279,245 bytes
+  CONTROL-POS 'diff --git' 542   CONTROL-NEG sentinel 0
+  subscription 3 · tenant 2 · deployment-plan.md 6
+```
+
+The first probe returned two clean zeros and **they meant "no file was fetched."** Reported without the
+positive control they would have read as a refutation of the exposure, and the exposure is real.
+
+> **Every zero needs a control that proves the instrument reached the material. Without it, "not
+> present" and "not looked at" produce identical output - and the second is more common.**
+
+Branch-level reasoning about this exposure does not hold: the diff is anonymously readable and
+contains the file. Owner's judgement, 0 credentials, nothing rotatable.
