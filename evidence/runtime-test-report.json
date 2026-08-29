@@ -1,6 +1,5 @@
 {
   "schemaVersion": "1.1.0",
-  "sliceId": "copilot-rewrite-java",
   "stack": "java-postgresql",
   "sourceCommit": "4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af",
   "status": "passed",

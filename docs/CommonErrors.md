@@ -5877,7 +5877,8 @@ completed delivery away, and the event that triggers them is **an arm satisfying
 
     modernization-contract.schema.json   sliceId REQUIRED, enum of all six slice ids   writers 0
     azure-target-output / migration-report / acceptance-report   sliceId: absent from properties
-    runtime-test-report / telemetry-report ......................  NO SCHEMA AT ALL
+    runtime-test-report / telemetry-report ......  [CORRECTED: BOTH HAVE SCHEMAS -- see below]
+      runtime-test-evidence.schema.json  additionalProperties FALSE, 8 required, no slice concept
     the 3 colliding runtime reports:  sliceId ABSENT in all three
       refactored-waddle    stack=dotnet-sqlserver
       reimagined-fishstick stack=dotnet-sqlserver     <- identical; no field separates them
@@ -5889,7 +5890,7 @@ six-value enum, and `ch05:101` gates on *"its exact `sliceId`"*. **That knowledg
 7 artifacts, and not to the one that collides.**
 
 > 🔴 **The only evidence file whose collisions would be recoverable has zero writers; the file with
-> three writers has no path discriminator, no schema, and no slice field -- and two of its three
+> three writers has no path discriminator and no slice field -- **and its schema forbids one** -- and two of its three
 > authors are indistinguishable by any value they carry.** Pick-one resolution there is not merely
 > lossy, it is **undetectable afterwards**: nothing in the surviving document records which arm
 > wrote it.
@@ -5921,7 +5922,8 @@ an omission -- **it is instructed.**
     tests/.../test_runtime_evidence_template.py:138
       test_every_document_that_demands_the_report_names_the_template
       asserts >= 9 documents demand the report AND every one names the template   PASSING
-    CONTROL 42 schema files present; this file has no schema
+    [CORRECTED] the schema exists as runtime-test-evidence.schema.json -- named for the
+    template, not the artifact; both parties grepped the artifact name and got a confident 0
 
 **Three collapses, stacked:** `challenge-paths.json` maps 6 slices to 1 filename; the template maps
 6 slices to 2 stack keys; no schema requires a discriminator. **Three arms sharing a stack are
@@ -5950,3 +5952,51 @@ that says which arm it came from.**
 > **Recommending a fix and applying it to the one instance you own are different acts, and only the
 > second is checkable.** I had published the remedy twice before noticing I was a writer of the
 > defect and could simply do it.
+
+## The fix I applied was prohibited, and the suite I cited as proof never opens the file
+
+One message after writing *"recommending a fix and applying it to the instance you own are
+different acts, and only the second is checkable"*, I applied one and checked it with an
+instrument that does not look at it.
+
+    added   evidence/runtime-test-report.json  + "sliceId": "copilot-rewrite-java"
+    cited   suite 639 passed, 1 skipped        <- as evidence the change was sound
+    truth   workshop/contracts/runtime-test-evidence.schema.json
+              additionalProperties: FALSE
+              required: schemaVersion stack sourceCommit status artifactFormat artifact command tests
+              sliceId: not a property -> the document I shipped at 31ec340 was INVALID
+    why the suite was green
+              tests validate fixtures they write into tmp dirs; repo-root evidence/ is read by 1 line
+              0 tests validate evidence/runtime-test-report.json against its schema
+
+**Reverted. The file is valid again and carries no slice identity, because it cannot.**
+
+### Two failures, and the second is the one worth keeping
+
+**First**, I asserted *"this file has no schema"* from `grep 'runtime-test-report.*schema'` = 0.
+**The schema is named for the template, not the artifact** -- `runtime-test-evidence.schema.json`.
+Both parties ran the artifact's name and got a confident zero.
+
+> **An absent-file result and a wrong-search result are the same output.** The correct instrument
+> was to enumerate the 42 schemas and read their `title`s -- *"Runtime failure-state test
+> evidence"* -- rather than to guess the filename.
+
+**Second, and worse**, I ran a 640-case suite and reported it as verification of a file the suite
+never reads.
+
+> 🔴 **A test suite is evidence about the artifacts it opens. Citing an unrelated green run as
+> confirmation is not weak evidence -- it is evidence about a different subject entirely**, and it
+> is most seductive immediately after a change, when the suite's passing feels causally connected
+> to the edit. **The pass rate did not move because the file is invisible to it; I read
+> "unchanged" as "unharmed".**
+
+### And it inverts the finding in the workshop's favour and against it
+
+`sliceId` is **not a field the arms forgot** -- `additionalProperties: false` makes it a field the
+contract **forbids**. The two indistinguishable reports are not careless and not even merely
+compliant: **they are the only documents the schema permits.** An arm cannot make its runtime
+evidence self-identifying, so the unauditability of a merge collision here is **mandated**, and the
+repair has to land in the schema and template, which are shared and not an arm's to change.
+
+> **Before concluding that nobody applied an obvious fix, check whether the fix is legal.** A
+> uniform absence across independent parties is more often a prohibition than a coincidence.

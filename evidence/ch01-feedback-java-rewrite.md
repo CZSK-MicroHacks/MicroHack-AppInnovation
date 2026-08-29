@@ -120,7 +120,10 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    seven paths, zero slice discriminators -- so a full workshop is 42 writes to 7 names.
    `modernization-contract.schema.json` **requires** `sliceId` against an enum of all six slice
    ids and `ch05:101` gates on *"its exact `sliceId`"*; **no other evidence schema declares the
-   property, and `runtime-test-report.json` has no schema at all.** Measured across seven remote
+   property, and `runtime-test-evidence.schema.json` -- which governs
+   `runtime-test-report.json` and is named for the template rather than the artifact -- sets
+   `additionalProperties: false` over eight required fields with no slice concept, so
+   **`sliceId` in a runtime report is not omitted but prohibited.** Measured across seven remote
    branches, that file already has **three** writers, of which two carry the identical
    `stack=dotnet-sqlserver` and no field separating them. **A pick-one resolution there is not
    recoverable, because nothing in the surviving document records who wrote it.** The estate
@@ -137,8 +140,14 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    **A conformance guard verifies agreement with a canonical source and cannot notice that the
    source is under-keyed for its consumers.** Fix: key the template by slice, or require
    `sliceId` in the evidence. **Applied here to the one copy this arm owns** --
-   `evidence/runtime-test-report.json` now declares `sliceId: copilot-rewrite-java`, matching
-   the enum in `modernization-contract.schema.json`; suite 639/1 unchanged.
+   **this remedy was attempted here and withdrawn, which is the sharper result.** Adding
+   `sliceId: copilot-rewrite-java` to `evidence/runtime-test-report.json` produced a document
+   that **violates `runtime-test-evidence.schema.json`** (`additionalProperties: false`), and
+   the acceptance suite stayed at **639/1 across both the invalid and the reverted state**
+   because no test validates the repository's own `evidence/` artifacts against their schemas.
+   The field is reverted; the file is valid. **An arm cannot make its runtime evidence
+   self-identifying without a schema change, so the unauditability of a merge collision on this
+   path is mandated by the contract rather than merely unaddressed by convention.**
 
 ## Ambiguities a participant hits
 
