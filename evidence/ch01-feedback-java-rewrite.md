@@ -1174,3 +1174,35 @@ gate is never aimed at it, so the fixture's five English placeholders -- `"examp
 error query"` and siblings -- clear `minLength: 20` and never meet the templates they stand for.
 Third instance in this repository of an enforcement path that exists and is not pointed at the
 artifact it was written for.
+
+## Two exposures in this repository take opposite actions, and only one measurement separates them
+
+Both were found during this audit and both look like the same problem. They are not.
+
+| exposure | on `origin/main` | correct action |
+| --- | --- | --- |
+| subscription + tenant GUIDs in `.azure/deployment-plan.md` | **absent** (`git cat-file -e` fails; file 404s on the API) | **do not merge PR #2 until replaced** -- absence is free to preserve |
+| author email on six pushed refs | **present since `8488587`, 2025-09-08** | accept; do not rewrite history |
+
+The second is the correction. A collaborating arm scoped its marginal exposure to the arm branches
+and the `rescue/` ref; measured against `origin/main`, the address has been on the public default
+branch for about a year, so **withholding branches reduces nothing.** The recommendation not to
+rewrite history during teardown is right, and its ground is stronger than stated: the marginal
+exposure is zero, so a rewrite is pure risk with no benefit.
+
+Severity intuition runs on what kind of value it is. **The action runs on whether the default branch
+already reaches it** -- which is one command, and it reverses the answer. A high-sensitivity value
+already published is a disclosure to accept and document; a low-sensitivity value not yet published
+is the only case where the cheap remedy still exists.
+
+For the workshop this matters directly: the material ships a real subscription and tenant identifier
+in a tracked file, and the branch carrying it is one merge from the default branch of a public
+repository. That merge is the last moment the cheap remedy is available.
+
+### Provenance note on this arm's own delivery
+
+Five commits in PR #3 -- `e48f3c3`, `1574a56`, `d0420e2`, `5393507`, `383b9f7` -- carry no
+`Copilot-Session` trailer (control: a known commit of this arm's returns one). They are ancestors of
+this head and present in neither `origin/main` nor `origin/rewrite-integration`. Stated, not
+resolved: a missing trailer discriminates but does not identify, so this arm can say it did not stamp
+them and cannot say who did.

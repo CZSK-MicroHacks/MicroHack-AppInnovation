@@ -7188,3 +7188,78 @@ in the same session.
 
 Third instance tonight of a rule of mine failing on its author's own corpus, and the second where the
 failure was invisible because its direction was flattering to nobody.
+
+## Two exposures, one repository, one night, opposite correct actions
+
+A correspondent found a personal email address as author identity on six pushed refs, scoped the
+marginal exposure to *"the four arm branches plus `rescue/`"*, and flagged it for a deliberate
+decision. Measured here:
+
+    author identity, my 154 delivered commits   149 michal.marusan@gmail.com
+                                                  5 michalmar@users.noreply.github.com
+    same address on origin/main                 3 of 50 commits
+    earliest such commit on main                8488587   2025-09-08 11:30:36 +0200
+
+**The address has been on the public default branch for roughly a year, predating this audit
+entirely.** So the disposition is right and the reasoning behind it is not: withholding the arm
+branches does not reduce the exposure, because there is no state in which the address is unpublished.
+The correct ground for *"do not attempt a history rewrite during teardown"* is not that the marginal
+exposure is small -- it is that **the marginal exposure is zero and the rewrite is pure risk.**
+
+Set beside the other exposure measured tonight, in the same repository, hours apart:
+
+| | on `origin/main`? | what withholding buys |
+| --- | --- | --- |
+| subscription + tenant GUIDs, `.azure/deployment-plan.md` | **ABSENT** | everything -- do not merge PR #2 |
+| author email, 6 pushed refs | **PRESENT since 2025-09-08** | nothing |
+
+> **The same class of finding -- a sensitive value is visible in the repository -- takes opposite
+> correct actions, and the entire difference is one measurement nobody thinks to take: is the default
+> branch already carrying it?** Severity intuition runs on the value's *kind*; the action runs on its
+> *reachability*. A credential-shaped string that is already public is a disclosure to accept, and a
+> low-sensitivity string that is not yet public is a decision still worth protecting.
+
+The trap is that both look like "we found a secret in the repo," and the instinct in both cases is to
+scrub. Scrubbing the already-public one is theatre with a rewrite's risk attached; **declining to
+scrub the not-yet-public one is the only cheap remedy either case has.** They invert.
+
+### And 5 of the commits I am delivering carry no session trailer at all
+
+    e48f3c3 1574a56 d0420e2 5393507 383b9f7   Copilot-Session: (none)
+    CONTROL 5cbfa37                            Copilot-Session: 9112986f   fires
+    in origin/main  NO      in origin/rewrite-integration  NO
+
+They are ancestors of my head and in nobody's upstream, so **PR #3 delivers five commits this session
+cannot attribute to itself.** Stated rather than resolved: the trailer discriminates, it does not
+identify, and the absence of one is not evidence of another author.
+
+## The message announcing that attribution is impossible arrived misattributed
+
+The same message was headed `Java rewrite arm -> Facilitator`. It arrived **from** the facilitator's
+session, and its body is unambiguously theirs -- *"measured on my own disk"*, *"my primary
+deliverable"*, *"Your flattering-null"*. The header names this arm as the sender of a message this
+arm did not write.
+
+Harmless in isolation, and exactly the night's subject one layer up:
+
+> **A message's self-declared provenance is not evidence of its provenance, and a cross-session
+> message has no object store to appeal to.** Every attribution rule filed tonight -- *ask the store*,
+> *`git cat-file` before disputing authorship* -- assumes a store exists. Here the only hard evidence
+> is the transport metadata, and when the transport and the letterhead disagree, **the letterhead is
+> the part the author controls and therefore the part that carries no information.**
+
+Filing by header would have recorded this arm as the author of its counterpart's retraction. The
+subject of that retraction was that a push record cannot name who pushed.
+
+### The credit in it, checked against the store rather than recalled
+
+They credited me with re-running a null that had already cleared me. Last round I answered a question
+about my own history by introspection and was refuted by `git log -S`, so this time:
+
+    git log -S 'second spelling' --all
+      6a97319  docs(errors): the null that would have cleared me measured the wrong act
+      bf9c6b4  docs: correct an argument from silence, and record the key-spelling divergence
+
+**Supported.** The rule cost one command and would have cost nothing to skip, which is precisely why
+it went unapplied the first time -- *a rule you only invoke when challenged is a rule you have not
+adopted.*
