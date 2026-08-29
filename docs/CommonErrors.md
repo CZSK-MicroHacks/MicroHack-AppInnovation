@@ -4931,3 +4931,63 @@ against each other because they were filed as separate findings, and separate fi
 collide until somebody acts on both.** Redaction first, then commit, is mechanical and
 removes the conflict -- but it has to be sequenced deliberately, and nothing in either
 finding says so.
+
+## Both coordinates were recorded, and both were the same name
+
+Last round this arm sharpened the observation-ref rule to a pair: name the ref the claim is
+*about* and the ref it was *measured at*. The counterparty then reported a self-filed CRITICAL
+in which they had read a file at one ref, verified it at another, and concluded their own
+correct citations were fabrications. Measuring that case shows the pair rule is still not
+sufficient.
+
+    docs/TelemetryFaultInjection.md
+      at 9c14770   250 lines          at fa8e789   289 lines      4 hunks
+      CONTROL-NEG  README.md across the same pair    0 hunks
+    relationship: 9c14770 IS an ancestor of fa8e789, merge-base IS 9c14770, 3 commits apart
+      2 of the 3 touch this file: 20e16ea, e601a35, net +39 lines
+    names:
+      local branch pointing at fa8e789    rewrite-integration
+      remote ref  pointing at 9c14770     origin/rewrite-integration
+
+**Both refs answer to the name `rewrite-integration`.** The content cited existed at the local
+tip and had not yet reached the published tip, three commits behind. A provenance note reading
+*"observed in rewrite-integration, verified in rewrite-integration"* is diligent-looking, is
+what a careful person would write, and carries no information at all.
+
+**A coordinate must be immutable or it is not a coordinate.** Branch names are themselves
+moving objects, so recording the pair by name records two functions of time and pretends they
+are constants. The pair must be SHAs. This arm's own repair last round used a SHA rather than
+`HEAD` or a branch name, and got that right without being able to say why; this is why.
+
+The failure mode is worse than the absent-coordinate case for the same reason a mismatched
+coordinate is: it survives review. Nobody queries a provenance line that names a branch,
+because naming the branch is the convention.
+
+### The containment question, asked twice, answered two ways
+
+While checking whether the cited content was at risk, two instruments disagreed:
+
+    git merge-base --is-ancestor fa8e789 origin/rewrite-integration   -> NO
+    git rev-list fa8e789 --not --remotes=origin --count               -> 0
+    CONTROL-POS same rev-list on 9c14770                              -> 0
+
+The first asks whether one *named* ref contains the commit; the second asks whether *any*
+origin ref does. Only the second answers "is this preserved." The commit is fully reachable
+from origin and is not stranded, and reporting it as unpublished on the strength of the first
+check would have been the ref-identity-for-containment error a third time -- caught here only
+because the second check was run before the sentence was written, not after.
+
+## A confession is a claim, and this one was false in the confessor's favour of nobody
+
+The counterparty filed a CRITICAL against themselves alleging fabricated citations, and it
+stood unchallenged for 50 minutes. The citations were correct. The file simply had 39 fewer
+lines at the ref they verified against, because that ref predated the two commits that wrote
+the content.
+
+This arm's deliverable already carries the heading *verify a confession exactly as you verify
+a claim*, filed after a different self-accusation. The instance here is stronger: **a
+self-accusation is the least likely statement to be audited, because contesting it means
+insisting the speaker was less wrong than they say.** Both parties have now produced one, and
+both went uncontested for as long as nobody re-derived them from the substrate. The remedy is
+not scepticism about confessions; it is that the substrate check is cheap and does not care
+which direction the claim points.
