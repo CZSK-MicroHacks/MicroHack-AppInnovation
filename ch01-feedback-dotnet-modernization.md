@@ -3846,3 +3846,61 @@ Unchanged and strengthened: `main` **is** the GitHub default branch (verified), 
 (`rewrite-integration → main`, `OPEN/MERGEABLE`) is the remedy, and merging it closes F-390 and
 F-360 together. The pre-start source-provenance check remains the cheap guard — and the corrected
 mechanism is precisely *why* it cannot be replaced by "you'll notice when something breaks."
+
+### F-392's ordering fix is right, undercounts by half, and is not sufficient on its own
+
+The facilitator reversed their own "merge PR #2 first" instruction on realising `main` has no
+`infra/` at all — so #2 does not *update* infrastructure, it **introduces** it, and whatever
+`rewrite-integration` holds on that day becomes `main`'s inaugural infrastructure. Correct. Three
+corrections to what they published under it.
+
+**1. `main` would inherit four defects today, not the two they listed.** Measured on
+`origin/rewrite-integration`:
+
+| Defect | Site | State on the publishing ref |
+| --- | --- | --- |
+| F-347 `activeRevisionsMode` | `environment.bicep:667` + compiled `main.json` | `'Single'` — **2 sites** |
+| F-382 double-dot `serverHost` | `sql.bicep:84` + compiled | source concat + **6** compiled occurrences |
+| F-384 hardcoded PG suffix | `postgresql.bicep:71` | `'.postgres.database.azure.com'` literal |
+
+They listed F-347 and F-382. **F-384 is also unfixed on the publishing ref** and would ship with
+the other two.
+
+**2. PR #5 is the sole carrier of two of the three remedies.** Checked across every open PR head:
+
+```
+michalmar-refactored-waddle              sql:1  postgres:1     <- only branch with either
+michalmar-ch01-java-rewrite-walkthrough  sql:0  postgres:0
+michalmar-ch07-and-wrapup                sql:0  postgres:0
+michalmar-reimagined-fishstick           sql:0  postgres:0
+rewrite-integration                      sql:0  postgres:0
+```
+
+So "children first" is not generic hygiene in this case — **#5 specifically must land before #2,
+or `main` receives the malformed hostname as its first-ever infrastructure**, in both the Bicep
+and the compiled ARM.
+
+**3. Children-first is necessary but not sufficient, because F-347's remedy is on no branch at
+all.** Established earlier: it was applied in a `/tmp` copy, verified, reported, deleted. Merging
+every open child still leaves `activeRevisionsMode: 'Single'` at two sites. **Someone has to make
+a commit that does not currently exist**, and by the two-artifact finding it must touch three
+files, not one.
+
+Correct sequence, as measured:
+
+```
+1. merge #3, #4, #5 into rewrite-integration     (#5 carries F-382 + F-384)
+2. commit the F-347 remedy there  -- exists nowhere; bicep AND both compiled artifacts
+3. verify: grep -rn 'activeRevisionsMode.*Single' infra/  -> 0
+           grep -c sqlServerHostname infra/main.json      -> 0
+4. then merge #2 into main
+```
+
+**Incidentally: PR #6 has appeared** (`michalmar-reimagined-fishstick → rewrite-integration`,
+**CONFLICTING**) and is not in any ordering the facilitator has published. The stack is five deep,
+not four.
+
+Their own framing of F-392 is the durable part and it generalises past this instance: **the
+severity of a new finding is the specific mechanism by which existing ordering rules get
+dropped.** The more urgent the discovery, the less likely the discoverer re-checks the
+constraints the urgency is about to violate.
