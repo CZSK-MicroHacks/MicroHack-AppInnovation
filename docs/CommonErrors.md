@@ -7463,3 +7463,68 @@ incapable of showing that.
 Same shape as the two scoping errors above, one axis over: they bounded by *refs I pushed*, I
 bounded by *commits I authored*. **All three are the population you are the subject of, mistaken for
 the population that exists.**
+
+## A pickaxe's earliest result is structurally guaranteed to be exculpatory
+
+A correspondent ran `git log --all -S<secret> --reverse`, took the first commit, and concluded: the
+value predates the workshop by ten days, **no arm introduced it**, sole file
+`.azure/deployment-plan.md`, scrub at source. That went into an operator handoff as the scrub target.
+
+Measured on the same store, taking the whole population instead of its first element:
+
+    total commits touching the value        35
+    dated 2026-08-27 or later (arm runs)    25
+    distinct files across the live trees     6   (not 1)
+    CONTROL --since=2030                     0   · CONTROL -S'deployment-plan'  88 (fires)
+
+The later ones have subjects like *"evidence: migration report"*, *"ch04: live .NET observability
+evidence"*, *"ch05 Defender walkthrough"*. **Arms did introduce it -- into evidence artifacts they
+generated.** An operator scrubbing the one named commit and the one named file leaves five files
+standing.
+
+### Why the error is structural rather than careless
+
+`-S … --reverse | head -1` answers *when did this value first appear.* It does not answer *which
+commits introduce it*, and it cannot answer *which files carry it now.*
+
+> **If a pre-existing baseline exists at all, the earliest introducing commit is by construction not
+> an arm's.** The query cannot return an incriminating first result. So its output was guaranteed to
+> exonerate before it was run, and it was read as an exoneration.
+
+That is the flattering-null family one member over. A null is an absence nobody re-runs; this is a
+**present, specific, correct value whose favourable direction is fixed by the shape of the query.**
+It is more persuasive than a null precisely because it is a real datum with a date and a SHA.
+
+Rule: **when a query's most favourable possible answer is also its structurally guaranteed answer,
+it has tested nothing.** Ask for the population, sort by date, and read the tail as well as the head.
+
+## The exposure was mandated by the contract, which changes what a remedy can be
+
+Following that correction upstream produced the finding the whole thread had been circling.
+
+    workshop/contracts/*.schema.json                                     42
+    REQUIRED *ResourceId fields (each embeds /subscriptions/<guid>/)     52  in 19 files
+    REQUIRED fields with pattern anchored ^/subscriptions/[0-9a-fA-F-]{36}   13  in 10 files
+    CONTROL required fields with no subscription implication            313 (fires)
+
+The material also instructs committing the evidence, and the repository is public. **A participant
+who follows the instructions correctly, and whose artifact validates, publishes their subscription
+identifier.** Twenty-five of the thirty-five commits are exactly that happening.
+
+Which reframes every remedy discussed for hours: scrubbing, squash-merging, deleting branches and
+rotating all act on **the copies that exist.** None of them touches the fact that **the next correct
+run regenerates the value.** A defect that is produced by compliance cannot be remediated by
+cleanup; only the specification can be changed.
+
+    /subscriptions/<SUBSCRIPTION-ID>                      FAIL validation
+    /subscriptions/REDACTED                               FAIL validation
+    /subscriptions/00000000-0000-0000-0000-000000000000   PASS  <- and the shipped examples use it
+
+**The safe form already exists in the repository's own example files and is never stated as an
+instruction.** The reason nobody redacted is not carelessness: the two spellings a person would
+reach for both fail validation, so redaction presents as forbidden by the contract. It is not -- but
+discovering that requires reading the regex rather than trying the obvious placeholder once.
+
+> **A convention demonstrated in examples but never stated as a rule is invisible to the person who
+> needs it**, because examples are read for the shape of the answer and not for the provenance of
+> each field.

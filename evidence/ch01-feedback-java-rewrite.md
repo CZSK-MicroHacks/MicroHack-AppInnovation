@@ -1309,3 +1309,69 @@ to `main`; then delete the branches that exist only as audit artifacts.
 settled my responsibility. It does not: pushing a branch is a publication act independent of whether
 you wrote the line, and this arm has been warning about a merge while serving the same file from a
 URL bearing its own branch name.
+
+## Root cause: the evidence contract requires the live subscription GUID, and the material never says to substitute one
+
+Everything above treats the exposed identifiers as something that got committed. That framing is
+wrong, and the correction supersedes the cause analysis in the two sections above -- their
+measurements stand, their account of *why* does not.
+
+The evidence contracts do not merely tolerate the subscription GUID. **They require it and validate
+its format.**
+
+    workshop/contracts/*.schema.json scanned                          42
+    REQUIRED *ResourceId fields (every one embeds /subscriptions/<guid>/)   52  in 19 files
+    REQUIRED fields whose pattern is anchored ^/subscriptions/[0-9a-fA-F-]{36}   13  in 10 files
+    CONTROL: required fields with no subscription implication          313 (fires)
+
+Examples of the anchored patterns, quoted from the contracts:
+
+    cicd-evidence           identity.resourceId      ^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/...
+    defender-*-envelope     scopeResourceId          ^/subscriptions/[0-9a-fA-F-]{36}$
+    observability-evidence  subject.containerAppResourceId   ^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/...
+
+And `challenges/ch01-copilot-modernization/README.md:157` instructs the participant to **commit** the
+result. The repository is public. So a participant who completes the workshop correctly, and whose
+evidence validates, has published their subscription identifier. **The leak is the specified
+behaviour of the material, not a lapse by anyone who ran it.**
+
+That is confirmed by the history rather than inferred: `git log --all -S<sub-guid>` returns **35**
+commits, of which **25 are dated 2026-08-27 or later** -- during the workshop runs, with subjects
+like *"evidence: migration report"*, *"ch04: live .NET observability evidence"*, *"ch05 Defender
+walkthrough: live posture evidence"*. Six distinct files carry it across the live trees, not one.
+
+### The remedy is one sentence, and the material already ships the safe pattern
+
+Testing what the anchored patterns actually accept:
+
+    /subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee   PASS
+    /subscriptions/00000000-0000-0000-0000-000000000000   PASS
+    /subscriptions/<SUBSCRIPTION-ID>                      FAIL
+    /subscriptions/REDACTED                               FAIL
+
+A word-shaped placeholder fails validation, which is why redaction looks impossible and why nobody
+attempted it. **An all-zero GUID passes** -- and `workshop/contracts/*.example.json` already uses
+exactly `00000000-0000-0000-0000-000000000000`.
+
+**The convention exists, is already demonstrated in the shipped examples, and is never stated as an
+instruction anywhere in `challenges/` or `workshop/`** (`redact|scrub|sanitiz` across both: 8 hits,
+none of them an instruction to the participant; the one near-miss at
+`challenges/ch05-defender/README.md:120` describes the examples as sanitized rather than telling the
+reader to sanitize theirs).
+
+**Recommended change to the material, in priority order:**
+
+1. State the placeholder convention in the evidence-contract documentation and in each challenge that
+   asks for a `*ResourceId` -- *"substitute `00000000-0000-0000-0000-000000000000` for your
+   subscription GUID in any evidence you commit; the contracts accept it."* One sentence; it closes
+   the class for every future run, and requires no schema change.
+2. Add an acceptance test that fails when a committed evidence artifact contains a subscription GUID
+   other than the all-zero placeholder. The repository already has 42 contracts and a validator at
+   `catalog_migrate/handoff.py`; this is the fourth built-but-unaimed enforcement path found in this
+   audit, and the only one whose absence has a security consequence.
+3. Rotate the currently exposed identifiers, then scrub. Rotation first, because as established
+   above no git-side action reaches copies already delivered.
+
+**Why this is the most important finding in this document:** every other defect here costs a
+participant time. This one costs them a disclosure, it is produced by following the instructions
+correctly, and it will recur on every future run of the workshop until the material changes.
