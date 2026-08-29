@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.microsoft.microhack.catalog.RuntimeHealthContractTest
+-------------------------------------------------------------------------------
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.929 s -- in com.microsoft.microhack.catalog.RuntimeHealthContractTest

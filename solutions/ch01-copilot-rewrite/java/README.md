@@ -85,6 +85,13 @@ uv --no-config run pytest -q tests/test_contract_assets.py \
 cd ../..
 ```
 
+On the workshop VM there is no Docker daemon, so the six `PostgreSqlIntegrationTest` cases
+are skipped and `mvnw test` still succeeds: expect `Tests run: 34 ... Skipped: 6`. Six
+skipped is the correct VM result, not a regression — where a Docker daemon is present the
+same command runs all 34 with none skipped. Read the skip count alongside the pass count
+when you compare two runs, because only the pair distinguishes an environment difference
+from a real failure.
+
 The deselected test is a repository-authoring guard, not a participant gate. It asserts that
 `java/` and `solutions/reference/java/` differ only in the nine files the *modernization*
 path edits, and that the only files the reference adds are its declared additions —
@@ -92,6 +99,15 @@ path edits, and that the only files the reference adds are its declared addition
 bounded rewrite edits files outside that set, and checkpoint 4 has you author
 `java/Dockerfile`, which removes it from the reference's declared additions. Deselect it here
 and keep running everything else, which is what actually characterizes your application.
+
+Read `solutions/reference/java/` as the **post-modernization target state, not a model for
+this path**. It is on Spring Boot 4.0.7 and Java 21 — `workshop/toolchain.lock.json` pins
+those as `targetSpringBoot` and `targetRuntime` — while you stay on the pinned source
+runtime, Spring Boot 3.5.16 and JDK 17, for the whole rewrite. The pinned JDK cannot compile
+it (`javac --release 21` on 17.0.20+8 exits 2 with `release version 21 not supported`), and
+because 75 files share a path across the two trees and 64 of those are byte-identical, the
+difference surfaces only as relocated Spring Boot 4 imports in files whose paths you
+recognise. Copy nothing from it.
 
 Start the unchanged application and disposable PostgreSQL using `java/README.md`,
 then run full shared acceptance against that baseline. Record the exact application

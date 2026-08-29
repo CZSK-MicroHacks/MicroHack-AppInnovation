@@ -61,7 +61,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /** Exercises Flyway, JPA validation, startup seed, HTTP, and transactional import on PostgreSQL. */
-@Testcontainers
+// The workshop VM has no Docker daemon by design, and the prescribed verification command
+// is a bare `mvnw test`. Without this flag the class cannot skip: the Testcontainers
+// extension starts the container from a BeforeAllCallback, which JUnit runs before any
+// @BeforeAll body, so an in-test assumption would come too late and the run errors instead.
+// `disabledWithoutDocker` is evaluated as an ExecutionCondition, before the container start.
+@Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)

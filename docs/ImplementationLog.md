@@ -1898,3 +1898,36 @@ It was caught by grepping the resolved tree for each fix rather than assuming th
 preserved them, which is the same check that found the half-landed template reference.
 Restored in a follow-up commit, keeping upstream's wording verbatim everywhere the two
 actually overlapped.
+
+### Withdrawing F-J6, and the fix it had already contaminated
+
+Three findings were challenged rather than accepted, so each was re-checked with a search
+wide enough to return the counter-evidence — run against the `4bf59f7` baseline, because the
+walkthrough's own fixes would otherwise have masked two of them.
+
+Two held. The Dockerfile-location contradiction held on positive evidence, though its rider
+that the challenge README was the "sole outlier" was false: four documents made the claim.
+The checkpoint/section mismatch stopped being a silence claim altogether once the same
+sentence turned up in both documents with different numbers — "the image itself is built in
+checkpoint 7" against "…in section 5".
+
+F-J6 was refuted. `docs/CommonErrors.md` entry 101 already named the symptom ("Maven reports
+that no compiler is available on macOS"), the cause (a legacy JRE without `javac`), and a
+resolution that explicitly forbids installing an unpinned JDK. Worse, the finding had called
+a Homebrew cask "the documented-by-implication route" — a route the material never mentions,
+invented by the walkthrough and then filed as a workshop defect when it failed.
+
+The consequence was not confined to the finding. It had been *fixed*: the invented tarball
+route was shipped into `java/README.md` and added to `docs/CommonErrors.md` as a new entry,
+so the registry held two contradictory resolutions for one root cause and pointed
+participants at the one entry 101 rules out. A second added entry duplicated entry 45 on
+keg-only `libpq`, same symptom string. Both now defer to the existing entries, and the new
+entry says to search the registry before adding to it.
+
+The generalisable part is a failure mode distinct from inferring silence from a filtered
+search: the walkthrough searched the document it was executing and never searched the
+repository's error registry, then wrote its conclusion back into that registry. What
+survives as a narrower claim is routing, not absence — the challenge READMEs send
+troubleshooting to `docs/Troubleshooting.md`, which contains no mention of `javac`, a JDK or
+a JRE, and nothing under `challenges/` references `docs/CommonErrors.md` at all.
+
