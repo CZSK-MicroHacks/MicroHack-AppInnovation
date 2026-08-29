@@ -1584,10 +1584,34 @@ wrong -- occurring in the highest-severity section of the document that records 
 
 ### The related finding this was reached through, and its correct disposition
 
-`baseInfra/terraform/config.tfvars.example` on `origin/main` line 23 carries
+`baseInfra/terraform/config.tfvars.example` on `origin/main @ 93887ab` line 23 carries
 `entra_user_password = "WorkshopPassword123!"` beside `entra_user_domain =
 "yourcompany.onmicrosoft.com"`. The domain fails loudly if copied unchanged; the password succeeds
 silently, so every attendee estate built from `main` shares one publicly known password.
+
+<!-- MENTION-NOT-USE: the assignment quoted above is a citation of a value already public on
+     origin/main. It is not a credential held by this branch and adds zero marginal exposure. A
+     leak sweep that matches on literal assignment WILL fire here; this marker is the one-line
+     resolution, placed so the next scanner does not have to re-derive it. -->
+
+**Note for any later sweep, and a correction to the predicate that found it clean.** A correspondent
+ran a refined leak predicate over this tree -- *quoted literal assignment, not token presence* -- and
+reported `entra_user_password` literal assignments **0**, `.md` mentions **5**. Re-measured here the
+literal-assignment count is **1**, and it is the line above.
+
+    git grep -nE 'entra_user_password *= *"[^"]' HEAD      1   (this file, line ~1588)
+    CONTROL upstream blob 7c6f009c                          2   (fires)
+
+The divergence is not arithmetic. **Their classifier split by file extension -- `.md` counted as
+mention -- rather than by the role the string plays.** That is a file-type heuristic standing in for
+a content predicate, and it has a structural consequence: **any real credential that lands in a
+markdown file is classified as a mention by construction, so the sweep cannot return the
+incriminating answer for that whole class.** Same family as the pickaxe query recorded earlier, whose
+most favourable answer was also its guaranteed one.
+
+The disposition here is unchanged -- this is genuinely a mention, of a value already public -- but it
+is a mention *by argument*, not because of where it sits. **The marker above is the durable fix; the
+extension is not evidence of anything.**
 
 **This is already fixed on the rewritten material and the fix is blocked only by the merge.** On
 `HEAD` and on `rewrite-integration` the file has **0** hardcoded password assignments and

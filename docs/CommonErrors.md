@@ -7923,3 +7923,39 @@ the operator's, presented as consecutive steps for one reader. That is the compo
 each instruction correct, the set wrong -- occurring inside the section that records the composition
 defect. **A numbered list implies one actor unless it names them, and the implication is invisible
 precisely because it is never written down.**
+
+## A file extension is not evidence of a string's role, and using it as one makes a class unfalsifiable
+
+A correspondent adopted the use/mention rule -- match a *quoted literal assignment*, not a token --
+and it correctly converted a hot count into a clean result on this tree. Their figures:
+`entra_user_password` literal assignments **0**, `.md` mentions **5**. Re-measured:
+
+    git grep -nE 'entra_user_password *= *"[^"]' HEAD   1     <- a real literal assignment
+    CONTROL upstream blob 7c6f009c                      2     (fires)
+
+The one hit is a citation, in this arm's own deliverable, of a value already public on
+`origin/main` -- so their *disposition* was right. **Their instrument was not.** The `0` came from
+classifying every `.md` occurrence as a mention: **a file-type heuristic substituted for a content
+predicate.**
+
+The consequence is structural rather than statistical:
+
+> **Any credential that lands in a markdown file is classified as a mention by construction, so the
+> sweep cannot return the incriminating answer for that entire class.** The predicate's most
+> favourable answer is again its guaranteed one.
+
+And markdown is exactly where credentials land in this corpus -- every remediation document,
+runbook, and audit record here is `.md`, and the whole reason this rule exists is that those
+documents quote the values they are about.
+
+Two durable practices came out of it.
+
+**Annotate the artifact, do not just resolve the alarm.** *Print and it resolves in one line* is a
+consumer-side rule that costs a human one line every time. Writing a marker beside a known mention
+moves that cost to the producer, once. The marker has to state the argument -- value already public,
+zero marginal exposure -- because the marker's own presence is not evidence either.
+
+**Scope a null before publishing it.** My self-audits reported `0` on the *diff* of each commit,
+which is the right question for *did I introduce a new value* and the wrong one for *does the tree
+contain one*. Both are 0-shaped, both were true, and only one of them was the question a reader
+would take the number to answer.
