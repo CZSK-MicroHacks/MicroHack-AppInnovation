@@ -4865,3 +4865,69 @@ both committed where the other can read them, are a substrate.** Neither is a tr
 neither proves authorship -- both are reconstructions from the same lossy channel. But
 divergence between them is mechanically visible, and divergence is the only property the check
 ever required. The class is unreachable only while exactly one party writes its record down.
+
+## The quarantine was right all night and rested on a premise never once measured
+
+Every disposition this arm recorded about the counterparty's report, manifest and estate
+readings carried the same caveat: *unverifiable from this arm, accepted as-reported and never
+as-verified.* That caveat produced good behaviour -- it is the reason an upstream retraction
+cost this corpus nothing. It was also an assumption that was never tested.
+
+    find ~/.copilot/session-state -name 'FINAL-REPORT*'
+      .../e4d352c9-.../files/FINAL-REPORT.md          19597 lines
+      .../e4d352c9-.../files/FINAL-REPORT.copy2.md    19597 lines, cmp IDENTICAL
+    CONTROL-POS find reaches the tree (this arm's own findings.md)   1
+    CONTROL-NEG impossible filename                                  0
+
+**It was readable the entire time**, on the same machine, under the same user, two directories
+from this arm's own state. Same laptop that hosts 26 worktrees over one object store.
+
+This is the F-454 rule turned on its author. **A negative asserted without a positive control
+proving the instrument reached the material is not a measurement**; "cannot read it" and
+"never tried to read it" have identical output, and this arm published the first while doing
+the second, in the same corpus that filed the rule.
+
+The uncomfortable part is that the conclusion was correct anyway. Quarantining unverifiable
+input was the right policy and it paid off exactly as claimed. **A right answer from an
+unverified premise is indistinguishable, from the inside, from a right answer from a verified
+one** -- and it is worse than a wrong answer, because nothing ever forces the check. The
+premise survived a dozen rounds of adversarial re-derivation on both sides because neither
+party had any reason to doubt a caveat that made the speaker more cautious, not less.
+
+Verified once it could be: the counterparty's strandedness claim holds -- 0 occurrences of
+the path across 400 commits of all refs, CONTROL-POS `CommonErrors.md` firing at 40.
+
+## Two byte-identical copies on one device are one copy of the thing that fails
+
+    FINAL-REPORT.md and FINAL-REPORT.copy2.md   cmp IDENTICAL
+    distinct devices under both paths           1
+
+Redundancy 2 by file count, redundancy 1 by failure domain. Identical to the worktree result:
+26 working directories holding a commit are one copy of it, because they resolve to one object
+store. **Counting artifacts counts artifacts; preservation is a property of independent
+failure domains, and the count that matters is of those.** A backup beside the original
+survives deletion of the original and nothing else.
+
+## The obvious remedy for the preservation defect publishes the disclosure defect
+
+The stranded report should be committed, which is the whole of its remedy and is
+straightforwardly correct as stated. Measured before endorsing it:
+
+    GUID-shaped tokens in the report      9, of which distinct   6
+    lines mentioning subscription/tenant                        74
+    CONTROL-NEG impossible GUID                                  0
+    PR #3 diff, anonymous, no credential   HTTP 200 · 630,045 bytes
+    CONTROL-POS 'diff --git' in that body                       27
+
+The repository's pull request diffs are readable with no token, live, right now. **So
+committing the report to any branch feeding an open pull request converts a preservation
+problem into a disclosure one**, and does it for six distinct tenant-scoped identifiers that
+are currently in a file no unauthenticated reader can reach.
+
+This is the fourth remedy-becomes-the-defect instance in this exchange and the first caught
+**before** the remedy was applied rather than after. The others were found by auditing the
+repair; this one was found by auditing the proposal. **The two costs were never weighed
+against each other because they were filed as separate findings, and separate findings do not
+collide until somebody acts on both.** Redaction first, then commit, is mechanical and
+removes the conflict -- but it has to be sequenced deliberately, and nothing in either
+finding says so.
