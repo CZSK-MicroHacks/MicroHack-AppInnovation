@@ -5912,8 +5912,14 @@ resource as safe, check whether it is safe or merely unused.
 ## The indistinguishability was manufactured by the template, and a green guard enforces it
 
 The three colliding `runtime-test-report.json` files carry no `sliceId`, and two of them are
-byte-indistinguishable (`stack=dotnet-sqlserver` both). I recorded that as an omission. It is not
-an omission -- **it is instructed.**
+**slice-indistinguishable** (`stack=dotnet-sqlserver` both). I recorded that as an omission. It is
+not an omission -- **it is instructed.**
+
+*(Precision correction, applied later: I first wrote "byte-indistinguishable" and that is wrong --
+the two differ in `artifact` and `sourceCommit`. They are indistinguishable in every field the
+contract designates as identifying. A human can tell them apart by reading an incidental filename;
+nothing guarantees those differ, and no field is for the purpose. That is the accurate claim and it
+survives the correction.)*
 
     workshop/contracts/runtime-test-evidence.template.json
       top-level keys: ['dotnet-sqlserver', 'java-postgresql']     TWO, keyed by STACK
@@ -6081,7 +6087,8 @@ I ran the existing validator, unmodified, against the repo-root artifact:
 > never why. I measured the absence correctly and inferred the wrong cause from it.
 
 This is load-bearing for the F-553 migration: **step 4 needs no new machinery.** One invocation
-over the repo-root `evidence/` directory makes existing enforcement live for all seven names.
+over the repo-root `evidence/` directory makes step 4 checkable. **It does not address the
+collision -- see the correction below.**
 
 ### The same null, three times in one night, from three wrong aims
 
@@ -6097,3 +6104,41 @@ returned the *correct* answer.
 > **A false null that produces a working workaround is self-concealing: the workaround succeeding
 > is read as confirmation that the thing was really missing.** Every subsequent correct result made
 > the original error less likely to be revisited.
+
+### 🔴 Correction: I verified the half of the message that was about me
+
+A counterparty told me wiring the existing validator over repo-root `evidence/` "makes existing
+enforcement live for all seven names at once," and I committed that into a deliverable. They
+retracted it before I tested it. Then I tested it:
+
+    validate_document(..., "runtime-test-evidence.schema.json")
+      michalmar-refactored-waddle               VALID   stack=dotnet-sqlserver
+      michalmar-reimagined-fishstick            VALID   stack=dotnet-sqlserver
+      michalmar-ch01-java-rewrite-walkthrough   VALID   stack=java-postgresql
+      CONTROL {"zzz":1}                         FIRED   additionalProperties live
+    schema-required fields that vary by SLICE: 0
+
+**All three colliding reports are valid.** Wiring the validator would have passed all three,
+unchanged, forever.
+
+> 🔴 **Validity and distinguishability are orthogonal, and a schema validator only measures the
+> first.** The collision is not a conformance failure -- it is **conformance working correctly on
+> an under-specified contract**, which is why every party involved is compliant and the artifacts
+> are still unrecoverable.
+
+**And the failure of method is mine, not inherited.** That message contained a refutation of my
+claim and a remedy for my finding. I reproduced the refutation with three controls, and accepted
+the remedy with none.
+
+> **I ran controls on the instrument and none on the remedy.** The refutation cost me something, so
+> I checked it; the remedy made my own finding sound closeable, so I did not. **A correction that
+> takes something from you gets tested. A correction that hands you something gets committed.**
+
+Their generalisation is the fix and I have adopted it as a standing rule: **a remedy tested against
+the defect that motivated it will always look sufficient -- test it against the defect you claim it
+solves.** The validator was found while asking *"does a check exist"* and published as an answer to
+*"can the collision be caught."*
+
+**Corrected disposition: the schema change is load-bearing and wiring is not a substitute for it.**
+Wiring buys exactly one thing -- step 4 becomes checkable *once* `sliceId` is `required`. Before
+step 4 it buys nothing at all.

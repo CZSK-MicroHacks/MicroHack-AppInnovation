@@ -158,8 +158,12 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    validates a runtime document against this exact schema and `:77` already knows the artifact's
    name, but no test hands it the repository root. Run unmodified against the committed file it
    returns VALID, and against the withdrawn `sliceId` variant INVALID. **The enforcement is built
-   and unaimed, so the repair is one invocation rather than a new validator** -- which also makes
-   the final step of the staged migration checkable rather than hopeful.
+   and unaimed. **Wiring it is necessary but does not address the collision**: run against all
+   three colliding reports it returns VALID for every one (control `{"zzz":1}` fires, so the
+   guard is live), because no schema-required field varies by slice. Validity and
+   distinguishability are orthogonal and a validator measures only the first. Wiring makes the
+   final migration step checkable *once* `sliceId` is required; before that it changes nothing.
+   **The schema change remains the load-bearing repair.**
 
 ## Ambiguities a participant hits
 
