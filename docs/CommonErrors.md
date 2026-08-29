@@ -6875,3 +6875,64 @@ There is a residual in the instrument as well, which its own output disclosed: 9
 times have a local-decorated form that collides with some other commit's true UTC form. For a
 stamp landing on one of those, a genuine defect would be scored clean. Small, but it means the
 check has a known false-negative rate rather than none.
+
+## A count has two endpoints, and we both searched only one
+
+Three commit counts could not be reconciled between two parties for several hours. Each of us
+tried to reproduce them by enumerating **bases**:
+
+    origin/main..J   origin/rewrite-integration..J   4bf59f7..J   93887ab..J
+
+and each of us concluded they reproduced from nothing. I published that as *"127/233 reproduce
+from no base I can construct."* All three reproduce, and the base was never wrong:
+
+    233   true at ed44cce   06:42       main..<head>
+    127   true at e62350a   06:43       rewrite-integration..<head>
+    128   true at b135ea0   06:49       rewrite-integration..<head>
+
+Within seven minutes of one another, consistent with a single message quoting all three. **The
+decay was in the head, not the base.** `A..B` is a function of two refs; when it fails to
+reproduce, the search space is two-dimensional, and both of us searched one axis and reported the
+absence as if we had searched the space.
+
+> **An absence claim inherits the shape of the search that produced it, and nothing in the result
+> records which dimensions went unvaried.** "It reproduces from no base" and "it reproduces from
+> nothing" are different statements, and only the first one was measured.
+
+This is the ref-decay asymmetry one level up. A single ref decays in one direction -- containment
+is monotone, absence is not. **A count decays in two**, because either endpoint can move, and a
+stale count carries no marker distinguishing which one did.
+
+### The consequence, which is the part that matters
+
+My unreproducible-count claim did not stay a claim. It was adopted into the counterparty's
+operator handoff as an **open, unexplained residual** -- a mystery certified by two independent
+parties, both of whom had searched the same single axis. **Correlated method produces correlated
+blind spots, and agreement between two parties running the same procedure is not corroboration.**
+
+The cheap check that would have found it at any point: don't ask *which base gives this number*,
+ask *when was this number true*. Walking my own branch takes one loop and answers in seconds:
+
+    git rev-list --reverse -40 <branch> | while read c; do
+      git rev-list --count <base>..$c; done
+
+I had also just filed an entry about unstated denominators in the same message that carried this
+claim. **The entry was correct and the message beside it committed a neighbouring instance** --
+second time in two exchanges that the act of filing a defect coincided with committing an adjacent
+one, which is now a pattern rather than a coincidence.
+
+### Verified rather than accepted, in the same pass
+
+The counterparty reported two commits reachable only from inside a bundle file, and corrected an
+operator instruction from copying one file to two. Both halves check out from here:
+
+    806ae62  in my object store: ABSENT      89f2a9b  ABSENT
+    CONTROL  f98073b  PRESENT (fires)
+    from DOTNET-ARM-WALKTHROUGH-89f2a9b.bundle, restored via --git-dir:
+      both commits PRESENT · is-ancestor exit 0 (measured directly, not piped)
+      CONTROL reverse direction exit 1 (fires)
+
+So the single extra file does cover both, and the corrected instruction is sound. Worth noting
+that this is the second time tonight a bundle's **filename** carried information its contents
+could not be asked for -- the missing work announced itself in the name of the file, which is
+where the counterparty's completeness audit finally found it.
