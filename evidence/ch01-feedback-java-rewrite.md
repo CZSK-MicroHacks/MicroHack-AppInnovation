@@ -131,6 +131,18 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    > **This read "the single shipped example" until it was re-measured: there are two, and both
    > declare the same path, so the conclusion strengthens and the count was wrong. A count
    > written as a determiner is not searchable as a count.**
+7. **Challenge 4's zero-row remedy points at a window Challenge 2 certifies is empty.**
+   `ch04:343` sends a stuck attendee to *"exercise the app - the Challenge 2 load window is the
+   reliable choice"*. `tests/load/load-test.yaml`, which `ch02:271` instructs the attendee to
+   use, sets `failureCriteria: percentage(error) > 0` and `autoStop.errorPercentage: 1` -- **a
+   passing Challenge 2 run contains no failures by its own pass criterion, and an erroring one
+   is truncated and marked failed.** Two of Challenge 4's five panels gate on
+   `failedRequests > 0` and `countif(Success==false) > 0`. `ch01:341` states the same thing in
+   prose -- *"no amount of extra traffic will"* -- and names `docs/TelemetryFaultInjection.md`
+   (13.6 KB, present); **ch04 references it 0 times**, CONTROL: ch04 mentions `Challenge 2` 5
+   times. The contract is correct; the troubleshooting entry is not. **One-line fix: point
+   `:343` at the fault-injection doc.**
+
 7. **Prerequisite recovery off the VM is documented, but described as something else where
    it is linked.** The answers exist as `docs/CommonErrors.md` entries 45 and 101. Every
    challenge README routes troubleshooting to `docs/Troubleshooting.md` (12 links), which

@@ -5750,3 +5750,48 @@ with its denominator is a dated measurement a reader can re-run; a figure withou
 measurement at all.** The rule earned earlier tonight -- *a corpus that includes the act of
 measuring it can be dated but not quoted* -- is the same rule, and it protects the figure that
 states its base.
+
+## The question was framed as empirical, and the answer was in a twelve-line spec
+
+A counterparty left one item explicitly open and declined to settle it: *whether the Challenge 2
+load run incidentally produces failures through saturation* -- reasoning that if it does, ch04's
+zero-row remedy works by accident, and if not, the attendee circles. **"Untested; I am not
+provisioning to settle it."** It needed no provisioning.
+
+    tests/load/load-test.yaml        <- ch02:271 "Create the test from tests/load/load-test.yaml"
+      failureCriteria:
+        - percentage(error) > 0      <- the run is FAILED by any error at all
+      autoStop:
+        errorPercentage: 1           <- and TERMINATED once errors reach 1%
+    workshop/contracts/load-test-evidence.example.json
+      assertions.allRequestsPassed = true
+    CONTROL  ch02 references to that file: 3      absent-token control: 0
+
+**A passing Challenge 2 run contains zero failures by its own pass criterion**, and an erroring
+one is truncated at 1% and marked failed. ch04's two failure-gated panels need
+`failedRequests > 0` and `countif(Success==false) > 0`.
+
+> 🔴 **So the window ch04 calls "the reliable choice" is the one window the workshop certifies to
+> be empty of the phenomenon ch04 requires -- and the better an attendee performs Challenge 2,
+> the more certainly Challenge 4's remedy fails.** The two challenges are individually correct
+> and jointly self-defeating.
+
+This does **not** reinstate the retracted *"mechanically unsatisfiable"* claim: the contract is
+right, and `docs/TelemetryFaultInjection.md` supplies the action that works. **ch04 never names
+it.** The defect stays documentary and gets sharper.
+
+### The mechanism, which is the transferable part
+
+The item was **phrased as a question about a run**, so both parties priced it as needing a
+deployment, and one of them owns a subscription. **It was a question about a specification.** The
+load profile does not merely tend to produce no errors; **it defines their presence as failure.**
+
+> **Framing a question as empirical is itself a claim -- that the answer is not already written
+> down -- and it is the one step in an investigation that nobody audits, because it happens
+> before the investigation starts.** The cost is asymmetric and invisible: an empirical framing
+> on a documentary question closes the inquiry with *"I cannot test that"*, which reads as
+> rigour.
+
+**Check whether the phenomenon is specified before measuring whether it occurs.** Every prior
+population failure tonight was aiming an instrument at the wrong set; this one is reaching for an
+instrument when a file already answered.
