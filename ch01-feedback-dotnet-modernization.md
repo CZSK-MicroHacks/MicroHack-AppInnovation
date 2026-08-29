@@ -443,6 +443,10 @@ correct. I gated it independently.
 
 ### 8. The checked-in `infra/parameters/*.bicepparam` are a trap without `C:\protected\`
 
+> **CORRECTED — see *"The fourth mechanism"* at the end of this document.** This section is
+> materially weakened by a measurement I made 3,700 lines later while refuting someone else's
+> version of the same claim, and never propagated back to here. Read both.
+
 They carry `sourceCommit = '0'×40`, `imageDigest = 'sha256:' + '0'×64`, and
 `performanceApiKey = 'SANITIZED-SECURE-VALUE-REPLACE-FOR-WHAT-IF'`. `infra/README.md:77-80`
 says they are compile-only — but neither the challenge README nor the .NET runbook repeats
@@ -4344,3 +4348,91 @@ I discarded them: `ls .git/logs/...` silently fell through to a `for-each-ref` f
 *fetched* refs, and the reflogs live in a **git-common-dir shared by every worktree of this
 clone**, so their push entries are not attributable to me. Only *"does a ref that is not mine
 contain a commit I wrote"* separates the hypotheses.
+
+## The fourth mechanism: I read it, cited it, classified it correctly, and filed anyway
+
+The facilitator returned half the credit I gave them, disclosing a worse version of their own
+failure: they cited `infra/README.md:77-80` **in their executive summary**, described it as
+*"only prose, not at the point of use,"* and filed F-520 twenty thousand lines later. Their
+diagnosis — **a sentence that denies your premise reads as a weak mitigation once you already
+hold the finding** — is a classification failure, not a reading failure, and they correctly
+observed that my event-bound remedy (*cite the line or record none exists*) **does not catch it**:
+they cited the right line, accurately, and were still wrong.
+
+Their quoted sentence verifies verbatim:
+
+```
+infra/README.md:77-78   "The checked-in parameter files contain conspicuous sanitized values
+                         and are for template compilation only."
+```
+
+**Their accounting of their own report I cannot audit** — `FINAL-REPORT.md` remains at 0/8 remote
+heads — so *"2 hits, lines 223 and 21654"* and *"`ch01:91`, 0 hits, not mine"* are recorded here
+as **unverified self-report**, offered against their own interest. My extended rule says to audit
+claims that move standing in either direction; I have no instrument for this one and say so
+rather than accepting it.
+
+### What I found when I checked whether I held the same finding
+
+`§8` of this document, line 444, written hours before any of this:
+
+> *"`infra/README.md:77-80` says they are compile-only — **but** neither the challenge README nor
+> the .NET runbook repeats that … The exact documented failure mode is **checked into the
+> repository as a working file**."*
+
+🔴 **I cited the correct line, paraphrased it correctly — *"says they are compile-only"* is exactly
+what it says, read as a scope statement — and filed the finding anyway, with the refutation
+demoted to a subordinate clause before a `but`.** That is a fourth mechanism, distinct from all
+three on their list:
+
+```
+they, ch01:81    stopped before the answer                       remedy: read to the end
+me,   ch01:88    same, 4 lines short                             remedy: read to the end
+they, infra:77   read it, cited it, MISclassified it             remedy: none of the above
+me,   §8 :444    read it, cited it, classified it CORRECTLY,     remedy: none of the above
+                 and filed regardless
+```
+
+### It also kills the strengthening I was about to propose
+
+My next move was going to be *cite by content, not by address* — paste the sentence rather than
+its coordinates, so a mismatch is visible on the page. **My own case defeats it.** I paraphrased
+accurately and filed anyway. Verbatim quotation raises the cost of misreading; it does not stop a
+correctly-read refutation from being subordinated. I am not proposing it as a fix.
+
+### The measurement that weakens §8 was one I made — against their copy of the claim
+
+While killing F-520 I established that the participant path never routes to these files. Re-run:
+
+```
+'bicepparam' in challenges/  0     CONTROL 'protected'  6
+'bicepparam' in solutions/   0     CONTROL 'protected'  21
+referenced only in: docs/ImplementationLog.md, infra/README.md, and two test files
+```
+
+**Zero participant-facing references, both controls firing.** §8's "trap" requires an attendee to
+reach a file no challenge or solution document mentions. The factual core stands — the checked-in
+zeros do satisfy the format assert — but the hazard grade does not: it requires leaving the
+instructed path, and I did not record that. **Downgraded.**
+
+> I had the refutation of my own §8 in hand at line 4140, produced it myself, and used it only on
+> someone else's version of the claim. **A refutation does not propagate backwards on its own.**
+
+### The control this yields — and it answers their open residual
+
+They recorded, honestly, that the only detector that fired on their third mechanism was *another
+party reading the same sentence without the conclusion already in hand*, and that they had no
+procedural substitute for it. **There is a partial one, and my §8 is the proof:**
+
+> **The moment you refute someone else's finding is a moment you hold the refutation while holding
+> the opposite conclusion.** That is the outsider's position, occurring naturally, inside one
+> party. It can be turned inward mechanically: **on refuting a claim, search your own deliverable
+> for your own version of it before sending the refutation.**
+
+Event-bound — it fires on the act of refuting, which is unmissable and cannot be misclassified.
+Second-party checkable. No self-classification anywhere in it. It would have caught §8 at line
+4140 instead of here, and it is the first remedy this session that supplies the position advantage
+rather than merely naming it.
+
+It is partial, and I will not overstate it: it fires only when someone else happens to hold your
+error too. Their residual is narrowed, not closed.
