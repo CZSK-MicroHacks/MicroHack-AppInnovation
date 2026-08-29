@@ -4702,3 +4702,90 @@ the defect turns on, and the existence check could not see that property.
 Recorded for this arm specifically: the code-side half is checkable with no deployment at all. Reading
 the committed template settles what the template *requests*; only the tenant settles what it is
 *granted*. **A no-deploy arm can confirm the antecedent and must not claim the consequent.**
+
+## An identity question answered from the substrate, and the answer was not about identity
+
+An adjacent session asked whether it had been corresponding with one working context or
+two, having seen two different session identifiers naming the same branch and the same
+single worktree. Self-description cannot settle that: a context asserting "I am one arm"
+is exactly what two arms sharing a branch would each say.
+
+The checkable substrate is the commit trailer. Over the 108 commits between the
+integration base and this branch tip, the `Copilot-Session` trailer takes **exactly one
+distinct value**, carried by 100 of them; the 8 without it predate the convention. One
+value means one authoring context. No conflation occurred.
+
+The durable part is what the measurement exposed on the way. **Three different
+identifiers name this context, and none is derivable from any other**: the session-state
+directory, the value in the commit trailer, and the identifier the correspondent used to
+address the message. Each is minted by a different subsystem. So the question "are these
+two identifiers the same arm" has no answer obtainable by comparing identifiers, and a
+correspondent who reasons from an identifier mismatch to a second arm will invent one.
+
+The rule is the operand rule landing on identity: **an identifier is not an emission.**
+Name the property the claim depends on, then pick the identifier that carries it. For
+"was this authored by one context", that is the trailer, because it is the only one of
+the three written into the artifact rather than into a runtime.
+
+## The store holds 277 commits that exist nowhere else, and no arm's own check can see it
+
+Answering "is anything on your branch local-only" honestly requires two measurements, not
+one, because the branch is not the unit of loss. For this arm: uncommitted 0, stashes 0,
+unpushed 0, working tree HEAD byte-matched to the remote. Redundancy for this arm's work
+is fine.
+
+Then the same instrument was pointed at the whole object store, because 26 working trees
+on this machine share a single `.git` directory:
+
+    commits reachable from a local branch and from no origin ref: 277, across 26 branches
+      observer-audit-v2                     128
+      michalmar-ch04-observability           38
+      michalmar-ch5-defender                 25
+      michalmar-ch06-sre-agent-walkthrough   23
+      michalmar-ch3-cicd-walkthrough         20
+      michalmar-ch02-performance-testing     13
+      ... and 20 more, each 1 to 3
+    CONTROL-POS this arm's branch, fully pushed, expected 0: 0
+    CONTROL-NEG total commits ignoring the filter, expected large: 1704
+
+Those 277 commits have **redundancy 1**. A second working tree is not a second copy; all
+26 trees resolve to one shared object store, so the count of directories holding a commit
+is not a count of copies of it. The exposure includes one commit on the branch of the arm
+whose 14/14 result this arm was benchmarked against.
+
+Two things make this invisible to every participant:
+
+**No arm's own check can find it.** Each arm correctly measures its own branch, correctly
+gets 0, and correctly reports "nothing local-only". The statement is true for each arm
+individually and the store is still at 277, because the exposure lives in branches no arm
+considers its own. A per-arm audit is structurally incapable of producing the figure.
+
+**The name test gives the wrong answer in both directions.** 33 local branch names are
+absent from origin, but a missing name is not missing content: 7 of the 33 have every
+commit already contained in some origin ref, so the name count overstates. Ask
+`git rev-list <branch> --not --remotes=origin --count`, which is the containment question,
+not `git ls-remote | grep`, which is the ref-identity question.
+
+## The convenient selector inflated my own headline by a factor of five
+
+The first figure this instrument produced was not 277. It was **1368**, from
+`git rev-list --all --not --remotes=origin`, and it was one keystroke from being reported.
+
+    refs/heads  277      refs/tags  0      --all  1368
+
+The gap is 1078 refs under `refs/copilot/checkpoints/`, runtime snapshot refs written by
+the tooling. They are real objects reachable from no origin ref, so 1368 is a correct
+answer -- to "how many objects are unique to this store", which is not the question.
+The question was how much **authored work** is unreplicated, and tooling checkpoints are
+not authored work.
+
+`--all` was chosen because it sounded exhaustive, and exhaustive sounded safe. It is the
+same defect as selecting installers by key name: **the population was defined by what the
+commits are, and the selector was defined by which refs were easy to name.** Erring toward
+the larger set is not the conservative direction; it is just a different wrong population,
+and here it would have inflated a real finding fivefold and handed anyone checking it a
+trivial refutation of a claim that is true at 277.
+
+Decompose any headline count by the namespaces feeding it before publishing it. The
+decomposition is one command and it is the difference between a finding that survives
+and one that gets dismissed along with the thing it was pointing at.
