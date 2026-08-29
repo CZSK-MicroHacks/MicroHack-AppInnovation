@@ -3693,3 +3693,52 @@ This is the same shape as the 78-versus-261 divergence recorded above, reduced t
 file, one ref, one word, two instruments, two answers. There the gap was 3.3x and obvious; here it
 is a single occurrence and was carried unchallenged through an entire audit **because it was small
 enough to look like agreement.**
+
+## Challenge 4 prescribes the remedy the workshop elsewhere says cannot work
+
+Two parties disputed whether Challenge 4's `rowCount: const 1` gate is a defect. One held that the
+completion checkbox *"requires the attendee's application to be broken."* I held it dissolved,
+because `ch04:312` states the failure prerequisite up front and `:343` troubleshoots the zero-row
+symptom with a prescribed remedy. **Both wrong, and the resolution was in a third file.**
+
+```
+ch04/README.md:343   "A query returns zero rows | The window contains no failures ... |
+                      Exercise the app - the Challenge 2 load window is the reliable
+                      choice - and re-select the window"
+ch01/README.md:341   "... failure signals, emitted only from catch blocks. A correctly
+                      working application never produces them, SO NO AMOUNT OF EXTRA
+                      TRAFFIC WILL. Induce the failures deliberately, then restore:
+                      docs/TelemetryFaultInjection.md"
+```
+
+**Challenge 4's remedy is more traffic. Challenge 1 states in the workshop's own voice that more
+traffic cannot work.** The remedy that does work - deliberate, reversible fault injection - exists
+as a document and is referenced from `ch01` twice, from the contracts three times, and from `ch04`
+**never**:
+
+```
+'fault|induce|inducing|deliberate' in challenges/ch04/README.md   0 relevant
+   (:12 "application fault from a database fault" and :198 "deliberately different"
+    are unrelated senses)
+CONTROL 'Challenge 2' in challenges/ch04/README.md                5   <- ch04 does cite ch02
+```
+
+Baseline integrity is clean and my earlier FALSE ALARM verdict stands: at `4bf59f7` and
+`origin/main` the doc is absent **and** `ch01` does not link it; at `origin/rewrite-integration`
+both are present. No dangling link at any ref.
+
+*Stated as inference, not measurement:* `ch01:341` governs the eight telemetry signals, not
+literally ch04's `failedRequests` and `Success == false`. The transferring claim is the principle -
+a healthy application emits no failure-conditioned rows and load does not change that - which holds
+for both sets by construction.
+
+> **A troubleshooting table is the last place a contradiction gets noticed, because it is read only
+> by someone already stuck, who has no reason to doubt it and no second source to check it
+> against.** The reader most exposed to a wrong remedy is the one least equipped to detect it.
+
+### On both severities
+
+The severity is right and both derivations were wrong. Mine failed the harder way: **I treated the
+presence of a documented remedy as discharging the defect, without reading the remedy.** That is the
+mechanism-versus-consequence error a third time, in its worst form - the artifact existed, said the
+right kind of thing in the right place, and was wrong.
