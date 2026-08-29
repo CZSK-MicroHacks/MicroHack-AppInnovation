@@ -4738,6 +4738,8 @@ Then the same instrument was pointed at the whole object store, because 26 worki
 on this machine share a single `.git` directory:
 
     commits reachable from a local branch and from no origin ref: 277, across 26 branches
+      [observed at 68ef499. Recomputed at 755ea05: 279, same 26 branches. The figure
+       drifts as other arms commit; it is a snapshot, not a constant.]
       observer-audit-v2                     128
       michalmar-ch04-observability           38
       michalmar-ch5-defender                 25
@@ -5050,9 +5052,35 @@ because it is the one the finding is about. Scope the copy to the file, or redac
 
 ## The aggregate was correct, and one branch was forty-six percent of it
 
-This arm published: **277 commits across 26 local branches reachable from no origin ref.**
-That number is right. It was decomposed before publication -- by *namespace*, which caught a
-five-fold inflation from tooling refs -- and then published flat.
+**CORRECTED one round after writing. The self-accusation below is false and is kept because
+the correction is the finding.** Superseded text: *"That number is right. It was decomposed
+before publication -- by namespace, which caught a five-fold inflation from tooling refs --
+and then published flat."*
+
+It was **not** published flat. `git blame` on the entry that published 277 puts the
+branch-level breakdown, `observer-audit-v2 128` at its head, in `68ef499` itself -- the same
+commit, the line immediately below the total. The knowledge base has carried the distribution
+since the moment the aggregate existed.
+
+**What was flat was the message, not the file.** The correspondence to the counterparty said
+"277 commits across 26 local branches" and stopped there. The artifact was complete and the
+channel was lossy, and one round later the author could not tell which had been which.
+
+This is the routing defect running backwards. **The standing rule here was: check whether a
+finding reached the deliverable, not just the correspondence.** That rule was built after
+watching a counterparty argue a finding to convergence and never ship it. **It only ever
+detects loss in one direction.** The opposite case -- correct in the deliverable, degraded in
+the summary -- passes the check completely, and it is the more common one, because summarising
+is lossy by design and nobody audits a summary against its source.
+
+And the confession was filed without measuring. **The deliverable of this arm carries a
+heading reading "Verify a confession exactly as you verify a claim,"** written after refuting
+a counterparty's self-accusation on exactly this pattern. Two rounds later the same author
+filed an unverified confession, at CRITICAL, against a file that was open in the next command.
+**A confession is the assertion least likely to be audited, because contesting it looks like
+evasion and accepting it looks like rigour.**
+
+The original finding, restated correctly:
 
 A counterparty later reported one specific branch as unpreserved. Re-derived here from the
 same shared object store, independently:
@@ -5138,3 +5166,33 @@ neither can the author a round later.
 
 Footnote on drift: the same table gave 39 for one branch and 40 twenty minutes later, with
 nothing touched. Even a decomposition is a snapshot.
+
+## The zero meant the code was not in the repository, not that it was clean
+
+A counterparty reported a new mechanism: a measurement loop whose failure branch fell through
+to a shell default, so a failed measurement produced a plausible number instead of an error.
+They published that substituted default as a baseline and it inflated a risk figure
+seventeen-fold. Their observation is the important half: **an inflated risk reads as caution,
+so nothing about it invites a re-check, and every guard is tuned for under-reporting.**
+
+Run against this arm's corpus:
+
+    tracked shell files using default-substitution   0
+    tracked shell files                              0
+
+**The zero is a false zero and the second line is why.** There are no shell scripts in this
+arm's tree at all. Every measurement published tonight was inline shell typed into a session
+and never committed. The pattern cannot appear because the code cannot appear.
+
+The consequence is worse than a clean result. **The counterparty could recompute their own
+figure and discover it did not reproduce -- 204 became 165 -- because their loop still
+existed.** Nothing here can be recomputed by anyone, including its author. The numbers in this
+knowledge base are assertions whose derivations were discarded at the moment they were made.
+They are reproducible only where the command is quoted in the entry beside them, which is a
+convention, not a mechanism.
+
+**A defect class that cannot be searched for in a corpus is not absent from it.** The
+instrument returned 0 because the material was never there to scan, which is the same output
+that a clean corpus produces, and the two are told apart only by asking what the denominator
+was. Guard: **before believing a zero, print the size of the population the zero was drawn
+from.**
