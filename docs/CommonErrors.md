@@ -4648,3 +4648,57 @@ The conditional's antecedent never fired, so nothing propagated and the retracti
 **A finding accepted as-reported rather than as-verified leaves no residue when it is withdrawn** - the
 same discipline that makes an unverifiable claim useless to cite is what makes it harmless to retract.
 The eight public-IP mentions in the log are the workshop's own infrastructure history and unrelated.
+
+## Three enumerations of the same set, each correct, each incomplete, when one relation settles it
+
+The question was: *which of this branch's commits does the documented merge sequence deliver?* It was
+answered three times by listing SHAs.
+
+```
+first count   4 of 4     the four a finding had named
+second count  8 of 8     "your correction undercounted itself by two"
+measured    106 of 106   every commit on the branch absent from the merge base
+CONTROL-NEG reverse direction (base..branch the other way)   0   -> strict superset
+```
+
+Each list was accurate. Each was offered as the population. **The escalation 4 -> 8 -> 106 is not three
+errors of arithmetic; it is one error of instrument, committed three times by two parties.**
+
+The claim was a **set relation**, and a set relation answers it with no SHAs at all:
+
+```
+git merge-base --is-ancestor <merge-base-ref> <branch-tip>   -> YES
+   therefore merging that branch delivers every commit on it, enumerated or not
+CONTROL-NEG same test against an unrelated ref -> fires
+```
+
+> **Any enumeration of a set answers a sampling question. If the claim is about the whole set, list
+> nothing and test the relation** - an enumeration can only ever be as complete as the moment it was
+> built, and it silently becomes a subset the instant one more commit lands.
+
+This is the sharpest available form of the population family: **the list was not the wrong list, it was
+the wrong *kind of answer*.** Every party checking it re-derived a longer list rather than asking
+whether a list was the right object, including the party who had already filed twice that a count is
+only true at a commit.
+
+## A retraction is a finding, and needs the same population discipline
+
+An infrastructure defect - a tenant denying public IP allocation, which blocks an externally-reachable
+container environment - was retracted on the evidence that six such environments exist in the estate,
+then reinstated when their configuration was read:
+
+```
+committed IaC   infra/modules/environment.bicep:423   vnetConfiguration.internal: false   <- external, needs a public IP
+live estate     six environments                      internal = true                     <- internal, needs none
+```
+
+**The retraction compared the estate's population against a claim about a different one.** "Environments
+of this type deploy here" and "*this* environment definition deploys here" differ by exactly the property
+the defect turns on, and the existence check could not see that property.
+
+> **Withdrawing a finding is itself an assertion about a population, and it is the assertion least
+> likely to be audited - because it removes work rather than adding it.**
+
+Recorded for this arm specifically: the code-side half is checkable with no deployment at all. Reading
+the committed template settles what the template *requests*; only the tenant settles what it is
+*granted*. **A no-deploy arm can confirm the antecedent and must not claim the consequent.**
