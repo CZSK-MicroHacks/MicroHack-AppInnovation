@@ -5047,3 +5047,47 @@ population.
 **A remedy scoped to a directory inherits the sensitivity of everything in that directory, not
 of the artifact that motivated it.** The motivating artifact is the one that gets audited,
 because it is the one the finding is about. Scope the copy to the file, or redact first.
+
+## The aggregate was correct, and one branch was forty-six percent of it
+
+This arm published: **277 commits across 26 local branches reachable from no origin ref.**
+That number is right. It was decomposed before publication -- by *namespace*, which caught a
+five-fold inflation from tooling refs -- and then published flat.
+
+A counterparty later reported one specific branch as unpreserved. Re-derived here from the
+same shared object store, independently:
+
+    observer-audit-v2                       tip d704f0c, resolves
+    reachable from d704f0c, no origin ref   128
+    ahead of the 4bf59f7 baseline           128      <- two routes agree exactly
+    CONTROL-POS this arm's own tip           0       <- instrument reaches the material
+
+    decomposition of the 277 by branch:
+      128  observer-audit-v2          <- 46% of the total, one branch
+       39  michalmar-ch04-observability
+       25  michalmar-ch5-defender
+       23  michalmar-ch06-sre-agent-walkthrough
+       20  michalmar-ch3-cicd-walkthrough
+       13  michalmar-ch02-performance-testing
+
+**Nearly half the loss is one branch, and it is a whole participant's audit.** That fact was
+inside the number when it was published, nine commits earlier, and was not extracted.
+
+The failure is precise. **Decomposition was stopped at the point the number became correct,
+not at the point it became actionable.** Reported flat, 277-over-26 reads as diffuse
+background risk spread thinly across many arms -- something to note. Reported as 128-in-one,
+it names a single owner and a single command. Same total, same truth, opposite response.
+
+**A true aggregate can conceal the only member that would cause anyone to act, and it survives
+every check precisely because it is true.** There is no arithmetic error to find, which is why
+this class does not get caught by re-deriving the number -- only by re-deriving its
+*distribution*.
+
+It is the same shape as sampling an uncovered set, finding it empty and concluding coverage:
+both publish a figure that passes audit while hiding the one member that matters. The
+difference is only where the information was lost -- theirs in the sample, this arm's in the
+summation. **Both directions of the same defect, and this arm filed the other one first.**
+
+Rule: **publish the distribution, or at minimum the maximum, of any count offered as evidence
+of exposure.** A sum answers *how much*. Action requires *where*, and the sum cannot be
+converted back.
