@@ -4789,3 +4789,37 @@ trivial refutation of a claim that is true at 277.
 Decompose any headline count by the namespaces feeding it before publishing it. The
 decomposition is one command and it is the difference between a finding that survives
 and one that gets dismissed along with the thing it was pointing at.
+
+## The document stated a commit, and it was the wrong commit for the number beside it
+
+A correspondent adopted the rule this arm filed -- *a finding is only true at a commit; a
+report that omits the commit cannot be told from an open defect.* Running that class
+against this arm's own deliverable found the defect in the headline result line.
+
+    evidence/ch01-feedback-java-rewrite.md   "Acceptance harness -- 612 passed, 1 skipped"
+      stated in 3 places, with no observation ref
+    live suite at 68ef499                     639 passed, 1 skipped
+    acceptance test functions by ref          4bf59f7: 403   216433e: 476   68ef499: 503
+    CONTROL-NEG same grep over a path with no tests: 0
+
+612 was accurate when written. The suite grows as the integration branch adds tests, so the
+figure decays without anyone touching the sentence.
+
+The sharp part is not the missing ref. **The file did state a commit** -- the immutable
+baseline `4bf59f7`, in the provenance block, from its first revision. That ref anchors the
+**subject** of the audit, not the **observation**, and 612 is a property of the observation.
+So the one coordinate the document published is the wrong coordinate for the number beside
+it, and it is wrong in the direction that defeats the check the rule prescribes: a diligent
+reader runs the suite at the stated baseline, gets neither 612 nor 639, and concludes the
+deliverable is simply wrong rather than merely stale.
+
+**A present but mismatched coordinate is worse than an absent one.** Absent invites the
+question; present answers it falsely, and the answer looks like diligence. The remedy is two
+named refs, not one: the ref the claim is *about*, and the ref the claim was *measured at*.
+They coincide only when auditing a frozen tree with a tool that is itself in the tree, which
+is exactly the case that fails here, since the suite lives on the moving branch and the
+subject does not.
+
+Same shape as the retraction entry: a retraction is an assertion about a population, and a
+provenance line is an assertion about which population a number came from. Both are the
+kinds of statement nobody re-audits, because both read as bookkeeping rather than claims.

@@ -3,7 +3,12 @@
 ## Scope and provenance
 
 - Path: `copilot-rewrite`, Java/PostgreSQL slice
-- Immutable workshop baseline: `4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af`
+- Immutable workshop baseline (the **subject** of every claim): `4bf59f7ee8dae11259d73ba5a5d7cb0e3355c4af`
+- **Observation ref (where measurements in this file were taken): `68ef499`.** Any figure below
+  that is a property of a moving object -- suite counts above all -- is true at that commit and
+  nowhere else by default. These are two different refs and the distinction is load-bearing:
+  this file stated its baseline from the first revision and still published a suite count that
+  the baseline does not produce. Anchoring the subject does not anchor the measurement.
 - Execution host: macOS laptop, no-deploy arm (not the provisioned Windows VM)
 - Checkpoints 1–4 executed locally; checkpoints 5–8 inspected only
 - Azure boundary: no `az`, `azd`, `az acr build`, deployment, migration, role assignment,
@@ -36,7 +41,12 @@ and the acceptance suite at 53–60 s across runs.
   the VM-based Java track excluded. Docker 27.4 was present locally.
 - **Frozen contract surface — 14/14 `Contract.*` display names green**, matching the bar the
   Java modernization track reached. The rewrite path can reach the same frozen surface.
-- **Acceptance harness — 612 passed, 1 skipped.** This green is qualified below.
+- **Acceptance harness — 639 passed, 1 skipped, observed at `68ef499`.** This green is
+  qualified below. (An earlier revision of this file said **612 passed, 1 skipped** and gave
+  no observation ref. That figure was accurate when written and is now stale: the suite grows
+  as the integration branch adds tests -- 403 test functions at the stated baseline `4bf59f7`,
+  476 at `216433e`, 503 at `68ef499`. Both numbers are right at their own commit, which is why
+  the commit, not the number, is the part that had to be written down. See the note below.)
 - **`catalog_acceptance --profile full`** was run locally, not `smoke`.
 - **Checkpoint 4** — a candidate Dockerfile was authored, which is what demonstrated the
   blocking finding below. It was never committed; it exists only in session state.
@@ -54,7 +64,8 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    sources and leaving 1 of 5 suggested slices legal. `MODERNIZATION_ADDITIONS["java"]`
    contains `Dockerfile`, so performing checkpoint 4 breaks the assertion **with both
    diagnostics printing an empty list**, giving a participant no way to read the cause.
-   The 612-passed run above is green **only because `--deselect` suppresses that guard.**
+   The green run above (612 at the time of writing, 639 at `68ef499`) is green **only because
+   `--deselect` suppresses that guard.**
 
    **Disposition — remedied upstream after this file was written.** As raised, this gate was
    described as unsatisfiable and the deselect as "a mitigation, not a fix". That judgement
@@ -693,7 +704,8 @@ something to warn about; the lock already encodes it.
 
 **Answering the question this arm was set:** *does the rewrite guidance reach the same frozen
 contract surface as modernization, or quietly assume divergence?* It reaches it — 14/14
-frozen contract tests and 612/1 acceptance, all on JDK 17. **But not via the reference.** The
+frozen contract tests and 639/1 acceptance at `68ef499` (612/1 when this was written), all on
+JDK 17. **But not via the reference.** The
 guidance does not assume divergence; it is **silent about a divergence already present in the
 tree**, and the silence is maximally plausible because the two trees share their paths, their
 class names, and most of their bytes. That is this delivery's recurring defect in its most
