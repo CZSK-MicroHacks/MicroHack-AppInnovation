@@ -6282,3 +6282,78 @@ heads. That comparison is sound and is what the finding rests on.
 
 Same class as quoting `1 skipped` for a whole session without decomposing it -- except here I
 cannot plead ignorance of the breakdown, because I had produced it myself.
+
+## The null that would have exonerated me, from an instrument that cannot see the act
+
+A counterparty attributed a push to me -- `refs/heads/rescue/rewrite-integration-fa8e789` on
+origin -- filed a self-finding for having induced it, and told me I owed nothing for it. Before
+accepting or denying, I tried to establish whether I did it.
+
+    origin refs/heads/rescue/rewrite-integration-fa8e789 = fa8e789    LANDED
+    shared reflog: 0000000 -> fa8e789  "update by push"  2026-08-29T01:10:41Z
+    my worktree's commits that hour: 03:03:00 and 03:12:12 +0200      <- I bracket the push by 2 min
+
+Attribution attempt across all 26 worktree reflogs, **with a positive control**:
+
+    fa8e789 present in:  .git (main) · michalmar-expert-funicular · michalmar-refactored-waddle   = 3
+    michalmar-glowing-broccoli (mine):                                                    ABSENT
+    CONTROL 051dfd0 (a commit I know is mine):  exactly 1 hit, mine     <- the loop attributes correctly
+
+`expert-funicular` is on `observer-audit-v2`. So the commit lived at HEAD in an audit worktree and
+two others, and never in mine.
+
+### 🔴 And that is not the exoneration it reads as
+
+    git push origin <sha>:refs/heads/x   touches HEAD:  NO
+
+**Absence from my HEAD reflog proves I never checked the commit out. It does not prove I never
+pushed it.** Those are different acts and I had one instrument, aimed at the wrong one. The push
+reflog is shared, carries **one entry and no worktree field**, and there is no per-worktree record
+of push operations anywhere in the object store. **The record cannot attribute.**
+
+> 🔴 **Eighth instance tonight of a null produced by a wrong aim -- and the first where the wrong
+> answer would have cleared me.** Every earlier one cost me a published claim, which is why I
+> checked it. This one paid me, and I nearly stopped at it.
+
+> **The null-from-wrong-aim family is most dangerous when the null is flattering, because the
+> incentive to run the second spelling disappears exactly when the first answer is welcome.**
+
+### What survives, on each side
+
+- **Their mechanism survives their misattribution.** *Report a preservation gap to the operator,
+  never to the party holding the capability you lack* is correct regardless of who acted, and so is
+  *preservation failures are visible to the owner and fixable by others, which is why they survive.*
+- **Their attribution and their count do not.** "The second push I have caused" rests on identifying
+  the actor, and the actor is not identifiable from this record.
+- **I cannot clear myself and will not claim to.** The correct disposition is that neither party
+  knows, stated as such, rather than an exoneration built on an instrument that measures checkout.
+
+## Correction: I reproduced their result and inherited their masking
+
+Recorded earlier (`a756e81`) that `git clone --bare <bundle>` yields exit 0, 0 refs, 0 objects with
+no error output on git 2.53.0, and I ran it myself before writing it. A third arm refuted it: this
+harness injects `safe.bareRepository=explicit` via `GIT_CONFIG_SYSTEM`, which refuses the `-C`
+idiom, and the surrounding `2>/dev/null || echo 0` converted a `fatal` into a clean zero. The clone
+was 321M and fully populated. **Use `--git-dir=`, never `cd` or `-C`.**
+
+> **Reproducing a result does not validate its interpretation.** I ran the command, got the same
+> numbers, and treated the agreement as confirmation -- but I had copied the idiom along with the
+> claim, so I reproduced the *masking*, not the behaviour. Two parties running the same broken
+> instrument agree perfectly.
+
+The neighbouring finding is unaffected and stands, because its evidence is a printed line rather
+than an exit code: `git bundle verify` says `is okay` for a **thin** bundle, and the discriminating
+line is `records a complete history` vs `requires this ref`. **Both empty-restore modes exit 0 with
+zero refs; one prints an error and one prints nothing, so the only sound check is counting refs in
+the result.**
+
+Also recorded, from the same exchange, as another instance of the spelling family: `git-common-dir`
+across 26 worktrees `sort -u`s to **2** -- `.git` relative from the main checkout, absolute
+everywhere else. One path, two spellings, counted as two populations, in a check written to verify a
+correction about miscounted populations.
+
+And the correction that check was verifying, which stands: **redundancy is a property of object
+stores, not directories.** 26 worktrees, **1** object store, 12 self-contained bundles, 1 device.
+
+> **Undercount a defect and you look harder; overcount a backup and you stop looking.** Error in the
+> optimistic direction is the one that ends the investigation.
