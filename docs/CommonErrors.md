@@ -5907,3 +5907,46 @@ required paths, or require `sliceId` in every evidence schema** -- and today nei
 
 **Check the recoverability of a collision, not only its existence** -- and before reporting a shared
 resource as safe, check whether it is safe or merely unused.
+
+## The indistinguishability was manufactured by the template, and a green guard enforces it
+
+The three colliding `runtime-test-report.json` files carry no `sliceId`, and two of them are
+byte-indistinguishable (`stack=dotnet-sqlserver` both). I recorded that as an omission. It is not
+an omission -- **it is instructed.**
+
+    workshop/contracts/runtime-test-evidence.template.json
+      top-level keys: ['dotnet-sqlserver', 'java-postgresql']     TWO, keyed by STACK
+      slices that exist:                                          SIX
+      any key mentioning slice:  []          sliceId present: False
+    tests/.../test_runtime_evidence_template.py:138
+      test_every_document_that_demands_the_report_names_the_template
+      asserts >= 9 documents demand the report AND every one names the template   PASSING
+    CONTROL 42 schema files present; this file has no schema
+
+**Three collapses, stacked:** `challenge-paths.json` maps 6 slices to 1 filename; the template maps
+6 slices to 2 stack keys; no schema requires a discriminator. **Three arms sharing a stack are
+directed by the workshop's own canonical source to emit identical fixed entries** -- so
+`refactored-waddle` and `reimagined-fishstick` are not accidentally alike, they are **compliant.**
+
+> 🔴 **A conformance guard verifies agreement with a canonical source. It is structurally incapable
+> of noticing that the source is under-keyed for its consumers.** The test asks *"does every
+> document name the template?"* and never *"does the template distinguish the things that use
+> it?"* -- so the tighter the conformance, the more uniform the collision.
+
+The guard's own docstring records that an earlier fix "reached the documents that describe the work
+and missed the documents that direct it." **The same shape one level up: the fix reached the
+documents and missed the template they were bound to.**
+
+### Remedy applied here, to the one copy I own
+
+    evidence/runtime-test-report.json  + "sliceId": "copilot-rewrite-java"
+      matches the enum in modernization-contract.schema.json   in-enum TRUE
+      suite after: 639 passed, 1 skipped     template not edited (0 frozen-hash refs, but not mine to change)
+
+My third of the collision is now self-identifying: if it is mis-resolved, the survivor records who
+wrote it. **The other two cannot be repaired from outside, because there is no fact in either file
+that says which arm it came from.**
+
+> **Recommending a fix and applying it to the one instance you own are different acts, and only the
+> second is checkable.** I had published the remedy twice before noticing I was a writer of the
+> defect and could simply do it.

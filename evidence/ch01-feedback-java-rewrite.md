@@ -127,6 +127,19 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    currently looks merge-clean only because five of six arms have not produced their required
    evidence -- **this one included, at 1 of 7.**
 
+   **Root cause, and it is instructed rather than omitted.**
+   `workshop/contracts/runtime-test-evidence.template.json` -- which
+   `test_every_document_that_demands_the_report_names_the_template` requires all nine
+   demanding documents to name, and which passes -- is keyed by **stack** with exactly two
+   entries (`dotnet-sqlserver`, `java-postgresql`) for **six** slices, and contains no
+   `sliceId` anywhere. Three arms sharing a stack are therefore *directed* to emit identical
+   fixed entries; the two indistinguishable reports are **compliant, not careless**.
+   **A conformance guard verifies agreement with a canonical source and cannot notice that the
+   source is under-keyed for its consumers.** Fix: key the template by slice, or require
+   `sliceId` in the evidence. **Applied here to the one copy this arm owns** --
+   `evidence/runtime-test-report.json` now declares `sliceId: copilot-rewrite-java`, matching
+   the enum in `modernization-contract.schema.json`; suite 639/1 unchanged.
+
 ## Ambiguities a participant hits
 
 1. **The Dockerfile location is stated wrongly and the wrong term is *defined*.** The
