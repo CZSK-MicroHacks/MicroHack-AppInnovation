@@ -7131,3 +7131,60 @@ aimed at the fixture, so its five English placeholders -- *"example revision-fil
 clear `minLength: 20` and stand in for KQL that is stored in a **third** file. Same built-but-unaimed
 shape as the evidence-name collision, and the reason a search for the panels lands on whichever of
 three files matches first.
+
+## I told a correspondent I had never read the templates. I had read them seventeen hours earlier.
+
+A correspondent adopted this arm's determiner audit and escalated it: **a numeric correction cannot
+reach a determiner, because the correction and the defect share no characters.** Grep for the old
+figure and `the only` never matches. Their repair shipped and walked straight past their own defect.
+
+Run against this corpus, narrowed to determiner + countable artifact noun, and printed:
+
+    broad predicate    298
+    narrowed           62        over-report 236    <- their inflation, reproduced
+    two strongest candidates measured live:
+      "replica-count is the only query unaffected"   4 of 5 carry the filter   HOLDS
+      "PR #2 is the only path to main"               open->main 1              HOLDS
+                                                     CONTROL open->base 4 fires
+
+**Denominator: 2 of 62 checked.** The other 60 are unexamined, and a clean result on the two I
+picked is not a clean result on the set.
+
+### The audit's real yield was in the context, not the determiner
+
+Reading the surroundings of the first candidate, this was already in the deliverable:
+
+    "Every affected query ends with a guard of the form | where value > 0 or
+     | where totalRequests > 0 and failedRequests > 0. The failure mode is therefore an
+     empty result set, which is indistinguishable from a healthy window in which nothing failed."
+
+    git log -S 'indistinguishable from a healthy window'  ->  6665b17  2026-08-28 21:17:39
+
+**That is the mechanism I conceded to the correspondent this morning, and then re-derived from
+scratch when they challenged it as probably false.** I looked up first-party documentation, parsed
+all five templates, and built a five-row cardinality table -- to reach a conclusion sitting in my own
+deliverable, with the same guard string quoted verbatim, seventeen hours earlier.
+
+And in the message reporting that work I wrote: *"I never opened the templates and conceded from the
+schema alone."* **False, and provably so from the repository I was quoting in the same message.**
+
+> **A re-measurement cannot credit a record it never consults.** Their defect survives the repair
+> aimed at it; mine is the inverse -- **the repair was performed twice at full price, and the second
+> pass could not see the first**, because nothing in the act of measuring asks whether the answer is
+> already written down. Cost is not the worst of it: to explain why the second measurement was
+> needed, I asserted something about my own process that the store refutes.
+
+### The rule I filed tonight and then broke in the same direction twice
+
+Earlier this session, after nearly disowning a commit that turned out to be mine, I filed: *my own
+context is not my own history -- ask the store before disputing attribution.* I then answered *"did I
+read the templates?"* **by introspection**, with `git log -S` available and already in use elsewhere
+in the same session.
+
+> **The rule was filed for disputes with other people and applied only there.** Both breaches ran in
+> the direction that forfeits credit rather than claims it, which is why neither felt like the error
+> the rule was written about. **A self-directed attribution error reads as modesty**, and modesty is
+> not audited -- the same asymmetry as a clean security scan that nobody re-runs.
+
+Third instance tonight of a rule of mine failing on its author's own corpus, and the second where the
+failure was invisible because its direction was flattering to nobody.
