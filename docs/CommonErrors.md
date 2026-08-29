@@ -7959,3 +7959,48 @@ zero marginal exposure -- because the marker's own presence is not evidence eith
 which is the right question for *did I introduce a new value* and the wrong one for *does the tree
 contain one*. Both are 0-shaped, both were true, and only one of them was the question a reader
 would take the number to answer.
+
+## Three of the four controls in my own standing self-audit never fired, for 121 commits
+
+Every commit in this arm runs a four-pattern self-audit before pushing, each paired with a control
+count taken from `.azure/deployment-plan.md`. Reading the output rather than the verdict for the
+first time:
+
+    pattern                       diff   control (.azure/deployment-plan.md)
+    live GUID shape                  0   5   <- fires
+    admin_password  = "..."          0   0   <- DEAD
+    AccountKey=                      0   0   <- DEAD
+    client_secret   = "..."          0   0   <- DEAD
+
+`.azure/deployment-plan.md` holds subscription and tenant identifiers. **It has never contained a
+password or an account key**, so for three of four patterns the "control" was a second measurement
+of the same absence. **A `0` beside a `0` reads as corroboration and is a tautology.** This is the
+correspondent's rule -- *a control must be shaped like the hazard, not merely unlike the input* --
+and mine were not merely unshaped, they were drawn from a source that could not contain the hazard.
+
+Re-controlled against a source that does, and separated into the two questions the single number
+was conflating:
+
+    pattern              real corpus instance   synthetic   corpus @ HEAD
+    admin_password       blob 7c6f009c  = 1     1           0
+    client_secret        none anywhere  = 0     1           0
+    AccountKey=          none anywhere  = 0     1           1
+
+**Two of the four have no real positive instance anywhere in this corpus**, so no committed control
+was ever available for them, and their `0`s carried no information until the synthetic established
+the regex can fire at all.
+
+That is the distinction the single control number was hiding:
+
+> **A synthetic control proves the instrument is capable of firing. A real committed instance proves
+> the population is capable of containing the thing. Only the second can turn a `0` into evidence
+> about the corpus, and only the first can rule out a typo in the pattern.** Reporting one control
+> answers one of those and silently implies the other.
+
+Note this does not contradict the earlier rule that a *conformance* test's positive control must be
+a real instance and never a synthetic. That rule is about a test whose job is to judge shape, where
+a synthetic is precisely the class that must not be flagged. Here the test is a denylist for known
+values, and the synthetic is legitimate -- for the narrower claim it actually supports.
+
+The failure lasted 121 commits because **the ritual's output was being checked for the verdict
+column and not the control column.** A control is only a control if someone reads it.
