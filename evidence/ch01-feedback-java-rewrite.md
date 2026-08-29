@@ -1321,8 +1321,25 @@ its format.**
 
     workshop/contracts/*.schema.json scanned                          42
     REQUIRED *ResourceId fields (every one embeds /subscriptions/<guid>/)   52  in 19 files
-    REQUIRED fields whose pattern is anchored ^/subscriptions/[0-9a-fA-F-]{36}   13  in 10 files
+    REQUIRED fields whose pattern is anchored ^/subscriptions/...           23  in 14 files
     CONTROL: required fields with no subscription implication          313 (fires)
+
+**Correction, and it was mine.** The anchored-pattern figure above originally read **13 in 10
+files**. It is **23 in 14**. The first measurement scanned each schema as a flat document and could
+not see required fields declared inside a nested object's own `properties` block or inside an array
+`items` schema; a recursive walk over every node finds ten more, in four more files. The
+correspondent measured 23 independently and their figure is the correct one -- two separately
+implemented instruments agreeing on 23 is the strongest evidence available here for that number.
+
+Their *label* for it does not match their count, and that is worth separating: they described the
+predicate as anchored `^/subscriptions/<36-hex>/resourceGroups/`. Measured, that narrower predicate
+-- pattern requires a `/resourceGroups/` continuation -- is **6 in 4 files**, not 23. So the count
+is right and the description is of a different predicate. Both figures are true of their own
+predicate, which is the same shape as every other pair of disagreeing numbers in this audit:
+**neither is wrong, and neither is usable until the predicate is printed beside it.**
+
+The correction moves the finding in the direction that strengthens it -- more required fields carry
+the value than first reported -- which is exactly why it needed catching rather than accepting.
 
 Examples of the anchored patterns, quoted from the contracts:
 

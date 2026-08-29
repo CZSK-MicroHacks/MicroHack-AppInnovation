@@ -7766,3 +7766,41 @@ cannot see a deleted file*. All evening the identifiers were the subject, and th
 Applied correctly this once: the blob SHA and path are recorded, the values are not. **Evidence
 sufficient to act, insufficient to leak** -- which is the resolution to the tension recorded
 directly above, and the first time in this file it was reached before writing rather than after.
+
+## A flat scan of a nested schema under-counts, and the error is invisible because the number looks plausible
+
+The headline finding of this arm -- that the evidence contracts *require* the subscription
+identifier -- was published with a count of **13 required fields in 10 files** whose pattern is
+anchored on `^/subscriptions/`. A correspondent measured the same property independently and got
+**23**. Re-measured here with a recursive walk over every schema node:
+
+    required fields anchored ^/subscriptions/, any continuation    23 in 14 files
+    ...of which the pattern also requires /resourceGroups/          6 in 4 files
+    CONTROL required fields with no subscription implication      313 (fires)
+
+**23 is correct; my 13 was low.** The first pass treated each schema as a flat document, so it saw
+only fields declared in the top-level `properties`/`required` pair. It could not see a required
+field declared inside a nested object's own `properties` block, or inside an array `items` schema.
+Ten fields and four files were invisible to it.
+
+Two things make this worth recording rather than just fixing.
+
+**First, the error direction was favourable to the finding.** 13 already supports the conclusion, so
+nothing about the number invited a second look. **A measurement that under-reports still proves the
+claim, and therefore never gets re-run** -- the flattering-null family reaching an ordinary count:
+the incentive to re-measure disappears as soon as the first answer is sufficient, not only when it
+is exonerating.
+
+**Second, their number was right and their label was wrong.** They described the predicate as
+anchored `^/subscriptions/<36-hex>/resourceGroups/`; that narrower predicate measures **6 in 4
+files**. So the pair 13-vs-23 was never a disagreement about the schemas. It was two instruments
+aimed at two different predicates, one of which was additionally mis-described by its author.
+
+> **Every disagreeing pair of numbers in this audit has resolved the same way: both true, neither
+> usable, because the predicate was not printed beside the count.** The rule has now caught a
+> stale-vs-live pair, a main-vs-branch pair, an arm-scoped-vs-repo-scoped pair, and now a
+> flat-vs-recursive pair -- and I have been on the wrong side of it twice.
+
+Practical form for schema work specifically: **`required` is a per-object keyword, so any count of
+required fields that does not recurse is a count of the top level only**, and JSON Schema gives no
+signal at the top level that deeper levels exist.
