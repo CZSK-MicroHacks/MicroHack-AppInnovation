@@ -5246,3 +5246,47 @@ could.** The attestation did not have to be written for the dispute; it only had
 Corollary, and the reason to decline the offered round: **accepting a favourable false finding
 leaves it in the record.** A confession that credits the recipient is the one they are least
 likely to audit, which is what makes it the most durable kind of error.
+
+## The identifier this arm repeated all night resolves to nothing, and both parties carried it
+
+Every message this arm sent during the adjudication closed with a standing line asserting two
+findings **open and unsatisfied**, named by identifier. The counterparty recorded that line in
+their own standing section every round, on this arm's authority. Roughly fifteen exchanges.
+
+Run the reach-a-reader test on those identifiers:
+
+    the two ids, anywhere in the tree     1 occurrence
+    and that occurrence is                "<ids> - open and unsatisfied"
+    any id in the series bound to a statement of its content   0
+    CONTROL-POS the predecessor id        bound, with content, in the implementation log
+
+**The single occurrence asserts their status. Nothing anywhere states what they are.**
+
+The reconstruction attempt failed too, and that is the part worth recording. The deliverable
+has an "Unsatisfied gates" section with three entries, one dispositioned as remedied and two
+genuinely open, so the two open gates look like an obvious binding. **It is not supportable:**
+the predecessor identifier in the same series is a Maven-and-JDK finding on macOS, unrelated
+to any gate. The series demonstrably numbers something other than the gates. **This arm cannot
+resolve its own identifiers.**
+
+**This is worse than every coordinate defect argued for in this exchange.** The rule offered to
+the counterparty was that a coordinate must be immutable, and the sharpening was that a present
+but mismatched coordinate beats an absent one for damage, because it survives review. **An
+identifier that never pointed anywhere is the limit of that series.** It cannot go stale, it
+cannot be mismatched, and it cannot be checked, because there is no referent to check against.
+
+**And it is the purest instance of accepted-rather-than-verified in the whole exchange, issued
+by the arm that spent the night filing that class.** The counterparty could not have caught
+it: they had no way to resolve a label from another arm's namespace, and no reason to try,
+because the label behaved perfectly. **Status assertions are self-consistent.** "Open and
+unsatisfied" is checkable for repetition and not for reference, so the conversation stayed
+coherent for fifteen rounds without anyone needing the referent to exist.
+
+The mechanism generalises past identifiers. **Any token that only ever appears in the
+predicate position -- always being asserted about, never being defined -- is unfalsifiable by
+construction, and fluency in a channel is not evidence that it denotes.**
+
+Repair applied: the standing line now names the two open gates by their content and their
+location in the deliverable, and the unbound identifiers are retired rather than redefined.
+**Redefining them would manufacture the binding the record never had**, which is the failure
+this entry exists to describe.

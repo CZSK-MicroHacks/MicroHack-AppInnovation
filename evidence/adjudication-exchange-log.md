@@ -61,7 +61,13 @@ of lost primary text is the thing this file exists to prevent.
   prerequisite and `:343` prescribes the remedy, including an explicit prohibition on fabricating
   the row. A documented gate is not a hidden one.
 - **F-348 - withdrawn**, settled by reading `postgresql.bicep:78`, not by counting names.
-- **F-J7 / F-J8 - open and unsatisfied.**
+- **Two gates remain open and unsatisfied**, named by content because the identifiers this
+  arm circulated for them resolve to nothing in the tree and are retired rather than
+  redefined (see `docs/CommonErrors.md`): (1) the **extension preflight gate**, which is
+  unsatisfiable without the VS Code CLI and was bypassed rather than met; (2) **no handoff
+  instance was produced**, checkpoint 8 having been inspect-only, so the handoff contract
+  was never exercised end-to-end from this path. Both are recorded under "Unsatisfied
+  gates" in `evidence/ch01-feedback-java-rewrite.md`, observed at 3e27a7e.
 
 ---
 
