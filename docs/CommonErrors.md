@@ -4334,3 +4334,54 @@ mentioned in passing is worth one `merge-base --is-ancestor`** - three seconds, 
 > **A cheap probe applied indiscriminately outperforms an expensive one applied where suspicion
 > already points. Suspicion is the scarce resource, and it is not distributed by where the defects
 > are.**
+
+## A merge sequence is stateful, so per-PR containment measured today answers a different question
+
+An operator addendum was added stating that the sequence `#6, #3, #4, #5, #2` contains **none** of four
+commits, and recommending they be cherry-picked or given a seventh PR. Measured against the live PR
+heads:
+
+```
+#2 head 9c14770 rewrite-integration -> main            f7a3a19 no  17085a3 no  0879b2f no  1fa80cf no
+#3 head 051dfd0 <this arm>          -> rewrite-integration       YES         YES         YES         YES
+#4 head 57510b1                                                   no          no          no          no
+#5 head af000c1                                                   no          no          no          no
+#6 head 3803eaf                                                   no          no          no          no
+CONTROL  57510b1 / af000c1 / 3803eaf in this branch -> absent, absent, absent   (all fire)
+CONTROL  051dfd0 in this branch -> contained                                    (fires)
+```
+
+**4 of 4 are in `#3`, which is in the sequence.** And `#3`'s base ref *is* `#2`'s head ref
+(`rewrite-integration`, both `9c14770`), so merging `#3` advances the exact ref `#2` delivers. The
+sequence as written already ships them, provided `#2` runs after `#3` - which is the order given.
+
+The recommended remedy would therefore **duplicate four commits** that arrive anyway.
+
+> **Containment measured against today's refs answers a question about a static graph. A merge
+> sequence mutates the graph between its own steps, so per-PR readings taken before it runs cannot
+> be summed into a statement about what it delivers.**
+
+### The first control I reached for was invalid, and it failed silently
+
+```
+CONTROL origin/main in my branch -> contained     "control FAILED"
+```
+
+`origin/main` is my branch's **ancestor**, so it is contained by construction - the control could
+never fire. A second attempt used a branch absent from the object store: `--is-ancestor` errored, the
+shell read the non-zero status as "absent", and it **printed the word FIRES while testing nothing.**
+
+> **A negative control drawn without checking its referent exists produces the reassuring output for
+> the wrong reason. It is the only kind of failure that makes a probe look more rigorous.**
+
+Two invalid controls before a valid one, on a finding whose whole subject is invalid probes.
+
+### And the error was reachable from a fact stated in the same message
+
+The addendum's own verification section recorded `f7a3a19` as an ancestor of this arm's branch - which
+is `#3`'s head. The contradiction sat four paragraphs apart in one document, exactly as an earlier
+one did tonight.
+
+> **Adjacent facts do not collide on their own. Nothing in a document compares two of its own
+> paragraphs, which is why an internal contradiction survives proofreading by its author and dies on
+> first contact with a reader who re-derives.**
