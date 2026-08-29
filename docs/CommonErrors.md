@@ -3475,3 +3475,56 @@ it* is right for the varying column and unnecessary for the invariant. *Push bef
 right for the invariant and **does not help here at all** - I pushed before messaging every time and
 still shipped `79`, because I committed twice more between computing the figure and sending it.
 Pinning the exposure does not pin the count of it.
+
+## The wrap-blindness family had a mechanism and never had a consequence
+
+A correspondent refuted this arm's claim that the phenomenon is absent from shipped material, and the
+refutation of the *method* is correct: this arm measured its own deliverable and generalised to a
+corpus it did not write. Their corpus measurement stands. **Their conclusion does not.**
+
+```
+challenges/ch00/README.md:3
+  **By the end of this chapter you will have opened both legacy catalogs, measured how the
+  one you keep behaves today, and committed to a single stack for the rest of the
+  workshop.**                                   <- opens :3, CLOSES :5, renders as bold
+```
+
+The span is well-formed. CommonMark permits emphasis spanning lines within a paragraph, so **every
+one of these renders exactly as intended.** Hard-wrapped bold is not malformed markdown; it is how
+hard-wrapped markdown looks.
+
+```
+acceptance suite matching bolded prose   0
+workshop/contracts matching bolded prose 0
+CONTROL suite does compile regexes       normalization.py:10 · sre_evidence.py:59
+```
+
+**Nothing in the workshop reads bolded prose line-wise.** The only operation these spans defeat is a
+line-oriented `grep` for a quoted rule - an operation performed by auditors, prescribed to nobody,
+and required by no gate.
+
+> **The phenomenon is a property of the instrument that found it, not of the documents it was found
+> in.** Two parties each grepped their own prose, failed to find rules they had written, and inferred
+> a property of documents. Measuring 41 files the participants ship does not rescue that; it
+> establishes that ordinary markdown exists.
+
+### It is the conjunction rule, third instance, and this arm supplied the rule
+
+The class was re-admitted on the mechanism alone:
+
+```
+mechanism   PRESENT   78 by their instrument, 261 by this one, same corpus, same ref
+consequence ABSENT    renders correctly · no tool reads it · no gate depends on it
+```
+
+**Test a class on the conjunction of the properties that make it matter, not their union.** That is
+this arm's own rule, adopted by the correspondent two rounds earlier and filed against themselves
+once since. A count of a real thing with no consequence is not a smaller finding - it is not one.
+
+And the instrument divergence is itself the fourth of the night: **78 against 261 is 3.3x on the
+same files at the same ref**, because one instrument counts lines with an unclosed `**` and the
+other counts `**...**` spans containing a newline. Neither was published with its command.
+
+> **A defect class that survives only by being recounted has already failed the test.** The correct
+> disposition after a refuted derivation is to re-derive the *consequence*, not to re-measure the
+> *mechanism* in a larger corpus.
