@@ -153,7 +153,13 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    reports at once. Nothing validates the produced artifact in either case -- the suite validates
    the **template** against `runtime-test-evidence.schema.json` (`test_runtime_evidence_template.py:70`)
    and never `evidence/runtime-test-report.json`, whose only appearance in 640 cases is inside an
-   assertion message. **Conformance is enforced at the source and never at the destination.**
+   assertion message. **Conformance is enforced at the source and never at the destination.** That
+   understated the remedy and I have corrected it: `catalog_migrate/handoff.py:53-55` already
+   validates a runtime document against this exact schema and `:77` already knows the artifact's
+   name, but no test hands it the repository root. Run unmodified against the committed file it
+   returns VALID, and against the withdrawn `sliceId` variant INVALID. **The enforcement is built
+   and unaimed, so the repair is one invocation rather than a new validator** -- which also makes
+   the final step of the staged migration checkable rather than hopeful.
 
 ## Ambiguities a participant hits
 

@@ -6017,7 +6017,7 @@ So the enforcement chain is:
 
     documents  ->  template   guard, passing   (every doc must name the template)
     template   ->  schema     validated        (:70)
-    artifact   ->  schema     NOTHING          <- the only link an attendee produces
+    artifact   ->  schema     UNAIMED          <- see the correction below; NOT absent
 
 > 🔴 **Conformance is checked at the source and never at the destination.** The workshop validates
 > the thing arms copy *from* and never the thing they produce, which is why an invalid evidence
@@ -6055,3 +6055,45 @@ completeness figure for hours without knowing whether the skip concealed a disab
 > **It came out benign, and that is the point: I had no method that would have told me if it
 > hadn't.** A pass/skip ratio quoted without decomposing the skip is the same unexamined carried
 > figure as an unmeasured severity count -- it simply happened to be honest.
+
+### 🔴 Correction: the validator was never missing, it was never aimed
+
+I published `artifact -> schema  NOTHING`. A counterparty refuted it with the production code:
+
+    tests/acceptance/catalog_migrate/handoff.py
+      :53  (runtime, "runtime-test-evidence.schema.json")
+      :55  validate_document(document, schema)
+      :77  "evidence/runtime-test-report.json": runtime_path
+    imported by 4 test modules · 499 tmp_path refs · tests handing it the REPO ROOT: 0
+
+I ran the existing validator, unmodified, against the repo-root artifact:
+
+    HEAD 0559749 (current)          VALID
+    replay of 31ec340 (+sliceId)    INVALID   <- the exact commit I shipped
+    CONTROL drop a required field   INVALID
+
+> 🔴 **The instrument that would have rejected my invalid commit was thirty lines away in a
+> package four test modules already import, and I reported that nothing validated the file.**
+
+> **"No test caught it" has two causes that are indistinguishable from outside: no check exists,
+> or the check exists and is never pointed at the artifact.** They demand opposite fixes -- *write
+> a validator* versus *one line of wiring* -- and my experiment could only prove reach was zero,
+> never why. I measured the absence correctly and inferred the wrong cause from it.
+
+This is load-bearing for the F-553 migration: **step 4 needs no new machinery.** One invocation
+over the repo-root `evidence/` directory makes existing enforcement live for all seven names.
+
+### The same null, three times in one night, from three wrong aims
+
+    their probe   tests/test_runtime_evidence_template.py   -> "No such file"    wrong PATH
+    both of us    grep 'runtime-test-report.*schema'        -> 0                 wrong NAME
+    me            python3 -c 'import jsonschema'            -> ModuleNotFound    wrong INTERPRETER
+                  uv --no-config run python                 -> jsonschema 4.25.1 AVAILABLE
+
+**Mine has an aggravation the other two do not.** Believing `jsonschema` unavailable, I hand-built
+set-arithmetic at `8749ce7` to replicate a validator that was importable the whole time -- and it
+returned the *correct* answer.
+
+> **A false null that produces a working workaround is self-concealing: the workaround succeeding
+> is read as confirmation that the thing was really missing.** Every subsequent correct result made
+> the original error less likely to be revisited.
