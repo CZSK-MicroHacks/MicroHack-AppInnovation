@@ -3781,7 +3781,12 @@ git merge-tree --write-tree rewrite-integration michalmar-ch01-java-rewrite-walk
            solutions/ch01-copilot-rewrite/java/README.md
 gh pr view 3 --json mergeable,mergeStateStatus
   {"mergeStateStatus":"DIRTY","mergeable":"CONFLICTING"}
+                     head 4aa8c59 vs base 9c14770   <- SHA PAIR ADDED RETROSPECTIVELY
 ```
+
+The SHA pair on that last line was **not** in this entry when it was written; it was added later, after
+the rule at the end of this file made its absence a defect. See the closing entry - the verdict above
+was unfalsifiable for as long as it stood without it.
 
 **Two independent instruments, same verdict: the pull request could not be merged.** Every column was
 true and the artifact was undeliverable.
@@ -3795,7 +3800,8 @@ be taken wholesale. Resolved as a union - the append-only registries keep both s
 explains the pinning rule) **and** upstream's concrete pinned-tarball commands, which are compatible
 because the fix required pinning and upstream pinned. Verified: `639 passed, 1 skipped` (up from 612
 - the merge carried 27 upstream tests), zero conflict markers repo-wide, and every distinctive string
-from both sides present with an absent-string control at 0. `MERGEABLE / CLEAN` confirmed after push.
+from both sides present with an absent-string control at 0. `MERGEABLE / CLEAN` confirmed after push,
+at head `f113283` against base `9c14770` - **the base SHA also added retrospectively.**
 
 This branch had already lost work to conflict resolution once, which is why the resolution was
 verified by content rather than by exit code.
@@ -3979,3 +3985,75 @@ It only surfaced because a zero-valued control is prima facie broken.
 > of the question being asked.** I searched a log for the word "Facilitator" because that is what I
 > call the counterparty; the log calls them by finding ID, because that is what I wrote in it.
 > **I failed to predict my own file's vocabulary.**
+
+## I wrote the base-SHA rule and left five violations of it standing in the same file
+
+A correspondent ran the rule from the entry above against their own deliverable and found
+**10 mergeability verdicts, 0 carrying a base SHA.** Before accepting the credit, the same falsifier
+was run here:
+
+```
+docs/CommonErrors.md                     verdicts 5   carrying a base SHA 0
+evidence/ch01-feedback-java-rewrite.md            0                       0
+evidence/adjudication-exchange-log.md             0                       0
+CONTROL (this file's own vocabulary)  'merge-tree' 3 · 'ca80010' 3 · absent-string 0   (fires)
+```
+
+**Five in five.** One of them sits **four lines above the sentence stating the rule**, and the rule's
+own worked example - *"`MERGEABLE @ca80010` is only checkable against a base SHA the reader must also
+be told"* - names the missing thing while the paragraph beside it fails to supply it. Both sites are
+now patched, and both patches are **labelled as retrospective** so the file does not read as though it
+had complied all along.
+
+> **Stating a rule reads, to its author, like satisfying it.** The author is the only party who
+> encounters the rule already knowing what it is for, which is exactly the state in which one stops
+> looking for counterexamples - and the nearest counterexamples are in the text one just wrote.
+
+This is *recorded-not-routed* at the shortest possible range: the finding and its violation cohabit a
+single file, with no channel, no latency, and no second party between them. Distance was never what
+made routing fail.
+
+### Why the falsifier had to be run here before the credit was taken
+
+The correspondent attributed the rule to this arm and measured it against themselves. Accepting that
+without measuring here would have been the favourable-side failure filed one round earlier - a
+compliment absorbed rather than tested - and it would have been absorbed **in the very act of
+congratulating myself for a rule about unverified acceptance.**
+
+> **Run the falsifier on your own corpus before accepting authorship of it.** Authorship of a rule is
+> the weakest available evidence of compliance with it, and it feels like the strongest.
+
+### The falsifier over-reported 6, and the reason unifies four probe failures in one night
+
+Re-run after patching: **6 verdict-shaped strings, 2 carrying a SHA pair.** That reads as a third of
+the defect surviving. It is not. Classified by hand:
+
+```
+3783  asserted verdict   PATCHED   head 4aa8c59 vs base 9c14770
+3803  asserted verdict   PATCHED   head f113283 vs base 9c14770
+3884  narrative about the two readings   - the differing SHAs are the subject
+3886  narrative about the two readings   - as above
+3894  the rule itself, quoting `MERGEABLE @ca80010` as the BAD example
+4003  a quotation of 3894
+```
+
+Two assertions, both repaired; four **mentions**. A token probe cannot tell a claim from a quotation
+of a claim, so a rule stated in prose registers as a violation of itself - and the more thoroughly a
+defect is documented, the worse its own file scores.
+
+> **Use versus mention. A grep counts occurrences of a string; a defect is a property of an
+> assertion. The two diverge most sharply in the document that defines the defect.**
+
+That is the fourth probe of the night to fail in one shape, and naming the shape is the durable
+output:
+
+```
+reachability probe   required an artifact name and a schema name to be the same string
+substring probe      'sql.bicep' matched 'postgresql.bicep'
+line-identity probe   reported 4 union losses that were rewordings
+use-mention probe     counted the rule's own statement as a breach of the rule
+```
+
+> **Every one matched text where the claim was about structure - reachability, citation, information,
+> assertion. A string probe is a cheap first instrument and never a sufficient last one; the answer it
+> gives is always "this text occurs," and that is never quite the question.**
