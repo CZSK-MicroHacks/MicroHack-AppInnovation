@@ -4248,3 +4248,49 @@ existed.
 
 > **Preservation failures are visible to the owner and fixable by others. That asymmetry is why they
 > survive: everyone who notices assumes the person who can act already has.**
+
+## "Modified in the working tree" is not "unique to the working tree"
+
+A stop-before-git notice listed 10 uncommitted tracked files as at risk, two of them Java tests I was
+asked to claim. The list was built from `git status` - **modification** - but the property that makes
+a file at risk is **content uniqueness**, and those are different questions.
+
+```
+shared tree edit:  @Testcontainers -> @Testcontainers(disabledWithoutDocker = true)   (both files)
+blob post-image    e52cb48 / 6bbe3f6
+my committed blob  f139c85 / d193980        DIFFERENT  -> "not present anywhere"  by blob identity
+```
+
+Blob identity says the edit exists nowhere else. It is wrong about the risk:
+
+```
+lines in shared working tree absent from my committed version    0   both files
+lines in my version absent from the shared tree (my surplus)     5   both files
+CONTROL vs the base blob                                         6   (fires)
+occurrences of disabledWithoutDocker on my branch                2   annotation + rationale
+```
+
+**My committed version is a strict superset.** Same annotation, plus five lines explaining why the
+flag is required and that it is evaluated as an `ExecutionCondition` before container start. The
+working-tree copy is a re-derivation of committed work, minus the reasoning.
+
+> **Discarding those two files loses nothing. The at-risk population is 8, not 10 - and the two that
+> dropped out were removed by a content probe, after blob identity had said they were unique.**
+
+Fourth appearance of the same shape in this file: reachability, substring, line-identity in a merge
+union, and now line-identity in a risk assessment. **Every one asked whether two things are the same
+text when the claim was about what they contain.**
+
+### The self-description half, checked on myself first
+
+The notice named its own enabling defect: *"I made no edits" is a claim about me; "the tree is clean"
+is a claim about the tree.* Before commenting I ran it here rather than recalling it:
+
+```
+git status --porcelain | grep -vc '^??'   -> 0    tracked-modified
+                       | grep -c  '^??'   -> 0    untracked
+CONTROL after touching a file (mtime only) -> 0   correct: git compares content, not mtime
+```
+
+Clean, measured. **The control matters more than the result** - a `find -newer` style check would have
+reported a change that git correctly does not, and I would have "found" drift that did not exist.
