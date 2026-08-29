@@ -3460,3 +3460,60 @@ Final counts, re-measured against the shipping branch: **45 commits, 24 files ad
 `origin/rewrite-integration..HEAD`; the published 66/41 used `4bf59f7..HEAD`, which includes
 **five merge commits** of the facilitator's own branch. All three figures independently
 confirmed here.
+
+## Delivery: PR #5, and F-267 caught in the act on the way out
+
+Opening the pull request surfaced the one thing this track had not yet produced — an instance
+of a finding **operating on this branch**, in real time, with this arm as the offending party.
+
+### The branch was preserved and undelivered, which are different properties
+
+`michalmar-refactored-waddle` was pushed, remote-matched and byte-identical to `origin`, and
+attached to **no pull request**: 46 commits reachable from a remote but on no delivery path.
+That is a second axis under the preservation finding, and this arm scored well on the first
+while scoring zero on the second without noticing. *Pushed* answers "can this be lost"; it
+does not answer "will this arrive". **A branch can be perfectly safe and still deliver
+nothing**, and the command that reveals the difference is not one anybody runs by habit.
+
+### Two of my three code fixes were already shipped, and one of mine was a regression
+
+The PR opened `CONFLICTING`, both conflicts in files I had fixed during the run. Rather than
+resolve in favour of my own work — the default instinct, and the one that would have been
+wrong — I ran the facilitator's F-267 guard:
+
+```bash
+git log -S'<identifier>' origin/rewrite-integration -- <path>
+```
+
+Both defects were **already remediated at `e070393` (2026-08-27)**, before my versions existed.
+
+| File | Measured verdict |
+| --- | --- |
+| `catalog_migrate/handoff.py` | Shipped fix identical (`.rstrip("/")` both operands) plus a comment. **Mine adds nothing.** |
+| `catalog_acceptance/database.py` | Shipped fix has the same decoding pin **and** an `except UnicodeDecodeError` handler naming the failure. **Mine has no handler.** |
+
+The second is the serious one. **My version is a strict subset: merging it would have deleted
+the handler** and reintroduced precisely the fail-far-from-here behaviour the fix exists to
+remove — a decode error surfacing as an `AttributeError` on `None` with no mention of
+encoding. My change would have arrived as a fix, been reviewed as a fix, and been a
+regression.
+
+This is **F-267's exact shape with this arm as the party shipping the subset** — the same
+finding that was filed against another arm two rounds earlier, reproduced by the arm that read
+the filing. That is worth more than agreeing with it. **A guard whose necessity you have
+already been told about, and which then catches you, is a guard that earns its place**; the
+prior instances could still be read as carelessness by others, and this one cannot.
+
+Both conflicts resolved to the shipping version. Nothing of mine was lost but docstring prose
+the base states more precisely.
+
+### What survived the guard
+
+`infra/modules/sql.bicep:84` is **not** fixed on the shipping branch — the double-dot empty-DNS-label
+hostname is still there. Guard-checked (`-S'fullyQualifiedDomainName'` returns nothing on the
+base), so it ships as genuinely novel rather than on the assumption that it was.
+
+**One of three fixes survived contact with the guard.** Had I not run it, the PR would have
+claimed three and delivered one plus a regression — with a body I had already written asserting
+the three. The overclaim was drafted before the check, which is the ordering that makes this
+worth recording.
