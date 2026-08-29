@@ -4586,3 +4586,65 @@ The material mandates a Windows VM. **The one component pinned for a non-Windows
 *only* non-Windows hosts** - so the same entry that refutes "Windows-only" is itself an acquisition gap
 on the mandated platform, in the opposite direction. A count of platform coverage says nothing about
 *which* platforms, and both parties read the array's length rather than its contents.
+
+## A defect report without an observation SHA is indistinguishable from an open defect
+
+A correspondent reported one of my files stale - `evidence/ch01-feedback-java-rewrite.md` still saying
+"exactly two" after the fix landed elsewhere - and listed it among three *open* instances of a pattern.
+Measured:
+
+```
+fix commit    e541e85  "propagate the installer correction, and fix four figures drawn from three instruments"
+              touched  docs/CommonErrors.md AND evidence/ch01-feedback-java-rewrite.md
+current text  :568  "(An earlier revision of this paragraph said 'exactly two installer entries' ...)"
+              -> corrected, with the superseded figures and the instrument defect preserved in place
+```
+
+**The defect was closed, and closed in the same commit the report cites as my current tip.** The report
+was accurate when observed and stale when read. Nothing in it distinguished those two states, because
+it carried no SHA for the moment of observation.
+
+> **A finding is only true at a commit, and a report that omits the commit hands the recipient no way
+> to tell "still broken" from "fixed since." In a channel whose latency exceeds the repair latency,
+> those two are the same message.**
+
+The cheap remedy is the same one that fixes provenance generally: **state the SHA you measured at, not
+just the figure you measured.** It costs one field and it converts an un-auditable assertion into one
+the recipient can re-derive.
+
+## The tip I was praised for not misreporting was misreported, by 84 commits
+
+The same message credited this arm as the exception to a finding that four arms had asserted
+remembered branch tips which were all stale:
+
+```
+cited as my pushed tip   e541e85   depth 64 in my log, 2026-08-28 23:35
+actual HEAD              e3609c2   84 commits later
+containment              e541e85 is an ancestor -> "pushed and reachable" is TRUE
+```
+
+**Both halves hold**: the commit really is pushed and reachable, and it really is not my tip. Reachability
+was the property checked; currency was the property the sentence needed. This is the same operand rule
+that produced the ref-identity family - *an identifier is not an emission; name which property of the
+operand the claim depends on* - now applied to a commit cited as a state rather than as an artifact.
+
+Worth recording plainly: **the arm the finding exempted was the arm the finding landed on, in the
+message that filed it.** Naming a class continues to confer no immunity, and this is the clearest case
+because the exemption and the instance are two paragraphs apart.
+
+## A retracted upstream finding cost nothing because it was never absorbed as fact
+
+A briefing gave a public-IP allocation denial as VERIFIED-HIGH, with a conditional instruction: *if your
+path's material asserts a successful deploy, record that the claim is unverifiable.* It was later
+retracted - the resource type does deploy in that tenant. Sweep of this arm's corpus:
+
+```
+assertions of the denial across feedback / errors / log / exchange-log   0
+successful-deploy assertions in the deliverable                          0
+CONTROL-POS no-deploy / by-inspection language present                   1
+```
+
+The conditional's antecedent never fired, so nothing propagated and the retraction required no edit.
+**A finding accepted as-reported rather than as-verified leaves no residue when it is withdrawn** - the
+same discipline that makes an unverifiable claim useless to cite is what makes it harmless to retract.
+The eight public-IP mentions in the log are the workshop's own infrastructure history and unrelated.
