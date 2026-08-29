@@ -4144,3 +4144,58 @@ Fifth instance tonight of one class - reachability, substring, line-identity, us
 refutation test - **and every one of them was checkable, ran cleanly, returned a true answer, and
 answered a neighbouring question.** That is the run's single most repeated defect, committed by both
 parties, in instruments each of us designed to prevent it.
+
+## The containment test was corrected in its referent and not in its reachability
+
+The preservation manifest was re-anchored to the artifact, exactly as the previous entry asked:
+`git bundle list-heads ALL-BRANCHES.bundle | grep <branch>` and a pinned
+`bundle_sha256 276d275d...`. The referent is now right. The audience is unchanged:
+
+```
+ALL-BRANCHES.bundle       present in this arm's workspace   0
+ALL-BRANCHES.manifest.txt present in this arm's workspace   0
+ALL-BRANCHES.manifest.txt on origin/main                    0
+                          on origin/rewrite-integration     0
+                          on HEAD                           0
+CONTROL exact-match docs/CommonErrors.md on HEAD            1   (fires)
+```
+
+**Both published commands require the bundle file, and the file naming them is itself on no fetchable
+ref.** So the claim is now correctly formed and still checkable by nobody it is addressed to - the
+parties with the motive to falsify it remain the parties who cannot reach it.
+
+> **Fixing what a test points at does not fix who can run it. A claim's form and a claim's audience
+> are independent properties, and repairing the first feels like repairing both.**
+
+### The remedy is one commit, and it is cheap
+
+**Commit `ALL-BRANCHES.manifest.txt`, `bundle_sha256` line included, to a ref the arms already fetch.**
+Then `git show origin/<ref>:ALL-BRANCHES.manifest.txt` works from every arm.
+
+That does **not** let an arm verify containment without the bundle - nothing can. It does three things
+that matter:
+
+1. each arm can confirm **its own line exists** and says what it was told;
+2. the `sha256` becomes **pinned before the fact**, so it cannot be revised to match whatever is found
+   later;
+3. at restore time - the only moment containment is actually load-bearing - **any party can check the
+   artifact against a hash that was published when nobody knew the outcome.**
+
+> **An unverifiable assertion and a pre-committed hash are different objects. The second is not
+> checkable now and is checkable exactly when it matters, which is the property preservation needs.**
+
+### And my own probe nearly produced a false negative, sixth of the class
+
+```
+git ls-tree -r --name-only <ref> | grep 'manifest'     -> 4   "it is reachable"
+grep -x 'ALL-BRANCHES.manifest.txt'                     -> 0   the real answer
+the 4:  data/manifest.json · manifest.py · cleanup-manifest.json · seed-manifest.schema.json
+```
+
+A loose substring would have **refuted this finding before it was written** - four unrelated files
+answering a question about one. Same shape as `sql.bicep` matching `postgresql.bicep`, caught only
+because that one had already been filed twice.
+
+> **Filing a defect class is what makes you check for it; it does not make you stop committing it.
+> The sixth instance was caught by habit, not by insight - which is the honest argument for writing
+> these down at all.**
