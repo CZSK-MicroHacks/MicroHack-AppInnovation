@@ -4385,3 +4385,75 @@ one did tonight.
 > **Adjacent facts do not collide on their own. Nothing in a document compares two of its own
 > paragraphs, which is why an internal contradiction survives proofreading by its author and dies on
 > first contact with a reader who re-derives.**
+
+## The disclosure conclusion was right and the instrument that produced it was not sufficient
+
+A public-exposure finding reported `.azure/deployment-plan.md` live on six published branches, with
+**zero credentials** across every public ref, scanned for private keys, SAS, `AccountKey`,
+`client_secret` and usernames. Verified independently, credential-free:
+
+```
+anonymous API HTTP 200 · visibility "public"      CONTROL a nonexistent repo -> 404   (fires)
+.azure/deployment-plan.md  on origin/main 0 · rewrite-integration 1 · this branch 1
+added by 3ba4ace (the Azure target-contract freeze) 2026-08-19, ancestor of the frozen baseline
+this arm's first commit 2026-08-27          -> in the tree through no act of any arm
+2 unique GUIDs: one subscription, one tenant
+```
+
+The conclusion holds. **The vocabulary did not include `password`, and the file contains it 14 times:**
+
+```
+:49  "no SQL administrator login/password parameter"
+:144 "`password-secret` compatibility mode or managed identity/Entra mode"
+:274 "create the local application role with the separate application password"
+assignment-shaped  password["']?\s*[:=]\s*["']?[A-Za-z0-9!@#$%^&*]{6,}   ->  0
+CONTROL-POS same regex on a synthetic 'password: hunter2secret'          ->  1   (fires)
+CONTROL-POS 'subscription' 18 · CONTROL-NEG sentinel 0
+```
+
+All fourteen are prose describing password **modes**, not values. So the answer is unchanged - and it
+was obtained by an instrument that could not have detected the thing it was most important to detect.
+
+> **A negative result is only as strong as the widest vocabulary that was tried, not the one that
+> happened to return zero. "No credentials found" and "no credentials present" differ by exactly the
+> tokens nobody thought of.**
+
+Same shape as grepping `golden` and concluding about `5-12 hours`, with the stakes inverted: there an
+absence claim was wrong, here it was right, **and the method was equally unable to know that.** The
+right answer is not evidence that the probe was adequate - which is why a *favourable* security result
+deserves a second vocabulary more than an unfavourable one does. An unfavourable result gets
+re-examined by its subject; a clean scan is filed.
+
+### No action follows for this arm
+
+The file predates every arm, is absent from `origin/main`, and is already public on six refs.
+Withholding a push prevents nothing and removing it would rewrite published history. **Disclosure is
+the owner's judgement; the arm's duty ends at measuring it accurately and saying so.**
+
+### Footnote: this entry was caught by the suite it was written beside
+
+The paragraph above originally quoted the introducing commit's subject verbatim. That subject contains
+a build-phase code, and `test_no_build_phase_codes_reach_a_reader` failed on it:
+
+```
+docs/CommonErrors.md:4398: <code redacted>      1 failed, 638 passed, 1 skipped
+```
+
+**A quotation is not exempt from the rule it violates.** The guard scans every file git knows about
+and does not care that the string arrived inside quote marks - correctly, because a reader meets the
+code either way. Repaired by naming the commit by SHA and describing what it froze.
+
+Worth stating plainly: **the acceptance suite caught a defect introduced by the person documenting how
+defects escape**, four lines below a sentence about instruments being insufficient. It is the only
+moment tonight where a green suite was load-bearing rather than reassuring.
+
+The repair failed a second time, at the new line: the footnote **quoted the guard's own failure
+output**, and that output necessarily contains the offending token. Redacted to `<code redacted>` on
+the third attempt.
+
+> **A guard that reports the string it forbids emits a diagnostic that cannot be pasted into any file
+> it protects.** Not a defect in the guard - the scan is right to be quotation-blind - but a property
+> worth knowing before writing a postmortem inside the scanned tree. Every honest write-up of a
+> violation is itself a violation until redacted.
+
+Three attempts: the quotation, the quotation of the error about the quotation, then the fix.
