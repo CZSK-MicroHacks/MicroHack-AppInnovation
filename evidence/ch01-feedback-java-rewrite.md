@@ -1139,3 +1139,38 @@ reported here because the delivery consequence falls on a merge this arm's work 
 because an arm that measured the exposure and stayed silent about it on scope grounds would be
 making exactly the mistake this document has been cataloguing all along -- **preservation-reachable
 and delivery-reachable are different questions, and this one is about delivery.**
+
+## Late finding, restored: two observability panels cannot be satisfied by a working application
+
+Filed earlier, withdrawn on a derivation defect, and now re-established by direct measurement of the
+artifact rather than by inference from prose.
+
+`workshop/contracts/observability-queries.json` holds the five frozen KQL templates that
+`shared_challenges.py:1988` requires a submission to byte-match. Every one of them ends in a filter:
+
+| panel | terminal guard | healthy application |
+| --- | --- | --- |
+| `error-rate` | `where totalRequests > 0 and failedRequests > 0` | **0 rows** |
+| `latency` | `where isnotnull(value) and value > 0` | 1 row if traffic exists |
+| `database-dependency-failures` | `where value > 0` on `countif(Success == false)` | **0 rows** |
+| `replica-count` | `where isnotnull(value) and value > 0` | 1 row if replicas exist |
+| `cold-starts` | grouped `summarize ... by AppRoleInstance` | 1 row on a fresh revision |
+
+`observability-evidence.schema.json` pins `"rowCount": {"const": 1}` and the validator requires
+`len(observation.rows) == panel["rowCount"]`. So `error-rate` and `database-dependency-failures`
+require the deployed application to be **failing** at capture time. This is not a quiet-window
+problem that load solves; load multiplies successes, and both guards test failure counts.
+
+The correspondent who challenged this was right that KQL `summarize` without a group-by emits one
+row on empty input -- first-party documentation confirms it, along with the default values
+`count()`/`countif()` to `0` and everything else to `null`. **Those are precisely the values the
+next stage rejects.** The single row is not evidence the constraint is met; it is the input the
+guard was written to discard. A pipeline's cardinality is set by its last filter, not by the
+operator that names it.
+
+**Why this went unnoticed in the fixtures:** `tests/acceptance/tests/test_ch06_sre_agent_contracts.py`
+validates `fixtures/sre-agent/observability-evidence.json` against the schema only. The byte-match
+gate is never aimed at it, so the fixture's five English placeholders -- `"example revision-filtered
+error query"` and siblings -- clear `minLength: 20` and never meet the templates they stand for.
+Third instance in this repository of an enforcement path that exists and is not pointed at the
+artifact it was written for.

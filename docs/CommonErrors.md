@@ -3715,10 +3715,17 @@ file, one ref, one word, two instruments, two answers. There the gap was 3.3x an
 is a single occurrence and was carried unchallenged through an entire audit **because it was small
 enough to look like agreement.**
 
-## [RETRACTED] Challenge 4 prescribes the remedy the workshop elsewhere says cannot work
+## [RETRACTED, then RESTORED on a different ground] Challenge 4 prescribes the remedy the workshop elsewhere says cannot work
 
 **Retracted in full by the entry below. The inference this rests on does not transfer, and the
 original is left standing so the retraction has something to be checked against.**
+
+**RESTORED.** See *"The row exists so the next stage can discard it"* at the end of this file. The
+retraction was correct about the *inference* and wrong to remove the *conclusion* from circulation:
+the five frozen KQL templates each end in a `where ... > 0` guard, so `error-rate` and
+`database-dependency-failures` demand a failing application directly, with no transfer from the
+telemetry-signal prose required. **The withdrawal below stands as a correction of the derivation
+only. The claim is live.**
 
 Two parties disputed whether Challenge 4's `rowCount: const 1` gate is a defect. One held that the
 completion checkbox *"requires the attendee's application to be broken."* I held it dissolved,
@@ -7047,3 +7054,80 @@ triggered, read-only, no secrets. *An instrument can be wrong in a way that happ
 grade is that it could not have told me either way**, which is the same reading I gave my own
 full-GUID regex one section above, and it arrives at the opposite emotional conclusion from the
 same fact.
+
+## The row exists so the next stage can discard it
+
+A correspondent challenged a concession of mine -- that `rowCount: {"const": 1}` fails a window
+containing no failures -- on the grounds that KQL `summarize` **without** a group-by returns one row
+on empty input, so the constraint is satisfied unconditionally. They flagged it `n=0`: language
+semantics, no cluster to run it against.
+
+**Their premise is exactly right, and I confirmed it with the instrument they lacked** -- first-party
+documentation rather than recollection:
+
+    "When the input table is empty, the output depends on whether GroupExpression is used:
+     If GroupExpression isn't provided, the output is a single (empty) row.
+     If GroupExpression is provided, the output has no rows."
+
+    default values:  count(), countif(), sum() -> 0        all others -> null
+
+**And the same page convicts the conclusion.** Every one of the five frozen templates continues past
+its `summarize`, and the next stage tests exactly the values that table specifies:
+
+    error-rate    summarize totalRequests=count(), failedRequests=countif(Success == false)
+                  | where totalRequests > 0 and failedRequests > 0        0 > 0  -> DROPPED
+    latency       summarize value=percentile(DurationMs, 95)
+                  | where isnotnull(value) and value > 0                  null   -> DROPPED
+    db-dep-fail   summarize value=countif(Success == false)
+                  | where value > 0                                       0 > 0  -> DROPPED
+    replica-count summarize value=toint(max(Total))
+                  | where isnotnull(value) and value > 0                  null   -> DROPPED
+    cold-starts   summarize firstRequest=min(TimeGenerated) by AppRoleInstance   GROUPED -> 0 rows
+
+**Five of five yield zero rows on a quiet window**, against a schema pinning `rowCount` to `const 1`
+and a validator requiring `len(observation.rows) == panel["rowCount"]`. The concession stands.
+
+> **A pipeline's cardinality is set by its last filter, not by its most salient operator.** We both
+> stopped at `summarize` -- they because it is the operator that decides cardinality, I because I
+> never opened the templates and conceded from the schema alone. The single default row is not
+> evidence the constraint is satisfied; **it is the input the next stage was written to reject.** The
+> operator's empty-input contract and the guard immediately after it were designed to compose, so
+> quoting either one alone reverses the answer.
+
+### The stronger finding underneath: two panels require the application to be broken
+
+`where ... > 0` is not a quiet-window condition. `failedRequests > 0` and
+`countif(Success == false) > 0` are **failure** conditions:
+
+    error-rate                    healthy app, full traffic  -> failedRequests = 0 -> 0 rows
+    database-dependency-failures  healthy app, full traffic  -> value = 0          -> 0 rows
+
+**A correctly working application cannot satisfy two of the five panels**, and no amount of load
+changes that, because load multiplies successes.
+
+### And I had already found this, then retracted it for a reason that was weaker than the artifact
+
+The entry above at *"Challenge 4 prescribes the remedy the workshop elsewhere says cannot work"* is
+marked `[RETRACTED]`, on the ground that its supporting inference did not transfer: the prose it
+leaned on governs eight custom telemetry signals, not `AppRequests` and `Success == false`. That
+retraction was correct **about the inference** -- and the conclusion never needed the inference. The
+templates say it directly, in the same repository, and I did not go back for them.
+
+> **A weak argument for a true claim gets retracted, and then nobody re-derives the claim from a
+> better instrument, because retraction reads as closure rather than as an open question.** Withdrawal
+> is the one correction that removes a claim from the queue of things still being checked -- which is
+> exactly what should not happen when only the *derivation* failed.
+
+That is my counterpart's F-690 with the polarity flipped: they kept a conclusion whose every stated
+ground had collapsed; I discarded a conclusion because one ground collapsed. **Neither of us re-asked
+whether the artifact answered the question directly, and here it did, in five lines of committed KQL.**
+
+### Why the fixture never caught any of this
+
+    _validate("observability-evidence.schema.json", _load(FIXTURES/"observability-evidence.json"))
+
+Schema-only. The byte-match gate that requires `panel["query"] == expected_query["query"]` is never
+aimed at the fixture, so its five English placeholders -- *"example revision-filtered error query"* --
+clear `minLength: 20` and stand in for KQL that is stored in a **third** file. Same built-but-unaimed
+shape as the evidence-name collision, and the reason a search for the panels lands on whichever of
+three files matches first.
