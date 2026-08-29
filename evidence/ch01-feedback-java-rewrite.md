@@ -1370,11 +1370,46 @@ A word-shaped placeholder fails validation, which is why redaction looks impossi
 attempted it. **An all-zero GUID passes** -- and `workshop/contracts/*.example.json` already uses
 exactly `00000000-0000-0000-0000-000000000000`.
 
-**The convention exists, is already demonstrated in the shipped examples, and is never stated as an
-instruction anywhere in `challenges/` or `workshop/`** (`redact|scrub|sanitiz` across both: 8 hits,
+~~**The convention exists, is already demonstrated in the shipped examples, and is never stated as an
+instruction anywhere in `challenges/` or `workshop/`**~~ (`redact|scrub|sanitiz` across both: 8 hits,
 none of them an instruction to the participant; the one near-miss at
 `challenges/ch05-defender/README.md:120` describes the examples as sanitized rather than telling the
 reader to sanitize theirs).
+
+**Struck, by my own re-measurement. There is no demonstrated redaction convention.** The claim
+depended on reading intent off the *presence* of the all-zero GUID in the example files. Checking
+what role the value actually plays there refutes it:
+
+    workshop/contracts/*.example.json, same files, other fields:
+      "sourceCommit": "0000000000000000000000000000000000000000"   <- F-29 requires 4bf59f7e...
+      "resourceId":  ".../resourceGroups/rg-mh-java-example"
+      "revisionName": "ca-mh-example--release-000000000000"
+      "imageDigest": "sha256:0000...0000"
+    docs/Facilitator.md:669
+      facilitator_principal_object_id = "00000000-0000-0000-0000-000000000000"
+      followed by: "Neither is a secret, so keep them in the tfvars file"
+    challenges/ch01-copilot-rewrite/README.md:159 (and ch01-modernization, ch01-manual)
+      "copy that and replace the ..."
+    CONTROL: a token absent from those docs -> 0 hits
+
+**Every field in those files is dummied the same way, and an all-zero `sourceCommit` is one nobody
+could submit.** The files are uniformly-zeroed *shape templates*, and the only instruction shipped
+next to them says **replace**. The Facilitator doc uses the identical token as a fill-in and states
+in the following sentence that the value is not a secret. So the all-zero GUID does not mean *"leave
+this redacted"* anywhere in the repository -- it means *"substitute your real value here"*, which is
+the exact behaviour that commits the live identifier.
+
+**The conclusion survives and gets worse.** It is not that a good convention went undocumented. It
+is that **the only documented instruction is to substitute the real value, and the schema then
+rejects every redaction spelling a person would reach for.** The material does not merely fail to
+teach redaction; it teaches substitution and forecloses the alternative.
+
+**And this holes recommendation 1 below.** Promoting the all-zero GUID to mean "redacted" collides
+with its established meaning as "replace me" -- in `sourceCommit`, three lines above the field in
+the same artifact. A token cannot carry both instructions in one file. Recommendation 1 must either
+name a *different* accepted placeholder and widen the pattern to admit it, or state the convention
+per-field rather than per-value. Recorded as an open defect in the remedy rather than silently
+patched, because the remedy was shipped jointly.
 
 **Recommended change to the material, in priority order:**
 

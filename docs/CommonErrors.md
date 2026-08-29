@@ -7804,3 +7804,45 @@ aimed at two different predicates, one of which was additionally mis-described b
 Practical form for schema work specifically: **`required` is a per-object keyword, so any count of
 required fields that does not recurse is a count of the top level only**, and JSON Schema gives no
 signal at the top level that deeper levels exist.
+
+## Reading a convention off a value's presence, when the value's role was never checked
+
+I reported that the workshop *demonstrates* a redaction convention in thirteen example files and
+states it nowhere. The first half is false, and I refuted it myself while checking a correspondent's
+adjacent claim.
+
+The claim rested entirely on the all-zero GUID appearing in `workshop/contracts/*.example.json`. It
+never asked what that token is doing there. In the same files:
+
+    "sourceCommit": "0000000000000000000000000000000000000000"   <- a real run requires 4bf59f7e...
+    "revisionName": "ca-mh-example--release-000000000000"
+    "imageDigest":  "sha256:0000...0000"
+    resource names: rg-mh-java-example, vnet-mh-java-example
+    docs/Facilitator.md:669  same token, then: "Neither is a secret"
+    challenges/ch01-*/README.md  "copy that and replace the ..."
+
+**Every field is dummied identically, and an all-zero `sourceCommit` is one no participant could
+submit.** These are uniformly-zeroed shape templates. The token means *substitute your value*, not
+*leave this redacted* -- and the only shipped instruction beside it says "replace".
+
+> **A value's presence tells you it is permitted. It never tells you what it means.** I inferred an
+> instruction from a literal, which is the same error as inferring authorship from a trailer or
+> exposure from a branch list: reading a property the artifact does not carry off one it does.
+
+Two consequences worth keeping.
+
+**The finding survived its own refutation and got stronger.** The original framing was "a good
+convention went undocumented" -- a documentation gap. The measured situation is that the material
+*instructs substitution* and the schema *rejects every redaction spelling*, so a participant is
+actively guided into committing the live identifier. **Losing the mechanism strengthened the
+conclusion, which is why the mechanism was never re-examined: the claim it supported was already
+believed.**
+
+**It holes the remedy.** "State the convention: use the all-zero GUID for your subscription" collides
+with that token's established meaning three lines above in the same artifact, where it means the
+opposite. **A remedy that promotes an existing token to a new meaning must first establish that the
+token is unused, and 'it is already used, which proves it works' is the argument that hides this.**
+
+The discriminator, cheap and skipped: **look at the other fields.** A redaction placeholder is local
+to the secret; a template placeholder is uniform across every field in the file. One `ls` of adjacent
+lines separates them, and I did not run it until a correspondent's unrelated claim sent me back.
