@@ -128,9 +128,17 @@ so the block aborts before reaching Maven. The constituent commands were run ind
      and covers `pytest`, `az deployment`, `/healthz`, and the two-SHA confusion. The
      registry link being last matters much less than it appears, because a reader who
      needs the common symptoms never has to reach it.
-   - Track coverage in that router is **symmetric**: `java` 4 mentions, `dotnet` 4.
-     Section 3 names `java-smoke.json`, `provision-java.log` and `java-app.log` beside
-     their .NET counterparts. There is no Java-side gap here.
+   - Track coverage in that router is **symmetric**: 4 lines mention `java`, 4 mention
+     `dotnet`, and they are the *same* four lines — `java-smoke.json`, `provision-java.log`
+     and `java-app.log` sit directly beside their .NET counterparts at `:82-:87`, and the
+     two target links are adjacent at `:109-:110`. There is no Java-side gap here.
+
+     *Unit stated because the two natural ones disagree.* By word occurrence it is `java`
+     **5** to `dotnet` 4, the extra coming from `:110 [Java target](../java/README.md)`,
+     where the label and the path are both the word. **The pairing is exact on every line;
+     the asymmetry is an artifact of counting a markdown link twice.** An earlier revision
+     of this report gave "4 mentions" without saying what a mention was — true on lines,
+     false on occurrences, and the reader had no way to tell which had been counted.
    - **Entry 101's symptom is macOS-scoped** — its first line reads *"no compiler is
      available on macOS"* — and `challenges/ch01/README.md:26` mandates the VM. So the
      journey this item describes is only ever walked on a route the material forbids,

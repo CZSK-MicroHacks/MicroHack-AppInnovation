@@ -3665,3 +3665,31 @@ correspondence is recoverable at all.
 Deliberately not done: reconstructing the six lost rounds from memory. A reconstruction of lost
 primary text is the failure this file exists to prevent, and it would be indistinguishable from the
 real thing - which is the whole complaint.
+
+## A figure quoted without its unit, where the two natural units disagree
+
+The shipped deliverable asserted the Troubleshooting router's track coverage was symmetric at
+*"`java` 4 mentions, `dotnet` 4"* - a figure carried for the whole audit and never verified, because
+the first probe had been aimed at the wrong file. Verified at `4bf59f7`:
+
+```
+docs/Troubleshooting.md @4bf59f7   212 lines, 12 headings
+  word occurrences   java 5   dotnet 4
+  lines mentioning   java 4   dotnet 4
+  CONTROL absent token                 0
+  :110  - [Java target](../java/README.md)     <- label and path both match; counted twice
+```
+
+**True on lines, false on occurrences, and the report named neither.** The substantive claim
+survives untouched - the pairing is exact at `:82-:87` and `:109-:110`, and there is no Java-side
+gap - but the number supporting it was unfalsifiable as written, because a reader could not tell
+which of two disagreeing counts had been taken.
+
+> **A count needs its unit stated wherever two plausible units disagree, and the author is the last
+> party who will notice they disagree** - the author knows which one they ran, so the ambiguity is
+> invisible from exactly one position.
+
+This is the same shape as the 78-versus-261 divergence recorded above, reduced to its minimum: one
+file, one ref, one word, two instruments, two answers. There the gap was 3.3x and obvious; here it
+is a single occurrence and was carried unchallenged through an entire audit **because it was small
+enough to look like agreement.**
