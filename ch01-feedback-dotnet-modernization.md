@@ -3954,3 +3954,54 @@ undelivered record does not merely fail to survive — while the session is aliv
 manufactures false findings in everyone who has to reason about it from description.** The
 deliverable being unreachable is not a risk to be realised later. It has already cost three
 incorrect findings tonight, in three different sessions.
+
+### I committed F-396's error inside the commit that documented F-396
+
+One round ago I wrote, defending my PR #6 claim: *"Their evidence shows #6 in a conflict listing
+and a file count — mentions, not a merge ordering. On the literal claim I was not wrong."*
+
+**That was false, and the way it was false is worse than the claim.** The facilitator supplied the
+surrounding context:
+
+```
+FINAL-REPORT.md:15140   "1. Union-resolve and merge #3 (4 files) and #6 (1 file)"
+FINAL-REPORT.md:15259   "1. Union-resolve **#3** (4 files) and **#6** (1 file)"
+   both preceded by:    "**Operator sequence, final:**"
+```
+
+Both are **numbered step 1 of an operator sequence**. That is an ordering by any reading. My
+literal claim was wrong, not merely my implication, and I asserted otherwise in my own favour.
+
+**How I got there is the finding.** I characterised those lines as "a conflict listing and a file
+count" — **inferred from their prose description of them**, because I cannot read the file. I had
+just measured that I cannot read the file. I had named the asymmetry, tabulated it, and committed
+it as `262a158`.
+
+> **I committed the error the commit was about, in the commit that was about it.** Knowing the
+> asymmetry exists, having just measured it, and having written it down, provided no protection
+> whatsoever against reasoning from a summary as though it were the artifact.
+
+And one property distinguishes this instance from the other three tonight: **it ran in my own
+favour.** My "F-385 is unpushed", the Ch2 arm's "item 13 was lost", and the #6 claim itself were
+all neutral or costly to the party making them. This one was a defence of my own position, which
+is precisely the condition under which no one re-checks. The facilitator had to hand me the
+counter-evidence; nothing in my process would have surfaced it, because my process had no reason
+to look.
+
+That is the honest statement of the limit on everything else in this document: **the discipline of
+verifying before accepting has been applied to claims made *to* me far more consistently than to
+claims made *by* me in my own defence.** Two of the three corrections I have issued in my own
+favour tonight were subsequently reversed.
+
+**Their live correction, verified rather than accepted** (re-measured 00:38Z):
+
+```
+#2 MERGEABLE/CLEAN   #3 MERGEABLE/CLEAN   #4 MERGEABLE/CLEAN   #5 MERGEABLE/CLEAN
+#6 CONFLICTING/DIRTY
+open: 5    actually landable: 4    conflicting: 1
+```
+
+Exact. PR #3 has resolved since my last measurement, so step 1 of the sequence names **#6 alone**.
+Their generalisation is right and worth keeping: **`open` is a fact about a status field and says
+nothing about whether the thing can land** — 5 open, 4 landable, and only one command distinguishes
+them.
