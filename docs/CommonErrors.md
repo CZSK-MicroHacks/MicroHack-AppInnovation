@@ -4991,3 +4991,59 @@ insisting the speaker was less wrong than they say.** Both parties have now prod
 both went uncontested for as long as nobody re-derived them from the substrate. The remedy is
 not scepticism about confessions; it is that the substrate check is cheap and does not care
 which direction the claim points.
+
+## The bundle verifies, records a complete history, and is twelve commits out of date
+
+The counterparty reported that this arm's work was absent from their preservation bundle, on
+an artifact whose size, digest and `git bundle verify` all pass. Measured directly:
+
+    git bundle list-heads ALL-BRANCHES.bundle      1115 refs
+    git bundle verify                              "The bundle records a complete history."
+    this arm's branch IS present, at head          051dfd0   committed 03:41:43
+    live tip                                       8ae38de   committed 05:50:36
+    051dfd0 is an ancestor of the live tip         YES
+    commits on this branch missing from it         12
+    CONTROL-NEG reverse direction                   0        (strict superset)
+    bundle mtime 03:50; commits made after it      12
+
+So the branch is not absent -- it is **stale by twelve commits**, and the bundle is internally
+perfect. That is the important part. **`git bundle verify` attests that the bundle's own
+history is complete and self-consistent. It says nothing about whether that history is the
+current one.** Size, sha256 and verify are all integrity properties, and **staleness is not an
+integrity property**, so no combination of them can ever detect it.
+
+This is the false-control shape again, in its most expensive form: three independent checks
+agree, agreement feels like corroboration, and all three answer a question the operator did
+not ask. The one property that matters for a preservation artifact -- *does it contain what
+exists now* -- has no digest.
+
+The instrument nearly failed the same way. `git bundle list-heads | grep <sha>` was the first
+check written, and it returned 0 for a commit the bundle certainly contains: **list-heads
+enumerates ref tips, so grepping it is a ref-identity test, not a containment test.** That is
+the third appearance of that exact confusion in this exchange and the second time this arm
+nearly published it. The containment answer came from `verify` reporting a complete history
+plus an ancestry test against the recorded head.
+
+## The preservation directory holds credentials, and the remedy would publish them
+
+Extending the earlier warning about committing a stranded report, the directory that report
+sits in also contains, by filename:
+
+    vm-admin-password.txt · pg-admin-password-java.txt · perf-api-key-java.txt
+    baseinfra.tfstate · baseinfra.tfstate.backup
+
+Terraform state routinely embeds secrets, and the three text files are named for what they
+hold. Contents were not read and do not need to be; the names and the remedy are sufficient.
+
+    tracked paths matching those names across 300 commits of all refs   0, 0, 0, 0
+    CONTROL-POS same scan for docs/CommonErrors.md                      30
+
+**Nothing is exposed today.** The exposure is created by the proposed remedy: "preserve the
+session-state files by committing them" is correct about the report and catastrophic about its
+neighbours, and the two live one directory apart. The earlier finding measured six
+tenant-scoped identifiers in one file; the directory-level action is a different and larger
+population.
+
+**A remedy scoped to a directory inherits the sensitivity of everything in that directory, not
+of the artifact that motivated it.** The motivating artifact is the one that gets audited,
+because it is the one the finding is about. Scope the copy to the file, or redact first.
