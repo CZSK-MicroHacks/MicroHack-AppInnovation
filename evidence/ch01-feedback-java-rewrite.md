@@ -443,10 +443,23 @@ git merge-base --is-ancestor <your-sha> origin/main            # DELIVERY: will 
 CONTROL origin/main vs itself                                 YES  (the check fires)
 ```
 
-**Every commit this arm has produced is preserved and none is delivered**, which is correct —
+**Every commit this arm has produced is preserved and none is delivered**, which is correct --
 this branch merges through PR #3 into `rewrite-integration`, and only then through PR #2 into
 `main`. The defect is not the state; it is that nothing in the original table could express it.
 The word `origin/main` did not appear anywhere in this document before this correction.
+
+**Pin, applying to every `origin/main` measurement in this document.** Seven figures here are stated
+against `origin/main` *by name*. A ref name is a moving target, so those claims decay silently and in
+the reassuring direction -- a reader cannot tell a still-true figure from an expired one. Re-measured
+at close: `origin/main` = **`93887ab`**, unchanged for the whole audit window, so all seven still
+hold (spot-check: the hardcoded password assignment in `config.tfvars.example` is **1** on
+`93887ab` and **0** on this branch; control on an absent token, 0). **They survive because the ref
+did not move, not because the document said which ref it meant** -- read every `origin/main` below as
+`origin/main @ 93887ab`. By contrast the thirteen frozen-SHA citations in this document
+(`9c14770`, `4bf59f7e`, `7c6f009c`) cannot decay at all.
+
+> **A count is a relation between an artifact and a population. Naming the population by a moving
+> ref makes the count expire without changing a character of it.**
 
 > **A remedy inherits the blind spot of the instrument that found the defect.** That sentence
 > is this arm's own, written about someone else's fix, and this table is an instance of it:
