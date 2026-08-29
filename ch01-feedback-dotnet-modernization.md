@@ -3517,3 +3517,73 @@ base), so it ships as genuinely novel rather than on the assumption that it was.
 claimed three and delivered one plus a regression — with a body I had already written asserting
 the three. The overclaim was drafted before the check, which is the ordering that makes this
 worth recording.
+
+## `sql.bicep:84` restored: measured against the template engine itself
+
+The refutation of this finding was wrong, and the way it was wrong is more valuable than the
+finding. I settled it by running the one instrument neither party had used — **ARM itself**,
+via a resource-free deployment whose only content is outputs:
+
+```jsonc
+"sqlSuffix":    "[environment().suffixes.sqlServerHostname]"
+"storageSuffix":"[environment().suffixes.storage]"
+"concatenated": "[format('{0}.{1}', 'srv', environment().suffixes.sqlServerHostname)]"
+```
+
+Result, deployment `envfn-probe` into `rg-user001`, since deleted:
+
+| Output | Value |
+| --- | --- |
+| `sqlSuffix` | `.database.windows.net` — **leading dot** |
+| `storageSuffix` | `core.windows.net` — **no leading dot** |
+| `concatenated` | **`srv..database.windows.net`** |
+
+**The double dot is real.** The asymmetry between the two suffixes is real. `sql.bicep:84` as
+written emits a hostname with an empty DNS label, and the fix is correct and necessary.
+
+### The claimed instrument divergence does not exist
+
+The refutation rested on *"the CLI returns the suffix with a dot, ARM returns it without"*, and
+a self-filed finding for having queried the CLI to predict the template engine. Measured:
+
+```
+az cloud show --query suffixes.sqlServerHostname  ->  .database.windows.net
+ARM environment().suffixes.sqlServerHostname      ->  .database.windows.net
+```
+
+**Both instruments agree.** The CLI was never the wrong instrument, so the self-filed finding
+records a correct method being retracted and an incorrect one adopted in its place. The actual
+error was different, and worse.
+
+### The real mechanism: a malformed value the platform silently repairs
+
+The refutation inferred the function's return value from a **deployed resource name** —
+`environment.bicep:179` is `'privatelink.${environment().suffixes.sqlServerHostname}'`, and the
+zone in the resource group is `privatelink.database.windows.net`, single dot. That looks like
+proof the function returns no dot. It is not.
+
+That template expression evaluates to **`privatelink..database.windows.net`**, and the zone
+deployed anyway, under my own `environment-p5ss4zr7xw23g`, because **Azure normalises the empty
+label out of a DNS zone name.** The platform repaired the malformed string before it became a
+resource.
+
+So the finding underneath this one is the sharpest wrong-but-plausible instance in the run:
+
+> **The same malformed expression is silently repaired in one context and shipped broken in
+> another.** As a *resource name* it is normalised and looks like a working idiom. As a *string
+> output* — `sql.bicep:84` — nothing normalises it, and the empty label survives into a hostname
+> no resolver accepts. **The working instance licenses the broken one**, and the deployed estate
+> reads as evidence that the pattern is safe.
+
+Inferring a function's raw return value from a normalised resource name is the wrong-substrate
+error, committed in the message that filed the wrong-substrate finding. **The instrument for
+"what does this template function return" is a deployment that outputs it** — not the docs, not
+a neighbouring CLI, and not a resource name the platform has already cleaned up on your behalf.
+
+### Count churn, disclosed
+
+This track's code-fix claim has now been stated as **three**, corrected to **one**, refuted to
+**zero**, and measured back to **one**. Each revision was published rather than quietly applied.
+The final position — `sql.bicep:84` novel and correct, the two acceptance-suite fixes already
+shipped and one of them a regression if merged — is the only one of the four that was measured
+against the engine rather than argued from text or inferred from an artifact.
