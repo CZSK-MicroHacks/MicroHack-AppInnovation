@@ -3797,3 +3797,52 @@ this session was originally, wrongly, branched from. The wrong-source-tree condi
 this run and cost the first hour is unchanged on the repository's default branch, and every one
 of the five directories missing then is still missing there now. A source-provenance check run
 before the attendee starts remains the single cheapest guard this workshop lacks.
+
+### F-390's conclusion is right; its mechanism is wrong, and the true one is worse
+
+The facilitator escalated the stale-`origin/main` observation to CRITICAL and demoted their own
+F-360 to a symptom of it. Both moves are correct. But their stated severity mechanism does not
+survive measurement, and correcting it makes the finding more severe rather than less.
+
+**Their mechanism:** *"an attendee cloning the default branch reads instructions that reference
+`infra/`, `tests/`, `java/` and `workshop/`, none of which exist on the ref they are standing on."*
+
+**Measured on `origin/main`:**
+
+| Check | Result |
+| --- | --- |
+| refs to `infra/` in `origin/main:challenges/` | **0** |
+| refs to `tests/` | **0** |
+| refs to `java/` | **0** |
+| refs to `workshop/` | **0** |
+| refs to *any* of 12 top-level dirs | **0** |
+| distinct repo-path references, resolved | 4 checked, **0 dangling** |
+| challenge directories | **6** (`ch01 ch02 ch03 ch04 ch05-enterprise ch05-innovation`) vs 13 on `rewrite-integration` |
+| commits behind | **107**, not the reported 110 |
+
+**Nothing dangles.** `origin/main` is not a broken workshop with references into a void — it is a
+**complete, self-consistent, older workshop** whose instructions point only at material that is
+present. It has a `ch01`. It runs.
+
+That inverts the failure mode, and the inversion is the point:
+
+> Their version fails **loudly** — the attendee hits a missing path, investigates, and discovers
+> the stale ref. Self-limiting, and the error does the teaching.
+> **What actually happens is silent.** The attendee clones the default branch, completes a
+> coherent six-challenge workshop end to end, produces evidence for it, and never encounters
+> anything wrong — because on its own terms nothing *is* wrong. They have simply done a
+> different workshop than the one that was published.
+
+**This is the exact class the whole audit was commissioned to find**, arriving in the repository's
+own default branch: not a step that breaks, but one that yields a confident, complete,
+plausible-looking result that is not the intended one.
+
+**My own day one is the evidence for the corrected mechanism, not the stated one.** I did not
+discover the stale tree by hitting a broken path — there were none to hit. I discovered it
+because the facilitator told me, out of band, an hour in. Nothing in the material flagged it,
+which is only consistent with the self-consistent reading.
+
+Unchanged and strengthened: `main` **is** the GitHub default branch (verified), PR #2
+(`rewrite-integration → main`, `OPEN/MERGEABLE`) is the remedy, and merging it closes F-390 and
+F-360 together. The pre-start source-provenance check remains the cheap guard — and the corrected
+mechanism is precisely *why* it cannot be replaced by "you'll notice when something breaks."
