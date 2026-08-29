@@ -3764,3 +3764,60 @@ presence of a documented remedy as discharging the defect, without reading the r
 mechanism-versus-consequence error a third time, in its worst form - the artifact existed, said the
 right kind of thing in the right place, and was wrong.
 
+
+## Three delivery columns, none of which measured whether the delivery could land
+
+For hours this arm reported standing as `preservation 0 · delivery 0 since 01:34:51 · conditional
+delivery N @sha`, and treated an open pull request as delivered work. A correspondent's suggestion to
+simulate the merge locally - `git merge-tree --write-tree`, which mutates nothing and needs no remote
+- was applied to this branch for the first time:
+
+```
+git merge-tree --write-tree rewrite-integration michalmar-ch01-java-rewrite-walkthrough
+  exit 1 · CONFLICT in docs/CommonErrors.md, docs/ImplementationLog.md, java/README.md,
+           solutions/ch01-copilot-rewrite/java/README.md
+gh pr view 3 --json mergeable,mergeStateStatus
+  {"mergeStateStatus":"DIRTY","mergeable":"CONFLICTING"}
+```
+
+**Two independent instruments, same verdict: the pull request could not be merged.** Every column was
+true and the artifact was undeliverable.
+
+> **`open` is a fact about a pull request's status field, not about whether it can land.** A delivery
+> metric that never simulates the delivery measures intent.
+
+All four conflicts were two-sided (`base->theirs` and `base->ours` both non-empty), so no side could
+be taken wholesale. Resolved as a union - the append-only registries keep both sides' entries; the
+`java/README.md` prerequisites section keeps this arm's *why* (which cites entries 101 and 45 and
+explains the pinning rule) **and** upstream's concrete pinned-tarball commands, which are compatible
+because the fix required pinning and upstream pinned. Verified: `639 passed, 1 skipped` (up from 612
+- the merge carried 27 upstream tests), zero conflict markers repo-wide, and every distinctive string
+from both sides present with an absent-string control at 0. `MERGEABLE / CLEAN` confirmed after push.
+
+This branch had already lost work to conflict resolution once, which is why the resolution was
+verified by content rather than by exit code.
+
+## I read a stale message as a reasoning defect, having spent the night filing that error at others
+
+A correspondent said three times that a finding was settled and that my messages were crossing theirs.
+I filed the third instance as an instrument defect - *deduplication keyed on `(id, severity)` merges a
+dissent into the agreement it contradicts*. Then I measured the channel:
+
+```
+their message arriving 02:24  carries standing stamped  00:01:08Z  = 02:01 local
+                              quotes my '83 @73f2013'   73f2013 committed 02:02:04
+my HEAD when it arrived       5f3d846  02:19:14         -> four commits later
+their local rewrite-integration fa8e789 · origin actually 9c14770
+```
+
+**Every figure in it is internally consistent with a compose time around 02:01.** They were not
+deduplicating my dissent; they had not received it. The mechanism I proposed requires them to have
+read the message, and the evidence says they did not.
+
+> **Before attributing a defect to a correspondent's reasoning, establish that they had the input the
+> defect requires.** A stale reply and a careless one are indistinguishable from the content alone,
+> and only one of them is anybody's fault.
+
+This is the stale-snapshot family again, in its worst position: I built the accusation on the very
+class of error I had spent the night documenting, and the disproof was in timestamps carried inside
+the messages I was accusing.
