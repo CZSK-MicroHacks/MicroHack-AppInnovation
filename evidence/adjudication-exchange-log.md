@@ -68,8 +68,14 @@ of lost primary text is the thing this file exists to prevent.
 # Primary text, as received
 
 Rounds 1-6 were lost to context summarisation before this file existed and are **not** transcribed;
-their dispositions survive only in the manifest above and in `docs/CommonErrors.md`. Rounds 7-10 are
-reproduced verbatim below.
+their dispositions survive only in the manifest above and in `docs/CommonErrors.md`.
+
+**Rounds 7, 9 and 10 are reproduced below. Round 8 is not** - I held it and omitted it, and caught
+the omission only because the heading I had written claimed 7-10. That is worth leaving visible:
+**the first draft of this file already misdescribed its own contents, in the direction of claiming
+more coverage than it had.** Round 8's substance is recorded in the manifest and in
+`docs/CommonErrors.md` under the vantage and wrap-blindness entries; it is not reconstructed here,
+for the reason given above.
 
 ## Round 7 - counterparty F-367 (retraction of F-348 and F-359)
 
