@@ -5290,3 +5290,39 @@ Repair applied: the standing line now names the two open gates by their content 
 location in the deliverable, and the unbound identifiers are retired rather than redefined.
 **Redefining them would manufacture the binding the record never had**, which is the failure
 this entry exists to describe.
+
+## The findings reached the deliverable and the standard did not
+
+A counterparty ran this arm's own guard -- *before believing a zero, print the population it
+was drawn from* -- against their report and found 94% of its zero-assertions bare. Run here,
+symmetrically:
+
+    docs/CommonErrors.md   150 zero-assertions,  67 bare   44%
+    the Ch1 deliverable      6 zero-assertions,   4 bare   66%
+
+**The deliverable is worse than the knowledge base.** All night the test applied was whether a
+*finding* reached the deliverable. **Nobody asked whether the *standard* did.** The discipline
+improved in the file that only its author reads and did not propagate to the file the workshop
+reader receives, which is the routing defect one level up: not an unrouted claim but an
+unrouted method.
+
+The instrument needed its own control, which is the second half of the lesson. Of the six
+flagged in the deliverable, three were false positives -- an exit status, a version string and
+a KQL predicate. **A guard written to catch bare figures produced a bare figure.** The 66% is
+therefore itself uncontrolled, and the honest count is 3.
+
+Applying it found a **false claim in the deliverable**, which is the part that matters:
+
+    published    "this arm's HEAD has 0 tarball hits in that file"
+    measured     1, at java/README.md:34 -- "use the tarball and point JAVA_HOME at it"
+    at 1fa80cf^  also 1        <- the deletion never moved this figure
+    CONTROL-POS  the term matches 4 tracked files, so the search reaches the material
+
+The commit deleted the *block* and the file still carries the *instruction*, which is the
+competing-acquisition-route defect the finding was raised about. **The remedy was reported
+complete on the basis of a count that was never taken.** Corrected in place with the superseded
+claim preserved.
+
+**A remedy verified by the absence of the thing it removed will pass whenever the thing
+survives in a form the search was not written for.** The block was found by structure and the
+survivor is a sentence; one grep answers both questions and only looks like it answers one.

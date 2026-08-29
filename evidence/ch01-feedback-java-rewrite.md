@@ -122,7 +122,9 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    it is linked.** The answers exist as `docs/CommonErrors.md` entries 45 and 101. Every
    challenge README routes troubleshooting to `docs/Troubleshooting.md` (12 links), which
    never mentions `javac`, a JDK or a JRE, and nothing under `challenges/` references the
-   error registry at all (0 references). One hop does exist —
+   error registry at all (0 references across the 13 files git tracks under
+   `challenges/`; CONTROL-POS the string `Troubleshooting` matches 12 of those same 13, so the
+   instrument reaches the population). One hop does exist —
    `docs/Troubleshooting.md:211`, the last content line of a 212-line file — but it calls
    the registry *"resolved implementation pitfalls"*, which reads as historical-internal
    rather than as answers to errors you are about to hit, and the next sentence attaches a
@@ -224,8 +226,14 @@ The two legs are not the same defect and need different treatment.
 
 - **`java/README.md` is the defect.** It is the guide every off-VM reader is sent to, and it
   prescribed the tarball as *the* way to acquire prerequisites, competing with entry 101.
-  `1fa80cf` **deletes** that block — this arm's HEAD has 0 tarball hits in that file — and
-  replaces it with pointers into entries 101 and 45. It cherry-picks **cleanly**, and on its
+  `1fa80cf` **deletes** that block. **CORRECTED: the remedy is partial.** The
+  superseded claim here read *"this arm's HEAD has 0 tarball hits in that file"*; measured,
+  HEAD has **1**, at `java/README.md:34`, and it is a prescription -- "use the tarball and
+  point JAVA_HOME at it" -- which is the competing-route defect the finding was about.
+  Deleting the block removed the section and not the instruction. CONTROL-POS the term
+  matches 4 tracked files at HEAD, so the search reaches the material; the count at
+  `1fa80cf^` was also 1, so the deletion never moved this figure. The commit does still
+  replace the block with pointers into entries 101 and 45. It cherry-picks **cleanly**, and on its
   own it closes the routing half.
 - **`docs/CommonErrors.md` is not a duplicate route.** Its tarball sits inside the *non-TTY
   cask* entry, which answers a different symptom — `brew install --cask` aborting without a
@@ -570,8 +578,9 @@ tools.azureCli · tools.git · tools.jq · tools.vscode   no platforms array at 
 databases.postgresql.client · .migrationTools          source = "bundled-with-postgresql-installer"
 ```
 
-There are **zero** target-runtime installers (verified: the string `targetRuntimeInstaller` has
-0 occurrences). Both stacks contract a target runtime (.NET 8→10, Java 17→21) that has **no
+There are **zero** target-runtime installers (verified across the 772 files git tracks: the string `targetRuntimeInstaller` has
+1 occurrence, which is this sentence quoting it, and 0 in the material;
+CONTROL-POS the sibling term `installer` matches 15 tracked files). Both stacks contract a target runtime (.NET 8→10, Java 17→21) that has **no
 pinned, hash-verified acquisition path**, while every JAR, NuGet package, Maven distribution and
 database image in the same file is pinned by hash or signature — counted as exact JSON keys:
 **19 `sha256`, 5 `sha512`, 6 `digest`, 6 `signature`**, plus 10 `signaturePublisher` Authenticode
