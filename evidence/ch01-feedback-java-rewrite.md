@@ -1365,13 +1365,62 @@ reader to sanitize theirs).
    asks for a `*ResourceId` -- *"substitute `00000000-0000-0000-0000-000000000000` for your
    subscription GUID in any evidence you commit; the contracts accept it."* One sentence; it closes
    the class for every future run, and requires no schema change.
-2. Add an acceptance test that fails when a committed evidence artifact contains a subscription GUID
-   other than the all-zero placeholder. The repository already has 42 contracts and a validator at
-   `catalog_migrate/handoff.py`; this is the fourth built-but-unaimed enforcement path found in this
-   audit, and the only one whose absence has a security consequence.
+2. ~~Add an acceptance test that fails when a committed evidence artifact contains a subscription
+   GUID other than the all-zero placeholder. The repository already has 42 contracts and a validator
+   at `catalog_migrate/handoff.py`; this is the fourth built-but-unaimed enforcement path found in
+   this audit, and the only one whose absence has a security consequence.~~
+   **Struck. Written above; simulated against the tree it would land in forty minutes later; it
+   fails three separate ways. Corrected as item 2' below.**
 3. Rotate the currently exposed identifiers, then scrub. Rotation first, because as established
    above no git-side action reaches copies already delivered.
 
 **Why this is the most important finding in this document:** every other defect here costs a
 participant time. This one costs them a disclosure, it is produced by following the instructions
 correctly, and it will recur on every future run of the workshop until the material changes.
+
+### Correction: the test recommended at item 2 does not work, and I shipped it unsimulated
+
+Running the predicate I had just written against `HEAD`:
+
+    files it FIRES on                                             2
+      evidence/ch01-feedback-java-rewrite.md    /subscriptions/aaaaaaaa-bbbb-...   synthetic
+      tests/.../test_ch05_defender_contracts.py /subscriptions/11111111-1111-...   synthetic
+    live-value hits in those two files                            0
+    CONTROL .azure/deployment-plan.md live-value hits             3   (fires)
+
+    does the predicate reach the file that actually carries it?
+      path form  /subscriptions/<36>  in .azure/deployment-plan.md   0
+      bare GUID form                  in .azure/deployment-plan.md   5
+
+    scoreboard on the tree it lands in:   true positives 0 · false positives 2
+
+**Three defects, in a recommendation written to fix a leak:**
+
+1. **Wrong shape.** I derived the predicate from the schema patterns, which are anchored
+   `^/subscriptions/<guid>/...` because they constrain *contract fields*. The live exposure is a bare
+   GUID **in prose** -- ``(`<guid>`)`` -- and never appears in path form in that file. I built the
+   test from the thing I had measured rather than the thing I was trying to catch. This document
+   already records the same mechanism from the other direction, hours earlier: *a redaction rule
+   matches values; prose emits variants*. I had the rule and re-committed the instance one layer
+   over.
+2. **Both hits are demonstrations, not violations.** One of them is this document -- the file making
+   the recommendation. **A conformance test cannot distinguish a violation from an explanation of a
+   violation**, and any document that teaches the rule must exhibit non-conforming examples in order
+   to teach it. Such a test needs an explicit allowlist, and the material that documents the
+   convention has to be on it.
+3. **Wrong position in the order.** I numbered the test at 2 and the scrub at 3, so an operator
+   following my own list lands a red suite on the branch that has not been scrubbed yet, and the
+   fix for the red is carried by the step that comes after. Each item is correct; the sequence is
+   not.
+
+**2' (corrected).** After rotation and the scrub, add a test that matches the **bare GUID form
+anywhere in tracked files**, with an explicit allowlist covering the all-zero placeholder, the
+documented synthetic examples, and the files that teach the convention. Prove it with a positive
+control that is a real committed instance rather than a synthetic one -- a synthetic control here
+passes for the wrong reason, because synthetics are exactly the class the test must *not* flag.
+
+I criticised the workshop in the paragraph above for shipping enforcement paths that are built but
+never aimed. The remedy I proposed in the next paragraph was built and aimed at the wrong shape, and
+I would have shipped it unsimulated if a correspondent had not filed an unrelated finding about
+instruction *sets* an hour later. **The recommendation and the defect it describes were in the same
+document, and writing one did not cause me to test the other.**

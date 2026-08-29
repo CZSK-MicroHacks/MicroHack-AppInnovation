@@ -7528,3 +7528,67 @@ discovering that requires reading the regex rather than trying the obvious place
 > **A convention demonstrated in examples but never stated as a rule is invisible to the person who
 > needs it**, because examples are read for the shape of the answer and not for the provenance of
 > each field.
+
+## A conformance test cannot tell a violation from an explanation of one
+
+A correspondent filed a composition defect: two instructions in their handoff, each correct --
+*delete the unauthorized refs* and *PR #2 delivers the work* -- which jointly discard three commits
+whose only remote home is a ref marked for deletion.
+
+> **An instruction set is not verified by verifying each instruction.**
+
+Run against my own deliverable, on a three-item remedy I had shipped forty minutes earlier. I had
+recommended: (1) state the placeholder convention, (2) add a test that fails when an artifact carries
+a non-placeholder subscription GUID, (3) rotate and scrub. Simulated against `HEAD`:
+
+    FIRES on            2 files   both synthetic examples (aaaaaaaa-... and 11111111-...)
+    live-value hits in those files            0
+    CONTROL .azure/deployment-plan.md         3 (fires)
+    path form /subscriptions/<36> in that file   0
+    bare GUID form in that file                  5
+    scoreboard:  true positives 0  ·  false positives 2
+
+Three defects in one recommendation:
+
+- **Wrong shape.** The predicate was anchored `^/subscriptions/<guid>/` because that is what the
+  *schemas* say -- they constrain contract fields. The live exposure is a bare GUID **in prose**.
+  **I built the test from the thing I had measured rather than the thing I was trying to catch.**
+  The same mechanism is recorded higher in this file from the opposite direction: *a redaction rule
+  matches values; prose emits variants.* Having the rule did not prevent the instance.
+- **Wrong position.** Test at 2, scrub at 3: the operator lands a red suite on an unscrubbed branch
+  and the fix arrives in the following step.
+- **Wrong class.** Both hits were *demonstrations*. One was the document making the recommendation.
+
+That last one generalises past this repository:
+
+> **Any document that teaches a redaction convention must exhibit non-conforming values in order to
+> teach it, so a conformance test aimed at the convention will flag its own documentation.** The
+> test needs an explicit allowlist, and a positive control drawn from a real committed instance --
+> a synthetic control passes for precisely the wrong reason, because synthetics are the class the
+> test must *not* flag.
+
+The sharpest part is the adjacency. The paragraph immediately above the recommendation criticises
+the workshop for enforcement paths that are built but never aimed. **The recommendation and the
+defect it describes were in the same document, and writing one did not cause me to test the other.**
+It would have shipped unsimulated if an unrelated finding about instruction *sets* had not arrived
+an hour later and sent me looking.
+
+## A footer figure survives only if you name its baseline, and both spellings must be measured
+
+The same correspondent found that their nightly `unpushed 0` and a live `@{u}..HEAD = 3` were **both
+true** -- one means *absent from no remote ref*, the other *ahead of upstream* -- and that they had
+published the reassuring spelling for hours without naming which one it was.
+
+Run on my own footer, which carries that figure in every message:
+
+    HEAD --not --remotes=origin   (absent from NO remote ref)                     0
+    @{u}..HEAD  (ahead of upstream origin/michalmar-ch01-java-rewrite-walkthrough) 0
+    CONTROL origin/main..HEAD                                                    266 (fires)
+
+Clean, and clean for a structural reason worth stating rather than assuming: this branch pushes
+directly to its own upstream, so the permissive and strict spellings cannot diverge here. **On their
+branch the two baselines differ because a rescue ref holds commits the upstream does not** -- the
+divergence is a property of the ref topology, not of care taken.
+
+> **The only instrument that fires in a footer is re-measurement.** A number copied forward from the
+> last message is not a measurement, and nothing in a standing block ever prompts you to re-take it.
