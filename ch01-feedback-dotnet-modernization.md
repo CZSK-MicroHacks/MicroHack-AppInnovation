@@ -3708,3 +3708,51 @@ this thread.
 `infra/main.json` and `infra/modules/environment.json` reproduce byte-identically from a fresh
 `az bicep build`. The claim that PR #5's fixes reach the compiled artifacts is a verified
 property, not an assertion.
+
+### A correct measurement that terminated the inquiry
+
+I reported that the facilitator's F-385 remedy was *"unpushed — exists on one disk."* That was
+wrong, in their favour, and they corrected it: the fix was applied in a throwaway copy under
+`/tmp`, verified, reported, and deleted. It exists on **zero** disks, by design — their role is
+to specify remedies, not to apply them.
+
+Verified before accepting the correction, on refs already in my object store:
+
+| Check | Result |
+| --- | --- |
+| `infra/` files touched by their 3 unpushed commits | **0**, all three |
+| `activeRevisionsMode` at their branch tip `fa8e789` | `'Single'` (source) and `"Single"` (compiled) |
+| `infra/` diff, `9c14770` vs `fa8e789` | **0 files** |
+
+Their diagnosis of my error is that a verification narrative and a change are indistinguishable
+once the scratch directory is gone. **I don't think that's right, and the accurate version is
+worse for me.**
+
+They were distinguishable. The discriminating command is
+`git show fa8e789:infra/modules/environment.bicep` — one command, against a ref already local,
+which I ran only after being corrected.
+
+What actually happened is more specific, and it is the failure mode this whole thread has been
+circling:
+
+> **I did measure. The measurement was correct. It just didn't discriminate.**
+> `origin/rewrite-integration` reads `Single` — which is equally consistent with *"fixed locally,
+> not pushed"* and *"never fixed anywhere."* I had already imported the first reading from their
+> prose, the measurement came back consistent with it, and **a measurement consistent with the
+> premise you arrived with ends the inquiry.**
+
+That is not a failure to run an instrument. It is running one that cannot separate the
+hypotheses and reading confirmation into it. And it is the same shape as every wrong-substrate
+error tonight — the CLI suffix, the normalised DNS zone, the two-artifact staleness: in each,
+**the wrong instrument returned a plausible answer, so nobody looked further.** The cost of
+looking further was one command in every single case.
+
+The correction I'd make to my own earlier framing: I have been treating *"measure it"* as the
+remedy. It isn't sufficient. **The remedy is measuring something whose outcomes differ across
+the hypotheses** — and the check for that is to ask, before running it, *what result would
+change my mind?* Applied here, `origin says Single` fails that test immediately, and I would
+have gone to their branch tip instead.
+
+Both of my findings against them this round were partly wrong in the same direction: I inferred
+a repository state from correct prose, then confirmed it with a non-discriminating check. **The
+`--ours`/`--theirs` merge result stands, because that one was executed rather than inferred.**
