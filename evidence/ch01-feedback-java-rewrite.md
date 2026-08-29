@@ -65,6 +65,19 @@ and the acceptance suite at 53–60 s across runs.
 so the block aborts before reaching Maven. The constituent commands were run individually.
 "Executed for real" therefore means the commands inside the block ran; the block did not.
 
+## Verification note on cross-arm containment
+
+An earlier draft of this report stated that an arm cannot verify containment of its own branch in
+the coordinator's archive. **That was wrong and is withdrawn.** The archive is readable from this
+worktree without a fetch; run against it, `git bundle list-heads` shows this branch, and the bundle
+holds an ancestor of this HEAD with **38 later commits absent** -- a freshness gap, not a
+containment gap. The archive's own published integrity check (`shasum -a 256` against a
+pre-committed hash) **does not pass**, because the file was regenerated under the same name after
+the manifest that pins it; 4 of 39 per-branch SHAs advanced, each an ancestor of its successor,
+which identifies regeneration rather than corruption. **A hash pins content and cannot pin a
+filename**, so a reader following the published instructions cannot tell which frozen state is
+being described.
+
 ## Unsatisfied gates
 
 1. **The rewrite path cannot keep the shared static suite green.**

@@ -4172,8 +4172,14 @@ parties with the motive to falsify it remain the parties who cannot reach it.
 **Commit `ALL-BRANCHES.manifest.txt`, `bundle_sha256` line included, to a ref the arms already fetch.**
 Then `git show origin/<ref>:ALL-BRANCHES.manifest.txt` works from every arm.
 
-That does **not** let an arm verify containment without the bundle - nothing can. It does three things
-that matter:
+That does **not** let an arm verify containment without the bundle - nothing can.
+
+*(🔴 Corrected later, and the correction is the finding: the sentence is true and it was misleading.
+The bundle was on this disk the entire time, readable from my shell without a fetch. "Nothing can do
+X without Y" is close to a tautology, and I deployed it as a reason to stop looking for Y. See the
+entry below.)*
+
+It does three things that matter:
 
 1. each arm can confirm **its own line exists** and says what it was told;
 2. the `sha256` becomes **pinned before the fact**, so it cannot be revised to match whatever is found
@@ -6142,3 +6148,84 @@ solves.** The validator was found while asking *"does a check exist"* and publis
 **Corrected disposition: the schema change is load-bearing and wiring is not a substitute for it.**
 Wiring buys exactly one thing -- step 4 becomes checkable *once* `sliceId` is `required`. Before
 step 4 it buys nothing at all.
+
+## The artifact I called unreachable was on this disk, and its own integrity check fails
+
+A counterparty told me their bundle was readable from my worktree. I had published that an arm
+**cannot** verify containment without it. Both halves turned out wrong, in opposite directions.
+
+### Their claim: correct, and my sentence was true-but-misleading
+
+    ALL-BRANCHES.bundle          526,513,178 bytes    readable from my shell, no fetch
+    git bundle list-heads        1115 heads · my branch present
+    CONTROL zzz-nope             0 entries
+
+I wrote *"nothing can let an arm verify containment without the bundle."* **That is a tautology
+wearing the clothes of a conclusion.**
+
+> 🔴 **A true statement of the form "X is impossible without Y" is a reason to go find Y, and I
+> used it as a reason to stop looking.** The sentence cannot be falsified, which is exactly why it
+> should not have terminated an investigation.
+
+Worse: I had **already filed this class**, at `6a6a855` -- *"the unreadable counterparty report was
+readable the whole time."* I found the file-level version and never generalised it one level up to
+the bundle. Third time tonight that a rule sat in my deliverable and not in my hands.
+
+### 🔴 Their artifact: the published verification fails when run exactly as written
+
+The manifest header states *"true forever about the frozen artifact"* and prescribes the check:
+
+    line 7:  shasum -a 256 ALL-BRANCHES.bundle   -> must equal bundle_sha256 above
+
+    claimed  148d703a7f4feaa64e74247d2b5aabb523281f75c3ee65929646cfdd021e2814
+    computed aad49385977ad43e6b94b98bb6b3b842ad3a43930c13722849042867f5da44bd
+    MATCH    NO
+
+Three independent measurements identify the cause as **regeneration in place**, not corruption:
+
+    mtime      bundle 03:50:47Z   manifest 03:13:21Z      bundle is 37 min NEWER than its own hash
+    git        "The bundle records a complete history"     intact, not truncated
+    per-branch 39 manifest entries · 39 bundle refs/heads · 0 either-only
+               35 SHAs agree · 4 DISAGREE, and each manifest SHA is an ANCESTOR of the bundle SHA
+                 michalmar-ch01-java-rewrite-walkthrough  b0bf186 -> 051dfd0   (4 commits)
+                 michalmar-ch04-observability             c6f5526 -> 48d411a
+                 michalmar-ch06-sre-agent-walkthrough     6626c6b -> e8a3a1e
+                 michalmar-ch5-defender                   f4cfbea -> a3a53af
+
+Corruption does not produce a strictly-newer, ancestor-consistent history on exactly the branches
+that moved. **The file was rebuilt under the same name after the manifest that pins it.**
+
+> 🔴 **A hash pins content; it cannot pin a filename.** "Frozen" is a property of bytes, and the
+> manifest asserted it of a path. An arm following the published instructions to the letter
+> concludes the artifact has been tampered with -- **the failure mode is indistinguishable from the
+> attack the check exists to detect.**
+
+### And it is the same defect the whole night has been about
+
+One filename, several generations, no discriminator -- `evidence/runtime-test-report.json` exactly.
+**In the artifact built to solve the coordination problem**, by the party who diagnosed it.
+
+    AT-RISK-0752 · AT-RISK-0801 · AT-RISK-3-0707 · DOTNET-ARM-WALKTHROUGH-0805   timestamped: 4
+    ALL-BRANCHES.bundle                                                          timestamped: 0
+
+**The convention that prevents this is in use on four of the six bundles in that directory. The
+only one without it is the one claiming to be frozen.**
+
+*(Containment for this arm, now actually measured: the bundle holds `051dfd0`, an ancestor of my
+HEAD, so **38 of my commits are not in it**. That is a freshness fact, which the manifest honestly
+disclaims -- but the hash mismatch means a reader cannot establish which frozen state it describes.)*
+
+### Two instrument failures of my own, in the six minutes it took to measure this
+
+    grep 'refs/' manifest        -> 0     the body says "contains <branch> @<sha>"   WRONG SPELLING
+    join manifest bundle         -> "in BOTH: 0"                                     BROKEN JOIN
+
+The first is the seventh instance tonight of a null produced by a wrong aim -- and had I published
+it I would have accused them of a *second* defect on the strength of a bad search.
+
+The second is the cheaper lesson: **the zero contradicted output I had already printed two commands
+earlier**, where my branch appeared in both files.
+
+> **A null that contradicts your own prior output is the cheapest catch available, and I still
+> nearly published it.** Neither was caught by insight; both were caught by re-running with a
+> different spelling before writing, which is the only habit here that has ever worked.
