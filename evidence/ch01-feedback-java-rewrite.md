@@ -1575,3 +1575,58 @@ line specifically and not a missing file.
 So the disposition is **merge ordering, not a material change request** -- the remedy exists and is
 waiting. That distinction matters, because filing it as a workshop change would duplicate work
 already done and would leave the actual defect, the credential blob above, untouched.
+
+---
+
+## Operator: the scrub plan reaches 6 files; the tooling has pinned the value into 1,246 more commits
+
+A correspondent reported that no sweep tonight had enumerated `refs/copilot`, and stated that the
+commits reachable only from that namespace number **0**. Reproduced here, the first half is right and
+the second is not.
+
+    ref namespace census, this repo
+      refs/copilot   1232       refs/heads 39   refs/remotes 8
+      every sweep tonight enumerated heads+remotes only = 47 of 1279 = 3.7%
+
+    commits reachable ONLY from refs/copilot          1246      (their figure: 0)
+    of the first 300 sampled, tree carries the live subscription GUID   299
+    CONTROL same 300 vs a GUID absent from the estate                     0
+    refs/copilot present on origin                      0      CONTROL heads on origin 7
+
+**The namespace is shared, so this is not a difference between our checkouts.** The refs live in the
+common git directory, not the per-worktree one -- 719 loose plus 514 packed under
+`git-common-dir`, **0** under this worktree's own git dir, across 26 worktrees sharing one object
+store. We are both looking at the same 1,232 refs.
+
+**What does not change: public exposure.** Zero of these refs exist on `origin`, so nothing here
+widens the disclosure already recorded above. That negative is the reason this is a remediation
+finding rather than a second incident.
+
+**What does change: every git-side remedy in the plan.** Scrubbing 6 files, squashing, and deleting
+5 branches acts on the tips and on history reachable from heads. These 1,246 commits are reachable
+from none of them -- they are pinned by refs no sweep enumerated, so they survive branch deletion
+entirely and are immune to garbage collection *because* they are ref-reachable. The value remains on
+disk, in bulk, after every step of the plan has been executed correctly.
+
+**And the backup is the largest single concentration of it.** A bundle cut with `--all` includes
+every ref, so it includes these commits -- roughly 1,240 of them carrying the live identifier. The
+artifact created to preserve the estate is therefore the densest copy of the secret and the one
+explicitly intended to leave the machine. It was cut `--all` for self-containment; the coverage of
+the copilot namespace is a side effect of that choice, not a decision anyone made about the secret.
+
+> **Rotation is the only remedy whose cost does not scale with the number of copies, and this is the
+> measurement that makes the point concrete: the enumerable copies went from 6 files to 1,246
+> commits on one command, and the command was a census, not a discovery.**
+
+**Workshop finding, and it is about the tooling rather than the material.** Running this workshop
+with an agent harness that snapshots session state into `refs/` means a participant accumulates on
+the order of a thousand refs preserving every intermediate tree. The material tells them to commit
+evidence containing their subscription identifier; if they later scrub it, the value persists in
+over a thousand local commits that no ordinary cleanup touches and no `git log` shows them. The
+material should either say so, or the evidence should never contain the value in the first place --
+which is the contract fix recorded above, and this is a second, independent argument for it.
+
+**A number that moved while it was being measured.** The count read 1,245 at the start of this
+paragraph and 1,246 at the end -- the decay the correspondent had just described, observed in my own
+figures within a single measurement. Stated as of `origin/main @ 93887ab` and this branch at the
+commit that records it.

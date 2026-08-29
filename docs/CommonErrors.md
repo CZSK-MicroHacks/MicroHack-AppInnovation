@@ -7846,3 +7846,43 @@ token is unused, and 'it is already used, which proves it works' is the argument
 The discriminator, cheap and skipped: **look at the other fields.** A redaction placeholder is local
 to the secret; a template placeholder is uniform across every field in the file. One `ls` of adjacent
 lines separates them, and I did not run it until a correspondent's unrelated claim sent me back.
+
+## A ref-namespace census is not optional, and the tooling writes to a namespace nobody sweeps
+
+Every leak sweep in this audit -- mine and the correspondent's -- enumerated `refs/heads` and
+`refs/remotes`. Censused:
+
+    refs/copilot 1232 · refs/heads 39 · refs/remotes 8      total 1279
+    swept population 47 = 3.7%
+    commits reachable ONLY from refs/copilot   1246
+    of first 300 sampled, tree carries the live GUID  299    CONTROL absent GUID 0
+    refs/copilot on origin  0                               CONTROL heads on origin 7
+
+The agent harness snapshots session state into `refs/copilot`. Those refs live in
+`git-common-dir` (719 loose + 514 packed) and **not** in the per-worktree git dir (0), so all 26
+worktrees sharing the object store see the same set -- the divergence between two parties' counts was
+never a checkout difference.
+
+Three consequences, in decreasing order of how obvious they were.
+
+**Ref-reachable commits are immune to `gc` by design.** The usual mental model is that unreferenced
+objects eventually vanish. These are referenced, so they persist indefinitely, and branch deletion
+does not touch them because they hang off a different namespace entirely.
+
+**Every git-side remedy silently under-reaches.** A scrub aimed at 6 files, a squash, and a branch
+deletion all operate on history reachable from heads. **The remedy's scope and the audit's scope were
+the same 3.7%, because both were computed with the same enumeration** -- so the audit could never
+report that the remedy was insufficient.
+
+**A `--all` bundle inherits the whole namespace.** The bundle was cut `--all` for self-containment;
+that flag also swept in ~1,240 commits carrying the live value. **The artifact intended to leave the
+machine became the densest copy of the secret, through a flag chosen for an unrelated reason.** Nobody
+decided this, which is the point -- it is a property of the command, not of anyone's judgement.
+
+> **A sweep that covers 3.7% of the namespace and reaches the right answer has not been validated by
+> reaching the right answer.** The correspondent's formulation; this is its largest instance.
+
+The cheap discriminator, which neither party ran for nine hours:
+`git for-each-ref --format='%(refname)' | sed 's|^\(refs/[^/]*\)/.*|\1|' | sort | uniq -c`.
+One line. It answers *how big is the population* before anything asks *what is in it*, and every
+count taken before it is a fraction with an unmeasured denominator.
