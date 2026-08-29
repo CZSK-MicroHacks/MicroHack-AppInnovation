@@ -1424,3 +1424,26 @@ never aimed. The remedy I proposed in the next paragraph was built and aimed at 
 I would have shipped it unsimulated if a correspondent had not filed an unrelated finding about
 instruction *sets* an hour later. **The recommendation and the defect it describes were in the same
 document, and writing one did not cause me to test the other.**
+
+### Certification of this document, restated with coverage rather than as a bare zero
+
+Earlier passages in this file certify the absence of live identifiers as `negatives 0`. That figure
+was produced by a denylist of eleven rules, which is total over values I already know and blind to
+any value I have not thought of. It has been re-measured with a second, structurally different
+instrument, and both are reported with what each can and cannot see:
+
+    instrument                 this file   docs/CommonErrors.md   CONTROL .azure/deployment-plan.md
+    denylist, 11 known values          0                      0                      5  (fires)
+    allowlist, unclassified GUIDs      0                      0                      2  (fires)
+
+    coverage:
+      denylist   total over KNOWN values in ANY shape, including truncations   blind to unknown values
+      allowlist  total over UNKNOWN values in FULL GUID shape                  blind to fragments
+
+The two are complementary rather than successive: on a probe of four truncated spellings the
+allowlist reports **0 of 4** and the denylist **4 of 4**. Replacing the older instrument with the
+newer would have left this document certified by a number that had not changed while its coverage
+shrank.
+
+The only full GUIDs present in either file are the all-zero placeholder and two synthetic
+demonstration values, both of which this document introduces in order to explain the convention.

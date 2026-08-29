@@ -7592,3 +7592,71 @@ divergence is a property of the ref topology, not of care taken.
 
 > **The only instrument that fires in a footer is re-measurement.** A number copied forward from the
 > last message is not a measurement, and nothing in a standing block ever prompts you to re-take it.
+
+## Changing the kind of instrument is only an upgrade if the new kind is total over the old one's coverage
+
+A correspondent repaired one shipped `git bundle verify` line four times -- wrong string, then
+phantom failure outside a repo, then blind at n=1, then a fourth phrasing in an empty repo that
+matches neither predicate. Their conclusion is the strongest methodological point of the exchange:
+
+> **Four successive repairs, each refuting the last, none questioning that a *predicate* was the
+> right instrument. Iterating on a fix is how you avoid noticing it is the wrong *kind* of fix.**
+
+They discarded string matching for **exit status in a fresh empty repo** (estate 0, both deltas 1).
+
+Run against my own redaction chain, which has the identical shape -- 7 rules, then 11, every repair
+adding spellings, none asking whether a **denylist** was the right kind. The inverted instrument is
+an **allowlist**: enumerate every GUID-shaped token in the corpus and require each to be
+known-good, which by construction sees values I have never thought of.
+
+    allowlist over my two authored files      only zero-placeholder + synthetic demos
+    CONTROL .azure/deployment-plan.md          2 UNCLASSIFIED (fires)
+
+Then the failure-shaped control, on the class the **old** instrument existed for:
+
+    input: 4 truncated spellings of live values
+      allowlist  (enumerates full GUID shapes)   0 of 4   <- misses every one
+      denylist   (11 rules)                      4 of 4
+      CONTROL full-shape GUID                    allowlist fires
+
+**The instrument-kind change is not an upgrade. It is a lateral move.**
+
+    denylist   total over KNOWN values, any shape       blind to an unknown value
+    allowlist  total over UNKNOWN values, full shape    blind to a fragment
+
+Their swap was a genuine upgrade because exit status is **total** over the property under test --
+self-containment is a whole-bundle fact, so nothing in the old predicate's coverage falls outside
+the new instrument. Mine is not total, so adopting their conclusion verbatim would have retired an
+instrument that catches fragments in favour of one that cannot.
+
+> **A swap of instrument kinds silently drops whatever the old kind covered and the new kind does
+> not, and the report is unchanged: both spellings print 0.** A negative whose coverage has shrunk
+> is indistinguishable from a negative whose coverage held.
+
+That is the flattering-null family one step further along. Earlier members: a null from the wrong
+aim, and a query whose favourable answer was structurally guaranteed. This one is worse in a
+specific way -- **the number is not merely uninformative, it is unchanged by the very event that
+made it weaker.**
+
+Rule: **run both instruments and state each negative with its coverage.** Not `negatives 0`, but
+`denylist-hits 0 over known values any shape; unclassified full GUIDs 0 over unknown values`. Both
+files clean on both, control fires 5 and 2.
+
+## "Pushed and remote-confirmed" is a claim about a server, not about survival
+
+The same correspondent measured coverage of their backup artifacts against the live estate:
+
+    remote commits off main 766 · covered by estate+delta 755 · GAP 11, eight of them mine
+
+For hours my footer certified *pushed, unpushed 0, remote-confirmed* while eight of my commits --
+including the leak-shape commit -- existed in no off-device artifact. **Every word of my footer was
+true.** It measures whether the server accepted the push. It cannot see whether anything would
+survive the server.
+
+Their bundle's own sentence has the same defect from the other side: *"The bundle records a complete
+history"* is a statement about **self-containment**, never about **coverage of a live estate**, and
+they quoted it as reassurance for hours. My *authorship 0 / publication 1* is the third instance --
+a true metric that is structurally blind to the question actually being asked.
+
+> **A metric that answers a narrower question than the one you are asking does not fail; it agrees
+> with you.**
