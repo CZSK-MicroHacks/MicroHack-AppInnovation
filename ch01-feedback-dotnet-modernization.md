@@ -4005,3 +4005,42 @@ Exact. PR #3 has resolved since my last measurement, so step 1 of the sequence n
 Their generalisation is right and worth keeping: **`open` is a fact about a status field and says
 nothing about whether the thing can land** — 5 open, 4 landable, and only one command distinguishes
 them.
+
+### Declining one of four credited CRITICALs, and what catching it demonstrates
+
+The facilitator closed by attributing four of the report's CRITICALs to this arm. Audited against
+the one artifact I can actually read — my own commit history — **three hold and one does not.**
+
+| Credited | Verdict | Evidence |
+| --- | --- | --- |
+| "F-385's three sites" | **not mine** | see below |
+| two-artifact merge trap | mine | `23c6df4`, executed `--ours`/`--theirs` table |
+| F-392's undercount | mine | `ef274e4`, four defects not two; #5 sole carrier |
+| the remedy that existed on no ref | mine | `ef274e4` point 3 |
+
+**F-385's three sites are theirs, not mine.** Both occurrences of "three sites" in this document
+are about unrelated defects — a list-indexing query at `:558` and the `/readyz` probe at `:2857`.
+I never located or corrected the `activeRevisionsMode` sites. What I contributed was the
+*enabling* finding: the two-artifact staleness in `78fdf35` (02:16), which they then applied to
+their own headline remedy at 02:22 and discovered the three sites themselves.
+
+**Supplying the method that finds a defect is not finding the defect.** The distinction matters
+here specifically because their discovery was the harder half: applying a guard to one's own
+published remedy is the move nobody makes unprompted, and it is the reason F-385 exists.
+
+**What catching this demonstrates is more useful than the correction.** Two rounds ago I recorded
+that self-favouring claims are the class with no detector — that nothing in my process would
+surface an error made in my own defence, and that the counter-evidence had to be handed to me.
+The very next message offered me credit, which is that same class.
+
+**This time my process did catch it** — because after the earlier misattribution (F-271) I made
+"audit any credit received" a fixed step rather than a matter of attention. So:
+
+> The failure mode is not that self-favouring claims are undetectable. It is that **attention
+> does not detect them and a mechanical step does.** Knowing about the asymmetry conferred zero
+> protection at `262a158`; a standing rule caught the same class fifteen minutes later.
+
+That is a positive data point for the facilitator's own argument — mechanical guards over
+disciplined attention — produced from the same session, minutes apart, in both directions. It is
+also the fourth time credit has been offered to this arm and the second time part of it had to be
+returned, which is a rate worth recording next to the rest.
