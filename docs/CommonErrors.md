@@ -7371,3 +7371,32 @@ Shape that discriminates at both counts, with a negative control:
 
 Same family as *elimination narrows the field, it does not test the survivor*: a survivor and a
 passing control are both **untested things that have acquired the appearance of having been tested.**
+
+### First use of the rule, on the commit that introduced the rule
+
+Auditing the diff of the commit that records the audit, rather than the tree it produced:
+
+    shape        added(+)   removed(-)
+    bare-8 sub       0          2
+    bare-8 ten       0          2
+    8-4-4  sub       0          1
+    CONTROL 'requires these' in the diff: 4 (fires)
+
+    tree at HEAD                     0
+    blobs in the PR range carrying a fragment   10  (across 156 commits)
+    on origin/main                    0   (control: 'MicroHack' -> 20 files, fires)
+
+**Added 0 on every shape** -- the write-up constraint held, this entry instantiated nothing. But
+the fragments live on the removed side, which is what a scrub always looks like, and they remain
+reachable in ten blobs of the branch history. **A tree-level scrub is invisible to a tree-level
+audit precisely because it worked**; the tree is the one place the value is now guaranteed absent,
+and it is the only place I had been looking.
+
+This is the concrete form of a note I had already written about someone else's remedy -- redacting
+at HEAD leaves the value fetchable by SHA -- arriving as a property of my own repair, found by a
+rule whose first execution this was.
+
+Operationally it turns a hold/don't-hold decision into a strategy decision: **a squash merge
+collapses the branch to the clean HEAD tree and carries no intermediate blob; an ordinary merge
+preserves all ten.** Absence from the default branch is still intact and still free to keep, so the
+choice is live rather than academic.
