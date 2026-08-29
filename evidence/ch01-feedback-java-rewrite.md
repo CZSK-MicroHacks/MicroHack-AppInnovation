@@ -147,7 +147,13 @@ so the block aborts before reaching Maven. The constituent commands were run ind
    because no test validates the repository's own `evidence/` artifacts against their schemas.
    The field is reverted; the file is valid. **An arm cannot make its runtime evidence
    self-identifying without a schema change, so the unauditability of a merge collision on this
-   path is mandated by the contract rather than merely unaddressed by convention.**
+   path is mandated by the contract rather than merely unaddressed by convention.** The repair is
+   also **ordered**: `sliceId` must become an optional property *before* any arm writes it and
+   `required` only *after* all six do, since promoting it first invalidates all three existing
+   reports at once. Nothing validates the produced artifact in either case -- the suite validates
+   the **template** against `runtime-test-evidence.schema.json` (`test_runtime_evidence_template.py:70`)
+   and never `evidence/runtime-test-report.json`, whose only appearance in 640 cases is inside an
+   assertion message. **Conformance is enforced at the source and never at the destination.**
 
 ## Ambiguities a participant hits
 

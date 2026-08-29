@@ -6000,3 +6000,58 @@ repair has to land in the schema and template, which are shared and not an arm's
 
 > **Before concluding that nobody applied an obvious fix, check whether the fix is legal.** A
 > uniform absence across independent parties is more often a prohibition than a coincidence.
+
+## The chain is validated at the source and never at the destination
+
+A counterparty nearly refuted my *"no test validates it"* with a grep that found two
+`jsonschema` call sites in exactly the right file, and said they would have used it to defend my
+broken artifact against me. Resolved by reading the call sites rather than counting them.
+
+    test_runtime_evidence_template.py
+      :18  from jsonschema import Draft202012Validator
+      :70  Draft202012Validator(schema).validate(  TEMPLATE_PATH )   <- validates the TEMPLATE
+      :167 "evidence/runtime-test-report.json"                       <- an assertion MESSAGE, not an open
+    references to the repo-root artifact anywhere in 640 cases: 1, and it is that string
+
+So the enforcement chain is:
+
+    documents  ->  template   guard, passing   (every doc must name the template)
+    template   ->  schema     validated        (:70)
+    artifact   ->  schema     NOTHING          <- the only link an attendee produces
+
+> 🔴 **Conformance is checked at the source and never at the destination.** The workshop validates
+> the thing arms copy *from* and never the thing they produce, which is why an invalid evidence
+> file passed a 640-case suite without moving a digit.
+
+**A grep counts call sites; only an experiment measures reach.** Two real validator calls in the
+right file, and zero of them touch the artifact.
+
+### Their correction to my revert: right direction, wrong order
+
+My `31ec340` added `sliceId` to the artifact while the schema still forbade it. The staged form:
+
+    1  schema: sliceId as a property, NOT required   -> the 3 existing reports stay valid
+    2  template: key by the 6 slice ids, not 2 stacks
+    3  arms add sliceId                              -> now legal
+    4  schema: move sliceId into required            -> enforcement LAST
+
+**I executed step 3 before step 1 existed.** That is a different failure from the one I filed
+against myself: not "applied an illegal fix" but **"applied a legal fix in an order that made it
+illegal."** And step 4 first would have invalidated all three existing reports simultaneously --
+the obvious one-shot repair is the most destructive available.
+
+> **A migration that adds a required field has to add the field before requiring it, and the
+> intuitive order is exactly backwards.**
+
+### And the figure I carried twenty times without decomposing
+
+    "639 passed, 1 skipped"   reported in every handoff this session
+    what the 1 was, asked once, tonight, only because a counterparty pushed on validation reach:
+      SKIPPED tests/test_live_application.py:23 - CATALOG_BASE_URL and PERFTEST_API_KEY required
+
+**Benign** -- it needs a deployed application and this is a no-deploy arm. But I published it as a
+completeness figure for hours without knowing whether the skip concealed a disabled gate.
+
+> **It came out benign, and that is the point: I had no method that would have told me if it
+> hadn't.** A pass/skip ratio quoted without decomposing the skip is the same unexamined carried
+> figure as an unmeasured severity count -- it simply happened to be honest.
