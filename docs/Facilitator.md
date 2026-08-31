@@ -196,14 +196,16 @@ and public IP quota. Per participant it counts **2 VMs, 2 OS disks, and 2 Standa
 IPs** -- one public IP per VM, used for RDP into the machine. Azure
 Bastion and the NAT gateway are no longer deployed.
 
-The NSG is created with **no inbound rules**. Tenant governance automation deletes any
-inbound 3389 rule whose source is `Internet` about twenty minutes after it is written,
-while leaving address-scoped rules alone, so an open rule is not a shortcut — it is a
-failure that surfaces halfway through the day. Participants create a rule for their own
-address in Challenge 0, step 1, using the Owner role they hold on their resource group.
-If your venue has a single fixed egress address you can pre-open it for everyone by
-setting `rdp_source_address_prefixes = ["203.0.113.10/32"]`; participants on a VPN or a
-different network still need the Challenge 0 step.
+The NSG is created with **no inbound rules**. Tenant governance automation deletes
+standing inbound 3389 rules — including address-scoped ones — so a hand-written rule is
+not a shortcut; it is a failure that surfaces halfway through the day. The sanctioned
+exception is **Just-in-Time (JIT) VM access**, whose rules survive the sweep. Participants
+enable JIT and request access themselves in Challenge 0, step 2, using the Owner role they
+hold on their resource group.
+
+**Confirm before the workshop that Just-in-Time VM access is available on the
+subscription** — it is a Microsoft Defender for Cloud feature, and if it is not enabled,
+participants have no supported way in. This is the single most likely day-one blocker.
 
 Check two fields in the output before you move on:
 
@@ -786,7 +788,7 @@ credential map: read it when you are ready to set the secrets, not before.
 | Every VM provisioned healthy | `C:\MicroHack\status\dotnet-smoke.json` and `java-smoke.json` on each VM; both must pass `/healthz`, `/readyz`, the canonical image, the `198/20/198` corpus, and the native database counts |
 | **Source tree is the one you pinned** | On one VM, read `C:\MicroHack\source\.source-commit` and confirm it matches your `source_commit`. Confirm `C:\MicroHack\source\infra` and every `challenges\*` folder exist |
 | **Deployment parameter files exist** | On one VM, in an ordinary **non-elevated** PowerShell — the session a participant has — `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` returns `9`, and `$p = (Get-Content C:\protected\manual-<stack>-baseline.json \| ConvertFrom-Json).parameters; $p.facilitatorPrincipalObjectId.value; [bool]$p.performanceApiKey.value` shows your object ID and `True`. Run it unelevated on purpose: that is the session Challenge 1 deploys from, so it also proves the Read ACE landed. `Access is denied` here means the grant is missing and every participant stops on their first deployment |
-| RDP access works | The baseline creates **no inbound 3389 rule** — participants open one for their own address in [Challenge 0, step 1](../challenges/ch00/README.md). To check it yourself, create a rule scoped to your address, then connect to at least one VM per region over its public IP. Do **not** "fix" this by allowing `Internet`: tenant governance deletes unscoped 3389 rules within ~20 minutes, so it works just long enough to look correct and then strands every participant mid-session |
+| RDP access works | The baseline creates **no inbound 3389 rule** — participants request [Just-in-Time access in Challenge 0, step 2](../challenges/ch00/README.md). Check it yourself the same way: enable JIT on one VM per region, request access for your address, then connect over its public IP. Do **not** "fix" this by writing a standing rule, scoped or otherwise: tenant governance deletes standing 3389 rules, so it works just long enough to look correct and then strands every participant mid-session. If JIT is unavailable in the portal, Defender for Cloud is not enabled for servers on the subscription — resolve that before the workshop, because there is no supported fallback |
 | **A participant can write where the work happens** | In that same non-elevated session, `New-Item C:\MicroHack\source\.t1-probe -ItemType File` must **succeed** and `New-Item C:\protected\.t1-probe -ItemType File` must **fail** with `Access is denied`. Remove the probe afterwards. The first proves Challenge 1 can commit and build in the tree it was given; the second proves the parameter files cannot be edited into something that no longer matches the deployment they describe. A VM that passes the read check above and fails this one has the wrong ACL rather than a missing one |
 | **A participant can create the migration export directory** | **Confirmation, not discovery.** `baseInfra/scripts/provision-vm.ps1` now creates `C:\ProgramData\MicroHack\migration` itself and places an explicit **Modify** ACE for `admin_username` on it (`New-MigrationExportDirectory`, using the same `Set-ProtectedAcl` call that grants read on `C:\protected`), so the permission is asserted at provisioning time instead of inherited from a folder created as SYSTEM. Confirm it held: in that same non-elevated session, `New-Item C:\ProgramData\MicroHack\migration\.t1-probe -ItemType File` must **succeed**. Remove the probe but **leave the directory** — deleting it discards the ACE that makes this work. All six Challenge 1 path documents create the directory with `New-Item -Force` before writing the database export, so on a correctly provisioned VM that line is now a no-op. If the probe fails with `Access is denied`, do not re-image — [editing a provisioning script re-provisions every VM](#reset-one-participant) — fix the ACL in place, per VM: `az vm run-command invoke -g <rg> -n <vm> --command-id RunPowerShellScript --scripts 'New-Item -ItemType Directory -Force C:\ProgramData\MicroHack\migration > $null; icacls C:\ProgramData\MicroHack\migration /grant azureuser:(OI)(CI)M'`, substituting your own `admin_username` if you changed it from `azureuser`. Left unfixed, every participant loses their database export, which is the artifact Challenge 1 exists to produce |
 | Load Testing prerequisites exist | Deploy `infra/perf-testing.bicep` and set the performance-test API-key secret in the Key Vault it creates to the value `terraform output -json performance_api_keys` reports for that participant and stack. A secret that does not match the generated key fails Challenge 2 with a 401, not a deployment error |
@@ -1140,7 +1142,7 @@ mailbox rather than a distribution list. Size it at roughly 1.5× the total in
 
 | Chapter | What you must have ready | When |
 | --- | --- | --- |
-| 0 — Select a baseline | Both VMs healthy per their smoke files; you available to approve each deallocation as it is requested | T-1 |
+| 0 — Select a baseline | Both VMs healthy per their smoke files; Just-in-Time VM access available on the subscription so participants can request RDP themselves | T-1 |
 | 1 — Modernize | **Both golden handoffs built, validated, and the 15:15 cut rehearsed once** — the repository ships none, so this is real work you must do; participants steered toward a path that can finish; the timebox announced in advance; the isolated CLI profile signed out of every VM when the block ends | T-4 |
 | 2 — Load and autoscaling | Load Testing resource deployed, API-key secret set in Key Vault; the filler content for 35 minutes of waiting ready to deliver | T-1 |
 | 3 — CI/CD and revisions | GitHub plan and repository visibility confirmed to support environment protection; `staging` and `production` environments creatable; you or a second person available to approve | T-15 for the plan, T-1 for the check |

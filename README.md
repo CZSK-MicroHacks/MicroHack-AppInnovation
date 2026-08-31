@@ -62,9 +62,8 @@ validated document that says so. By the end you will have measured:
 - **Catalog response time** — a median you take on the legacy VM in Challenge 0 and put
   next to the median the load engine reports in Challenge 2.
 - **Pipeline lead time** — dispatch to live: from the moment the release pipeline is
-  dispatched to the moment the new revision serves traffic. Its "before" is the manual
-  release you count step by step in Challenge 0, so the comparison is steps against
-  minutes.
+  dispatched to the moment the new revision serves traffic. Its "before" is the fourteen
+  manual steps Challenge 0 walks you through, so the comparison is steps against minutes.
 - **Scale-out under load** — replicas responding to real traffic, with the database
   signal to match.
 - **Rollback time** — how long it takes to undo a bad release.
@@ -145,7 +144,7 @@ never fabricate or hand-edit an evidence document.
 
 | Chapter | Outcome | Participant guide | Reference solution |
 | --- | --- | --- | --- |
-| **0. Select a baseline** | Opened both legacy catalogs, measured how the one you keep behaves today, and committed to a single stack for the rest of the workshop — the other VM deallocated with facilitator approval | [Challenge 0](challenges/ch00/README.md) | [Solution 0](solutions/ch00/README.md) |
+| **0. Select a baseline** | Chose one of the two legacy stacks, connected to its VM, and measured how that application behaves today — the "before" column for every comparison that follows | [Challenge 0](challenges/ch00/README.md) | [Solution 0](solutions/ch00/README.md) |
 | **1. Modernize** | Got the catalog off the VM: running as a container on Azure Container Apps, against a managed database, with its images in Azure storage and no password anywhere in the application — and a validated handoff that proves it | [Shared target](challenges/ch01/README.md) plus the selected path above | [Shared solution](solutions/ch01/README.md) plus the matching stack/path solution |
 | **2. Load and autoscaling** | Watched the catalog add capacity by itself under 40 concurrent users, serve every request without a single error, and give the capacity back when the traffic stopped — with the metrics for all three | [Challenge 2](challenges/ch02/README.md) | [Solution 2](solutions/ch02/README.md) |
 | **3. CI/CD and revisions** | Shipped a release through an approved pipeline, measured how long it took from dispatch to live, and undid it on purpose — with a number for that too | [Challenge 3](challenges/ch03/README.md) | [Solution 3](solutions/ch03/README.md) |

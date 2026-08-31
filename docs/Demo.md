@@ -55,11 +55,11 @@ Every command below is either quoted from a chapter or is a chapter's command wi
 
 Open the catalog in the VM's own browser after connecting over RDP — `http://localhost:5000` for
 `dotnet-sqlserver`, `http://localhost:8080` for `java-postgresql`
-([Challenge 0, step 2](../challenges/ch00/README.md), the stack table). Search for a
+([Challenge 0, step 1](../challenges/ch00/README.md), the stack table). Search for a
 figure, filter a category, open one detail page and let its photograph load.
 
 Then put the baseline on screen. This file is written by the PowerShell block in
-[Challenge 0, step 3](../challenges/ch00/README.md):
+[Challenge 0, step 4](../challenges/ch00/README.md):
 
 ```bash
 jq -r '

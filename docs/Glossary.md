@@ -125,13 +125,14 @@ and the out-of-hours window they needed — against the Challenge 3 number, whic
 pipeline run plus one approval. Older notes may call this *deployment lead time*.
 
 **RDP (Remote Desktop Protocol)**
-How you get a Windows desktop on your two legacy VMs. Each VM has its own public IP
-address, but port 3389 is **closed** until you open it for your own address in
-[Challenge 0, step 1](../challenges/ch00/README.md) — a rule that allows everyone is
-deleted automatically within about twenty minutes, so the scoped one is the one that
-lasts. After that you connect with any Remote Desktop client using the administrator
-credentials your facilitator hands out. The catalog application listens on the VM's
-loopback interface, so the browser you use to view it is the one *inside* the VM.
+How you get a Windows desktop on your legacy VM. Each VM has its own public IP address,
+but port 3389 is **closed** until you request **Just-in-Time (JIT) access** for your own
+address in [Challenge 0, step 2](../challenges/ch00/README.md). Standing rules that hold
+3389 open are deleted automatically by tenant governance, so JIT — which opens the port
+for a few hours and then closes it — is the way in that lasts. After that you connect with
+any Remote Desktop client using the administrator credentials your facilitator hands out.
+The catalog application listens on the VM's loopback interface, so the browser you use to
+view it is the one *inside* the VM.
 
 **Revision**
 An immutable snapshot of a Container App's configuration and image. Changing the image or

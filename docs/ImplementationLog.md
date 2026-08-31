@@ -2038,3 +2038,81 @@ Docs realigned: `challenges/ch00` gains step 1 and two troubleshooting rows (sec
 renumbered 2-8, with the cross-references in `docs/Demo.md` and `challenges/wrapup` updated),
 and `docs/Facilitator.md`, `docs/Design.md`, `docs/Glossary.md` and `docs/Agenda.md` no
 longer claim 3389 is open on arrival.
+
+## RDP correction and the Challenge 0 rewrite
+
+**The previous entry's conclusion was wrong.** It claimed tenant governance strips inbound
+3389 rules whose source is `Internet` while leaving address-scoped rules alone, and shipped a
+participant step that created a `/32` rule by hand. Re-testing disproved it. The governance
+automation writes **hourly** (11:26, 12:26, 13:26 UTC observed) and only when it has something
+to remove, so the twenty quiet minutes that produced the original claim were not evidence of
+survival — the rule had not yet faced a single sweep. A later run showed a `/32` rule on 3389
+removed, a `/32` rule on port 9999 left alone, and `MicrosoftDefenderForCloud-JITRule-*` rules
+left alone. The control keys on the management port, not on source breadth.
+
+The supported path is therefore **Just-in-Time VM access**, which is also the only mechanism
+observed to survive a governance pass. Challenge 0 now walks participants through enabling JIT
+and requesting access in the Azure Portal, with no scripts and screenshot placeholders to fill
+in later. `CommonErrors.md` #124 carries the corrected finding and the reasoning error that
+produced the wrong one.
+
+**Challenge 0 restructured around one VM.** The chapter previously had participants open both
+catalogs, measure both, verify both markers, then choose a stack and deallocate the loser. That
+ordering measured work nobody kept. It now reads: choose the stack first (section 1), connect to
+that one VM via JIT (2), look around optionally (3), measure the baseline (4), verify the frozen
+marker (5), record the selection (6). The two per-stack verification sections collapsed into one
+stack-parameterized block, and the separate manual-deploy-step counting block folded into the
+measurement block it was amending.
+
+Two clarifications the walkthrough flagged as confusing are now explicit: the "scorecard" is
+named as the before/after table in `challenges/wrapup/README.md`, and the "one-line fix" is
+labelled as a counting exercise that produces `manualDeploySteps`/`manualRollbackSteps` rather
+than an actual fix to apply.
+
+**Evidence moved off the VM.** Both blocks now print JSON for the participant to copy into their
+own repository clone instead of writing files onto the machine. This makes the boundary real: the
+VM is scenery for the legacy world, and everything from Challenge 1 onwards works from
+application source in the clone. The deallocation section is gone — a one-to-two day workshop
+does not need the $4.42 and the step confused more than it saved.
+
+`checkedStacks` and `unselectedVm` are dropped from the selection record, and the long PowerShell
+validation block became a plain JSON template plus a checklist, so the step no longer assumes
+PowerShell on the participant's own machine. `solutions/ch00`, `README.md`, `docs/Agenda.md`,
+`docs/Facilitator.md`, `docs/Design.md`, `docs/Glossary.md`, `docs/Demo.md` and
+`challenges/wrapup/README.md` follow.
+
+Still open: `docs/CostEstimate.md` continues to model the Challenge 0 deallocation and needs
+reworking against the two-VMs-stay-running decision.
+
+### Challenge 0 cut to a 15-minute budget, and the manual-release numbers supplied
+
+The previous revision still asked participants to *count* the steps in a manual release and
+name their own change window before the measurement block would run. Two problems with that.
+It assumed knowledge most attendees do not have — someone who has never shipped to a Windows
+VM by hand will guess — and the `throw` guard on `$manualDeploySteps` blocked the latency
+samples until they guessed, coupling an opinion to a measurement.
+
+The fourteen-step release is now **written out as a numbered list** and the three values are
+**pre-filled** (`14`, `6`, and a Saturday change window), matching
+`workshop/contracts/fixtures/wrapup/ch00-pain-dotnet.json` — which had carried `14`/`6` all
+along while the prose claimed `manualRollbackSteps` was "almost certainly 0". The chapter and
+the fixture now agree. Participants are invited to edit the defaults to their own reality,
+which is the more useful exercise and costs no time from those who cannot.
+
+**Steps 4 and 5 merged into one block.** The marker check, the four HTTP assertions and the
+20-sample timing run were two separate paste-run-copy cycles over RDP that shared the same
+`$stack`/`$baseUrl` setup. They are now a single 77-line block that verifies first and measures
+second, then prints both JSON documents behind `=== save as evidence/... ===` markers derived
+from `$stack`. That removes an entire RDP round-trip and makes F-102 structurally harder to hit:
+the participant reads the destination filename off the machine rather than out of prose.
+`test_ch00_baseline_filename_is_derived_from_the_stack_variable` was updated to assert the
+printed markers, which is a stronger guarantee than the `$markerPath` assignment it replaced.
+
+Verified by running the exact block on both live VMs via `az vm run-command`: `dotnet` returned
+`catalogMedianMs` 156.7 and `MSSQL$SQLEXPRESS=Running`, `java` returned 176.3 and
+`postgresql-x64-18=Running`, both with the 198/20/198 marker and the expected `sourceCommit`.
+
+Estimated time drops from 30–40 minutes to 15. Chapter is now five steps; the wrap-up's
+"Challenge 0, step 4" reference still resolves to the measurement. `docs/Agenda.md` keeps its
+60-minute slot deliberately — that slot is sized for a room enabling JIT for the first time,
+not for one attendee's reading speed.

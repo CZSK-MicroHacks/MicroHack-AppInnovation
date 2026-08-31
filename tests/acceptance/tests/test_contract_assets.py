@@ -3264,30 +3264,38 @@ def _source_tree_writes(script: str) -> list[tuple[int, str]]:
     def record(offset: int, path: str) -> None:
         writes.append((offset, path.replace("\\", "/").lstrip("/")))
 
-    # -Path (Join-Path $Var 'name') on a writing cmdlet
-    for match in re.finditer(
-        r"(Set-Content|Out-File|Copy-Item)\b[^\n]*?\s-(?:Path|Destination|LiteralPath)\s+"
-        r"\(Join-Path\s+\$(\w+)\s+'([^']+)'\)",
-        script,
-        re.DOTALL,
-    ):
-        base = match.group(2)
-        if base == "SourceRoot":
-            record(match.start(), match.group(3))
-        elif base in variables:
-            record(match.start(), f"{variables[base]}/{match.group(3)}")
+    # Which parameter names the *destination* depends on the cmdlet: for Set-Content and
+    # Out-File it is -Path, but for Copy-Item and Move-Item -Path is the *source*. Treating
+    # them alike reports a copy that merely reads from the source tree as a write to it.
+    destinations = (
+        (r"Set-Content|Out-File|Add-Content", r"Path|LiteralPath"),
+        (r"Copy-Item|Move-Item", r"Destination"),
+    )
 
-    # -Path $Var, where $Var was itself built from $SourceRoot
-    for match in re.finditer(
-        r"(?:Set-Content|Out-File|Copy-Item)\b[^\n]*?\s-(?:Path|Destination|LiteralPath)\s+\$(\w+)\b",
-        script,
-    ):
-        name = match.group(1)
-        target = re.search(
-            rf"\${name}\s*=\s*Join-Path\s+\$SourceRoot\s+'([^']+)'", script
-        )
-        if target:
-            record(match.start(), target.group(1))
+    for cmdlets, parameters in destinations:
+        # -<Destination> (Join-Path $Var 'name')
+        for match in re.finditer(
+            rf"(?:{cmdlets})\b[^\n]*?\s-(?:{parameters})\s+"
+            r"\(Join-Path\s+\$(\w+)\s+'([^']+)'\)",
+            script,
+            re.DOTALL,
+        ):
+            base = match.group(1)
+            if base == "SourceRoot":
+                record(match.start(), match.group(2))
+            elif base in variables:
+                record(match.start(), f"{variables[base]}/{match.group(2)}")
+
+        # -<Destination> $Var, where $Var was itself built from $SourceRoot
+        for match in re.finditer(
+            rf"(?:{cmdlets})\b[^\n]*?\s-(?:{parameters})\s+\$(\w+)\b", script
+        ):
+            name = match.group(1)
+            target = re.search(
+                rf"\${name}\s*=\s*Join-Path\s+\$SourceRoot\s+'([^']+)'", script
+            )
+            if target:
+                record(match.start(), target.group(1))
 
     return writes
 

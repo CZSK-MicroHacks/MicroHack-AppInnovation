@@ -1084,24 +1084,39 @@ it is the NSG rule that gets removed.
 deployment time will decay after roughly twenty minutes. Treat opening RDP as a participant
 step performed when it is needed, not as something the deployment can do once and rely on.
 
-**Resolution (measured, not assumed):** the sweep is *selective*. Two rules were written into
-the same NSG at the same moment — `rdp` with `sourceAddressPrefix: Internet`, and a second
-scoped to a single `/32`. The sweep at the next interval removed the `Internet` rule and left
-the scoped one, which then survived further sweeps and stayed usable. Sweeps ran on a ~20-minute
-cadence aligned to :06/:26/:46, not at a fixed offset from when the rule was created.
+**Resolution — Just-in-Time VM access.** An earlier version of this entry claimed the sweep was
+selective on *source breadth*: that an `Internet` rule was removed while a `/32` rule survived.
+**That conclusion was wrong, and the way it was reached is the more useful lesson.** The
+automation only writes to the NSG when it has something to remove, so a quiet twenty minutes is
+not evidence that a rule survived — it is evidence of nothing at all. The cadence is **hourly**
+(writes observed at 11:26, 12:26 and 13:26 UTC), so a rule checked at :46 has not yet faced a
+single sweep.
 
-So the baseline now ships `rdp_source_address_prefixes`, defaulting to `[]`, which creates the
-NSG with no inbound rules at all. Participants open 3389 for their own address in Challenge 0,
-step 1 — they hold Owner on their resource group, so this needs no facilitator:
-```bash
-MYIP=$(curl -s https://api.ipify.org)
-az network nsg rule create -g rg-userNNN --nsg-name nsg-userNNN -n allow-my-rdp \
-  --priority 300 --protocol Tcp --access Allow --direction Inbound \
-  --source-address-prefixes "$MYIP/32" --destination-port-ranges 3389
-```
-Both the root variable and the NSG resource reject `Internet` outright, because an unscoped
-rule is worse than no rule: it works long enough to look correct and then strands people
-mid-challenge with a VM that appears to have broken.
+What is actually established, from a run with two `/32` rules written at the same moment:
+
+| Rule | Scope | After the next governance pass |
+| --- | --- | --- |
+| `scoped-3389` | one `/32`, port 3389 | **removed** |
+| `scoped-9999` | one `/32`, port 9999 | survived |
+| `MicrosoftDefenderForCloud-JITRule-*` | created by JIT | **survived** |
+
+So the control keys on the **management port**, not on how narrow the source is. One honest
+caveat: JIT was enabled in the portal at 13:11–13:19 during that window, and enabling JIT
+rewrites the NSG itself, so `scoped-3389`'s removal cannot be pinned on governance with
+certainty. What is not in doubt is that a hand-written `/32` rule on 3389 did not persist and
+JIT rules did.
+
+The baseline therefore ships `rdp_source_address_prefixes` defaulting to `[]`, creating the NSG
+with no inbound rules, and **participants use Just-in-Time VM access** — Azure Portal → the VM →
+*Connect*, or Defender for Cloud → *Just-in-time VM access* → enable, then *Request access* with
+**My IP**. This is Challenge 0, step 2. JIT opens 3389 for a few hours and closes it again,
+which is exactly the shape the governance automation tolerates.
+
+Do not replace this with a standing rule, however narrowly scoped. It works long enough to look
+correct and then strands people mid-challenge with a VM that appears to have broken. If JIT is
+not offered in the portal, Defender for Cloud is not enabled for servers on the subscription —
+that is a subscription-level prerequisite to settle before the workshop, not something to work
+around.
 
 **Do not mistake this for the same symptom from a different cause.** While diagnosing it, one
 VM's public IP timed out on 3389 while the other answered instantly, on an identical NSG,

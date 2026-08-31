@@ -147,16 +147,15 @@ The root outputs include:
 - `resource_group_names`, `vnet_names`, and region distribution
 - `deployment_footprint` with doubled VM, vCPU, OS-disk, and disk-GiB totals
 
-Connect over RDP to each VM's public IP address. After Challenge 0,
-deallocate only the VM derived from the validated
-`evidence/ch00-selection.json`. Use the executable mapping and authorization procedure
-in [Challenge 0](../challenges/ch00/README.md), not a stack-name guess or a copied
-example command. The facilitator uses the matching
+Connect over RDP by requesting **Just-in-Time VM access** in the Azure Portal — the NSG
+ships with no inbound rules, and standing 3389 rules are removed by tenant governance.
+Participants do this themselves in [Challenge 0](../challenges/ch00/README.md) for the one
+VM matching their `evidence/ch00-selection.json`. Both VMs stay running for the duration of
+the workshop; the facilitator uses the matching
 [solution verification](../solutions/ch00/README.md) before proceeding.
 
-A facilitator may restore that exact recorded VM when a stack-matched golden rejoin is
-required. Restoration is bounded to VM power state and does not authorize replacement
-or deletion.
+Power-state changes are bounded to starting or stopping a VM and do not authorize
+replacement or deletion.
 
 ## Provisioning status and diagnostics
 

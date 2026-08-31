@@ -4,9 +4,10 @@
 facilitating and need to confirm a participant's selection, or if someone has run out of
 time and needs to rejoin.**
 
-Challenge 0 is an inventory and power-state decision, not a repair or migration task.
-Both pre-warmed VMs must already pass before a participant chooses one. If they do not,
-the fix is facilitator-side reprovisioning — never a weakened check.
+Challenge 0 is an inventory and selection task, not a repair or migration task. Both
+pre-warmed VMs must already pass before the workshop starts, even though each participant
+only opens one of them. If a VM does not pass, the fix is facilitator-side reprovisioning
+— never a weakened check.
 
 **Who this is for:** facilitators, and participants stuck on the marker or selection
 validation blocks in [Challenge 0](../../challenges/ch00/README.md).
@@ -37,10 +38,11 @@ state. Do not let the participant reseed a database or weaken the check.
 
 ## Reading the legacy baseline measurement
 
-Step 2 of the challenge writes `evidence/ch00-pain-dotnet.json` and
-`evidence/ch00-pain-java.json`. These are teaching artifacts, not graded evidence — no
-validator reads them — but they carry the *before* column of the wrap-up scorecard, so
-treat a missing or obviously wrong value as worth fixing.
+Step 4 of the challenge prints a measurement block that the participant copies into their
+own clone as `evidence/ch00-pain-<stack>.json`, for their selected stack only. These are
+teaching artifacts, not graded evidence — no validator reads them — but they carry the
+*before* column of the wrap-up scorecard, so treat a missing or obviously wrong value as
+worth fixing.
 
 What good output looks like, and what to say about it on the floor:
 
@@ -53,12 +55,15 @@ What good output looks like, and what to say about it on the floor:
 | `imageFilesOnDisk` | `198` | Rebuild the VM and the product photography is gone |
 | `runningInstances` / `autoscale` | `1` / `False` | There is no horizontal story at all |
 | `distributedTraces` | `False` | Challenge 4 exists because of this line |
+| `manualDeploySteps` / `manualRollbackSteps` | `14` / `6` unless they edited them | These are **supplied defaults**, not a participant measurement — the challenge walks through the fourteen-step release and hands them the numbers. A participant who changed them to match their own change process has done something better, not something wrong |
+| `manualDeployWindow` | A change window in prose | Same: a default is provided, and a participant substituting their own real window is the ideal outcome |
 
 Common causes of a surprising result: the first request after VM start is slow because
-of JIT or connection warm-up (the block issues one warm-up request precisely for that,
-but a cold VM can still skew the slowest sample); and an RDP session competing for CPU
-inflates the median. Neither invalidates the exercise — both are worth saying out loud,
-because they are the same measurement problems participants will have at home.
+of JIT or connection warm-up (the block calls the catalog once during its HTTP checks
+before it starts timing, but a cold VM can still skew the slowest sample); and an RDP
+session competing for CPU inflates the median. Neither invalidates the exercise — both
+are worth saying out loud, because they are the same measurement problems participants
+will have at home.
 
 ## Selection interpretation
 
@@ -72,21 +77,21 @@ Both cells rejoin after producing a valid
 `evidence/modernization-contract.json`. Challenges 2 through 6 consume the selected
 handoff and do not provide alternate stack-specific success criteria.
 
-The expected `evidence/ch00-selection.json` has:
+The expected `evidence/ch00-selection.json`, which lives in the participant's own
+repository clone, has:
 
 - `schemaVersion` exactly `1.0.0`;
 - one allowed `selectedStack`;
-- distinct selected and unselected VM names;
+- the VM name matching that stack;
 - the participant's exact `rg-userNNN`;
-- `sourceCommit` equal to the full immutable commit verified on both VM markers;
+- `sourceCommit` equal to the full immutable commit on that stack's VM marker;
 - baseline contract
-  `workshop/contracts/behavior-contract.json@1.1.0`;
-- both stack IDs in `checkedStacks`; and
+  `workshop/contracts/behavior-contract.json@1.1.0`; and
 - an actual UTC selection timestamp.
 
-The stack and participant suffix determine both VM names. For `rg-user007`,
-`dotnet-sqlserver` must select `vm-dotnet-user007` and leave
-`vm-java-user007` as the unselected VM; `java-postgresql` reverses that mapping.
+The stack and participant suffix determine the VM name. For `rg-user007`,
+`dotnet-sqlserver` must select `vm-dotnet-user007`; `java-postgresql` must select
+`vm-java-user007`. Both VMs stay running for the duration of the workshop.
 
 Do not publish a reusable example with plausible resource names as proof. The
 participant record describes the assigned environment.
@@ -94,7 +99,7 @@ participant record describes the assigned environment.
 ## Facilitator verification
 
 From an authorized facilitator shell, read the participant record, bind its stack to
-the expected VM names, and verify both final power states:
+the expected VM name, and verify that VM is running:
 
 ```powershell
 $selection = Get-Content '<facilitator-provided-path-to-ch00-selection.json>' -Raw | ConvertFrom-Json
@@ -116,15 +121,7 @@ $expectedSelectedVm = if ($selection.selectedStack -eq 'dotnet-sqlserver') {
 } else {
   throw 'Challenge 0 selected stack is invalid.'
 }
-$expectedUnselectedVm = if ($selection.selectedStack -eq 'dotnet-sqlserver') {
-  "vm-java-$participant"
-} else {
-  "vm-dotnet-$participant"
-}
-if (
-  $selection.selectedVm -ne $expectedSelectedVm -or
-  $selection.unselectedVm -ne $expectedUnselectedVm
-) {
+if ($selection.selectedVm -ne $expectedSelectedVm) {
   throw 'Challenge 0 stack-to-VM mapping is invalid.'
 }
 
@@ -134,23 +131,14 @@ $selected = az vm get-instance-view `
   --query "{id:id,power:instanceView.statuses[?starts_with(code, 'PowerState/')].code|[0]}" `
   --output json | ConvertFrom-Json
 
-$unselected = az vm get-instance-view `
-  --resource-group $selection.resourceGroup `
-  --name $selection.unselectedVm `
-  --query "{id:id,power:instanceView.statuses[?starts_with(code, 'PowerState/')].code|[0]}" `
-  --output json | ConvertFrom-Json
-
-if (
-  $selected.power -ne 'PowerState/running' -or
-  $unselected.power -ne 'PowerState/deallocated'
-) {
-  throw 'Challenge 0 VM power states do not match the recorded selection.'
+if ($selected.power -ne 'PowerState/running') {
+  throw 'Challenge 0 selected VM is not running.'
 }
 ```
 
-If the participant is not authorized to change VM state, the facilitator runs the same
-deallocation and records the outcome. Deallocation is reversible; deletion is outside
-this challenge.
+Both VMs are left running for the whole workshop. Nothing after Challenge 0 depends on
+either machine — the VM exists to demonstrate the legacy world, and every later challenge
+works from the application source in the participant's clone.
 
 ## Rejoin path
 

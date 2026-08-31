@@ -63,8 +63,8 @@ Challenge 0 rather than the deployment opening it for everyone once. The catalog
 served on the loopback interface and is
 browsed inside the VM, which is faithful to the single-machine baseline the workshop is
 arguing against. The VMs share only participant-scoped network resources and can be
-powered independently. Challenge 0 selects one stack and deallocates the other; it does
-not delete either baseline.
+powered independently. Challenge 0 selects one stack and the participant works only with
+that VM; both are left running for the duration and neither baseline is deleted.
 
 ## Three modernization paths
 

@@ -150,8 +150,13 @@ def test_root_readme_freezes_matrix_sequence_and_facilitator_gates() -> None:
         assert f"]({optional})" in readme
 
 
-def test_challenge_zero_proves_both_baselines_and_one_selection() -> None:
-    """Require executable comparison, selection evidence, and bounded deallocation."""
+def test_challenge_zero_proves_one_baseline_and_one_selection() -> None:
+    """Require a stack-parameterized baseline check and one selection record.
+
+    Challenge 0 measures only the stack the participant chose, and leaves both VMs
+    running: nothing after Challenge 0 depends on either machine, so there is no
+    power-state mutation left in the chapter to bound.
+    """
     challenge = _read("challenges/ch00/README.md")
     solution = _read("solutions/ch00/README.md")
     behavior_version = json.loads(
@@ -161,32 +166,17 @@ def test_challenge_zero_proves_both_baselines_and_one_selection() -> None:
         f"workshop/contracts/behavior-contract.json@{behavior_version}"
     )
 
-    # A prose phrase must survive the paragraph being re-wrapped: a line break inside
-    # "facilitator authorizes" is a formatting change, not a missing warning, and failing
-    # a correct document is how a team learns to delete the check. Commands stay exact --
-    # "az vm deallocate" split across a newline is broken code, not re-wrapped prose.
-    flowed = " ".join(challenge.split())
-
     for required in (
         "dotnet-sqlserver",
         "java-postgresql",
-        "dotnet-smoke.json",
-        "java-smoke.json",
+        r"C:\MicroHack\status\$stack-smoke.json",
         "198",
         "20",
         "evidence/ch00-selection.json",
-        "az vm deallocate",
     ):
         assert required in challenge
 
-    for required in ("facilitator authorizes",):
-        assert required in flowed
-
-    selection_record = _powershell_block_containing(
-        challenge, "$selection = [ordered]@{"
-    )
-    assert f"baselineContract = '{behavior_reference}'" in selection_record
-    assert "sourceCommit = $expectedSourceCommit" in selection_record
+    assert f'"baselineContract": "{behavior_reference}"' in challenge
 
     baseline_validation = _powershell_block_containing(
         challenge, "$marker.sourceCommit"
@@ -196,62 +186,36 @@ def test_challenge_zero_proves_both_baselines_and_one_selection() -> None:
         in baseline_validation
     )
     assert "$marker.sourceCommit -cne $expectedSourceCommit" in baseline_validation
-    assert (
-        "Use the same facilitator-provided\n`$expectedSourceCommit`"
-        in challenge
-    )
 
-    selection_validation = _powershell_block_containing(
-        challenge, "$expectedSelectedVm"
-    )
-    for required in (
-        "'^rg-(user[0-9]{3})$'",
-        '"vm-dotnet-$participant"',
-        '"vm-java-$participant"',
-        "$selection.selectedVm -ne $expectedSelectedVm",
-        "$selection.unselectedVm -ne $expectedUnselectedVm",
-        "$expectedSourceCommit -cnotmatch '^[0-9a-f]{40}$'",
-        "$selection.sourceCommit -cne $expectedSourceCommit",
-        f"'{behavior_reference}'",
-    ):
-        assert required in selection_validation
-
+    # The chapter no longer changes VM power state, so no active guide may either.
     active_guides = {
         path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
         for path in _active_guide_paths()
     }
-    assert sum(
-        document.count("az vm deallocate")
-        for document in active_guides.values()
-    ) == 1
-    assert all("az vm stop" not in document for document in active_guides.values())
-    assert all("Stop-AzVM" not in document for document in active_guides.values())
-
-    deallocation = _powershell_block_containing(
-        active_guides["challenges/ch00/README.md"], "az vm deallocate"
-    )
-    assert deallocation.strip() == (
-        "az vm deallocate `\n"
-        "  --resource-group $selection.resourceGroup `\n"
-        "  --name $selection.unselectedVm"
-    )
+    for forbidden in ("az vm deallocate", "az vm stop", "Stop-AzVM"):
+        assert all(
+            forbidden not in document for document in active_guides.values()
+        ), forbidden
 
     facilitator_validation = _powershell_block_containing(
         solution, "az vm get-instance-view"
     )
     for required in (
         "$selection.selectedVm -ne $expectedSelectedVm",
-        "$selection.unselectedVm -ne $expectedUnselectedVm",
         "$selection.sourceCommit -cne $expectedSourceCommit",
         "--name $selection.selectedVm",
-        "--name $selection.unselectedVm",
     ):
         assert required in facilitator_validation
 
-    assert "PowerState/deallocated" in solution
+    assert "PowerState/running" in solution
     assert "golden handoff" in solution
-    assert "az vm delete" not in challenge
-    assert "az group delete" not in challenge
+    for forbidden in (
+        "az vm delete",
+        "az group delete",
+        "unselectedVm",
+        "checkedStacks",
+    ):
+        assert forbidden not in challenge, forbidden
 
 
 def test_design_describes_current_cross_stack_architecture() -> None:
@@ -449,59 +413,88 @@ def test_run_command_conflict_tells_you_to_retry_before_escalating() -> None:
 
 
 def test_ch00_baseline_filename_is_derived_from_the_stack_variable():
-    """Challenge 0 tells participants to change two values when switching stacks.
+    """Challenge 0 tells participants to change three values when switching stacks.
 
-    The evidence filename must therefore come from ``$stack`` rather than being
-    hardcoded, or following the instruction literally files a Java measurement under
-    the .NET name (F-102).
+    The marker path, and now the filenames the block *prints*, must be expressed in
+    terms of the stack rather than hardcoded, or following the instruction literally
+    files a Java measurement under the .NET name (F-102). Since the two measurement
+    blocks were merged, the participant reads the destination filename off the VM's
+    own output, so that output is where the guarantee has to hold.
     """
     text = (ROOT / "challenges" / "ch00" / "README.md").read_text(encoding="utf-8")
 
-    assert 'Set-Content "evidence/ch00-$stack-baseline.json"' in text, (
-        "challenges/ch00 must derive the baseline evidence filename from $stack"
+    assert r'"C:\MicroHack\status\$stack-smoke.json"' in text, (
+        "challenges/ch00 must derive the provisioning marker path from $stack"
     )
-    assert "Set-Content evidence/ch00-dotnet-baseline.json" not in text, (
-        "challenges/ch00 still hardcodes the .NET baseline filename"
-    )
+    for printed in (
+        r'"=== save as evidence/ch00-$stack-baseline.json ==="',
+        r'"=== save as evidence/ch00-pain-$stack.json ==="',
+    ):
+        assert printed in text, (
+            "challenges/ch00 must print the destination filename derived from $stack, "
+            f"so the participant cannot misfile it: {printed}"
+        )
+    for derived in (
+        "evidence/ch00-pain-<stack>.json",
+        "evidence/ch00-<stack>-baseline.json",
+    ):
+        assert derived in text, (
+            f"challenges/ch00 must name the evidence file per stack: {derived}"
+        )
     for hardcoded in (
+        "Set-Content evidence/ch00-dotnet-baseline.json",
+        "=== save as evidence/ch00-dotnet-baseline.json ===",
         "throw 'The .NET baseline HTTP checks failed.'",
         "throw 'The .NET provisioning marker does not match the frozen baseline.'",
     ):
         assert hardcoded not in text, (
-            f"challenges/ch00 still hardcodes a .NET-specific failure message: {hardcoded}"
+            f"challenges/ch00 still hardcodes a .NET-specific value: {hardcoded}"
         )
 
 
-def test_ch01_warns_that_modernizing_can_end_the_legacy_application():
-    """Challenge 1 may edit configuration in the tree the legacy app boots from.
+def test_ch01_states_the_legacy_application_survives_the_modernization():
+    """Challenge 1 edits the source tree, and the legacy app must survive that (F-103).
 
-    When it does, the workshop's "before" system stops permanently and silently, and
-    the wrap-up later asks for a comparison against it (F-103). The two stacks diverged
-    during the trial run -- Java repointed in place and died, .NET did not -- so the
-    warning must be conditional rather than absolute, and must still name the surviving
-    record and the preserving copy.
+    The original diagnosis -- that editing ``appsettings.json`` or
+    ``application.properties`` silently kills the "before" system -- was wrong. The
+    provisioner publishes the app to ``C:\\MicroHack\\app``, starts it from a scheduled
+    task, configures it with environment variables, and gives it its own copy of the
+    photographs, so the source tree is not load-bearing at runtime. The chapter must say
+    so, name the real ways to stop it, and still point at the Challenge 0 evidence as the
+    only surviving record of "before".
     """
     text = (ROOT / "challenges" / "ch01" / "README.md").read_text(encoding="utf-8")
     lowered = text.lower()
 
-    assert "can end the legacy application" in lowered, (
-        "challenges/ch01 must warn that the legacy application can stop running"
+    assert "the legacy application keeps running while you work" in lowered, (
+        "challenges/ch01 must state that the legacy application survives the work"
     )
-    assert "ends the legacy application" not in lowered, (
-        "the warning must not claim the loss is certain -- the .NET arm modernized "
-        "without it, so an absolute claim is false and teaches attendees to ignore it"
-    )
-    assert "legacy-source" in text, (
-        "challenges/ch01 must offer the copy that preserves the legacy tree"
-    )
+    for claim in (
+        "can end the legacy application",
+        "ends the legacy application",
+    ):
+        assert claim not in lowered, (
+            f"challenges/ch01 repeats the disproven F-103 claim: {claim}"
+        )
 
-    warning = lowered.index("can end the legacy application")
+    for required in (
+        r"C:\MicroHack\app",
+        r"C:\MicroHack\legacy-data",
+        "MicroHack-<stack>",
+        "Start-ScheduledTask",
+        "/healthz",
+    ):
+        assert required in text, (
+            f"challenges/ch01 must name {required} so the participant can tell a "
+            "running baseline from a stopped one, and restart it if they stop it"
+        )
+
+    warning = lowered.index("the legacy application keeps running while you work")
     body = lowered[warning : warning + 1600]
     assert "challenge 0" in body, (
         "the warning must point back to Challenge 0 evidence as the surviving record"
     )
-    for config in ("application.properties", "appsettings.json"):
-        assert config in body, (
-            f"the warning must name {config} -- the edit that causes the loss is "
-            "otherwise unguided, and no other document mentions these files"
+    for evidence in ("ch00-<stack>-baseline.json", "ch00-pain-<stack>.json"):
+        assert evidence in body, (
+            f"the warning must name {evidence} -- it is the only record of 'before'"
         )
