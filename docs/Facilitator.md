@@ -144,11 +144,13 @@ starting point, this pair was verified end to end — provisioned onto both VMs,
 content guards passing, apps healthy afterwards:
 
 ```hcl
-source_commit         = "349ad50d5ab8fb3f52a5365a631fbcd5054a63ab"
-source_archive_sha256 = "a2987977df4b095f7b07e45d47b7629126a6557cc8bc3e8f4d0b2807dfd1bf27"
+source_commit         = "b1846d144b3084d50a689dcfcfe084b54fa16f53"
+source_archive_sha256 = "13a2bd207b9236a220f37b334da5102271163b172cf0d1bcf6ead44352e57c0e"
 ```
 
-Re-run the steps above for any newer commit — the digest changes with the tree.
+That commit is on `main`. Pin to a commit that is merged rather than one that only exists
+on a feature branch, so the archive stays reachable after the branch is deleted. Re-run the
+steps above for any newer commit — the digest changes with the tree.
 
 > The provisioner refuses an archive that does not contain `data/manifest.json`, `dotnet/`,
 > `java/` and `challenges/ch01/`. That guard only proves the archive *is* a workshop tree,
