@@ -20,7 +20,7 @@ Application content comes from an immutable commit that **you must set for every
 `source_commit` has no default, and the historical `fd298de6…` pin is rejected outright
 because its tree carries none of the current chapters. Terraform also rejects branch, tag,
 short-SHA, and other mutable source values, and provisioning fails loudly if the downloaded
-archive does not contain `infra/main.bicep` and the migration CLI. See "Re-pin the VM source
+archive does not carry the application sources and challenge folders. See "Re-pin the VM source
 commit" in [the facilitator guide](../docs/Facilitator.md).
 
 `baseInfra/scripts/provision-vm.ps1` and a generated per-stack secret payload are embedded as a VM
@@ -59,9 +59,9 @@ through `az acr build`, so no Docker daemon is installed or required.
 
 ## Facilitator preflight
 
-Complete the repository-level [facilitator go/no-go matrix](../README.md#facilitator-gono-go-matrix)
-before this component gate. The two-VM baseline is consumed by
-[Challenge 0](../challenges/ch00/README.md).
+Work through the delivery checklist in
+[the facilitator guide](../docs/Facilitator.md) before this component gate. The two-VM
+baseline is consumed by [Challenge 0](../challenges/ch00/README.md).
 
 Prerequisites:
 
@@ -92,7 +92,7 @@ silently.
 
 Download the immutable archive once to record the digest that every VM will enforce. Set `$commit`
 to the exact 40-hex SHA you pushed for this delivery — take it from `git rev-parse HEAD` after the
-push and confirm the published archive really contains `infra/`, `workshop/contracts/`, and every
+push and confirm the published archive really contains `dotnet/`, `java/`, `data/`, and every
 `challenges/` folder, following "Re-pin the VM source commit" in
 [the facilitator guide](../docs/Facilitator.md). The placeholder below is not a commit and the
 snippet does nothing until you replace it:
@@ -149,10 +149,9 @@ The root outputs include:
 
 Connect over RDP by requesting **Just-in-Time VM access** in the Azure Portal — the NSG
 ships with no inbound rules, and standing 3389 rules are removed by tenant governance.
-Participants do this themselves in [Challenge 0](../challenges/ch00/README.md) for the one
-VM matching their `evidence/ch00-selection.json`. Both VMs stay running for the duration of
-the workshop; the facilitator uses the matching
-[solution verification](../solutions/ch00/README.md) before proceeding.
+Participants do this themselves in [Challenge 0](../challenges/ch00/README.md) for whichever
+VM matches the stack they chose. Both VMs stay running for the duration of the workshop; the
+facilitator can follow the [ch00 solution](../solutions/ch00/README.md) to help anyone stuck.
 
 Power-state changes are bounded to starting or stopping a VM and do not authorize
 replacement or deletion.

@@ -381,86 +381,16 @@ $SourceVirtualNetworkResourceId = [string]$ProvisioningSecrets.migrationSourceVi
 $SourceVmResourceId = [string]$ProvisioningSecrets.migrationSourceVmResourceId
 $ProvisioningSecrets = $null
 
-function Save-ProtectedDeploymentParameters {
-    <#
-    .SYNOPSIS
-    Writes this stack's nine Challenge 1 deployment parameter files to C:\protected.
-
-    .DESCRIPTION
-    Every Challenge 1 runbook deploys infra/main.bicep with
-    --parameters '@C:\protected\<path>-<stack>-<stage>.json'. The files carry every value
-    that is already known at provisioning time. sourceCommit and imageDigest are
-    deliberately absent: they are not knowable now, and a placeholder would satisfy the
-    template's format asserts while silently deploying the wrong source, so a forgotten
-    command-line override must fail instead. The Java database passwords stay on the
-    interactive protected prompt. The files hold no participant work and are rewritten on
-    every provisioning run.
-    #>
-
-    # imageProvider and the Java authentication mode are frozen per path by the runbooks.
-    $DeploymentPaths = [ordered]@{
-        'manual'                = @{ ImageProvider = 'azure-files'; JavaAuthentication = 'password-secret' }
-        'copilot-rewrite'       = @{ ImageProvider = 'azure-blob'; JavaAuthentication = 'managed-identity' }
-        'copilot-modernization' = @{ ImageProvider = 'azure-blob'; JavaAuthentication = 'managed-identity' }
-    }
-    $DeploymentStages = [ordered]@{
-        'bootstrap' = @{ DeploymentStage = 'bootstrap'; RevisionRole = '' }
-        'baseline'  = @{ DeploymentStage = 'application'; RevisionRole = 'baseline' }
-        'release'   = @{ DeploymentStage = 'application'; RevisionRole = 'release' }
-    }
-    $TargetStack = if ($Stack -eq 'dotnet') { 'dotnet-sqlserver' } else { 'java-postgresql' }
-
-    New-Item -ItemType Directory -Path $ProtectedRoot -Force | Out-Null
-    Set-ProtectedAcl -Path $ProtectedRoot -Directory -ReadPrincipal $AdminUsername
-
-    foreach ($PathName in $DeploymentPaths.Keys) {
-        # main.bicep pins the .NET stack to managed identity, so only Java varies by path.
-        $Authentication = if ($Stack -eq 'dotnet') {
-            'managed-identity'
-        }
-        else {
-            $DeploymentPaths[$PathName].JavaAuthentication
-        }
-        foreach ($StageName in $DeploymentStages.Keys) {
-            $File = Join-Path $ProtectedRoot "$PathName-$Stack-$StageName.json"
-            Save-ProtectedConfiguration -Path $File -Depth 4 -ReadPrincipal $AdminUsername -Values ([ordered]@{
-                    '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
-                    contentVersion = '1.0.0.0'
-                    parameters     = [ordered]@{
-                        deploymentStage                         = @{ value = $DeploymentStages[$StageName].DeploymentStage }
-                        stack                                   = @{ value = $TargetStack }
-                        imageProvider                           = @{ value = $DeploymentPaths[$PathName].ImageProvider }
-                        postgresqlAuthentication                = @{ value = $Authentication }
-                        resourceGroupName                       = @{ value = $ParticipantResourceGroup }
-                        teamName                                = @{ value = $TeamName }
-                        migrationSourceVirtualNetworkResourceId = @{ value = $SourceVirtualNetworkResourceId }
-                        migrationSourceVmResourceId             = @{ value = $SourceVmResourceId }
-                        applicationRevisionRole                 = @{ value = $DeploymentStages[$StageName].RevisionRole }
-                        facilitatorPrincipalName                = @{ value = $FacilitatorPrincipalName }
-                        facilitatorPrincipalObjectId            = @{ value = $FacilitatorPrincipalObjectId }
-                        performanceApiKey                       = @{ value = $PerformanceApiKey }
-                    }
-                })
-            Write-ProvisionLog "Wrote protected deployment parameters $PathName-$Stack-$StageName.json."
-        }
-    }
-}
-
 function New-MigrationExportDirectory {
     <#
     .SYNOPSIS
     Creates C:\ProgramData\MicroHack\migration with an explicit participant ACE.
 
     .DESCRIPTION
-    All six Challenge 1 path documents write the database export under this directory, and
-    every one of them creates it with New-Item -Force first, so the directory itself is
-    never missing. What was untested is the permission. Provisioning creates
-    C:\ProgramData\MicroHack as SYSTEM — as a side effect of the vscode-extensions folder —
-    and never places an ACE on it, so whether a non-elevated participant may add a subfolder
-    under it is inherited-ACE behaviour no delivery has exercised on a real VM. Creating the
-    directory here with an explicit Modify ACE replaces that inheritance with a known ACL:
-    the runbook New-Item becomes a no-op, and the T-1 probe confirms a property that was
-    asserted at provisioning time rather than discovering one that was never asserted.
+    Participants export the legacy database under this directory during Challenge 1.
+    Provisioning creates C:\ProgramData\MicroHack as SYSTEM, so without an explicit ACE
+    whether a non-elevated participant may create a subfolder there is left to inherited
+    permissions. Creating it here with an explicit Modify ACE makes that predictable.
     #>
 
     New-Item -ItemType Directory -Path $MigrationRoot -Force | Out-Null
@@ -1143,7 +1073,7 @@ superpassword=$DatabasePassword
 function Install-SourceArchive {
     # Re-provisioning is the facilitator's first response to a broken stack, and by that
     # point the participant's Challenge 1 commits live only in $SourceRoot\.git. Replacing
-    # the directory would destroy the very commit their image tags and handoff bind to, so
+    # the directory would destroy the very commit their work lives on, so
     # an already-correct tree is left exactly as it is.
     $ExistingMarker = Join-Path $SourceRoot '.source-commit'
     if ((Test-Path (Join-Path $SourceRoot '.git')) -and (Test-Path $ExistingMarker) -and
@@ -1161,16 +1091,13 @@ function Install-SourceArchive {
     New-Item -ItemType Directory -Path $Staging -Force | Out-Null
     Expand-Archive -Path $Archive -DestinationPath $Staging -Force
     $ArchiveRoot = Get-ChildItem -Path $Staging -Directory | Select-Object -First 1
-    # The pinned commit must carry the chapters, templates and migration CLI the guides
-    # drive. An older commit still has data/dotnet/java and would install silently, so the
-    # guard also names content that only the current tree has.
+    # The pinned commit must carry the application sources and the canonical catalog the
+    # guides drive.
     if ($null -eq $ArchiveRoot -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'data\manifest.json')) -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'dotnet')) -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'java')) -or
-        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'infra\main.bicep')) -or
-        -not (Select-String -Path (Join-Path $ArchiveRoot.FullName 'tests\acceptance\pyproject.toml') `
-                -Pattern 'catalog-migrate' -Quiet -ErrorAction SilentlyContinue)) {
+        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'challenges\ch01'))) {
         throw ("The verified source archive does not carry the workshop content this " +
             "provisioner expects. Re-pin source_commit - see docs/Facilitator.md.")
     }
@@ -2010,7 +1937,6 @@ function Invoke-StackSmokeCheck {
 
 try {
     Write-ProvisionLog "Starting idempotent provisioning for source commit $SourceCommit."
-    Save-ProtectedDeploymentParameters
     New-MigrationExportDirectory
     Stop-ApplicationTask
     Install-CommonTools

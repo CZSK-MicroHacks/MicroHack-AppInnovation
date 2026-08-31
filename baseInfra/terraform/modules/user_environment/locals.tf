@@ -19,7 +19,7 @@ locals {
     "plain-bootstrap-v1",
     "gzip-provisioner-v1"
   ]))
-  # infra/main.bicep needs the exact ARM ID of each stack's legacy VM. It is composed from
+  # Challenge 1 needs the exact ARM ID of each stack's legacy VM. It is composed from
   # the resource group rather than read from azapi_resource.vm, because it travels in that
   # same VM's custom data and a resource cannot reference itself.
   source_vm_resource_ids = {

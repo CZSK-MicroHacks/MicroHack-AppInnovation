@@ -1,8 +1,41 @@
 locals {
-  subscription_resource_id             = "/subscriptions/${var.subscription_id}"
-  defender_contract                    = jsondecode(file("${path.module}/../../workshop/contracts/defender.json"))
-  defender_foundation                  = local.defender_contract.foundation
-  defender_pricings                    = { for pricing in local.defender_foundation.requiredPricings : pricing.name => pricing }
+  subscription_resource_id = "/subscriptions/${var.subscription_id}"
+
+  # Paid Defender for Cloud plans that Challenge 5 needs in order to show real findings.
+  # These cost money, so they are only created when a facilitator explicitly opts in.
+  defender_pricings = {
+    CloudPosture = {
+      pricingTier = "Standard"
+      extensions = [
+        {
+          name      = "ContainerRegistriesVulnerabilityAssessments"
+          isEnabled = "True"
+        }
+      ]
+    }
+    Containers = {
+      pricingTier = "Standard"
+      extensions  = []
+    }
+    SqlServers = {
+      pricingTier = "Standard"
+      extensions  = []
+    }
+    OpenSourceRelationalDatabases = {
+      pricingTier = "Standard"
+      extensions  = []
+    }
+    VirtualMachines = {
+      pricingTier = "Standard"
+      subPlan     = "P2"
+      enforce     = "True"
+      extensions  = []
+    }
+  }
+
+  defender_budget_api_version = "2023-11-01"
+  defender_budget_threshold   = 80
+
   security_reader_role_definition_id   = "${local.subscription_resource_id}/providers/Microsoft.Authorization/roleDefinitions/39bc4728-0917-49c7-9d2c-d95423bc2eb4"
   security_reader_assignment_namespace = "39bc4728-0917-49c7-9d2c-d95423bc2eb4"
 }
@@ -32,7 +65,7 @@ resource "azapi_resource" "defender_pricing" {
     prevent_destroy = true
 
     precondition {
-      condition     = var.defender_facilitator_authorized && local.defender_foundation.requiresFacilitatorAuthorization
+      condition     = var.defender_facilitator_authorized
       error_message = "Defender paid plans require explicit facilitator authorization."
     }
   }
@@ -43,14 +76,14 @@ resource "azapi_resource" "defender_pricing" {
 resource "azapi_resource" "defender_budget" {
   count = var.enable_defender_foundation ? 1 : 0
 
-  type      = "Microsoft.Consumption/budgets@${local.defender_foundation.budget.apiVersion}"
+  type      = "Microsoft.Consumption/budgets@${local.defender_budget_api_version}"
   name      = var.defender_budget_name
   parent_id = local.subscription_resource_id
   body = {
     properties = {
       amount    = var.defender_budget_amount
-      category  = local.defender_foundation.budget.category
-      timeGrain = local.defender_foundation.budget.timeGrain
+      category  = "Cost"
+      timeGrain = "Monthly"
       timePeriod = {
         startDate = var.defender_budget_start_date
         endDate   = var.defender_budget_end_date
@@ -59,7 +92,7 @@ resource "azapi_resource" "defender_budget" {
         Actual_GreaterThan_80_Percent = {
           enabled       = true
           operator      = "GreaterThan"
-          threshold     = local.defender_foundation.budget.maximumNotificationThreshold
+          threshold     = local.defender_budget_threshold
           thresholdType = "Actual"
           contactEmails = sort(tolist(var.defender_budget_notification_emails))
           contactGroups = []
@@ -71,7 +104,7 @@ resource "azapi_resource" "defender_budget" {
 
   lifecycle {
     precondition {
-      condition     = var.defender_facilitator_authorized && local.defender_foundation.requiresFacilitatorAuthorization
+      condition     = var.defender_facilitator_authorized
       error_message = "The Defender subscription budget requires explicit facilitator authorization."
     }
   }

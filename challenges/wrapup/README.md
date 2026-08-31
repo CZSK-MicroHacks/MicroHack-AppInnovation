@@ -1,154 +1,76 @@
-# Wrap-up: what you proved
+# Wrap-up: what you moved and why it matters
 
-**By the end of this chapter you will have one page that answers the question your
-manager will ask on Monday: was it worth it?**
+You started with a small catalog application on a single virtual machine. You finish with
+the same business capability running on managed Azure services, with a path to deploy,
+observe, secure, and recover it.
 
-## Why this matters
+This chapter is a short human retrospective. No files to generate, no scorecard to pass —
+just a conversation about what changed and what you would take back to your own estate.
 
-Two days ago the catalog ran on a single Windows Server virtual machine with its
-database installed beside it. Nobody wanted to touch it, because touching it meant a
-weekend, and breaking it meant a restore.
+## The shape changed
 
-You did not just move it. You measured it. Every required chapter produced a number, and
-this chapter puts them side by side — because "we modernized the app" convinces nobody,
-and "rollback went from a four-hour restore to ninety seconds" convinces everybody.
+| Before: legacy VM shape | After: Azure shape |
+| --- | --- |
+| App and database lived on one machine | App runs as a container on Azure Container Apps |
+| Local SQL Server Express or PostgreSQL on the host | Managed Azure SQL Database serverless or PostgreSQL Flexible Server |
+| Product images served from local disk | Images moved to Azure storage or another cloud-friendly static-content path |
+| Manual build, copy, restart, and hope | Repeatable build and deployment flow |
+| Scaling meant changing the VM | Container Apps can scale instances for traffic |
+| Troubleshooting started by logging onto the box | Telemetry, logs, traces, and health endpoints guide investigation |
+| Security posture was mostly unknown | Defender for Cloud and your own review expose what remains |
+| Recovery depended on host access and backups | Rollback and SRE exercises give you a practiced recovery story |
 
-**Estimated time:** 20–30 minutes.
+## Discuss at your table
 
-## Before you start
-
-You should have completed Challenges 0 through 6 and have your `evidence/` directory
-with the validated handoff and each chapter's output. If your facilitator gave you a
-golden handoff partway through, use the numbers from the chapters you completed
-yourself and mark the rest as *not measured*.
-
-## Fill in your scorecard
-
-Copy this table and complete it from your own evidence. Nothing is pre-filled on purpose:
-a scorecard somebody else wrote proves nothing, and the two days were spent producing
-exactly these numbers. The last two columns name the file, field, or step each value comes
-from, so no cell needs a guess. Where `<stack>` appears, use `dotnet` or `java` —
-whichever you selected in Challenge 0.
-
-**Any row you did not measure is written as *not measured*, whatever the reason.** That
-covers a golden handoff, a chapter that ran out of time, a step that failed, and a number
-you could have derived but did not. This permission is unconditional and it is not a
-consolation: nothing in this workshop reads your scorecard back, so a full table and a
-forged one are the same artifact, and only a partial table carries information about what
-actually happened. **An honest scorecard with three numbers is stronger evidence than a
-complete one, because the complete one cannot be distinguished from an invented one by
-you, your facilitator, or anybody at the table.** Fill what you measured and mark the
-rest.
-
-| What you measured | Legacy baseline | After modernization | Where the baseline comes from | Where the result comes from |
-| --- | --- | --- | --- | --- |
-| Catalog response, median | | | `evidence/ch00-pain-<stack>.json` → `catalogMedianMs` | `evidence/load/raw/test-run.json` → `.testRunStatistics.Total.medianResTime`, Challenge 2 |
-| Pipeline lead time — dispatch to live | | | `evidence/ch00-pain-<stack>.json` → `manualDeploySteps` and `manualDeployWindow`, recorded at the end of Challenge 0, step 4 | `evidence/cicd-report.json` → `.workflow.jobs.staging.startedAt` to `.traffic.promotion.observedAt`, printed by the Challenge 3, step 5 `jq` |
-| Human steps to ship a one-line fix | | | `evidence/ch00-pain-<stack>.json` → `manualDeploySteps`, and `manualRollbackSteps` for the undo | `evidence/cicd-report.json` → the two human actions it records, `.workflow.jobs.staging.startedAt` (you dispatched it) and `.approval.approvedAt` (a named reviewer approved it); the undo is one more, `.traffic.safety.rollbackAttemptedAt` |
-| Rollback — bad release to known-good | | | `evidence/ch00-pain-<stack>.json` → `manualRollbackSteps`, the steps in that same list that undo the release | `evidence/cicd-report.json` → `.traffic.safety.rollbackAttemptedAt` to `.traffic.safety.rollbackCompletedAt`, printed by the same Challenge 3, step 5 `jq` |
-| Behaviour under load | | | `evidence/ch00-pain-<stack>.json` → `runningInstances` and `autoscale` | `evidence/load-test-report.json`, Challenge 2 |
-| Time to answer "why was it slow?" | | | `evidence/ch00-pain-<stack>.json` → `onlyDiagnostics` and `distributedTraces` | Challenge 4, step 3 — the two clock readings you took either side of naming the slow dependency, and the difference in minutes |
-| Mean time to recovery from an incident | | | `evidence/ch00-pain-<stack>.json` → `applicationHosts`, `databaseServices`, and `runningInstances` — one box, one instance, one text file | `evidence/ch06-mttr.json` → `minutesToRecovery`, Challenge 6, Task 7 |
-| Security posture of what the migration touched | | | Challenge 0 ran no security assessment, so the honest baseline is *not assessed*; `evidence/ch00-pain-<stack>.json` → `configurationFile` is the one exposure it did record | `evidence/defender-report.json` → `.controls.containerRegistry`, `.controls.containerApp`, `.controls.database`, and `.controls.legacyVm`, each with its `disposition`, Challenge 5, step 3 |
-| Secrets in application configuration | | | `evidence/ch00-pain-<stack>.json` → `configurationFile` | Challenge 1 |
-| Patching the host | | | `evidence/ch00-pain-<stack>.json` → `applicationHosts` and `databaseServices`, both installed on the machine you connect to | Challenge 1 |
-| Cost to run, per day | | | [`docs/CostEstimate.md`](../../docs/CostEstimate.md) → *Legacy VM versus modernized workload*, the legacy row | The same table, the row for your stack |
-
-Four rows need a caveat, and saying them is part of doing this properly.
-
-- **Catalog response** is the only row where both numbers are yours, and they were not
-  measured the same way: one is a quiet loopback request on the VM, the other is 40
-  concurrent users arriving over public HTTPS. Record both, and record what each measured.
-- **Pipeline lead time** starts at the `workflow_dispatch` that began the run, not at a
-  commit — Challenge 3 says so in its own labels. Against the legacy column, which is a
-  whole release window, the comparison is directional rather than like-for-like. If
-  someone at the table quotes DORA's *lead time for changes*, that is a different,
-  longer measurement this workshop never observed.
-- **Security posture** is deliberately not a count. Challenge 5 is explicit that "the
-  value is not the count of things you fixed", so this row takes that chapter's own
-  wording: the legacy answer is *unknown — never measured*, and yours is *enumerated,
-  each with a disposition*. Write the four dispositions out if you want the detail;
-  a headline number here would reward whoever started from the worst baseline.
-- **Cost to run** is the one row you did not measure. It is a list-price estimate for this
-  workshop's shapes and assumptions, and the answer depends on which database your stack
-  uses. Quote it as an estimate, or re-derive it for your own region and agreement. And
-  say which way it moves: on .NET / Azure SQL the modernized figure is *higher* — $5.13 to
-  $6.67, about 30% more — and that is the expected outcome, not a failed migration. The
-  legacy figure prices a machine; it does not price the patching, the backup, the
-  certificate renewal, or the out-of-hours release window that every other row on this
-  scorecard just removed. Hand over the +30% without that sentence and it reads as a loss.
-
-## Discuss
-
-Work through these with your table. They matter more than the commands you ran.
-
-1. **Which path did you take in Challenge 1, and would you take it again?** Manual
-   rebuild, Copilot-assisted rewrite, and Copilot modernization each cost different
-   amounts of time and taught different things. Compare with someone who chose
-   differently.
-2. **Which number would persuade your organization?** Not the one you find most
-   technically interesting — the one your business would care about.
-3. **What did the SRE Agent get wrong, or nearly get wrong?** You were asked to reject a
-   plausible hypothesis. What would have happened if you had accepted it?
-4. **What is still manual?** Be specific. This is the honest edge of the workshop.
-5. **What would you have to add before this ran a real product?** Backups, DR, cost
-   controls, network isolation, on-call. Name the gaps rather than pretending they
-   closed.
-
-**Facilitators:** before you close the room, collect one number from every table — the
-`minutesToRecovery` field in each team's `evidence/ch06-mttr.json` — and read out the
-median. A single team's figure is an anecdote; "the median team in this room recovered in
-eleven minutes, and none of them had a runbook for it" is the line people repeat back at
-their own organizations. Read out the spread as well, and ask the fastest and slowest
-tables what differed.
-
-Two things before you read anything out. **Ask which tables have the file at all, and say
-that number first.** A team whose incident never ran has no `ch06-mttr.json`, and a median
-taken over the tables that finished is a median over the tables that finished — say so, or
-the room hears it as the median of the room. **And the recovery clock is only half
-checked:** the acceptance validator binds `recoveredAt` to the alert's own resolution
-timestamp and re-derives the arithmetic, but nothing binds `detectedAt`, so a team that
-typed a detection time gets a number that passes. That is fine for a room-level
-conversation and not fine as a figure anyone quotes afterwards. Read it as what the tables
-observed, not as what the workshop measured.
-
-## What this did not cover
-
-Being straight about the boundary is part of the value:
-
-- **No in-place production migration.** The workshop rebuilds onto a clean target and
-  reseeds from the canonical corpus. Real migrations carry data, users, and downtime
-  constraints this workshop deliberately excludes.
-- **No multi-region or disaster recovery design.** Single region throughout.
-- **No cost optimization pass.** You proved it runs; you did not right-size it.
-- **No production security review.** Challenge 5 shows you posture management; it is not
-  a threat model.
-- **A disposable database.** Workshop databases are reseeded, not migrated with history.
-
-The optional [Challenge 7 extensions](../ch07-enterprise/README.md) start on several of
-these.
+1. **Which Challenge 1 path did you take?** If your table split, compare Path A
+   [modernization](../ch01-A/README.md) with Path B
+   [spec-driven rewrite](../ch01-B/README.md). Which felt safer? Which
+   taught more? Which would you use on a real app?
+2. **What was the most important change?** The container, managed database, image storage,
+   pipeline, telemetry, security review, or SRE Agent may matter differently to different
+   organizations.
+3. **What stayed harder than expected?** Name the manual steps, brittle assumptions, or
+   missing permissions that slowed you down.
+4. **What would need to be true before production?** Think backups, private networking,
+   identity, cost controls, DR, on-call ownership, data migration, and compliance review.
+5. **What did GitHub Copilot do well?** Also name where you had to slow it down, correct
+   it, or ask for a smaller step.
+6. **What would you measure next?** Performance, release frequency, recovery time, cost,
+   security findings, or user satisfaction?
 
 ## Take it home
 
-- The [reference implementation](../../solutions/reference/README.md) is the finished
-  target for both stacks — read it next to your own work.
-- The [handoff contract](../../workshop/contracts/README.md) is the pattern worth
-  stealing: make the boundary between two phases an explicit, validated document rather
-  than tribal knowledge.
-- The three Challenge 1 paths are a real decision you will face again. You now have data
-  on which one suits which kind of change.
+- Start with one application that people are afraid to touch. A small, visible win builds
+  more trust than a platform diagram nobody uses.
+- Keep the old behavior clear before changing the architecture. Modernization succeeds
+  when users still recognize the app.
+- Move state out of the compute layer early: database, images, secrets, and configuration
+  each deserve their own home.
+- Automate the path you expect people to repeat. A one-off migration is a project; a
+  repeatable deployment is a capability.
+- Treat observability and recovery as features. If you cannot explain an incident or roll
+  back safely, the migration is not finished.
+- Use the optional enterprise and innovation challenges as backlog ideas, not as proof that
+  every production concern is solved.
 
-## What you just proved
+## Clean up
 
-You took an application nobody wanted to touch and gave it a deployment pipeline with a
-rollback, an autoscaler, distributed tracing, a security posture baseline, and an agent
-that spots incidents before a human does — and you have the evidence to show each one.
+Your workshop resources are temporary. If the facilitator owns the subscription, they will
+usually delete the resource groups after the event. If you created resources in your own
+subscription, delete them now or set a reminder before paid services surprise you.
 
-The scorecard above is the deliverable. Everything else was practice.
+Keep notes, prompts, diagrams, and decisions that would help your real team repeat the
+journey. Delete credentials, local secrets, and any workshop-only access.
+
+## What you proved
+
+You took an application from a fragile host-centered design to a service-centered Azure
+design. More importantly, you practiced the engineering conversations around that move:
+what to keep, what to replace, what to automate, what to measure, and what still needs a
+human owner.
+
+That is the part you can reuse on Monday.
 
 ---
 
-**Previous:** [Challenge 6: SRE Agent](../ch06-sre-agent/README.md) ·
-**Optional next:** [Challenge 7 — Enterprise](../ch07-enterprise/README.md) or
-[Innovation](../ch07-innovation/README.md) ·
-**Back to** [workshop overview](../../README.md)
+**Previous:** [ch06-sre-agent](../ch06-sre-agent/README.md) · **Optional challenges:** [ch07-enterprise](../ch07-enterprise/README.md) or [ch07-innovation](../ch07-innovation/README.md) · **Back to:** [workshop overview](../../README.md)

@@ -1,541 +1,218 @@
-# Challenge 6 solution: source-bound reviewed rollback
+# Challenge 6 solution: reviewed SRE Agent recovery
 
-**What this is for.** Every command, prompt, and capture behind
-[Challenge 6](../../challenges/ch06-sre-agent/README.md) — the exact investigation
-producers the agent's answers must be checkable against, the assembly of the incident
-evidence, the recovery-clock calculation, and the facilitator-owned teardown.
+There are several valid ways to complete this challenge. This version uses the Azure Portal, KQL, and GitHub Copilot prompts. The point is simple: let Azure SRE Agent correlate signals quickly, but keep production-changing action behind human approval.
 
-**When to open it.** Open it if the agent keeps answering from the runbook and you cannot
-tell what to demand instead, if a capture fails the validator, or if you are facilitating
-and need the approval and cleanup sequence in one place. If you have not yet tried to
-make the agent reject a hypothesis on your own, close this and go back — that argument is
-the chapter.
+## Before you start
 
-Run commands from the repository root in Bash unless a section says otherwise. Use the
-exact participant scope selected by the handoff. Participants investigate and review;
-only the facilitator approves the write and performs cleanup.
+- Your catalog app runs in Azure Container Apps with a managed database.
+- Challenge 4 telemetry is active in Application Insights and Log Analytics.
+- Container Apps multiple revisions are enabled, as in [Challenge 3](../../challenges/ch03/README.md).
+- You can configure Azure SRE Agent, or a facilitator can configure it while you drive the investigation.
 
-## 1. Validate and bind every upstream input
+| | .NET / SQL Server | Java / PostgreSQL |
+| --- | --- | --- |
+| App folder | [`dotnet/`](../../dotnet/README.md) | [`java/`](../../java/README.md) |
+| Database | Azure SQL Database | Azure Database for PostgreSQL Flexible Server |
+| Failure clue | SQL dependency failures | JDBC/PostgreSQL dependency failures |
+| Healthy state | database is Online | server is Ready |
 
-```bash
-set -euo pipefail
-umask 077
+## Step 1: Create the agent and scope
 
-(
-  cd tests/acceptance
-  uv --no-config run python -m catalog_acceptance.handoff_cli \
-    ../../evidence/modernization-contract.json \
-    --contracts ../../workshop/contracts \
-    --repository-root ../..
-)
+Create an **Azure SRE Agent** resource in the Azure Portal. Use a managed identity and start
+with **Review** mode. Review mode lets the agent propose Azure infrastructure actions, but
+an SRE Agent Administrator must approve them before execution.
 
-HANDOFF=evidence/modernization-contract.json
-TARGET_OUTPUT=$(jq -er '.deployment.targetOutput' "$HANDOFF")
-APP_RESOURCE_ID=$(jq -er '.application.resourceId' "$HANDOFF")
-APP_NAME=$(jq -er '.application.containerAppName' "$HANDOFF")
-APP_INSIGHTS_RESOURCE_ID=$(jq -er '.observability.applicationInsightsResourceId' "$HANDOFF")
-WORKSPACE_RESOURCE_ID=$(jq -er '.observability.logAnalyticsWorkspaceResourceId' "$HANDOFF")
-HEALTHY_REVISION=$(jq -er '.application.revisionName' "$HANDOFF")
-SOURCE_COMMIT=$(jq -er '.source.commitSha' "$HANDOFF")
-SERVICE_NAME=$(jq -er '.observability.serviceName' "$HANDOFF")
-IMAGE_DIGEST=$(jq -er '.containerImage.digest' "$HANDOFF")
-DATABASE_RESOURCE_ID=$(jq -er '.database.resourceId' "$HANDOFF")
-DATABASE_FAMILY=$(jq -er '.database.family' "$HANDOFF")
-HEALTH_URL=$(jq -er '.application.healthUrl' "$HANDOFF")
-READINESS_URL=$(jq -er '.application.readinessUrl' "$HANDOFF")
-SUBSCRIPTION_ID=$(cut -d/ -f3 <<<"$APP_RESOURCE_ID")
-RESOURCE_GROUP=$(cut -d/ -f5 <<<"$APP_RESOURCE_ID")
-FOUNDATION=evidence/sre-agent/foundation.json
-AGENT_ID=$(jq -er '.agent.response.id' "$FOUNDATION")
-AGENT_APPLICATION_INSIGHTS_RESOURCE_ID=$(jq -er \
-  '.agentObservability.applicationInsightsResourceId' "$FOUNDATION")
-APPLICATION_INSIGHTS_QUERY_API_VERSION=$(jq -er \
-  '.resources.applicationInsightsQueryApiVersion' workshop/contracts/sre-agent.json)
+Give the agent access to the resource group that contains the Container App, database,
+Application Insights, and Log Analytics workspace. Start with read-first roles:
 
-test "$(jq -er '.application.resourceId' "$TARGET_OUTPUT")" = "$APP_RESOURCE_ID"
-test "$(jq -er '.sourceCommit' "$TARGET_OUTPUT")" = "$SOURCE_COMMIT"
-test "$(jq -er '.containerImage.digest' "$TARGET_OUTPUT")" = "$IMAGE_DIGEST"
-[[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-[[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-```
+- Reader
+- Log Analytics Reader
+- Monitoring Reader
+- Monitoring Contributor if the agent will manage alert lifecycle state
 
-Require the exact Challenge 3 CI/CD and Challenge 4 observability reports referenced by
-this chapter's capture. The independent Challenge 6 validator replays both shared
-validators; a copied summary is insufficient.
+If you want the approved remediation to be executed by the agent, add only the narrow
+Container Apps permission needed for revision traffic on the catalog app or its resource
+group. Avoid broad Owner or Contributor assignments for a drill.
 
-Read the facilitator-provided `foundation.json` and `response-plan-preflight.json`. Confirm
-that the agent is Review/Low, the two managed identities have only the frozen roles, the
-test incident was rejected by the facilitator, and no preflight write executed.
+## Step 2: Connect telemetry
 
-## 2. Establish the incident window and complete revision history
+In the SRE Agent resource, open **Builder** and add Azure Monitor as the incident source, the Log Analytics workspace used by Application Insights, and resource visibility for the Container App and selected database.
 
-Record UTC `INCIDENT_START`, `INVESTIGATION_END`, `INCIDENT_END`, the facilitator-provided
-`BAD_REVISION`, `BAD_REVISION_CREATED_AT`, and the agent/thread identifiers. The drill
-revision creation must precede `INCIDENT_START`; the investigation must begin strictly
-after the alert-bound `IncidentActivitySnapshot`.
-
-```bash
-RAW=evidence/sre-agent/raw
-mkdir -p "$RAW"
-: "${BAD_REVISION_CREATED_AT:?Set the facilitator-captured drill creation time}"
-: "${INCIDENT_START:?Set the incident-window start after drill creation}"
-: "${BAD_REVISION:?Set the facilitator-captured drill revision name}"
-
-jq -en \
-  --arg created "$BAD_REVISION_CREATED_AT" \
-  --arg start "$INCIDENT_START" \
-  '($created | fromdateiso8601) < ($start | fromdateiso8601)' >/dev/null
-
-az rest --method get \
-  --url "https://management.azure.com${APP_RESOURCE_ID}/revisions?api-version=2025-01-01" \
-  > "$RAW/deployment-history.json"
-
-jq -e --arg healthy "$HEALTHY_REVISION" --arg bad "$BAD_REVISION" '
-  (.nextLink == null)
-  and ([.value[].name] | index($healthy) != null)
-  and ([.value[].name] | index($bad) != null)
-' "$RAW/deployment-history.json" >/dev/null
-```
-
-Do not use only `az containerapp revision show` for one revision. The producer is the
-complete list, with no `nextLink`. Both revisions must use the same handoff image digest;
-the drill revision must be newer and currently carry traffic. Preserve each native ARM
-revision object, including nested `properties.trafficWeight`; never flatten or synthesize
-the list response.
-
-## 3. Capture request, exception, and dependency evidence
-
-Render the three exact query templates from `workshop/contracts/sre-agent.json`. For
-Azure SQL use `microsoft.sql_server`; for PostgreSQL use `postgresql`.
-
-```bash
-: "${INVESTIGATION_END:?Set the investigation-window end, strictly after the incident start}"
-
-case "$DATABASE_FAMILY" in
-  azure-sql)
-    DATABASE_SYSTEM=microsoft.sql_server
-    DATABASE_AVAILABILITY_ID=$DATABASE_RESOURCE_ID
-    DATABASE_API_VERSION=2023-08-01
-    ;;
-  postgresql-flexible)
-    DATABASE_SYSTEM=postgresql
-    DATABASE_AVAILABILITY_ID=${DATABASE_RESOURCE_ID%/databases/*}
-    DATABASE_API_VERSION=2024-08-01
-    ;;
-  *)
-    printf 'Unsupported database family: %s\n' "$DATABASE_FAMILY" >&2
-    exit 1
-    ;;
-esac
-
-render_query() {
-  local key=$1
-  jq -r \
-    --arg key "$key" \
-    --arg start "$INCIDENT_START" \
-    --arg end "$INVESTIGATION_END" \
-    --arg service "$SERVICE_NAME" \
-    --arg commit "$SOURCE_COMMIT" \
-    --arg revision "$BAD_REVISION" \
-    --arg system "$DATABASE_SYSTEM" '
-      .queries[$key]
-      | gsub("\\{incidentStart\\}"; $start)
-      | gsub("\\{investigationEnd\\}"; $end)
-      | gsub("\\{serviceName\\}"; $service)
-      | gsub("\\{sourceCommit\\}"; $commit)
-      | gsub("\\{badRevision\\}"; $revision)
-      | gsub("\\{databaseSystem\\}"; $system)
-    ' workshop/contracts/sre-agent.json
-}
-
-REQUEST_QUERY=$(render_query investigationRequestFailures)
-EXCEPTION_QUERY=$(render_query investigationExceptions)
-DEPENDENCY_QUERY=$(render_query investigationDatabaseDependencies)
-
-for query_name in request exception dependency; do
-  case "$query_name" in
-    request) query=$REQUEST_QUERY ;;
-    exception) query=$EXCEPTION_QUERY ;;
-    dependency) query=$DEPENDENCY_QUERY ;;
-  esac
-  printf '%s\n' "$query" > "$RAW/${query_name}.kql"
-  az rest --method post \
-    --url "https://management.azure.com${APP_INSIGHTS_RESOURCE_ID}/query?api-version=${APPLICATION_INSIGHTS_QUERY_API_VERSION}" \
-    --body "$(jq -n --arg query "$query" '{query: $query}')" \
-    > "$RAW/${query_name}.json"
-done
-
-az rest --method get \
-  --url "https://management.azure.com${DATABASE_AVAILABILITY_ID}?api-version=${DATABASE_API_VERSION}" \
-  > "$RAW/database-availability.json"
-```
-
-Require nonzero failed requests, exceptions, and failed dependencies. The dependency
-targets must include the `.sre-drill.invalid` host. Azure SQL must report database status
-`Online`; PostgreSQL must report flexible-server state `Ready`. That live availability
-rejects a platform outage.
-
-## 4. Ask the agent, then challenge its hypothesis
-
-Use this sequence in the exact incident thread:
-
-1. “Scope this incident to the affected revision and time window. Cite current traffic and
-   complete deployment history.”
-2. “Correlate request failures, exceptions, database dependencies, and selected-database
-   availability for the exact handoff service, source commit, and bad revision.”
-3. “State one supported hypothesis and challenge it. Explain why a database platform
-   outage and an image regression are weaker alternatives.”
-4. “Propose only the runbook traffic rollback. State blast radius and the exact
-   verification plan. Do not execute.”
-
-The accepted hypothesis is `bad-revision-selected-database-endpoint`. The same image
-digest on both revisions rejects `application-image-regression`. The available selected
-database rejects `selected-database-platform-outage`.
-
-Before approval, the `AgentResponse` must accurately reproduce all evidence references,
-counts, exception types, dependency targets, database status, affected revision/window,
-both alternatives, blast radius, and five verification steps. The following
-`AgentToolExecution` must be Review phase with `writeExecuted=false`.
-
-## 5. Obtain facilitator approval
-
-Show the exact proposal and command to the facilitator. Reject it if the target is not
-`APP_RESOURCE_ID` or if it changes anything except traffic:
+Test the connection by asking:
 
 ```text
-retained healthy revision = 100
-drill revision = 0
+List recent failed requests, exceptions, and failed dependencies for my catalog app.
+Show the KQL you ran and the workspace you queried.
 ```
 
-Only the facilitator selects **Approve**. Preserve the `ApprovalDecision` principal,
-timestamp, thread, trace, and correlation ID. The participant must never approve.
+Fix workspace permissions before continuing if the agent cannot query logs.
 
-## 6. Capture rollback, recovery, and audit evidence
+## Step 3: Create the catalog investigator
 
-Capture the complete Container App immediately before and after the approved operation:
+Create a custom agent, or update the default agent instructions:
+
+```text
+You are the SRE investigator for the LEGO catalog app.
+Correlate Container Apps revisions, request failures, exceptions, dependency failures,
+database health, and recent deployment changes.
+Show the KQL or portal observation behind each claim.
+Compare database platform outage, app image regression, and revision configuration failure.
+In Review mode, propose only the smallest reversible remediation and do not execute writes
+until an SRE Agent Administrator approves them.
+```
+
+Create an incident response plan in **Builder → Incident response plans**:
+
+- Source: Azure Monitor.
+- Severity: the severity your catalog alert uses.
+- Title contains: a catalog-specific word if needed.
+- Response custom agent: the catalog investigator.
+- Agent autonomy level: **Review**.
+
+If another plan also matches the same alert, turn it off or narrow its filter.
+
+## Step 4: Create a safe incident
+
+Use one reversible fault. The wrong-host revision is usually best because it does not touch
+real data.
+
+| Fault | Create it | Recover by |
+| --- | --- | --- |
+| Wrong database host | New revision with `CATALOG_DATABASE_HOST=bad-host.invalid` | Route traffic back |
+| Bad credential | New revision with a bad database secret/value | Restore the previous value or revision |
+| Stopped database | Stop the PostgreSQL server, or disconnect/pause if your database supports it | Start it again |
+
+You can do this in the portal, or ask Copilot for stack-specific commands:
+
+```text
+Generate Azure CLI commands to create a new Azure Container Apps revision for my catalog
+app with the same image and settings as the current revision, except set
+CATALOG_DATABASE_HOST to bad-host.invalid. Put the app in multiple revision mode, route
+100 percent of traffic to the bad revision, then show the command to route 100 percent
+back to the previous healthy revision. Do not change secrets, image, scale, or ingress.
+```
+
+Browse the catalog after routing traffic to the bad revision. Wait until the alert fires or
+until you can see failures in Application Insights.
+
+## Step 5: Drive the investigation
+
+Open the incident thread and make the agent prove scope first:
+
+```text
+Scope this incident. Identify the Container App, active revision, previous healthy
+revision, time window, failed request count, and current traffic split. Show the KQL or
+portal source for each value.
+```
+
+Then ask for correlation:
+
+```text
+Correlate failed requests, exceptions, failed database dependencies, Container Apps
+revision history, and live database health for the same time window. Separate signals from
+Application Insights, Azure Resource Manager, and the database resource.
+```
+
+Run these one at a time in Logs to verify the agent's claims:
+
+```kusto
+requests
+| where timestamp > ago(30m) and success == false
+| summarize failedRequests=count() by cloud_RoleName, operation_Name
+dependencies
+| where timestamp > ago(30m) and success == false
+| summarize failedDependencies=count() by type, target, resultCode
+exceptions
+| where timestamp > ago(30m)
+| summarize exceptions=count() by type, outerMessage
+```
+
+Check database health in the portal. A healthy database plus failed dependencies from only
+the bad revision points to revision configuration, not a platform outage.
+
+## Step 6: Challenge the answer
+
+Ask the agent to argue against its first explanation:
+
+```text
+State the most likely root cause, then challenge it. What signals would support a
+database platform outage? What signals would support an application image regression?
+What signals do we actually have? Do not propose remediation until both alternatives are
+addressed.
+```
+
+A good answer should show:
+
+- the bad revision receives traffic;
+- failures start when that revision receives traffic;
+- database dependencies fail against the wrong host or bad authentication;
+- the selected database resource is healthy;
+- the previous revision, or the same image with previous configuration, still works.
+
+Deny any proposal that skips these observations.
+
+## Step 7: Review and approve remediation
+
+Now ask for the smallest safe fix:
+
+```text
+Propose the smallest safe remediation. Prefer routing traffic back to the last healthy
+Container Apps revision. Show the target resource, before and after traffic weights, blast
+radius, verification steps, and whether any secret, image, scale, ingress, or role
+assignment would change. Do not execute until approved.
+```
+
+For the wrong-host drill, the proposal should be only:
+
+```text
+healthy revision: 100 percent traffic
+bad revision: 0 percent traffic
+```
+
+Only an SRE Agent Administrator approves the write. If you are not that person, hand the
+proposal to the facilitator. The approval gate is part of the lesson.
+
+## Step 8: Verify recovery
+
+After approval, check traffic and health:
 
 ```bash
-CONTAINER_APP_URL="${APP_RESOURCE_ID}?api-version=2025-01-01"
-capture_container_app() {
-  local name=$1
-  local response="$RAW/${name}-response.json"
-  local observed_at
+az containerapp revision list \
+  --resource-group <resource-group> \
+  --name <container-app-name> \
+  --query "[].{name:name,active:properties.active,traffic:properties.trafficWeight}" \
+  --output table
 
-  az rest --method get \
-    --url "https://management.azure.com${CONTAINER_APP_URL}" \
-    > "$response"
-  observed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-  jq -n \
-    --arg observedAt "$observed_at" \
-    --arg url "$CONTAINER_APP_URL" \
-    --slurpfile response "$response" '{
-      observedAt: $observedAt,
-      request: {method: "GET", url: $url},
-      response: $response[0]
-    }' > "$RAW/${name}.json"
-}
-
-capture_container_app container-app-before-rollback
-
-# The agent executes only after facilitator approval.
-
-capture_container_app container-app-after-rollback
-
-REVISION_LIST_URL="${APP_RESOURCE_ID}/revisions?api-version=2025-01-01"
-az rest --method get \
-  --url "https://management.azure.com${REVISION_LIST_URL}" \
-  > "$RAW/recovered-traffic-response.json"
-RECOVERED_TRAFFIC_OBSERVED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-jq -n \
-  --arg observedAt "$RECOVERED_TRAFFIC_OBSERVED_AT" \
-  --arg url "$REVISION_LIST_URL" \
-  --slurpfile response "$RAW/recovered-traffic-response.json" '{
-    observedAt: $observedAt,
-    request: {method: "GET", url: $url},
-    response: $response[0]
-  }' > "$RAW/recovered-traffic.json"
-jq -e '
-  .response.nextLink == null
-  and ([.response.value[] | .properties.trafficWeight] | add == 100)
-' "$RAW/recovered-traffic.json" >/dev/null
-
-capture_recovery() {
-  local name=$1
-  local url=$2
-  local observed_at
-
-  curl --fail-with-body --silent --show-error \
-    --proto '=https' \
-    --max-redirs 0 \
-    --connect-timeout 10 \
-    --max-time 30 \
-    --output "$RAW/${name}.body" \
-    --write-out '%{json}\n' \
-    "$url" > "$RAW/${name}-transfer.json"
-  observed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-  jq -e \
-    --arg observedAt "$observed_at" \
-    --arg url "$url" \
-    '{
-      observedAt: $observedAt,
-      request: {
-        method: "GET",
-        url: $url,
-        redirectsAllowed: false
-      },
-      response: .
-    }' "$RAW/${name}-transfer.json" > "$RAW/${name}-http.json"
-  jq -e '
-    .response.exitcode == 0
-    and .response.http_code == 200
-    and .response.num_redirects == 0
-    and .response.url_effective == .request.url
-  ' "$RAW/${name}-http.json" >/dev/null
-}
-
-capture_recovery health "$HEALTH_URL"
-capture_recovery readiness "$READINESS_URL"
+curl -i https://<your-app-url>/healthz
+curl -i https://<your-app-url>/readyz
 ```
 
-The two Container App envelope responses must be identical after removing only
-`response.properties.configuration.ingress.traffic`. Preserve both generated observation
-times and exact requests.
+Confirm the Azure Monitor alert resolves. It can take a few minutes after the app is
+healthy. Record when the alert fired, when the agent investigated, when approval happened,
+when the alert resolved, and what prevention you would add next.
 
-Use the generated `health-http.json` and `readiness-http.json` objects as
-`recoveryHealth`; do not type status or timestamps by hand. The validator requires native
-curl exit code `0`, HTTP `200`, no redirects, and the exact effective handoff URL.
+A good prevention is a pre-traffic smoke test that calls `/readyz` on a new revision before
+assigning production traffic.
 
-Render `queries.agentAudit` from the registry with the exact incident window, agent ID,
-and thread ID. Query the dedicated agent Application Insights component, not the
-application component:
+## If it goes wrong
 
-```bash
-: "${THREAD_ID:?Set the exact incident thread ID}"
-: "${INCIDENT_END:?Set the incident-window end, at or after the investigation end}"
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Agent cannot query logs | Missing workspace role | Add Log Analytics Reader on the workspace or resource group |
+| Incident opens twice | Two plans match | Turn off or narrow one plan |
+| Agent wants to restart or redeploy everything | Prompt is too broad | Ask for the smallest reversible traffic change |
+| Database outage and bad revision look identical | You only checked requests | Add dependencies, revision history, and database health |
+| Alert remains fired | Monitor has not re-evaluated | Wait for the next evaluation cycle |
 
-AGENT_AUDIT_QUERY=$(jq -r \
-  --arg start "$INCIDENT_START" \
-  --arg end "$INCIDENT_END" \
-  --arg agent "$AGENT_ID" \
-  --arg thread "$THREAD_ID" '
-    .queries.agentAudit
-    | gsub("\\{incidentStart\\}"; $start)
-    | gsub("\\{incidentEnd\\}"; $end)
-    | gsub("\\{agentId\\}"; $agent)
-    | gsub("\\{threadId\\}"; $thread)
-  ' workshop/contracts/sre-agent.json)
+## What you proved
 
-az rest --method post \
-  --url "https://management.azure.com${AGENT_APPLICATION_INSIGHTS_RESOURCE_ID}/query?api-version=${APPLICATION_INSIGHTS_QUERY_API_VERSION}" \
-  --body "$(jq -n --arg query "$AGENT_AUDIT_QUERY" '{query: $query}')" \
-  > "$RAW/agent-audit.json"
-```
+Azure SRE Agent can gather the same signals an on-call engineer would collect by hand:
+requests, exceptions, dependencies, revisions, database health, and alert state. More
+importantly, the production write stayed behind a human approval gate.
 
-Capture the exact Container App Activity Log producer:
-
-```bash
-FILTER="eventTimestamp ge '${INCIDENT_START}' and eventTimestamp le '${INCIDENT_END}' and resourceUri eq '${APP_RESOURCE_ID}'"
-ENCODED_FILTER=${FILTER// /%20}
-ACTIVITY_URL="/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Insights/eventtypes/management/values?api-version=2015-04-01&\$filter=${ENCODED_FILTER}"
-az rest --method get \
-  --url "https://management.azure.com${ACTIVITY_URL}" \
-  > "$RAW/activity-log-response.json"
-jq -n \
-  --arg url "$ACTIVITY_URL" \
-  --slurpfile response "$RAW/activity-log-response.json" '{
-    request: {method: "GET", url: $url},
-    response: $response[0]
-  }' > "$RAW/activity-log.json"
-```
-
-Require exactly two successful `Microsoft.App/containerApps/write` events at the exact
-app: the earlier facilitator seed and the later correlation-bound user-assigned-identity
-rollback. Extra writes fail.
-
-Finally capture the alert itself, by the exact alert ID the agent thread was opened with,
-at `2019-05-05`. The `IncidentActivitySnapshot` row carries that ID in its
-`Properties.alertId`, so nothing here is typed by hand. Read the audit rows as named
-columns rather than by position — the KQL result is a table, and column order is a
-property of the query, not of the contract:
-
-```bash
-ALERT_API_VERSION=2019-05-05
-
-audit_snapshot() {
-  jq -er '
-    [ .tables[]
-      | [.columns[].name] as $names
-      | .rows[]
-      | [$names, .] | transpose | map({key: .[0], value: .[1]}) | from_entries
-    ]
-    | map(select(.name == "IncidentActivitySnapshot"))
-    | first
-  ' "$RAW/agent-audit.json"
-}
-
-ALERT_ID=$(audit_snapshot | jq -er '.Properties.alertId')
-
-capture_alert() {
-  local name=$1
-
-  az rest --method get \
-    --url "https://management.azure.com${ALERT_ID}?api-version=${ALERT_API_VERSION}" \
-    > "$RAW/${name}-response.json"
-  jq -n \
-    --arg url "${ALERT_ID}?api-version=${ALERT_API_VERSION}" \
-    --slurpfile response "$RAW/${name}-response.json" '{
-      request: {method: "GET", url: $url},
-      response: $response[0]
-    }' > "$RAW/${name}.json"
-}
-
-capture_alert alert-resolved
-jq -e '
-  .response.properties.essentials.monitorCondition == "Resolved"
-  and (.response.properties.essentials.resolvedDateTime | type) == "string"
-' "$RAW/alert-resolved.json" >/dev/null
-```
-
-Azure Monitor can take several minutes to re-evaluate after the rollback. If the assertion
-fails because the condition still reads `Fired`, wait and re-run `capture_alert
-alert-resolved`; never edit the captured response. The matching `alertFired` envelope is
-the same `capture_alert` call made earlier in the window, before the rollback.
-
-## 7. Read the recovery clock
-
-The chapter's headline number comes out of evidence you already have — no extra query.
-Detection is the timestamp of the alert-bound `IncidentActivitySnapshot` in
-`$RAW/agent-audit.json`; recovery is `resolvedDateTime` on the resolved alert envelope you
-just captured. Both are derived, not typed:
-
-```bash
-DETECTED_AT=$(audit_snapshot | jq -er '.timestamp | sub("\\.[0-9]+Z$"; "Z")')
-RECOVERED_AT=$(jq -er '
-  .response.properties.essentials.resolvedDateTime | sub("\\.[0-9]+Z$"; "Z")
-' "$RAW/alert-resolved.json")
-
-jq -en \
-  --arg detected "$DETECTED_AT" \
-  --arg recovered "$RECOVERED_AT" \
-  '($recovered | fromdateiso8601) >= ($detected | fromdateiso8601)' >/dev/null
-
-mkdir -p evidence
-jq -n \
-  --arg detected "$DETECTED_AT" \
-  --arg recovered "$RECOVERED_AT" \
-  '{
-    detectedAt: $detected,
-    recoveredAt: $recovered,
-    minutesToRecovery: ((($recovered | fromdateiso8601)
-      - ($detected | fromdateiso8601)) / 60 | floor)
-  }' > evidence/ch06-mttr.json
-
-cat evidence/ch06-mttr.json
-```
-
-`fromdateiso8601` parses whole seconds only, which is why both values pass through
-`sub("\\.[0-9]+Z$"; "Z")` — Application Insights and Azure Monitor both return
-sub-second precision, and without that the block would abort on a timestamp that is
-otherwise perfectly good.
-
-Against the sanitized shape example in `workshop/contracts/fixtures/sre-agent/incident.json`
-the block prints:
-
-```json
-{
-  "detectedAt": "2026-08-20T15:06:05Z",
-  "recoveredAt": "2026-08-20T15:09:00Z",
-  "minutesToRecovery": 2
-}
-```
-
-`evidence/ch06-mttr.json` is the chapter's headline number, and it is the only place it
-persists: the frozen `1.2.0` evidence contract has no field for it, so do not invent one
-in `capture.json`. Repeat the figure in the written assessment and carry it to the
-[wrap-up scorecard](../../challenges/wrapup/README.md) as mean time to recovery.
-
-Facilitators: collect `minutesToRecovery` from every team and read out the room's median
-in the debrief. One team's figure is an anecdote; the room's median is the number people
-take back to their own on-call rotation.
-
-If a participant asks what a fair comparison looks like, the honest legacy answer is that
-there is no equivalent measurement — on the VM the incident lasts until a human notices,
-so detection time is unbounded rather than long.
-
-## 8. Assemble, render, and validate
-
-Create `evidence/sre-agent/incident.json` against the `1.2.0`
-`workshop/contracts/sre-agent-incident.schema.json`. Preserve every raw request URL/body,
-response, observation time, and correlation field, including the generated curl recovery
-objects and native revision-list envelopes. The assessment must repeat the evidence-derived
-diagnosis, both alternatives, traffic action, and prevention:
-validate selected-database endpoint configuration and `/readyz` behavior before traffic.
-
-The facilitator supplies the separately authorized cleanup artifact only after exporting
-the incident. Create the seven-entry capture manifest with repository-root-relative paths
-and lowercase SHA-256 digests:
-
-```bash
-sha256sum \
-  "$TARGET_OUTPUT" \
-  evidence/cicd-report.json \
-  evidence/observability-report.json \
-  evidence/sre-agent/foundation.json \
-  evidence/sre-agent/response-plan-preflight.json \
-  evidence/sre-agent/incident.json \
-  evidence/sre-agent/cleanup.json
-```
-
-From `tests/acceptance`, run the frozen renderer and independent validator:
-
-```bash
-cd tests/acceptance
-uv --no-config run catalog-render-sre-agent-evidence \
-  --capture evidence/sre-agent/capture.json \
-  --handoff evidence/modernization-contract.json \
-  --output evidence/sre-agent-report.json \
-  --repository-root ../..
-
-uv --no-config run catalog-validate-sre-agent-evidence \
-  --capture evidence/sre-agent/capture.json \
-  --handoff evidence/modernization-contract.json \
-  --report evidence/sre-agent-report.json \
-  --contracts workshop/contracts \
-  --recovery-time evidence/ch06-mttr.json \
-  --repository-root ../..
-```
-
-`--recovery-time` recomputes `minutesToRecovery` from the two timestamps in
-`evidence/ch06-mttr.json` and checks its `recoveredAt` against
-`incident.alertResolvedAt` in the sealed report. Editing the minutes by hand, or
-inventing a pair of timestamps that agree with each other, both fail here.
-
-Do not edit `evidence/sre-agent-report.json`.
-
-## 9. Facilitator-owned teardown and billing
-
-Participants stop after validation. Everything below is the facilitator's, and it is the
-part most easily forgotten because nothing fails when you skip it — the meter simply keeps
-running.
-
-- The agent bills a **fixed four-agent-unit hourly charge for as long as the resource
-  exists**, independent of how much it was used during the drill. Stopping the agent does
-  not end its fixed four-agent-unit charge; only facilitator-authorized deletion does.
-- Delete the agent and prove its ARM `GET` returns `404`, delete only the dedicated agent
-  resource group, then re-check every protected handoff resource still answers. The exact
-  ordered sequence, the protected-resource checks, and the Cost Management query live in
-  [the SRE Agent facilitator guide](../../workshop/sre-agent/README.md).
-- Cleanup is a separate authorization gate, not a continuation of the drill. Never run a
-  broad resource-group deletion against a participant resource group.
-- Cost data lags. Query Cost Management last, and expect the final figure hours after the
-  workshop ends.
-
-Do this at the end of the day, not at the end of the chapter — and keep it out of the
-participant narrative. The last thing a participant should take from Challenge 6 is their
-recovery time, not a billing caveat.
+That is the model to take home: fast machine investigation, narrow proposed action, human
+accountability for remediation.
 
 ---
 
-**Back to** [Challenge 6](../../challenges/ch06-sre-agent/README.md) ·
-[Solution 5](../ch05-defender/README.md) ·
-[workshop overview](../../README.md)
+**Challenge:** [ch06-sre-agent](../../challenges/ch06-sre-agent/README.md) · **Previous:** [ch05-defender](../ch05-defender/README.md) · **Next:** [ch07-enterprise](../../challenges/ch07-enterprise/README.md)

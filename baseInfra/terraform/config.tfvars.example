@@ -25,8 +25,8 @@ os_disk_size_gb   = 127
 source_commit = ""
 # Set TF_VAR_source_archive_sha256 to the reviewed 64-hex archive digest.
 
-# Facilitator identity recorded by infra/main.bicep and written into the protected
-# deployment parameter files on every participant VM. REQUIRED - there are no defaults.
+# Facilitator identity recorded on every participant VM.
+# REQUIRED - there are no defaults.
 # Read the object ID with: az ad signed-in-user show --query id -o tsv
 facilitator_principal_name      = "facilitator@yourcompany.onmicrosoft.com"
 facilitator_principal_object_id = "00000000-0000-0000-0000-000000000000"

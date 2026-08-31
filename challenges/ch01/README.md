@@ -1,422 +1,99 @@
-# Challenge 1: get the catalog off the virtual machine
+# ch01: Migrate database, containerize application, deploy to Azure
 
-**By the end of this chapter your catalog will run as a container on Azure Container
-Apps, against a managed database, with its images in Azure storage and no password
-anywhere in the application — and you will have a validated document that proves it.**
+## Goal
 
-## Why this matters
+Take the legacy catalog application off its single Virtual Machine and run it on Azure in
+a modern, scalable way: the application in a container on **Azure Container Apps**, the
+data in a **managed database**, and the product images served from **Azure storage**.
 
-Everything you measured in Challenge 0 comes from one machine: one instance, one disk
-holding 198 photographs, one credential in a config file, one text log. This is the
-chapter that takes those apart. The database moves to a managed service, the images move
-to Azure storage, the application becomes an immutable image identified by a digest, and
-the credential disappears behind a managed identity.
+This is the heart of the workshop. Everything after it — autoscaling, CI/CD, tracing,
+security posture — builds on what you deploy here.
 
-It is also the longest chapter in the workshop and the one people most often run out of
-time on. Read the whole of this page before you pick a path — the choice you make in the
-next ten minutes decides how the rest of your day goes.
+You picked one stack in [Challenge 0](../ch00/README.md). Work with that one only.
 
-**Estimated time:** 5–12 hours depending on the path you choose. That is longer than the
-time available, deliberately: you are meant to get far enough to understand the work, not
-necessarily to finish it. See "If you run out of time" below.
-
-## Before you start
-
-**Where you work.** Everything in this chapter runs on your selected VM from Challenge 0,
-reached over RDP at its public IP address. The source tree is at `C:\MicroHack\source`, extracted there
-from a verified archive by the provisioner. **That directory is what "the repository
-root" means in this and every other workshop document** — start each terminal with
-`cd C:\MicroHack\source`.
-
-> **The legacy application keeps running while you work, and you should check that it does.**
-> It does not run from the tree you are about to change. The provisioner publishes it to
-> `C:\MicroHack\app\<stack>`, starts it from the scheduled task `MicroHack-<stack>`, feeds it
-> its connection details as environment variables, and gives it its own copy of the 198
-> photographs at `C:\MicroHack\legacy-data`. So edit, delete, refactor and `git clean` inside
-> `C:\MicroHack\source` freely — none of it reaches the running catalog.
->
-> Two things *will* stop it, and both are recoverable: stopping the scheduled task, and
-> taking the port it listens on. Check it is still up at any point with:
-> ```powershell
-> Invoke-WebRequest http://localhost:5000/healthz -UseBasicParsing   # 8080 on Java
-> ```
-> and bring it back with:
-> ```powershell
-> Start-ScheduledTask -TaskName 'MicroHack-dotnet'                   # or MicroHack-java
-> ```
->
-> **Everything you will ever be able to say about "before" is the evidence you captured in
-> Challenge 0.** If you have not written `evidence/ch00-<stack>-baseline.json` and
-> `evidence/ch00-pain-<stack>.json`, go back and do it now — the wrap-up in Challenge 7 asks
-> you to compare against numbers you may no longer be able to re-measure.
->
-> When you migrate the photographs to Blob Storage, upload them from
-> `C:\MicroHack\legacy-data\images`. That is the copy the legacy application is actually
-> serving, and it is the one that stays pristine no matter what you do to your checkout.
-
-**What the VM has, and deliberately does not.** The image is fully pinned, and Git is part
-of that pin: the provisioner initializes `C:\MicroHack\source` as a repository holding one
-baseline commit of the extracted archive, so `git status`, `git add`, `git commit`, and
-`git rev-parse HEAD` all behave normally. There is no Docker daemon, and none is needed.
-Three things carry the whole chapter:
-
-| You need | Use this |
-| --- | --- |
-| the commit that identifies your work | `git rev-parse HEAD`, taken once you have published your branch — see [Publishing: the gate every path passes through](#publishing-the-gate-every-path-passes-through) below |
-| the exact 40-character source commit of the archive | `(Get-Content 'C:\MicroHack\source\.source-commit' -Raw).Trim()` — the provisioner writes this marker when it extracts the archive |
-| a container image build | `az acr build`, which uploads the build context and builds inside Azure Container Registry |
-
-Both Copilot paths commit their accepted work as they go, which is what that baseline
-commit is for: your first commit is your own modernization. It also means the local
-history is unrelated to the published commit the archive came from. Read `.source-commit`
-when you need the provenance of the source you were handed, and `git rev-parse HEAD` when
-you need the identity of the work you did — your path guide says which one each command
-takes, and confusing the two is the single most common way to lose an hour in this
-chapter.
-
-Beyond that:
-
-- You completed [Challenge 0](../ch00/README.md) and have
-  `evidence/ch00-selection.json` naming exactly one stack.
-- Your selected VM is running and still passes its baseline check. Everything in this
-  chapter is executed from that VM, because the migration tooling verifies the host's
-  network identity before it moves any data.
-- You can produce an immutable source commit — a full 40-character lowercase SHA, not a
-  branch, not `HEAD`, not a short SHA. You do not have one yet: it is the commit you
-  publish at the gate below, and your path guide says exactly where that gate sits.
-- Your facilitator has approved the Azure target deployment, and has given you the
-  protected parameter files that hold secrets. Those files live outside the repository
-  and never get committed. They also name your `resourceGroupName` — the resource group
-  the facilitator created for you before the workshop, the one holding your two legacy
-  VMs, and the only group `infra/main.bicep` will deploy into.
-- **Two parameters are missing from those files on purpose:** `sourceCommit` and
-  `imageDigest`. Neither value existed when provisioning wrote the files — one comes from
-  the publish gate below, the other from your container build — and a placeholder that
-  satisfied `infra/main.bicep`'s format assert would deploy the wrong source without ever
-  saying so. Supply them on the command line instead, *after* the file —
-  `--parameters '@C:\protected\<file>.json' --parameters sourceCommit=$SourceCommit` —
-  because a later `--parameters` overrides an earlier one. A deployment that fails because
-  you forgot one is that guard working, not a broken file; your path guide says which
-  deployment needs which.
-- You have the HTTPS URL of your own GitHub repository, from the facilitator.
-- For either GitHub Copilot path: an active GitHub Copilot entitlement, signed in on the
-  VM.
-
-Unfamiliar terms — *handoff*, *evidence*, *digest*, *revision*, *managed identity* — are
-in the [glossary](../../docs/Glossary.md).
-
-## The concept
-
-Six routes, one destination. Two legacy stacks × three ways of doing the work, all
-finishing at the same Azure architecture and the same validated document:
-
-```mermaid
-flowchart LR
-  A[".NET 8 + SQL Server<br/>on a VM"] --> M
-  B["Java 17 + PostgreSQL<br/>on a VM"] --> M
-  subgraph M["Three ways to do the work"]
-    direction TB
-    M1["Manual rebuild"]
-    M2["Copilot-assisted rewrite"]
-    M3["Copilot modernization"]
-  end
-  M --> H["evidence/modernization-contract.json<br/><i>the handoff</i>"]
-  H --> C2["Challenge 2"]
-  H --> C3["Challenge 3"]
-  H --> C4["Challenges 4–6"]
-```
-
-That middle document is the point. Challenges 2 through 6 never rediscover your
-resources from the portal — they read the handoff. So the handoff must be true: it names
-the container image by digest, the database by resource ID, the revision that is
-serving, and the rollback revision held in reserve. A validator refuses it if any of
-those cannot be reached.
-
-This is worth stealing for your own estate. The handoff is the boundary between "we
-migrated it" and "we can prove we migrated it".
-
-A contract only earns its name if something reads it. An audit of this repository found
-that our own acceptance harness declared its destructive-delete boundary twice, under two
-different names, and then deleted rows using a string literal that matched neither
-declaration. Nothing was wrong at runtime — and nothing would have told us if it had become
-wrong. A guard now fails if the literal and either declaration disagree. Ask that of every
-contract you write: what breaks if the declaration and the code drift apart?
-
-## Your goal
-
-Take the stack you selected in Challenge 0 and produce a running Azure Container Apps
-deployment with a managed database, external image storage, managed identity, immutable
-image digest, and telemetry — then render and validate
-`evidence/modernization-contract.json`.
-
-**How** you do that is your choice, and it is a real one.
-
-## Choose your path
-
-All three paths end at the same place. They differ in what they teach and what they
-cost.
-
-| | [Manual rebuild](../ch01-manual/README.md) | [Copilot-assisted rewrite](../ch01-copilot-rewrite/README.md) | [Copilot modernization](../ch01-copilot-modernization/README.md) |
-| --- | --- | --- | --- |
-| **Realistic time** | 5–8 hours | 8–12 hours | 5–7 hours |
-| **You will spend it on** | Reading Bicep, running migrations, fixing your own container | Reviewing generated diffs, one slice at a time | Reviewing a generated plan, then reviewing generated diffs |
-| **Teaches you** | Every boundary, in detail, because you cross each one by hand | How far an AI pair goes when *you* own the target architecture | What guided modernization tooling does and does not do for a real upgrade backlog |
-| **Assumes you know** | Azure CLI, Bicep, your stack's build tooling | Your stack well enough to reject a bad diff quickly | Your IDE and how to read a plan critically |
-| **Pick it if** | You want to be able to do this again without any tooling | You want to judge AI-assisted development honestly, with tests as the referee | Your real backlog is framework upgrades, and you want to see the tooling on a codebase you understand |
-| **Avoid it if** | You already know this shape and want a bigger lesson | You are short on time — this is the longest path | You want to learn what the tooling is doing underneath |
-| **The honest catch** | You will type a lot and learn a lot | The assistant is fast at code and indifferent to your contracts; the reviewing is the work | The tooling upgrades and prepares code; it does not move your data, and it does not prove behavior |
-
-**If your table has three or more people, split.** The single most valuable thing to come
-out of this chapter is the comparison, and you can only make it if somebody in the room
-took each route. The debrief at the end of this page assumes you did.
-
-**If you can only pick one and want a recommendation:** take *Copilot modernization*. It
-is the closest thing to the work most teams actually have queued, and it is the only path
-that shows you tooling you cannot get anywhere else. Take *manual* if you have never
-migrated an application to containers before — the slow way is the one that sticks.
-
-Whichever you choose, the reference solutions are here when you need them:
-
-| Path | Participant guide | Reference solutions |
+| | `dotnet-sqlserver` | `java-postgresql` |
 | --- | --- | --- |
-| Manual rebuild | [Manual modernization](../ch01-manual/README.md) | [.NET](../../solutions/ch01-manual/dotnet/README.md) · [Java](../../solutions/ch01-manual/java/README.md) |
-| Copilot-assisted rewrite | [Copilot rewrite](../ch01-copilot-rewrite/README.md) | [.NET](../../solutions/ch01-copilot-rewrite/dotnet/README.md) · [Java](../../solutions/ch01-copilot-rewrite/java/README.md) |
-| Copilot modernization | [Copilot modernization](../ch01-copilot-modernization/README.md) | [.NET](../../solutions/ch01-copilot-modernization/dotnet/README.md) · [Java](../../solutions/ch01-copilot-modernization/java/README.md) |
+| Legacy runtime | .NET 8 Blazor Server | Spring Boot 3 on Java 17 |
+| Legacy database | SQL Server 2022 Express | PostgreSQL 18 |
+| Source folder | [`dotnet/`](../../dotnet/README.md) | [`java/`](../../java/README.md) |
+| Managed database to use | Azure SQL Database (serverless) | Azure Database for PostgreSQL Flexible Server |
+| Runs locally on | `http://localhost:5000` | `http://localhost:8080` |
 
-The [finished target for both stacks](../../solutions/reference/README.md) is checked in
-as well. Read it if you are stuck on one specific thing; copying it wholesale skips the
-only chapter that teaches modernization.
+## This challenge splits in two
 
-## Before you open your path
+There are two honest ways to modernize an application, and this is where you choose one.
+**Read this page, decide, then open only your path** — each path has its own instructions
+and you do not need the other one.
 
-Record your selected stack, confirm the selected VM's baseline is still healthy, and read
-these three:
+### 🅐 Modernize the existing application
 
-- [`workshop/contracts/challenge-paths.json`](../../workshop/contracts/challenge-paths.json)
-  — the exact path/stack target and the evidence set your path must produce.
-- [`infra/README.md`](../../infra/README.md) — the shared Azure target and the order its
-  stages deploy in.
-- [`tests/acceptance/README.md`](../../tests/acceptance/README.md) — how behavior,
-  database, image, runtime-test, telemetry, and handoff verification actually work.
+**You keep the code and move it forward.** GitHub Copilot upgrades the framework to a
+current version, helps you write the Dockerfile and the Bicep, and you migrate the data
+into a managed database. When you are done it is recognisably the same application, in a
+container, talking to Azure SQL or Azure Database for PostgreSQL.
 
-If the selected stack, database family, image provider, source identity, or required
-tooling differs from what the registry says, stop and ask. A workaround here invalidates
-every chapter downstream.
+➡️ **[Go to ch01-A](../ch01-A/README.md)** — then pick
+[.NET](../ch01-A/dotnet.md) or [Java](../ch01-A/java.md)
 
-## Publishing: the gate every path passes through
+### 🅑 Rewrite from a specification
 
-Whichever path you took, your work has to leave the VM before it can identify anything.
-Challenge 3 checks the application source out of **your own** GitHub repository at the
-commit the handoff names, and builds the `Dockerfile` you authored from that checkout, so
-a commit that exists only on the VM disk is not enough.
+**You keep the behaviour and throw the code away.** Copilot reads the legacy application
+and writes a **Product Requirements Document** describing what it does and why. You review
+and correct that PRD — that review *is* the work — Copilot turns it into an implementation
+plan, and then builds the application again on a modern stack of your choosing, JavaScript
+included. It lands on exactly the same Azure architecture as path A.
 
-**This gate comes before the first command that takes `--source-commit`, not at the end of
-the day.** Every migration command binds to that SHA, so publishing late means redoing
-everything that consumed it. Two things follow, and your path guide places both:
+➡️ **[Go to ch01-B](../ch01-B/README.md)**
 
-- **The `Dockerfile` has to be in the commit you publish.** Author it before you push. On
-  the manual path that means writing it at the publish gate and building it later, when
-  the registry exists; on both Copilot paths the container work already comes first.
-- **Take the SHA after the push, never before.** `git rev-parse HEAD` on a clean tree is
-  the identity of your own work. `C:\MicroHack\source\.source-commit` is the provenance of
-  the archive you were handed, GitHub has never seen it, and the two are never
-  interchangeable.
+## Which one should you pick?
 
-Commit everything, point `C:\MicroHack\source` at your repository, and publish the branch:
-
-```powershell
-git add --all
-git commit -m 'Modernize the catalog for Azure'
-$ParticipantRepositoryUrl = '<facilitator-provided-https-url-of-your-repository>'
-if ((git remote) -contains 'origin') {
-  git remote set-url origin $ParticipantRepositoryUrl
-}
-else {
-  git remote add origin $ParticipantRepositoryUrl
-}
-git push --set-upstream origin workshop
-$SourceCommit = (git rev-parse HEAD).Trim()
-if ($SourceCommit -eq (Get-Content C:\MicroHack\source\.source-commit -Raw).Trim()) {
-  throw "sourceCommit equals the archive provenance SHA. You captured the baseline you were handed instead of the work you just pushed; nothing downstream can detect this."
-}
-```
-
-The first push opens a browser sign-in through Git Credential Manager; sign in as the
-account that owns the repository. `$SourceCommit` is what the handoff records as
-`source.commitSha`, and re-running the block is safe if a later fix changes a tracked
-file — just recapture `$SourceCommit` before the next command that consumes it.
-
-That guard exists because nothing downstream can catch the mistake it prevents. Both
-values are forty hexadecimal characters, both live under `C:\MicroHack\source`, and the
-deployment only checks the *shape* of `sourceCommit` — so the archive SHA deploys
-successfully, tags an image, and produces a handoff that passes schema validation. The
-failure surfaces a chapter later in Challenge 3, which builds your `Dockerfile` from a
-checkout at that SHA and finds no `Dockerfile`, because writing it was this challenge.
-
-Every path produces the same seven shared evidence artifacts plus the four specific to
-your path. The final handoff must name the path you took, reference a real rollback
-runbook in the repository, and validate before you start Challenge 2:
-
-```powershell
-cd tests\acceptance
-uv --no-config run python -m catalog_acceptance.handoff_cli ..\..\evidence\modernization-contract.json --contracts ..\..\workshop\contracts --repository-root ..\..
-```
-
-That command is one line on purpose. Wrapping it would need PowerShell's backtick
-continuation, and a single trailing space after a backtick silently turns one command into
-several — paste it whole.
-
-Once it validates, commit and push `evidence/modernization-contract.json` too. That second
-push is deliberate, not tidiness: Challenge 3 reads the handoff from the commit it
-dispatches, and that commit has to be a later commit than the source commit it builds.
-
-## Success criteria
-
-- The catalog is served by an Azure Container Apps revision, over HTTPS, from a public
-  URL — and the VM is no longer in the request path.
-- The database is a managed Azure service, holding all 198 figures and 20 categories,
-  reached over TLS by a least-privilege application principal.
-- All 198 images are served from Azure storage, not from a container's local disk.
-- The application container runs as a non-root user and is deployed by immutable
-  `sha256:` digest, never by tag.
-- A healthy previous revision is retained, inactive, ready to roll back to.
-- No application password exists anywhere in source, evidence, or shell history.
-- Your modernized source and `evidence/modernization-contract.json` are pushed to your own
-  GitHub repository on the `workshop` branch.
-- `evidence/modernization-contract.json` passes the command above with no findings.
-
-## Hints
-
-<details>
-<summary>Hint 1 — a nudge</summary>
-
-Do the work in the order the target is built, not the order that feels natural. Publish
-your branch first so you have a real source commit, then infrastructure, then data, then
-images, then the container build, then the deployment. Each stage proves something the
-next one assumes.
-
-The single most common way to lose an afternoon is to build and deploy a container
-before proving the application can talk to the managed database at all. There is a
-checkpoint for exactly that reason — take it seriously.
-
-</details>
-
-<details>
-<summary>Hint 2 — the approach</summary>
-
-Sequence: characterize the source and back it up → author your `Dockerfile` and publish
-the branch, which is where your source commit comes from → review and deploy the shared
-Bicep target → export, import, and verify the database → copy the images → point the
-still-on-the-VM application at the managed database and re-run acceptance → build the
-container → deploy the same digest twice, as a baseline and as a release → collect
-runtime, acceptance, and telemetry evidence → write the rollback runbook → render and
-validate the handoff.
-
-Telemetry evidence has a step in it that is easy to miss: four of the eight required log
-signals only appear when the application fails, so you have to induce those failures on
-purpose and put things back afterwards. See
-[inducing the telemetry failure signals](../../docs/TelemetryFaultInjection.md).
-
-Every migration command wants the same three things: the exact target resource ID
-repeated as a confirmation argument, `--source-commit` bound to your published commit,
-and `--execute`. They refuse to overwrite a non-empty target, which is a feature.
-
-</details>
-
-<details>
-<summary>Hint 3 — nearly the answer</summary>
-
-Your path's guide lists the required progression step by step, and the stack-specific
-reference solution in `solutions/ch01-*/` contains the complete executable form of every
-command including the guards around it. Use the reference solution when you are stuck on
-*syntax*; use your path guide when you are stuck on *what comes next*.
-
-If the handoff validator rejects your document, read the finding it names rather than
-editing the document. The handoff is rendered by
-`catalog-migrate render-handoff`, never written by hand — a hand-edited handoff is the
-one failure mode this workshop treats as fatal.
-
-</details>
-
-## If it goes wrong
-
-| Symptom | Cause | Fix |
+| | 🅐 Modernize | 🅑 Rewrite |
 | --- | --- | --- |
-| A deployment is rejected before a single resource is created, naming a required parameter it was not given | `sourceCommit` — and, at the application stages, `imageDigest` — are deliberately absent from the protected parameter files | Append `--parameters sourceCommit=$SourceCommit` (and `imageDigest=$ImageDigest`) after the `@file` argument. Absent by design, not a broken file — see the bullet in [Before you start](#before-you-start). |
-| A migration command refuses to run, saying the target is not empty | You already imported once, or the facilitator pre-seeded the target | Do not force it. Confirm which import succeeded, and re-run only `catalog-migrate verify`. |
-| The handoff validator reports a digest mismatch | You deployed by tag, or you rebuilt the image after resolving the digest | Resolve the tag to a `sha256:` digest once, then use that digest for both deployments and for the handoff. |
-| The handoff validator reports a missing telemetry signal | Four of the eight required signals are *failure* signals, emitted only from `catch` blocks. A correctly working application never produces them, so no amount of extra traffic will | Induce the failures deliberately, then restore: [inducing the telemetry failure signals](../../docs/TelemetryFaultInjection.md). Also check you are querying `AppExceptions` and not only `AppTraces` — records logged with an exception go to the former. |
-| The handoff validator reports a missing telemetry signal and the application was deployed before Application Insights was wired | No traces exist for the release revision at all | Confirm the connection string reached the container, generate traffic against the release revision, and re-collect telemetry. |
-| Acceptance passes locally but fails against Azure | You are testing the VM application, not the Container Apps revision | Check the base URL your acceptance run is bound to. |
+| **What you review** | Diffs against code you already have | A PRD and a plan, before any code exists |
+| **Language** | Same language, newer version | Anything modern — JavaScript/TypeScript welcome |
+| **Where time goes** | Fighting the framework upgrade | Arguing with the specification |
+| **Risk** | Low — the app already works today | Higher — the rewrite only knows what the PRD captured |
+| **Typical duration** | Shorter, more predictable | Longer, more variable |
+| **You'll learn** | A practical upgrade-and-containerize workflow | How to steer AI with a specification instead of code |
+| **Pick it if** | You want something you can use on Monday | You want to see where AI-first development actually lands |
 
-Everything else: [troubleshooting](../../docs/Troubleshooting.md).
+Some rules of thumb:
 
-## If you run out of time
+- **New to Azure Container Apps, Bicep, or containers generally?** Take 🅐. You will spend
+  your time learning the platform rather than debating requirements, and the rest of the
+  workshop depends on getting deployed.
+- **Short on time, or running this as a half day?** Take 🅐. It is the more predictable
+  route to a working deployment.
+- **The app you maintain at home is one you intend to keep?** Take 🅐 — that is exactly
+  this scenario.
+- **Curious how far AI gets from a spec, or your real backlog contains a "we should just
+  rewrite this" candidate?** Take 🅑.
+- **Want to write JavaScript, Python, or Go instead of C#/Java?** Take 🅑. It is the only
+  path where the target language is yours to choose.
 
-You probably will, and that is designed in. Tell your facilitator where you got to. They
-can hand you a prevalidated **golden handoff** for the same stack, which lets you rejoin
-at Challenge 2 with a working environment.
+**No preference? Take 🅐.** It is the shorter route and the one most directly useful
+afterwards.
 
-Two rules: it must be the golden handoff for *your* stack, and you never hand-edit or
-fabricate an evidence document to fill a gap. At the wrap-up, count the numbers you
-measured yourself and mark the rest *not measured*. That is an honest result. A
-fabricated one is not.
+**Got several people at the table?** Split — two on 🅐, two on 🅑 — and compare at the end
+of the day. That comparison is more interesting than either path alone, and the
+[wrap-up](../wrapup/README.md) has questions for it.
 
-## Debrief: compare the three paths
+> Both paths converge before [Challenge 2](../ch02/README.md), so nobody gets stranded.
+> Whichever you take, you finish with a container on Azure Container Apps and a managed
+> database, and everything after ch01 works the same way.
 
-**Do this as a group before you start Challenge 2. Fifteen minutes.** This is the
-comparison the workshop is built around, and it only works if people who took different
-paths talk to each other.
+## Success Criteria
 
-Fill this in together, one row per person:
+Identical for both paths:
 
-| | Manual | Copilot rewrite | Copilot modernization |
-| --- | --- | --- | --- |
-| Wall-clock to a running Container App | | | |
-| Roughly how many lines did *you* type? | | | |
-| What did the tests catch that review missed? | | | |
-| What did the tooling get wrong? | | | |
-| What would you not have let it touch? | | | |
-| Would you use this on your own estate? | | | |
+- The application is fully functional in Azure: browse, search, filter by category, open
+  a figure detail page, and see its photograph.
+- The application and the database are deployed separately, and the database is a managed
+  Azure service.
+- The application runs as a container on Azure Container Apps and can scale.
+- No database password is committed to the repository.
 
-Then discuss:
+## Now open your path
 
-1. **Where did the time actually go?** Almost nobody spends it where they expected. The
-   manual path loses it to infrastructure and data, the rewrite path loses it to
-   reviewing, and the modernization path loses it to the parts the tooling does not
-   cover.
-2. **Who caught the mistakes?** In all three paths the referee was the same: the
-   characterization and acceptance tests. Note how much confidence that bought, and what
-   you would have done without them.
-3. **What did the AI paths refuse to do, and were they right to?** Neither Copilot path
-   performs the database cutover. Ask whether you would have *wanted* it to.
-4. **Which path fits which kind of change?** A framework upgrade, a re-platform, a
-   rewrite, and a lift-and-shift are four different jobs. Map each to a path.
-5. **What would you tell your own team on Monday?** One sentence. That sentence is the
-   real output of this chapter.
-
-## What you just proved
-
-The catalog no longer runs on a machine you patch. It runs as an immutable image on a
-platform that can start another copy of it, against a database with its own backups and
-its own failure domain, using an identity instead of a password, with a previous version
-sitting ready to take traffic back.
-
-| | Before (Challenge 0) | Now |
-| --- | --- | --- |
-| Compute | One Windows VM | Container Apps revision, replaceable |
-| Database | Same box as the app | Managed service, separate failure domain |
-| 198 images | Local disk | Azure storage |
-| Application credential | A file on the server | Managed identity — none exists |
-| Undoing a bad release | Restore from backup | A retained revision, one command away |
-| Proof any of this is true | A person's word | A validated handoff document |
-
-And you have the number that matters for everything that follows: a real deployment,
-addressable over the internet, that Challenges 2 through 6 can load-test, redeploy,
-observe, assess, and break on purpose.
-
----
-
-**Previous:** [Challenge 0: meet the application you are about to move](../ch00/README.md) ·
-**Next:** [Challenge 2: load and autoscaling](../ch02/README.md) ·
-**Solution:** [Challenge 1 solution](../../solutions/ch01/README.md)
+- 🅐 **[ch01-A — Modernize the existing application](../ch01-A/README.md)**
+- 🅑 **[ch01-B — Rewrite from a specification](../ch01-B/README.md)**

@@ -127,8 +127,8 @@ terraform output deployment_footprint
 
 ## Defender for Cloud facilitator foundation
 
-The foundation reads the frozen `workshop/contracts/defender.json` version 1.1.0 and creates only its
-five `Microsoft.Security/pricings@2024-01-01` resources plus one
+The foundation creates the five `Microsoft.Security/pricings@2024-01-01` resources listed in
+`defender.tf`, plus one
 `Microsoft.Consumption/budgets@2023-11-01` subscription budget. Participant users retain their existing
 resource-group Owner permission for modernization and additionally receive the built-in Security Reader
 role on only their assigned resource group. Paid-plan and policy administration remain subscription-level
@@ -152,7 +152,7 @@ Containers coverage can take up to 24 hours to appear; live findings and recomme
 Terraform does not automate Defender cleanup or restore prior settings. After the workshop, an authorized
 facilitator must capture the pre-cleanup inventory, restore every prior pricing/subplan/enforce/extension
 value and the Serverless Containers portal state, verify the restored pricing state, capture the
-post-cleanup inventory, and run the contract cost query. Cost data may lag, so record the query time and
+post-cleanup inventory, and check the subscription cost query. Cost data may lag, so record the query time and
 repeat cost verification until workshop charges have stopped.
 
 `Microsoft.Security/pricings@2024-01-01` DELETE is **Valid only for resource scope**; it cannot remove
@@ -190,9 +190,9 @@ https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/<40-hex-commi
 
 `source_archive_sha256` is verified before every expansion, including cached archives. Each run
 uses a clean staging extraction and atomically swaps the source tree rather than trusting a prior
-mutable extraction. Every tool/database installer is the exact URL from
-`workshop/toolchain.lock.json`, with digest verification and Authenticode publisher verification
-where the lock declares a publisher.
+mutable extraction. Every tool and database installer is downloaded from a
+pinned URL with SHA-256 digest verification, plus Authenticode publisher verification where
+applicable.
 
 VM image version, .NET, SQL Server Express, go-sqlcmd, self-contained Windows SqlPackage,
 Microsoft OpenJDK, PostgreSQL, Maven, VS Code, Azure CLI, uv, Python, and VS Code extension

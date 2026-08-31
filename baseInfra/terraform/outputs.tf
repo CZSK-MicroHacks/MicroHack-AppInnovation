@@ -78,7 +78,7 @@ EOT
 output "performance_api_keys" {
   description = <<EOT
 Per-participant, per-stack performance-test API key, keyed by user index. Terraform generates
-it, the provisioner writes it into `C:\protected\*.json`, and `infra/main.bicep` surfaces it to
+it, the provisioner writes it into `C:\protected\*.json`, and participants surface it to
 the container app as `PERFTEST_API_KEY`. Challenge 2's load test reads the key from a Key Vault
 secret in a separate deployment, so that secret must carry this same value for the run to
 authenticate.

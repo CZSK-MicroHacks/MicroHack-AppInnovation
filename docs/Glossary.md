@@ -1,167 +1,75 @@
 # Glossary
 
-Terms used across the challenges, in alphabetical order. Every definition describes how
-*this workshop* uses the word, which is not always the broadest possible meaning.
-
-If a term below appears in a chapter you are working on, read this entry first — most
-"I don't understand what it's asking for" moments are vocabulary, not difficulty.
-
----
+Short definitions for terms participants meet during the workshop.
 
 **ACR (Azure Container Registry)**
-The private registry that holds your container images. The workshop uses the **Basic**
-tier, one registry per participant. Container Apps pulls from it by digest, not by tag.
-
-**Agent unit**
-The billing unit of the Azure SRE Agent. Each agent in this workshop runs at a fixed
-capacity of **four agent units, charged hourly for as long as the agent resource exists**.
-Stopping the agent does not stop the charge; only deleting the resource does.
+The private registry where your container image is built and stored. `az acr build` runs the build in Azure, so Docker is not required on the VM.
 
 **Application Insights**
-The application-performance side of Azure Monitor: request rates, dependency calls,
-failures, and traces from your container app. In this workshop it is *workspace-based*,
-so its data lands in a Log Analytics workspace and is billed through that workspace's
-ingestion meter.
+The Azure Monitor service used for request rates, dependencies, failures, logs, and traces from the catalog.
 
-**Baseline**
-The measurement you take in Challenge 0, *before* you change anything: the legacy app's
-row counts, `/healthz` and `/readyz` responses, canonical image, and the `198/20/198`
-corpus check. Every later "did it get better?" claim is measured against this number, so
-a missing baseline makes the wrap-up scorecard unanswerable.
+**Azure Container Apps (ACA)**
+The serverless container platform that runs the modernized catalog. ACA handles ingress, revisions, replicas, scale rules, and traffic splitting.
 
 **Bicep**
-Microsoft's domain-specific language for Azure Resource Manager templates. The workshop's
-Azure target (`infra/`) is written in Bicep. You deploy it; you do not usually edit it.
+Azure's readable language for Infrastructure as Code. Participants write their own Bicep with GitHub Copilot instead of copying a shared template.
 
-**Container Apps environment**
-The shared boundary that container apps live inside: it owns the virtual network
-integration, the ingress, and the Log Analytics workspace all its apps log to. One
-environment can host several apps; in this workshop it hosts your catalog.
+**Container App environment**
+The hosting boundary around Container Apps. It provides the managed runtime, logging integration, networking boundary, and workload profile settings.
 
-**Defender for Cloud plan**
-A per-service, subscription-wide, **paid** switch in Microsoft Defender for Cloud — for
-example *Defender for Servers*, *Defender for Containers*, or *Defender CSPM*. Turning
-one on changes the bill and the security posture for everyone in the subscription, which
-is why participants never enable a plan themselves. The facilitator enables them ahead of
-the workshop; you get `Security Reader` and investigate what they found.
+**Container image**
+A packaged version of the application and its runtime dependencies. The image is built in ACR and deployed to ACA.
 
-**Digest / SHA-256 pin**
-Identifying a container image by its immutable content hash
-(`myregistry.azurecr.io/catalog@sha256:abc123…`) instead of a mutable tag like `:latest`.
-A tag can be repointed at different content; a digest cannot. Every deployment in this
-workshop is pinned by digest so that "which build is running?" always has one answer.
+**Defender for Cloud**
+Azure's security posture and recommendation service. Challenge 5 uses it to review what the migration exposed and which findings matter first.
 
-**Drill revision**
-The deliberately broken revision at the centre of Challenge 6: a copy of your working
-revision, created at **zero traffic** before the incident window, reusing the same image
-and secrets, with only the database hostname pointed at `.sre-drill.invalid` and the
-readiness probe routed to `/healthz` instead of `/readyz`. The platform therefore believes
-it is healthy and keeps sending it traffic while every request fails. No secret is exposed
-and no real database is touched.
+**Federated credential**
+The trust rule that lets GitHub Actions use OIDC to obtain an Azure token for a managed identity. It must match the repository, branch, and environment.
 
-**Evidence**
-A JSON file under `evidence/` that records what you actually observed, produced by
-running commands rather than by writing prose. Chapters read each other's evidence instead
-of rediscovering resources in the portal. Never hand-edit or fabricate an evidence file —
-the validators are designed to catch it, and the whole chain of later chapters depends on
-it being true.
+**GitHub OIDC**
+Secretless authentication from GitHub Actions to Azure. GitHub sends a short-lived token; Azure checks it and grants only the roles assigned to the identity.
 
-**Fail-closed**
-A check that treats "I could not tell" as failure rather than success. The workshop's
-validators and `jq` assertions are fail-closed: a missing field, an empty array, or an
-unexpected status is an error, not a shrug. This is deliberate — a green result you cannot
-trust is worse than a red one.
-
-**Golden handoff**
-A prevalidated `evidence/modernization-contract.json` for a given stack, produced by the
-facilitator in advance. If your Challenge 1 path runs out of time, the facilitator hands
-you the golden handoff for your stack so you can rejoin the group at Challenge 2. It is a
-rejoin mechanism, not a shortcut to be taken pre-emptively — and it is the *only*
-legitimate way to obtain a handoff you did not build.
-
-**Handoff contract**
-The agreement between Challenge 1 and everything after it: a fixed JSON schema that names
-your Azure resources, image digest, database, and telemetry. Once it validates, later
-chapters read the file and stop caring how you got there — which is precisely why all six
-Challenge 1 stack/path combinations converge on it.
+**JIT VM access**
+Just-in-Time access opens RDP port 3389 to your current IP address for a limited time. The VMs start with RDP closed on purpose.
 
 **KQL (Kusto Query Language)**
-The query language for Log Analytics and Application Insights. Challenge 4 gives you five
-frozen KQL queries; you prove they return the expected shape against your own telemetry.
+The query language used by Log Analytics and Application Insights to ask questions about operations, dependencies, and failures.
 
 **Log Analytics workspace**
-The store that holds your logs and metrics. It is billed by **gigabytes ingested**, not by
-uptime, so a chatty application costs more than an idle one regardless of how long it
-runs.
+The Azure Monitor data store for logs and traces. Application Insights writes to a workspace, and queries run against that telemetry.
+
+**Managed database**
+A database service operated by Azure rather than installed on the VM. The .NET path targets Azure SQL Database serverless; Java targets Azure Database for PostgreSQL Flexible Server.
 
 **Managed identity**
-An Azure identity attached to a resource so that the resource can authenticate to other
-Azure services **without a secret in configuration**. *System-assigned* identities live and
-die with their resource; *user-assigned* identities are standalone and can be shared. This
-is what replaces the connection-string password you find in the legacy application.
+An Azure identity attached to a resource. It lets the Container App pull images, read storage, or access other Azure services without long-lived secrets in code.
 
-**`modernization-contract.json`**
-The concrete file that carries the handoff contract, written to `evidence/` at the end of
-Challenge 1 and validated by the shared handoff validator. If this file does not validate,
-Challenges 2 through 6 have nothing to read.
+**OTLP**
+The OpenTelemetry Protocol. The application uses OTLP exporters to send telemetry to Azure Monitor / Application Insights.
 
-**MTTR (mean time to recovery)**
-How long it takes to get back to a working state after a failure. Challenge 6 measures a
-real one: from the alert firing on the drill revision to traffic being back on the healthy
-revision.
+**OpenTelemetry**
+A vendor-neutral way to collect traces, metrics, and logs. Challenge 4 uses it to show requests and database calls across the new architecture.
 
-**OIDC (OpenID Connect)**
-The way the GitHub Actions workflow in Challenge 3 authenticates to Azure: GitHub presents
-a short-lived token, Azure validates it against a *federated credential* registered on a
-managed identity, and no client secret is ever stored in the repository.
+**PRD (Product Requirements Document)**
+The document created in the rewrite path before implementation. It describes the legacy behavior that the new app must preserve.
 
-**Pipeline lead time**
-How long a release takes from the moment the pipeline is dispatched to the moment the new
-revision serves traffic — *dispatch to live*. It is deliberately not measured from the
-commit: this workshop never observes how long a change waited before somebody dispatched
-it, so a commit-anchored figure would claim an interval it did not record. In the wrap-up
-you put it next to the legacy release you counted in Challenge 0 — its `manualDeploySteps`
-and the out-of-hours window they needed — against the Challenge 3 number, which is one
-pipeline run plus one approval. Older notes may call this *deployment lead time*.
-
-**RDP (Remote Desktop Protocol)**
-How you get a Windows desktop on your legacy VM. Each VM has its own public IP address,
-but port 3389 is **closed** until you request **Just-in-Time (JIT) access** for your own
-address in [Challenge 0, step 2](../challenges/ch00/README.md). Standing rules that hold
-3389 open are deleted automatically by tenant governance, so JIT — which opens the port
-for a few hours and then closes it — is the way in that lasts. After that you connect with
-any Remote Desktop client using the administrator credentials your facilitator hands out.
-The catalog application listens on the VM's loopback interface, so the browser you use to
-view it is the one *inside* the VM.
+**Replica**
+One running copy of a Container App revision. Scaling out adds replicas; scaling in removes them when demand falls.
 
 **Revision**
-An immutable snapshot of a Container App's configuration and image. Changing the image or
-a setting creates a *new* revision rather than mutating the running one, which is what
-makes both traffic splitting and instant rollback possible.
+An immutable version of a Container App's image and configuration. Changing the image or an environment variable creates a new revision.
 
-**Slice**
-One bounded unit of rewrite work in the Copilot-assisted path: plan it, let Copilot
-generate it, review the diff yourself, run the tests, commit — then take the next one. The
-registered slices are listed in `workshop/contracts/challenge-paths.json`. Slicing exists
-so that a failed generation costs you one small diff instead of a day.
+**Scale rule**
+The condition ACA watches to decide how many replicas to run. The workshop starts with HTTP/load signals and discusses when other signals would be better.
 
-**SRE Agent (Azure SRE Agent)**
-The Azure service in Challenge 6 that investigates an incident from your telemetry and
-proposes a remediation. In this workshop it runs in **Review** mode: it may read
-everything, but it may not change anything until a human with the Administrator role
-approves the proposed action.
+**Scale to zero**
+Running no replicas while idle. It saves money, but the next request may wait while the app and database wake up.
 
-**Terraform**
-The infrastructure-as-code tool used for the *facilitator-owned* base infrastructure in
-`baseInfra/` — the participant VMs, network, public IPs, and Entra users. Participants do not
-run it; the Azure target you deploy is Bicep.
+**Spec-driven development**
+The rewrite workflow where Copilot first helps describe desired behavior in a PRD, then uses that reviewed specification to plan and build the app.
 
 **Traffic split**
-The percentages that decide how much live traffic each revision of a Container App
-receives. `100/0` means all traffic to the current revision; shifting to `0/100` is how
-Challenge 3 promotes and how Challenge 6 rolls back.
+The percentage of requests sent to each revision. Reversing the split is the fast rollback move.
 
-**Validator**
-An executable check — a `pytest` gate or a `jq` assertion — that decides whether your
-evidence is acceptable. Validators are fail-closed and are the arbiter of chapter
-completion, so "it looks right to me" is never the pass condition.
+**Workload profile**
+The compute profile available inside a Container Apps environment. The workshop uses consumption-style behavior for the catalog so it can scale with demand.

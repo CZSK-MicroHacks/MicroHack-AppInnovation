@@ -104,8 +104,8 @@ variable "source_commit" {
 Immutable Git commit used to download the application, canonical manifest, catalog, and images.
 There is deliberately no default: a stale pin provisions a tree that has none of the chapters the
 room is following, and that failure only surfaces once the VMs are built. Re-pin this for every
-delivery to the published workshop commit, then verify the downloaded archive contains infra/ and
-every challenge folder before provisioning. See "Re-pin the VM source commit" in docs/Facilitator.md.
+delivery to the published workshop commit, then verify the downloaded archive contains the
+application sources and every challenge folder before provisioning. See "Re-pin the VM source commit" in docs/Facilitator.md.
 Values must be full lowercase 40-hex commit IDs; branches, tags, main, and other mutable
 references are rejected.
 EOT
@@ -117,7 +117,7 @@ EOT
 
   validation {
     condition     = var.source_commit != "fd298de6ded4e55b5208fe3f6d8e81fbcdf836c9"
-    error_message = "source_commit is the historical fd298de6 pin, whose tree has no infra/ and no current challenges. Re-pin it - see docs/Facilitator.md."
+    error_message = "source_commit is the historical fd298de6 pin, whose tree has none of the current challenges. Re-pin it - see docs/Facilitator.md."
   }
 }
 
@@ -216,7 +216,7 @@ variable "enable_defender_foundation" {
   default     = false
   description = <<EOT
 Opt-in switch for the paid Microsoft Defender for Cloud plans and subscription budget frozen in
-workshop/contracts/defender.json. The default is false so ordinary plans cannot create paid Defender
+defender.tf. The default is false so ordinary plans cannot create paid Defender
 resources. Setting this true also requires defender_facilitator_authorized=true and valid budget inputs.
 EOT
 }
@@ -318,7 +318,7 @@ variable "defender_budget_notification_emails" {
   type        = set(string)
   default     = []
   description = <<EOT
-Facilitator email recipients for the Defender budget's actual-cost notification at the contract maximum
+Facilitator email recipients for the Defender budget's actual-cost notification at the configured
 threshold of 80 percent. At least one non-empty address is required when the foundation is enabled.
 EOT
 
@@ -334,7 +334,7 @@ EOT
 variable "facilitator_principal_name" {
   type        = string
   description = <<EOT
-User principal name of the facilitator identity that `infra/main.bicep` records as
+User principal name of the facilitator identity recorded as
 `facilitatorPrincipalName`. Every Challenge 1 deployment requires it, so provisioning writes it
 into the protected deployment parameter files on each participant VM. Use the signed-in
 facilitator UPN, or the display name of the facilitator group when you delegate through a group.
@@ -349,7 +349,7 @@ EOT
 variable "facilitator_principal_object_id" {
   type        = string
   description = <<EOT
-Entra ID object ID of the same facilitator principal, passed to `infra/main.bicep` as
+Entra ID object ID of the same facilitator principal, surfaced as
 `facilitatorPrincipalObjectId`. Read it with `az ad signed-in-user show --query id -o tsv`, or
 `az ad group show --group '<group>' --query id -o tsv` when you delegate through a group.
 EOT
