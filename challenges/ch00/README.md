@@ -50,7 +50,7 @@ flowchart TB
   subgraph VM["One Windows Server VM — one failure domain"]
     APP["Catalog application<br/>started by a scheduled task"]
     DB[("Database<br/>installed beside the app")]
-    IMG["198 PNG files<br/>C:\MicroHack\source\data\images"]
+    IMG["198 PNG files<br/>C:\MicroHack\legacy-data\images"]
     CFG["Connection string<br/>C:\MicroHack\secrets\*.json"]
     LOG["The only diagnostics<br/>C:\MicroHack\logs\*-app.log"]
   end
@@ -136,7 +136,7 @@ $pain = [ordered]@{
     ForEach-Object { "$($_.Name)=$($_.Status)" })
   startupTasks      = @(Get-ScheduledTask -TaskName 'MicroHack-*' -ErrorAction SilentlyContinue |
     ForEach-Object { "$($_.TaskName)=$($_.State)" })
-  imageFilesOnDisk  = @(Get-ChildItem 'C:\MicroHack\source\data\images' -Filter *.png).Count
+  imageFilesOnDisk  = @(Get-ChildItem 'C:\MicroHack\legacy-data\images' -Filter *.png).Count
   configurationFile = "C:\MicroHack\secrets\$stack.json"
   onlyDiagnostics   = "C:\MicroHack\logs\$stack-app.log"
   runningInstances  = 1

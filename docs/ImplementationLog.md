@@ -1958,3 +1958,38 @@ leans on run-command. Settled on the plain `2025-datacenter-g2` SKU, which keeps
 stacks with no manual step. Both report `/healthz` 200 and `/readyz` 200 on localhost, and both
 smoke markers in `C:\MicroHack\status` show 198 figures / 20 categories / 198 images against the
 canonical image. The follow-up `terraform plan` prints `No changes.`
+
+### 2026-08-31 (F-103 - the legacy application no longer depends on the tree being modernized)
+The running catalog served its 198 photographs and read its seed data from
+`C:\MicroHack\source\data\`, which is the tree Challenge 1 asks participants to modernize in
+place. Migrating the images to Blob Storage — an obvious early step — took the legacy
+application down, and since no later step re-checks the baseline, participants were not told.
+Proved on a live VM before changing anything: renaming `source\data\images` away made the
+canonical image request fail immediately.
+
+The earlier warning box in `challenges/ch01/README.md` blamed the wrong thing. Editing
+`appsettings.json` or `application.properties` in the source tree does nothing to the running
+application: it runs from the published build in `C:\MicroHack\app\<stack>` and takes its
+configuration from environment variables set in the scheduled task's start script. The coupling
+was data, not configuration.
+
+`Sync-LegacyDataRoot` now publishes the canonical dataset to `C:\MicroHack\legacy-data` after
+`Assert-CanonicalData`, and both stacks point `CATALOG_IMAGES_PATH` and `CATALOG_SEED_PATH`
+there. It copies rather than moves so the participant's checkout stays intact and `git clean`
+stays safe, verifies 198 images before publishing, and swaps through a staging directory so a
+failed copy leaves the previous dataset in place instead of an empty directory the application
+would start against and fail readiness. `Invoke-StackSmokeCheck` now reads the catalog from
+`legacy-data` too, so it keeps validating what the application is actually serving once
+Challenge 1 is under way. The challenge text was rewritten to say the application survives the
+work, how to check it is still up, how to restart it, and to migrate images from
+`legacy-data\images`.
+
+Verified by rebuilding both VMs: renaming `source\data\images` away now leaves the canonical
+image at 200 on both stacks, and both smoke markers are still written.
+
+**Also found, and unresolved by this change:** inbound NSG rules do not survive. A tenant
+governance automation (`MCAPSGovernance-AutomationApp`) removed every inbound rule roughly
+nineteen minutes after Terraform created it, leaving `securityRules: []`. RDP is genuinely
+reachable while the rule exists — verified against both VMs — so the access model works; it
+just decays. This is very likely the true origin of the repo's long-standing claim that tenant
+governance blocks public IPs. See CommonErrors #124.

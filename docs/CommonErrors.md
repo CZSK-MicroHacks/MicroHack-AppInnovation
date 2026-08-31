@@ -1035,3 +1035,51 @@ or `id`. For a facilitator scaling `n` mid-workshop this wipes every attendee's 
 **Verification:** After a successful apply, `terraform plan` must print
 `No changes. Your infrastructure matches the configuration.` Treat anything else as a defect —
 a plan that is not clean is what re-arms this bug.
+
+## 123. Challenge 1 silently kills the legacy application (F-103)
+**Symptom:** Partway through Challenge 1 the legacy catalog stops serving images, or stops
+responding entirely, and nothing restarts it. Because no step re-checks the baseline, the
+participant is not told — and the "before" half of the Challenge 7 scorecard is gone.
+
+**Cause:** The running application read its image corpus and seed data straight out of
+`C:\MicroHack\source\data\` — the very tree Challenge 1 tells participants to modernize in
+place. Moving the 198 photographs to Blob Storage is an obvious early modernization step, and
+doing it broke the application that was still serving them.
+
+Note what is *not* the cause, despite an earlier version of the challenge text saying so:
+editing `appsettings.json` or `application.properties` in the source tree is harmless. The
+application runs from a published build at `C:\MicroHack\app\<stack>`, and its configuration
+arrives as environment variables set by the scheduled task's start script, so source-tree
+config is not read at all.
+
+**Resolution:** `Sync-LegacyDataRoot` in `provision-vm.ps1` publishes the canonical dataset to
+`C:\MicroHack\legacy-data`, and `CATALOG_IMAGES_PATH` / `CATALOG_SEED_PATH` point there for
+both stacks. Participants can now edit, delete from, and `git clean` their checkout without
+touching the application. Re-provisioning refreshes the copy, so it also repairs a participant
+who damaged it.
+
+**Verification (this is the regression test):** on the VM, rename
+`C:\MicroHack\source\data\images` away and request the canonical image. It must still return
+200. Before the fix it returned an error immediately.
+
+## 124. NSG inbound rules disappear about 20 minutes after they are created
+**Symptom:** RDP to a VM's public IP works right after deployment and then stops. The NSG shows
+`securityRules: []` even though Terraform created a rule and reported success, and a
+`terraform plan` that was clean minutes ago now wants to re-add the rule.
+
+**Cause:** Not Terraform, and not Azure Policy. In MCAPS subscriptions a tenant governance
+automation removes inbound rules it considers risky. The activity log names it:
+```bash
+az monitor activity-log list -g rg-userNNN --offset 6h \
+  --query "[?contains(to_string(resourceId),'nsg-userNNN')].{time:eventTimestamp,op:operationName.value,caller:caller}" -o table
+```
+The caller resolves to the application `MCAPSGovernance-AutomationApp`
+(appId `a1a9c5b6-7a4f-4288-89ab-6805873f65d1`).
+
+This is almost certainly the real origin of the long-standing repo note that "tenant governance
+blocks public IPs and reverts re-registration within minutes". The public IP itself is fine —
+it is the NSG rule that gets removed.
+
+**Implication:** any access design that depends on a *persistent* inbound allow rule created at
+deployment time will decay after roughly twenty minutes. Treat opening RDP as a participant
+step performed when it is needed, not as something the deployment can do once and rely on.

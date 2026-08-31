@@ -35,6 +35,12 @@ $ProgressPreference = 'SilentlyContinue'
 $Root = 'C:\MicroHack'
 $DownloadRoot = Join-Path $Root 'downloads'
 $SourceRoot = Join-Path $Root 'source'
+# The data the running legacy application serves, held outside $SourceRoot on purpose.
+# Challenge 1 has participants modernize the tree in $SourceRoot, and a plausible early step
+# there -- moving the image corpus to Blob Storage -- used to stop the legacy application
+# dead, because it served its images straight out of the tree being edited. Nothing the
+# participant does to their checkout can reach this copy.
+$LegacyDataRoot = Join-Path $Root 'legacy-data'
 $ApplicationRoot = Join-Path $Root 'app'
 $StatusRoot = Join-Path $Root 'status'
 $SecretRoot = Join-Path $Root 'secrets'
@@ -1240,6 +1246,56 @@ function Initialize-SourceRepository {
     }
 }
 
+function Sync-LegacyDataRoot {
+    <#
+    .SYNOPSIS
+        Publishes the canonical dataset to $LegacyDataRoot, which the application reads.
+    .DESCRIPTION
+        Copied rather than referenced in place so that Challenge 1 cannot take the legacy
+        application down: participants edit, delete from, and run `git clean` inside
+        $SourceRoot, and the application must survive all of it to remain a usable "before".
+        The copy is refreshed on every provisioning run, so re-provisioning repairs a
+        participant who damaged it, and it is verified afterwards rather than trusted.
+    #>
+
+    $Staging = "$LegacyDataRoot.staging"
+    $Previous = "$LegacyDataRoot.previous"
+    foreach ($Path in @($Staging, $Previous)) {
+        Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    New-Item -Path $Staging -ItemType Directory -Force | Out-Null
+    Copy-Item -Path (Join-Path $SourceRoot 'data\images') -Destination $Staging -Recurse -Force
+    foreach ($File in @('catalog.json', 'categories.json', 'manifest.json')) {
+        Copy-Item -Path (Join-Path $SourceRoot "data\$File") -Destination $Staging -Force
+    }
+
+    $Images = @(Get-ChildItem -Path (Join-Path $Staging 'images') -File -Filter '*.png')
+    if ($Images.Count -ne 198) {
+        Remove-Item -Path $Staging -Recurse -Force -ErrorAction SilentlyContinue
+        throw "Legacy data copy holds $($Images.Count) images instead of 198."
+    }
+
+    # Swap through a temporary name so a failed copy leaves the previous dataset in place
+    # rather than an empty directory the application would start against and fail readiness.
+    if (Test-Path $LegacyDataRoot) {
+        Move-Item -LiteralPath $LegacyDataRoot -Destination $Previous
+    }
+    try {
+        Move-Item -LiteralPath $Staging -Destination $LegacyDataRoot
+        Remove-Item -Path $Previous -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        Remove-Item -Path $LegacyDataRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $Previous) {
+            Move-Item -LiteralPath $Previous -Destination $LegacyDataRoot
+        }
+        throw
+    }
+
+    Write-ProvisionLog "Published the canonical dataset to $LegacyDataRoot."
+}
+
 function Assert-CanonicalData {
     $ManifestPath = Join-Path $SourceRoot 'data\manifest.json'
     $CatalogPath = Join-Path $SourceRoot 'data\catalog.json'
@@ -1635,8 +1691,8 @@ $env:CATALOG_DATABASE_PORT = '1433'
 $env:CATALOG_DATABASE_NAME = 'LegoCatalog'
 $env:CATALOG_DATABASE_USERNAME = 'catalog'
 $env:CATALOG_DATABASE_PASSWORD = $Configuration.DatabasePassword
-$env:CATALOG_IMAGES_PATH = 'C:\MicroHack\source\data\images'
-$env:CATALOG_SEED_PATH = 'C:\MicroHack\source\data\catalog.json'
+$env:CATALOG_IMAGES_PATH = 'C:\MicroHack\legacy-data\images'
+$env:CATALOG_SEED_PATH = 'C:\MicroHack\legacy-data\catalog.json'
 $env:CATALOG_STARTUP_IMPORT_ENABLED = 'true'
 $env:PERFTEST_API_KEY = $Configuration.PerformanceApiKey
 $env:PERFTEST_WORK_FACTOR = '10'
@@ -1654,8 +1710,8 @@ exit $LASTEXITCODE
         CATALOG_DATABASE_PORT     = '1433'
         CATALOG_DATABASE_NAME     = 'LegoCatalog'
         CATALOG_DATABASE_USERNAME = 'catalog'
-        CATALOG_IMAGES_PATH       = 'C:\MicroHack\source\data\images'
-        CATALOG_SEED_PATH         = 'C:\MicroHack\source\data\catalog.json'
+        CATALOG_IMAGES_PATH       = 'C:\MicroHack\legacy-data\images'
+        CATALOG_SEED_PATH         = 'C:\MicroHack\legacy-data\catalog.json'
         CATALOG_BASE_URL          = 'http://localhost:5000'
     }
     Register-ApplicationTask -ScriptPath $StartScript
@@ -1841,8 +1897,8 @@ $env:CATALOG_DATABASE_NAME = 'catalog'
 $env:CATALOG_DATABASE_USERNAME = 'catalog'
 $env:CATALOG_DATABASE_PASSWORD = $Configuration.DatabasePassword
 $env:CATALOG_DATABASE_SSL_MODE = 'disable'
-$env:CATALOG_IMAGES_PATH = 'C:\MicroHack\source\data\images'
-$env:CATALOG_SEED_PATH = 'C:\MicroHack\source\data\catalog.json'
+$env:CATALOG_IMAGES_PATH = 'C:\MicroHack\legacy-data\images'
+$env:CATALOG_SEED_PATH = 'C:\MicroHack\legacy-data\catalog.json'
 $env:CATALOG_STARTUP_IMPORT_ENABLED = 'true'
 $env:PERFTEST_API_KEY = $Configuration.PerformanceApiKey
 $env:PERFTEST_WORK_FACTOR = '10'
@@ -1862,8 +1918,8 @@ exit $LASTEXITCODE
         CATALOG_DATABASE_NAME     = 'catalog'
         CATALOG_DATABASE_USERNAME = 'catalog'
         CATALOG_DATABASE_SSL_MODE = 'disable'
-        CATALOG_IMAGES_PATH       = 'C:\MicroHack\source\data\images'
-        CATALOG_SEED_PATH         = 'C:\MicroHack\source\data\catalog.json'
+        CATALOG_IMAGES_PATH       = 'C:\MicroHack\legacy-data\images'
+        CATALOG_SEED_PATH         = 'C:\MicroHack\legacy-data\catalog.json'
         CATALOG_BASE_URL          = 'http://localhost:8080'
     }
     Register-ApplicationTask -ScriptPath $StartScript
@@ -1890,7 +1946,9 @@ function Invoke-StackSmokeCheck {
         }
     } -Attempts 120
 
-    $CatalogJson = Get-Content (Join-Path $SourceRoot 'data\catalog.json') -Raw | ConvertFrom-Json
+    # Read the dataset the application was actually pointed at, not the participant-editable
+    # tree it was copied from, so this check keeps meaning once Challenge 1 is under way.
+    $CatalogJson = Get-Content (Join-Path $LegacyDataRoot 'catalog.json') -Raw | ConvertFrom-Json
     $Catalog = @($CatalogJson)
     $ImageName = [string]$Catalog[0].filename
     if ($ImageName -cnotmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$') {
@@ -1958,6 +2016,7 @@ try {
     Install-CommonTools
     Install-SourceArchive
     Assert-CanonicalData
+    Sync-LegacyDataRoot
 
     if ($Stack -eq 'dotnet') {
         $Tools = Install-DotNetDatabase
