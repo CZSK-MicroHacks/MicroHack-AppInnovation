@@ -1,45 +1,58 @@
 {
   "name": "MicroHack-AppInnovation",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
+  "image": "mcr.microsoft.com/devcontainers/base:1-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0",
+      "additionalVersions": "10.0"
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "additionalVersions": "17",
+      "jdkDistro": "ms",
+      "installMaven": true
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "installBicep": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/azure/azure-dev/azd:0": {}
   },
-  "runArgs": [
-    "-v",
-    "/var/run/docker.sock:/var/run/docker.sock"
-  ],
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
   "remoteUser": "vscode",
-  "workspaceFolder": "/workspaces/MicroHack-AppInnovation",
-  "updateContentCommand": "dotnet restore ./dotnet || true",
-  "postCreateCommand": "az version && azd version && dotnet --info",
-  "features": {},
+
+  "postCreateCommand": "dotnet --list-sdks && java -version && mvn -v | head -1 && az version --output tsv --query '\"azure-cli\"'",
+
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-dotnettools.csharp",
+        "vscjava.vscode-java-pack",
         "ms-azuretools.vscode-bicep",
         "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-azurecontainerapps",
         "GitHub.copilot",
         "GitHub.copilot-chat"
       ],
       "settings": {
         "dotnet.defaultSolution": "dotnet/LegoCatalog.sln",
         "editor.formatOnSave": true,
-        "bicep.trace.server": "Off",
         "bicep.suppressGitIgnoreWarning": true,
-        "github.copilot.enable": {
-          "*": true
-        },
         "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   },
-  "mounts": [
-    "source=${localWorkspaceFolder}/data,target=/workspaces/MicroHack-AppInnovation/data,type=bind"
-  ],
+
   "containerEnv": {
-    "ASPNETCORE_ENVIRONMENT": "Development",
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-    "MSSQL_SA_PASSWORD": "YourStrong!Passw0rd!"
+    "DOTNET_ROLL_FORWARD": "LatestPatch"
   }
 }

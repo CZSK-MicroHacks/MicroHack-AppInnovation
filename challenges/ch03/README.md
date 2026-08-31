@@ -1,16 +1,37 @@
-# Implement CI/CD pipeline to automatically deploy changes
+# ch03: Implement a CI/CD pipeline to deploy changes automatically
 
 ## Goal
-In this challenge you will use Github Actions to automate the build and deployment of your application to Azure automatically as code changes are made. New version of application should be first deployed to staging environment so functionality can be tested before showing this to users. In our lab we will not consider dev and testing environments with separate databases so your staging (or sometimes called pre-production) will access the same database. Implement manual sign-off in your pipeline after which new version gets promoted to production instance.
+
+In this challenge you will use GitHub Actions to build and deploy the application to Azure
+automatically as code changes are made.
+
+A new version should first go to a staging environment so it can be tested before users
+see it. In this lab we do not run separate dev and test databases — your staging (or
+pre-production) instance talks to the same database as production. Add a manual sign-off to
+the pipeline, after which the new version is promoted to all users.
 
 ## Actions
-- Fork this repository to your GitHub account or organization
-- Create GitHub Actions workflow that will detect changes in ```dotnet/``` folder, build container, push to Azure Container Registry new version and trigger deployment to Azure Container Apps
-- Enhance this solution to deploy new version in a way that users are still presented with previous one yet there is URL for tester to look into it. After approval in pipeline new version should be rolled to all users.
+
+- Fork this repository into your own GitHub account or organization.
+- Create a GitHub Actions workflow that detects changes in your application folder
+  (`dotnet/`, `java/`, or the folder your rewrite produced), builds the container, pushes a
+  new version to Azure Container Registry, and triggers a deployment to Azure Container
+  Apps.
+- Authenticate to Azure without storing a secret. What does federated identity (OIDC) buy
+  you over a service principal password?
+- Enhance the workflow so users continue to see the previous version while a tester gets a
+  URL for the new one. After approval in the pipeline, the new version takes all traffic.
 
 ## Success Criteria
-- Application is built and deployed automatically.
-- New versions are first deployed not visible to users and wait for approval.
+
+- The application is built and deployed automatically when code changes.
+- New versions are deployed without being visible to users, and wait for approval.
+- No Azure credential is stored as a long-lived secret in GitHub.
 
 ## Solution - Spoilerwarning
-[Solution Steps](/solutions/ch03/README.md)
+
+[Solution Steps](../../solutions/ch03/README.md)
+
+---
+
+**Previous:** [ch02](../ch02/README.md) · **Next:** [ch04](../ch04/README.md)

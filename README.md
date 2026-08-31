@@ -1,72 +1,172 @@
 # MicroHack: Application Innovation
-What is the next generation of modernization and why does it matter?
 
-## MicroHack Context
-We will work with simple Web applications built on .NET and SQL Server.
+What is the next generation of modernization, and why does it matter?
 
-![](./images/catalog.png)
+## MicroHack context
 
-The application is deployed in a way that does not fully leverage the cloud: it cannot auto-scale or scale to zero, high availability is limited in its current form, and the deployment process is manual and error‑prone.
+A specialty retailer sells collectible figures. Its product catalog — 198 items across 20
+categories, each with a photograph — runs the way it has run for years: one Windows Server
+virtual machine, with the application and its database installed side by side on the same
+box.
 
-Note: All data in this application has been AI-generated and is for testing purposes only. We generated an initial batch for you, but if you're interested in generating your own, see [dataGenerator](/dataGenerator/README.md).
+![The catalog application](./images/catalog.png)
 
-## MicroHack Objectives
-- Learn how to take application from VM and deploy it using modern platform services using containers in **Azure Container Apps** and **Azure SQL Database**
-- Investigate **auto-scaling** capabilities for application and databases including **scale-to-zero**
-- Learn how to use Azure for **testing performance and functionality** of applications
-- Automatically deploy changes using **CI/CD pipelines** and introduce staging environment and approval workflow in **GitHub Actions**
-- Learn how to enable modern application monitoring and tracing using standard **OpenTelemetry**
-- Optionally implement strict **security controls** and compliance measures
-- Optionally enhance application with **AI capabilities**
-- Learn to effectively use **GitHub Copilot** for brainstorming, analysis, writing scripts and Infrastructure as Code templates
+It works. That is the problem, because nobody can justify touching it.
 
-## MicroHack Challenges
-Focus on implementing **at least the first two challenges today** as a minimum out of the four major challenges. 
+- **Scaling means buying a bigger machine.** There is one instance, and a traffic spike is
+  survived by hoping.
+- **Releases are a weekend activity.** Someone remotes in, stops the service, copies files,
+  and starts it again. There is no rollback that is not a restore.
+- **The database shares a host with the web tier.** A runaway query takes the site down.
+- **Nobody can explain last Tuesday.** No traces, no metrics, and the only log is a text
+  file on the server.
 
-Challenge 5 is designed for participants who have time to spare or as follow‑up work after the MicroHack and comes in two optional flavors. The Enterprise flavor enhances enterprise‑grade security; the Innovation flavor adds AI capabilities to the application.
+Your job is to move the catalog to Azure Container Apps and a managed database — and to
+have a good time working out how.
+
+Note: all data in this application is AI-generated and for testing purposes only. We
+generated a batch for you; if you want to generate your own, see
+[dataGenerator](./dataGenerator/README.md).
+
+## Two stacks, pick one
+
+The same catalog exists twice, so you can practise on something close to what you actually
+maintain. In [ch00](./challenges/ch00/README.md) you choose **one** and keep it for the
+whole workshop.
+
+| | `dotnet-sqlserver` | `java-postgresql` |
+| --- | --- | --- |
+| Application today | .NET 8 Blazor Server | Spring Boot 3 on Java 17 |
+| Database today | SQL Server 2022 Express | PostgreSQL 18 |
+| Source | [`dotnet/`](./dotnet/README.md) | [`java/`](./java/README.md) |
+| Target database | Azure SQL Database (serverless) | Azure Database for PostgreSQL Flexible Server |
+
+Both converge on the same Azure architecture, so neither is the easy option.
+
+## MicroHack objectives
+
+- Take an application off a VM and run it on modern platform services — containers on
+  **Azure Container Apps** with a **managed database**.
+- Investigate **auto-scaling** for the application and the database, including
+  **scale-to-zero**.
+- Use Azure to **test performance and functionality**.
+- Deploy changes automatically with **GitHub Actions**, adding a staging revision and an
+  approval workflow.
+- Enable modern monitoring and tracing with standard **OpenTelemetry**.
+- Read your real **cloud security posture** and let an **AI agent** work an incident.
+- Optionally implement strict security controls, or add AI capabilities to the app.
+- Learn to use **GitHub Copilot** effectively — for analysis, scripts, Infrastructure as
+  Code, and the modernization itself.
+
+## MicroHack challenges
+
+| Challenge | What you do | Guide | Solution |
+| --- | --- | --- | --- |
+| **ch00** | Meet the application, choose your stack | [Challenge](./challenges/ch00/README.md) | [Solution](./solutions/ch00/README.md) |
+| **ch01** | Migrate the database, containerize, deploy to Azure | [Choose a path](./challenges/ch01/README.md) → [ch01-A](./challenges/ch01-A/README.md) · [ch01-B](./challenges/ch01-B/README.md) | [A](./solutions/ch01-A/README.md) · [B](./solutions/ch01-B/README.md) |
+| **ch02** | Test autoscaling under load | [Challenge](./challenges/ch02/README.md) | [Solution](./solutions/ch02/README.md) |
+| **ch03** | Automate deployment with CI/CD | [Challenge](./challenges/ch03/README.md) | [Solution](./solutions/ch03/README.md) |
+| **ch04** | Monitor performance with tracing | [Challenge](./challenges/ch04/README.md) | [Solution](./solutions/ch04/README.md) |
+| **ch05-defender** | See what the migration actually exposed | [Challenge](./challenges/ch05-defender/README.md) | [Solution](./solutions/ch05-defender/README.md) |
+| **ch06-sre-agent** | Let an AI agent diagnose an incident | [Challenge](./challenges/ch06-sre-agent/README.md) | [Solution](./solutions/ch06-sre-agent/README.md) |
+| **ch07-enterprise** | Optional: enterprise security hardening | [Challenge](./challenges/ch07-enterprise/README.md) | Open-ended |
+| **ch07-innovation** | Optional: add AI capabilities | [Challenge](./challenges/ch07-innovation/README.md) | Open-ended |
+| **Wrap-up** | What you moved, and what to take home | [Wrap-up](./challenges/wrapup/README.md) | — |
+
+Focus on getting through **at least ch01 and ch02** — those are the minimum. The ch07
+challenges are for teams with time to spare, or as follow-up work afterwards.
+
+See [the agenda](./docs/Agenda.md) for how this fits into the available time.
+
+### Challenge 1 has two paths
+
+Challenge 1 is the heart of the workshop, and there are two honest ways through it:
+
+- **[ch01-A — Modernize the existing application](./challenges/ch01-A/README.md).** Keep
+  the code, upgrade the framework, containerize it, and move the data to a managed
+  database. The realistic upgrade workflow, and the shorter route.
+- **[ch01-B — Rewrite from a specification](./challenges/ch01-B/README.md).** Treat the
+  legacy app as the source of behaviour, have Copilot write a PRD and a plan, and rebuild
+  on a modern stack of your choice — JavaScript included. Spec-driven development in
+  practice.
+
+Both end at the same Azure architecture, so nobody gets stranded. Read
+[ch01](./challenges/ch01/README.md) to choose, then open only your path. If your table has
+several people, split so you can compare notes afterwards.
 
 ## MicroHack tips
-- Use **GitHub Copilot** to help you author infrastructure (Bicep/Terraform), Dockerfiles, GitHub Actions workflows, scripts, and application code faster and with fewer errors. If you do not have a Business/Enterprise/Pro license, ask a facilitator to enable it.
-- Take advantage of the **Azure MCP Server** in VS Code with GitHub Copilot to ask questions about Azure documentation, configurations, and services deployed in your environment. It can help you configure your database, Container Apps, or monitoring.
+
+- Use **GitHub Copilot** to author Bicep/Terraform, Dockerfiles, GitHub Actions workflows,
+  scripts, and application code faster and with fewer errors. If you do not have a
+  Business/Enterprise/Pro license, ask a facilitator to enable it.
+- Take advantage of the **Azure MCP Server** in VS Code with GitHub Copilot to ask
+  questions about Azure documentation, configuration, and the services in your environment.
 - Don't hesitate to **ask for help** from your peers or mentors if you get stuck.
-- There are many ways to achieve the challenges; generally we recommend going **step-by-step**, leveraging Copilot, testing along the way, and using **repeatable patterns** (e.g., Infrastructure as Code).
-- The lab environment includes a Virtual Machine (accessed via the Azure Portal) that can be used as a **development workstation** and has been tested for all challenges. You can also use your own device or GitHub Codespaces.
-- Some **components include their own README.md file** in their respective folders. These help you understand how to run the application and which environment variables are supported.
-- All challenges except for ch05-innovation are designed so that **you do not have to change any application code to succeed**. Making code changes is still fine if required for your chosen approach.
+- There are many ways to pass each challenge. Generally: go **step by step**, lean on
+  Copilot, test as you go, and use **repeatable patterns** such as Infrastructure as Code.
+- Some **components have their own README.md** in their folder, explaining how to run them
+  and which environment variables they support.
 
-### Prerequisites and existing infrastructure
-You must have GitHub account so you can ask for GitHub Copilot license for our session and get assigned to GitHub Organization (so you can leverage Codespaces and Actions paid centrally).
+## Prerequisites and existing infrastructure
 
-There is Azure subscription and Resource Group deployed for you and facilitator will provide you with login to [Azure Portal](https://portal.azure.com). Note due to security rules in training tenant you will be required to enroll this account to MFA using Microsoft Authenticator app after first login. Inside you will find Virtual Machine with credentials ```azureuser``` and password ```Azure12345678``` accessible via Bastion host from Azure Portal. This VM contains application that use local SQL Server Express, .NET app and image files stored in a folder.
+You need a GitHub account so you can be given a GitHub Copilot license for the session and
+be added to the GitHub Organization (for Codespaces and Actions billed centrally).
 
-After VM starts use PowerShell script ```C:\start-app.ps1``` to run your application and access it at ```http://localhost:5000```.
+There is an Azure subscription and a resource group deployed for you, and the facilitator
+will give you a login for the [Azure Portal](https://portal.azure.com). Because of security
+rules in the training tenant you will be asked to enroll in MFA with the Microsoft
+Authenticator app after first login.
 
-You can also use this VM as your developer station, there are tools preinstalled for you such as Docker environment, Azure CLI, SQL Server Management Studio, git and Visual Studio Code. You may also use your local computer or GitHub Codespaces for this MicroHack if you prefer.
+Your resource group contains **two** Virtual Machines — one per stack. Each runs the legacy
+catalog with a local database and image files in a folder. Access is through
+**Just-in-Time VM access** over RDP; see [ch00](./challenges/ch00/README.md).
 
-Source code and important documentation for this application is stored in ```dotnet``` folder of this repository. In order to automate CI/CD later in a lab we suggest to clone this repo into your development environment.
+From ch01 onwards you write code, and the workshop assumes you do that in **GitHub
+Codespaces** on your own fork or clone of this repository. The
+[dev container](./.devcontainer/README.md) ships both SDKs (.NET 8 and 10, Java 21 and 17),
+Maven, a Docker daemon and the Azure CLI, so nothing has to be installed on your machine
+and both stacks behave the same for everyone.
 
-### Facilitator instructions (students skip this)
-- Make sure you have access to subscription and Entra ID role with permissions to create users (in MngEnv type of tenant you must use PIM to elevate to Global Admin in Entra). 
-- Modify `config.auto.tfvars` with your Entra domain and set `n`, number of user environments.
-- Deploy Terraform from [baseInfra](./baseInfra/README.md) (for large setup such as 50 or more seats, use -parallelism=40 to speed things up)
-- After deployment there are Dev tools installation scripts running in VMs so you might wait few more minutes for this to finish.
-- You may provision GitHub Organization for participants to give them Copilot licenses and environment for challenge 03. Follow [guide](./baseInfra/github/README.md)
-- Default subscription limits in MngEnv type of subscriptions is good for 50 seats per region (50 ACA envs, 100 VM cores, 50 Grafana, ...). To scale for more configure Terraform with more regions (script will balance deployments to those - in Europe for example ["swedencentral", "germanywestcentral", "francecentral", "norwayeast"] ) or use more subscriptions (you will have to create separate deployments for this, script do not support multiple subscriptions natively).
+The VM is a fine place to *look at* the legacy application, and it has VS Code, git, the
+Azure CLI and the stack's SDK — but it has no Docker daemon and only the old SDK, so do not
+plan to build there.
 
-### ch01: Migrate database, containerize application, deploy to Azure
-[Challenge](/challenges/ch01/README.md) | [Solution]( /solutions/ch01/README.md)
+### Facilitator instructions (participants skip this)
 
-### ch02: Test autoscaling under load
-[Challenge](/challenges/ch02/README.md) | [Solution]( /solutions/ch02/README.md)
+- Make sure you have subscription access and an Entra ID role with permission to create
+  users (in MngEnv tenants you must use PIM to elevate to Global Admin in Entra).
+- Configure `config.auto.tfvars` with your Entra domain and `n`, the number of participant
+  environments.
+- Deploy Terraform from [baseInfra](./baseInfra/README.md). For large setups (50+ seats),
+  use `-parallelism=40`.
+- Dev tool installation scripts run inside the VMs after deployment, so allow a few extra
+  minutes.
+- Provision a GitHub Organization for participants to give them Copilot licenses and an
+  environment for ch03. Follow the [guide](./baseInfra/github/README.md).
+- Default MngEnv subscription limits suit about 50 seats per region. To scale further,
+  configure Terraform with more regions or use more subscriptions.
 
-### ch03: Implement CI/CD pipeline to automatically deploy changes
-[Challenge](/challenges/ch03/README.md) | [Solution]( /solutions/ch03/README.md)
+Delivery planning — lead times, cost, capacity, and the per-challenge runbook — is in
+[the facilitator guide](./docs/Facilitator.md) and
+[the cost estimate](./docs/CostEstimate.md). Selling this internally? The
+[ten-minute demo](./docs/Demo.md) is the script.
 
-### ch04: Monitor application performance with tracing
-[Challenge](/challenges/ch04/README.md) | [Solution]( /solutions/ch04/README.md)
+## Repository map
 
-### ch05-enterprise: Implement security best practices
-[Challenge](/challenges/ch05-enterprise/README.md) – Optional hardening: VNet integration, Private Endpoints, WAF (Front Door) as sole public entry, Entra ID auth, Managed Identity, CMK-backed data encryption, policy & logging.
+| Path | Purpose |
+| --- | --- |
+| [`challenges`](./challenges) | Participant instructions — start here |
+| [`solutions`](./solutions) | Reference solutions, hints, and prompts |
+| [`dotnet`](./dotnet/README.md) | .NET/SQL Server legacy baseline |
+| [`java`](./java/README.md) | Java/PostgreSQL legacy baseline |
+| [`data`](./data) | The canonical 198-figure, 20-category catalog and its images |
+| [`dataGenerator`](./dataGenerator/README.md) | How the sample data was generated |
+| [`baseInfra`](./baseInfra/README.md) | Facilitator-owned lab infrastructure (Terraform) |
+| [`tests/load`](./tests/load) | JMeter plan and load-test config for ch02 |
+| [`docs`](./docs) | Agenda, facilitator guide, glossary, troubleshooting, cost estimate |
 
-### ch05-innovation: Implement AI capabilities
-[Challenge](/challenges/ch05-innovation/README.md) – Optional AI enhancements: semantic search, grounding + recommendation chatbot, translations, image generation, personalization, or new AI microservices.
+## Safety
+
+- Never run this workshop in a production or shared business subscription.
+- Do not commit database passwords, API keys, or connection strings.
+- Keep Terraform state encrypted and access controlled; it contains secrets.

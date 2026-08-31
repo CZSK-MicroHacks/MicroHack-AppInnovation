@@ -1,160 +1,237 @@
-# Terraform (azapi) Workshop Infrastructure
+# Facilitator Terraform
 
-This directory provides a Terraform implementation of the per-user workshop environment originally defined in Bicep. It intentionally uses the `azapi` provider for all Azure resources (instead of native `azurerm_*` resources) to give direct control over API versions and parity with the existing Bicep modules.
+This root module uses `azapi` for workshop resources and `azurerm` for authentication and explicit
+provider registration. It creates two keyed VM resources per participant:
 
-## Features
-
-### Resource Provider Registration
-Workshop users typically don't have subscription-level permissions to register Azure resource providers. This Terraform configuration automatically registers all required providers (AI, containers, databases, networking, etc.) before deploying any resources. 
-
-**Important**: The provider configuration includes `resource_provider_registrations = "none"` to disable automatic provider registration by Terraform. This gives explicit control over which providers are registered via the `resource_provider_registration` module.
-
-**Lifecycle**: Providers remain registered even after `terraform destroy` - this is intentional to avoid breaking existing resources in the subscription.
-
-See `modules/resource_provider_registration/README.md` for the complete list of registered providers.
-
-## Deployed Per User Environment
-For each user index (1..n, zero‑padded) the module provisions:
-- Resource Group `rg-userNNN`
-- Standard Public IP for Azure Bastion `pip-userNNN`
-- Standard Public IP for NAT Gateway `pip-nat-userNNN`
-- NAT Gateway `nat-userNNN` associated to both subnets
-- Network Security Group `nsg-userNNN` (RDP allowed only from VirtualNetwork)
-- Virtual Network `vnet-userNNN` (default CIDR `10.<index>.0.0/22`)
-  - Subnet `vms` (`10.<index>.0.0/24`)
-  - Subnet `AzureBastionSubnet` (`10.<index>.1.0/26`)
-- Network Interface `nic-userNNN`
-- Azure Bastion Host `bastion-userNNN`
-- Windows Server 2025 VM `vm-userNNN` (image: WindowsServer 2025 Datacenter Azure Edition)
-  - System-assigned managed identity (Owner on its resource group)
-- Custom Script Extension downloading and executing provisioning scripts from GitHub:
-  - `setup.ps1` (orchestrator)
-  - `SQL_install.ps1`, `App_install.ps1`, `Dev_install_initial.ps1`, `Dev_install_post_reboot.ps1`
-  
-Optional (when `manage_entra_users = true`):
-- Entra ID user `userNNN@<entra_user_domain>` granted Owner on the matching resource group.
-
-## Variables
-Current input surface (deprecated override/acceleration flags removed for simplicity):
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `n` | number | yes | Number of per‑user environments (loop count). |
-| `locations` | list(string) | yes | List of Azure regions. Per-user environments are assigned round-robin: index i -> `locations[(i-1) % len(locations)]`. |
-| `admin_username` | string | yes | Local admin username for Windows VMs. |
-| `admin_password` | string | yes | Local admin password (sensitive). Provide via env var or tfvars not committed. |
-| `vm_size` | string | yes | VM size (e.g. `Standard_D2as_v5`). |
-| `manage_entra_users` | bool | no (default true) | Whether to create lab Entra ID users and assign Owner role to each RG. |
-| `entra_user_domain` | string | conditional | Domain used for generated user UPNs (required if manage_entra_users=true). |
-| `entra_user_password` | string | conditional | Password for all generated users (required if manage_entra_users=true). |
-| `manage_azure_resources` | bool | no (default true) | Whether to deploy Azure infrastructure resources. When false, only Entra ID users are created. |
-| `manage_sub_providers` | bool | no (default true) | Whether to register Azure resource providers. Set to false if providers are already registered or you don't have subscription permissions. |
-
-Implicit (no longer user configurable):
-- VNet CIDR: `10.<index>.0.0/22`
-- `vms` subnet: `10.<index>.0.0/24`
-- `AzureBastionSubnet`: `10.<index>.1.0/26`
-- Accelerated networking: always disabled (consistent behavior across chosen sizes).
-
-### Entra ID User Provisioning
-When enabled (`manage_entra_users=true`) a separate module creates one user per environment:
-- UPN pattern: `userNNN@<entra_user_domain>` (NNN zero‑padded index)
-- All users share the provided password (lab convenience only—do NOT use in production)
-- Each user receives an Owner role assignment scoped only to its own resource group
-
-Disable this by setting `manage_entra_users=false` (no users created, no RBAC performed).
-
-### Region Distribution
-Set one or multiple regions via `locations`. With two regions `["swedencentral","germanywestcentral"]` and `n=5`, assignment becomes:
-
-| User Index | Region            |
-|------------|-------------------|
-| 1          | swedencentral     |
-| 2          | germanywestcentral|
-| 3          | swedencentral     |
-| 4          | germanywestcentral|
-| 5          | swedencentral     |
-
-Differences in counts per region are at most 1 (round-robin fairness). Changing region assignments for existing indices forces recreation of those resource groups.
-
-## Quick Start
-```pwsh
-# Initialize
-terraform init
-
-# Create your configuration file from the example
-copy config.tfvars.example config.auto.tfvars
-
-# Edit config.auto.tfvars with your specific values:
-# - Set your subscription_id
-# - Adjust n (number of environments)
-# - Configure locations (Azure regions)
-# - Set your entra_user_domain
-# - Update admin_password and entra_user_password
-
-# Apply (with increased parallelism for faster deployment)
-terraform apply -parallelism=50
-
-# Show outputs
-terraform output
+```text
+module.user_environment["1"].azapi_resource.vm["dotnet"]
+module.user_environment["1"].azapi_resource.vm["java"]
 ```
 
-### Multiple Subscriptions with Workspaces
-If you need to deploy to multiple subscriptions, use Terraform workspaces to manage separate state files:
+The matching NIC, extension, managed-identity role assignment, generated database password, and
+generated performance key use the same `dotnet` or `java` key. The network,
+NSG, resource group, and outbound public IP remain single shared resources in that participant
+module.
+
+## Inputs
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `n` | `5` | Participant environments; creates `n * 2` VMs and OS disks |
+| `locations` | required | Unique regions assigned round-robin |
+| `subscription_id` | required | Target Azure subscription |
+| `admin_username` | `azureuser` | Local administrator name on both VMs |
+| `admin_password` | none, sensitive | Set with `TF_VAR_admin_password` |
+| `vm_size` | `Standard_D2as_v5` | Size used by both VMs |
+| `vm_vcpus` | `2` | Footprint value confirmed by preflight |
+| `os_disk_size_gb` | `127` | Separate Premium OS disk size for each VM |
+| `source_commit` | frozen 40-hex commit | Immutable application/data source |
+| `source_archive_sha256` | required | Reviewed immutable archive digest |
+| `capacity_preflight_confirmed` | `false` | Blocks resource creation until preflight succeeds |
+| `manage_entra_users` | `true` | Creates participant Entra users when enabled |
+| `entra_user_domain` | empty | Required when Entra user creation is enabled |
+| `entra_user_password_length` | `24` | Length of the per-user initial password Terraform generates |
+| `manage_azure_resources` | `true` | Enables participant infrastructure |
+| `manage_sub_providers` | `true` | Enables explicit provider registration |
+| `enable_defender_foundation` | `false` | Opts in to the frozen paid Defender plans and subscription budget |
+| `defender_facilitator_authorized` | `false` | Required facilitator approval for the paid foundation |
+| `defender_budget_name` | `mh-defender-workshop` | Stable subscription budget name |
+| `defender_budget_amount` | `0` | Explicit positive amount required when enabled |
+| `defender_budget_start_date` | empty | First day of the current month through twelve months ahead at midnight UTC |
+| `defender_budget_end_date` | empty | Explicit later RFC 3339 budget end required when enabled |
+| `defender_budget_notification_emails` | empty | One or more facilitator recipients required when enabled |
+
+No secret belongs in `config.tfvars.example` or a committed `.tfvars` file. Generated secrets,
+VM custom data, and protected extension settings are still present in Terraform state. VM custom
+data is restricted to SYSTEM/Administrators after Windows provisioning but is not an encrypted
+secret store, so use an encrypted, access-controlled remote backend and tightly restrict VM
+administrator access.
+
+## Participant sign-in credentials
+
+Terraform generates one `random_password` per participant and sets `force_password_change = true`,
+so every participant receives a different initial password and must change it at first sign-in.
+There is no shared workshop password to leak or reuse.
+
+Read the credentials only when you are ready to hand them out:
 
 ```pwsh
-# Create and switch to workspace for first subscription
-terraform workspace new sub1
-terraform apply -var-file="sub1.tfvars" -parallelism=50
-
-# Create and switch to workspace for second subscription
-terraform workspace new sub2  
-terraform apply -var-file="sub2.tfvars" -parallelism=50
-
-# List available workspaces
-terraform workspace list
-
-# Switch between workspaces
-terraform workspace select sub1
-terraform workspace select sub2
-
-# Check current workspace
-terraform workspace show
+terraform output -json entra_user_credentials | ConvertFrom-Json
 ```
 
-Each workspace maintains its own state file, allowing you to manage multiple deployments independently.
+Distribute one row per participant over a private channel. Do not paste the whole map into a chat
+room: the participant user principal names are predictable (`userNNN@<domain>`), so one leaked
+password is enough to sign in as somebody else.
 
-## Destroy
+## Remote state
+
+State holds every generated secret in clear text — participant passwords, database passwords, and
+performance keys — so a local `terraform.tfstate` file is not acceptable for a real cohort. This
+module declares a partial `azurerm` backend; you supply the storage account at init time.
+
+Bootstrap the state container once per subscription, then:
+
 ```pwsh
-terraform destroy -parallelism=50
+Copy-Item backend.hcl.example backend.hcl   # backend.hcl is git-ignored
+# edit backend.hcl with your storage account name
+terraform init -backend-config=backend.hcl
 ```
-This removes all per-user resource groups (irreversible). Confirm before proceeding.
 
-## Design Notes
-- Every resource uses `azapi_resource` to honor the request of building an azapi-based configuration.
-- The `azurerm` provider is still declared to simplify authentication (`data.azurerm_client_config.current`). No `azurerm_*` resources are created.
-- Dependencies are expressed implicitly via ID references plus a few explicit `depends_on` where ordering is critical (e.g., NAT Gateway before NIC / VNet subnets association completeness, VM extension after VM).
-- Naming exactly mirrors Bicep convention ensuring parity across tooling.
-- The module keeps scripting logic unchanged—future improvements could parameterize script repository or pin commit SHAs for stronger immutability.
+The full bootstrap procedure, including the storage-account settings that make the container safe
+to hold secrets, is in [`../../docs/Facilitator.md`](../../docs/Facilitator.md).
 
-## Security & Secrets
-- Never commit real `admin_password` values. Prefer environment variables or a secure secrets manager / pipeline variable group.
-- Bastion restricts RDP by design (NSG rule only allows from VirtualNetwork). Access VMs through Azure Bastion (portal or CLI/SSH/RDP integration).
+Validation and formatting do not need a backend:
 
-## Future Enhancements (Optional)
-- Add diagnostics settings (Log Analytics) via azapi once monitoring requirements are finalized.
-- Introduce per-user custom sizing or feature flags using `for_each` map input instead of simple range.
-- Parameterize script source (branch/tag/commit) for reproducibility.
+```pwsh
+terraform init -backend=false
+terraform validate
+```
 
-## Parity Validation Checklist
-| Aspect | Bicep | Terraform (azapi) |
-|--------|-------|-------------------|
-| Naming | userNNN pattern | Same |
-| Addressing | 10.<i>.0.0/22 derived | Same |
-| Security | NSG RDP-from-vnet only | Same |
-| Bastion | Basic SKU + Standard PIP | Same |
-| Outbound | NAT Gateway + dedicated PIP | Same |
-| Provisioning | Custom Script Extension | Same |
-| VM Identity | Not originally highlighted | System-assigned identity + Owner on RG |
+## Commands
 
-If you discover a divergence please open an issue or update this README with corrective steps.
+Run the exact preflight and source digest procedure in [`../README.md`](../README.md), then:
+
+```pwsh
+Set-Location baseInfra/terraform
+terraform init -backend-config=backend.hcl
+terraform validate
+terraform plan -var-file local.tfvars -out tfplan
+terraform apply tfplan
+```
+
+Do not use `terraform apply -auto-approve` for the facilitator environment. Review the doubled
+compute/disk footprint, source digest, provider registrations, and all replacements in the saved
+plan.
+
+For a dependency-safe validation and reviewed plan from the repository root, run:
+
+```pwsh
+terraform -chdir=baseInfra/terraform init -backend=false -lockfile=readonly
+terraform -chdir=baseInfra/terraform validate
+terraform -chdir=baseInfra/terraform plan -var-file=local.tfvars -out=tfplan
+terraform -chdir=baseInfra/terraform show tfplan
+```
+
+These commands do not apply the plan. Keep `enable_defender_foundation=false` for ordinary participant
+infrastructure plans.
+
+Useful outputs:
+
+```pwsh
+terraform output dotnet_vm_names
+terraform output java_vm_names
+terraform output vm_names_by_environment
+terraform output private_ip_addresses_by_environment
+terraform output deployment_footprint
+```
+
+## Defender for Cloud facilitator foundation
+
+The foundation creates the five `Microsoft.Security/pricings@2024-01-01` resources listed in
+`defender.tf`, plus one
+`Microsoft.Consumption/budgets@2023-11-01` subscription budget. Participant users retain their existing
+resource-group Owner permission for modernization and additionally receive the built-in Security Reader
+role on only their assigned resource group. Paid-plan and policy administration remain subscription-level
+facilitator responsibilities.
+
+The Defender plans incur charges. Before a reviewed plan may contain them, an authorized facilitator must:
+
+1. Use a dedicated workshop subscription and capture the complete current Defender pricing state, including
+   pricing tier, subplan, enforce value, and extensions for every plan that cleanup could affect.
+2. Complete the Owner-only **Serverless Containers** portal preflight. The pricing API does not expose that
+   switch, so Terraform intentionally does not model it.
+3. Set `enable_defender_foundation=true`, `defender_facilitator_authorized=true`, a positive
+   `defender_budget_amount`, a midnight-UTC start on the first day of the current month through
+   twelve months ahead, a later RFC 3339 end date, and at least one facilitator email in
+   `defender_budget_notification_emails`.
+4. Review the saved plan before any separately authorized apply.
+
+Enable the foundation far enough ahead of the workshop to pre-warm ACA and ACR coverage. Full Serverless
+Containers coverage can take up to 24 hours to appear; live findings and recommendations are asynchronous.
+
+Terraform does not automate Defender cleanup or restore prior settings. After the workshop, an authorized
+facilitator must capture the pre-cleanup inventory, restore every prior pricing/subplan/enforce/extension
+value and the Serverless Containers portal state, verify the restored pricing state, capture the
+post-cleanup inventory, and check the subscription cost query. Cost data may lag, so record the query time and
+repeat cost verification until workshop charges have stopped.
+
+`Microsoft.Security/pricings@2024-01-01` DELETE is **Valid only for resource scope**; it cannot remove
+these subscription pricing objects. Terraform therefore creates the budget before changing any paid plan
+and protects every pricing instance with `prevent_destroy`. Do not disable the foundation or destroy its
+state while paid pricing remains. Only after the solution's authorized restoration and verification
+complete, detach the restored subscription pricing objects from Terraform state without changing Azure:
+
+```pwsh
+terraform state rm 'azapi_resource.defender_pricing'
+```
+
+The facilitator may then set `enable_defender_foundation=false` and review a plan that removes the budget.
+
+## Immutable Custom Script Extension
+
+The provisioner and a generated per-stack secret payload are embedded in each VM's custom data
+instead of downloaded from a branch. Azure decodes the data bundle under the
+SYSTEM/Administrators-only `C:\AzureData` directory. The extension command is stored only in
+`protectedSettings` and contains a secret-free encoded bootstrap. Before any provisioner
+execution, a short wrapper decodes the Terraform `base64gzip` payload with .NET
+`MemoryStream`/`GZipStream`/`StreamReader`, dot-sources the decompressed secret-free bootstrap, and
+calls it with only stack/source metadata. The bootstrap reads the bundle as data, writes a protected
+payload and clean script, clears `CustomData.bin`, and launches a new Windows PowerShell process
+against only the clean script. Payload values never become PowerShell source, command arguments, or
+logs. A lifecycle precondition rejects an entire rendered CSE command above 7,800 characters.
+Installers
+receive database setup secrets through short-lived protected response/option files; `sqlcmd` and
+`psql` authenticate through `SQLCMDPASSWORD` and `PGPASSWORD`, never password command arguments.
+Application/data content uses:
+
+```text
+https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/<40-hex-commit>.zip
+```
+
+`source_archive_sha256` is verified before every expansion, including cached archives. Each run
+uses a clean staging extraction and atomically swaps the source tree rather than trusting a prior
+mutable extraction. Every tool and database installer is downloaded from a
+pinned URL with SHA-256 digest verification, plus Authenticode publisher verification where
+applicable.
+
+VM image version, .NET, SQL Server Express, go-sqlcmd, self-contained Windows SqlPackage,
+Microsoft OpenJDK, PostgreSQL, Maven, VS Code, Azure CLI, uv, Python, and VS Code extension
+versions are pinned. SqlPackage installation verifies the locked archive digest, extracted
+executable publisher, and exact version without requiring another .NET runtime. There are no
+raw branch URLs, `latest` versions, or mutable package-manager fallbacks.
+
+VM custom data cannot be updated in place. A `terraform_data.provisioner` replacement trigger makes
+any bootstrap, provisioner, bundle-format, or transport-version change replace the two VMs rather
+than attempt an invalid Azure update. The same combined digest drives the extension force tag.
+Changing only `source_commit` reruns each extension in place and reuses the already-separated
+protected local files.
+
+## Independent operation
+
+Each database is a local automatic Windows service. Each application is run by an automatic
+scheduled task (`MicroHack-dotnet` or `MicroHack-java`) whose startup script requires a successful
+native database query within five minutes before launching the app. Native connection/query
+timeouts and an exact-PID process deadline prevent either client from hanging the task; final
+sanitized failures are written to the stack app log before retry. A provisioner rerun disables the
+task before stopping it, matches only exact parsed DLL/JAR arguments, recovers an interrupted
+`.previous` directory, publishes to staging, and atomically swaps the completed output. Task
+registration explicitly re-enables it before start. Provisioning creates a stack-specific smoke
+marker only after the app, liveness, readiness, canonical image, canonical manifest counts, and
+native database counts pass.
+
+Deallocating `vm-dotnet-userNNN` does not affect `vm-java-userNNN`, and vice versa. The shared
+VNet, subnet, and NSG remain available while either VM is stopped. Each VM keeps its own static
+public IP address across a stop/start cycle, so the URL a participant bookmarked stays valid.
+
+## Provider registration lifecycle
+
+The AzureRM provider sets `resource_provider_registrations = "none"`. The registration module owns
+the approved namespace list and uses `prevent_destroy = true` to preserve the subscription-wide
+boundary. Before participant cleanup, remove that module from this state without unregistering it:
+
+```pwsh
+terraform state rm 'module.resource_providers[0]'
+terraform destroy -var-file local.tfvars
+```
+
+Use `import_existing_providers.ps1` when adopting existing registrations into a new state.

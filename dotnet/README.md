@@ -1,188 +1,105 @@
-## Lego Catalog (.NET Blazor Server)
+# Lego Catalog — .NET / SQL Server baseline
 
-Simple demo application that serves the generated Lego catalog, allows browsing, searching, filtering by category, viewing details, and importing additional seed data from a JSON file (idempotent insert-only for new product IDs).
+This is the legacy application you are modernizing: a .NET 8 Blazor Server monolith backed
+by SQL Server 2022 Express, both installed on the same Windows VM.
 
-### Features
-- Blazor Server (.NET 8 LTS) – runs cross‑platform (Windows / Linux) with Kestrel
-- EF Core (SQL Server) with automatic schema creation on startup (`EnsureCreated`) – zero extra steps
-- Environment variable driven configuration (overrides `appsettings.json`)
-- Idempotent JSON import on every startup (always attempted; inserts only new figure IDs)
-- Local filesystem image serving via `/images/{imageFile}` endpoint
-- OpenTelemetry instrumentation (traces, metrics, logs) via standard OTEL_* environment variables only (no App Insights / vendor SDK)
+It deliberately ships **no Dockerfile and no Azure infrastructure**. Creating those is your
+job in [Challenge 1](../challenges/ch01/README.md).
 
-### Configuration
-Configuration sources (highest precedence last):
-1. `appsettings.json` / `appsettings.Development.json`
-2. Environment variables (override file values)
+## Prerequisites
 
-Environment variables (aligns with design doc):
+- .NET SDK 8.0
+- SQL Server 2022 Express, or any SQL Server 2022 instance
+- The catalog data in `data/catalog.json` and `data/images/`
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| SQL_CONNECTION_STRING | Full SQL Server connection string | `Server=.\\SQLEXPRESS;Database=LegoCatalog;TrustServerCertificate=True;Integrated Security=True` |
-| SEED_DATA_PATH | Optional path to `catalog.json` for automatic import when DB empty | `C:\\git\\MicroHack-AppInnovation\\data\\catalog.json` |
-| IMAGE_ROOT_PATH | Folder containing PNG images | `C:\\git\\MicroHack-AppInnovation\\data\\images` |
-| PERFTEST_API_KEY | API key required for `/perftest/catalog` endpoint (performance testing) | `MySecretKey123` |
+All of this is preinstalled on the workshop VM.
 
-If `SQL_CONNECTION_STRING` is not supplied, the fallback from `appsettings.json` is used.
+## Configuration
 
-### Observability (OpenTelemetry)
-The app is pre-instrumented with OpenTelemetry using only upstream open-source packages. Nothing is required to run locally; if you do not set any OTEL_* environment variables the exporter is effectively dormant.
+Environment variables override the non-secret local defaults in `appsettings.json`.
 
-Packages included:
-- OpenTelemetry (SDK + APIs)
-- OpenTelemetry.Extensions.Hosting (generic host integration)
-- Instrumentations: AspNetCore, SqlClient, HttpClient, Runtime, Process
-- OTLP exporter (enabled for traces/metrics/logs through a single `.UseOtlpExporter()` call)
-	- Logs also explicitly register `AddOtlpExporter()` (no vendor-specific logging package required)
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `CATALOG_DATABASE_HOST` | No | SQL Server host or named instance; defaults to `.\SQLEXPRESS` |
+| `CATALOG_DATABASE_PORT` | No | TCP port, when the host is not a named instance |
+| `CATALOG_DATABASE_NAME` | No | Database name; defaults to `LegoCatalog` |
+| `CATALOG_DATABASE_USERNAME` | With password | SQL login; omit both to use Windows integrated security |
+| `CATALOG_DATABASE_PASSWORD` | With username | SQL login secret — supply it outside source control |
+| `CATALOG_IMAGES_PATH` | No | Directory holding the figure images |
+| `CATALOG_SEED_PATH` | No | Path to `catalog.json` |
+| `CATALOG_STARTUP_IMPORT_ENABLED` | No | `true` by default; imports the seed data on startup |
+| `PERFTEST_API_KEY` | Yes | Key required by `GET /perftest/catalog` |
+| `PERFTEST_WORK_FACTOR` | No | Integer 1–25; defaults to `10` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint; telemetry is only exported when this is set |
+| `OTEL_SERVICE_VERSION` | Yes | Version identity of what is running |
+| `DEPLOYMENT_ENVIRONMENT` | Yes | Use `lab` |
+| `CONTAINER_APP_REVISION` | Yes | Revision identity; use a local label during development |
 
-Key optional environment variables (spec defined):
+The three telemetry identity variables have no defaults and the app will refuse to start
+without them — that is intentional, so a running instance can always tell you which build
+it is. When you containerize in Challenge 1, remember to set them in the Container App.
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| OTEL_SERVICE_NAME | Logical service name (overrides default `lego-catalog`) | `lego-catalog` |
-| OTEL_RESOURCE_ATTRIBUTES | Extra resource attrs | `deployment.environment=dev,team=platform` |
-| OTEL_EXPORTER_OTLP_ENDPOINT | Base OTLP endpoint | `http://otel-collector:4317` |
-| OTEL_EXPORTER_OTLP_PROTOCOL | `grpc` (default) or `http/protobuf` | `http/protobuf` |
-| OTEL_EXPORTER_OTLP_HEADERS | Additional headers | `authorization=Bearer abc123` |
-| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT | Trace-specific endpoint | `http://collector:4318/v1/traces` |
-| OTEL_EXPORTER_OTLP_METRICS_ENDPOINT | Metrics-specific endpoint | `http://collector:4318/v1/metrics` |
-| OTEL_EXPORTER_OTLP_LOGS_ENDPOINT | Logs-specific endpoint | `http://collector:4318/v1/logs` |
-| OTEL_TRACES_SAMPLER | Sampler strategy | `traceidratio` |
-| OTEL_TRACES_SAMPLER_ARG | Sampler argument (e.g. ratio) | `0.1` |
-| OTEL_BSP_* | Batch span processor tuning | see spec |
-| OTEL_METRIC_EXPORT_INTERVAL | Metric export interval ms | `10000` |
+Never commit a database password or the performance API key.
 
-Instrumentation coverage:
-- Incoming HTTP & Blazor Server (AspNetCore)
-- Outgoing HTTP (HttpClient)
-- SQL Server driver operations (SqlClient) – by default **does not** capture raw SQL text to avoid sensitive data; can be enabled by code change if needed.
-- Runtime & process metrics (GC, CPU, memory, threads)
-- Custom: counter `lego.perf_endpoint.invocations` and manual activity segment `PerfEndpoint.PostProcessing` when `/perftest/catalog` completes.
+## Run it
 
-Quick test with an OpenTelemetry Collector running locally (example docker):
+Create the database, grant your login permission to migrate and read/write, then from
+`dotnet/`:
+
 ```powershell
-docker run --rm -p 4317:4317 -p 4318:4318 -e LOGS_EXPORTER=otlp -e OTEL_EXPORTER_OTLP_PROTOCOL=grpc otel/opentelemetry-collector:latest
-
-# In another shell (run app with OTLP export)
-$env:OTEL_SERVICE_NAME = 'lego-catalog'
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4317'
-dotnet run --project src/LegoCatalog.App/LegoCatalog.App.csproj
+$env:PERFTEST_API_KEY = '<pick-a-local-key>'
+$env:CATALOG_SEED_PATH = (Resolve-Path ..\data\catalog.json)
+$env:CATALOG_IMAGES_PATH = (Resolve-Path ..\data\images)
+$env:DEPLOYMENT_ENVIRONMENT = 'lab'
+$env:OTEL_SERVICE_VERSION = (git rev-parse HEAD)
+$env:CONTAINER_APP_REVISION = 'local-vm'
+dotnet run --project src\LegoCatalog.App\LegoCatalog.App.csproj
 ```
 
-Add `OTEL_TRACES_SAMPLER=traceidratio` + `OTEL_TRACES_SAMPLER_ARG=0.2` to reduce volume in load tests.
+The app applies its EF Core migration, imports any seed records it does not already have
+in one transaction, and listens on the URL Kestrel prints — usually
+<http://localhost:5000>.
 
-Disable query string redaction for HTTP spans (development only) by setting:
+## Routes
+
+| Route | Behavior |
+| --- | --- |
+| `GET /` | Catalog list; `search` matches on name, `category` accepts a slug or display name |
+| `GET /figure/{id}` | Detail page, or 404 |
+| `GET /images/{filename}` | PNG bytes, or 404; path traversal is rejected |
+| `GET /import` | Upload form |
+| `POST /import` | Validates the uploaded document and inserts new figures in a transaction |
+| `GET /healthz` | Liveness — is the process up |
+| `GET /readyz` | Readiness — SQL connectivity plus startup migration/import state |
+| `GET /perftest/catalog` | Bounded database work behind an `x-api-key` header, for load testing |
+
+`/healthz` and `/readyz` are what you wire into the Container App probes in Challenge 1;
+`/perftest/catalog` is what you hammer in [Challenge 2](../challenges/ch02/README.md).
+
+## Test
+
 ```powershell
-$env:OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION = 'true'
+dotnet restore LegoCatalog.sln
+dotnet test LegoCatalog.sln
 ```
 
-Troubleshooting exporter issues:
-- Create a file `OTEL_DIAGNOSTICS.json` in the working directory:
-```json
-{ "LogDirectory": ".", "FileSize": 32768, "LogLevel": "Warning", "FormatMessage": true }
-```
-This enables circular self-diagnostics log (e.g. `LegoCatalog.App.<pid>.log`).
+## OpenTelemetry
 
-### Prerequisites
-- .NET 8 SDK
-- SQL Server Express (or any reachable SQL Server). Example local install: https://aka.ms/sqlexpress
-- The generated `catalog.json` + `images/` from the Python generator (place them under the repository `data/` folder or anywhere and point env vars accordingly).
+Telemetry is exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The app emits
+standard ASP.NET Core, HTTP client, SQL Client, and .NET runtime instrumentation, plus its
+own `catalog.import`, `catalog.query`, and `catalog.performance` spans with matching
+metrics and structured logs. It identifies itself as `service.name=mh-catalog-dotnet` in
+namespace `app-innovation`.
 
-### Quick Start (PowerShell)
-```powershell
-# From repo root
-cd dotnet
+You point that endpoint at a collector in [Challenge 4](../challenges/ch04/README.md).
 
-# (Optional) set environment variables for this session
-$env:SQL_CONNECTION_STRING = 'Server=.\SQLEXPRESS;Database=LegoCatalog;TrustServerCertificate=True;Integrated Security=True'
-$env:SEED_DATA_PATH = (Resolve-Path ..\data\catalog.json)
-$env:IMAGE_ROOT_PATH = (Resolve-Path ..\data\images)
+## Troubleshooting
 
-# Restore & run
-dotnet restore
-dotnet run --project src/LegoCatalog.App/LegoCatalog.App.csproj
-```
-
-Open http://localhost:5000 (or shown URL) in a browser.
-
-### Importing Data
-On every startup the application attempts to import the seed catalog JSON specified by `SEED_DATA_PATH` (or config fallback). Existing IDs are ignored (no duplicates).
-
-### JSON Schema (Expected Fields)
-Minimal required per item: `id`, `name`, `category`, `description`, `imageFile` (and optional `prompt`).
-
-### Production / Container Notes
-- Provide env vars instead of editing `appsettings.*` inside container.
-- Images can be volume-mounted and pointed via `IMAGE_ROOT_PATH`.
-- For Azure SQL, set `SQL_CONNECTION_STRING` accordingly.
-
-### Containerization
-A multi-stage Dockerfile (`dotnet/Dockerfile`) is included for Linux builds.
-
-Build (from within the `dotnet` directory where the Dockerfile resides):
-```powershell
-cd dotnet
-docker build -t lego-catalog .
-```
-
-Run from project root, configure proper SQL connection string and we are mapping local folders into container as volumes:
-```powershell
-$env:SQL_CONNECTION_STRING = 'Server=host.docker.internal,1433;Database=LegoCatalog;User Id=sa;Password=Your_password123;TrustServerCertificate=True'
-docker run --rm -p 8080:8080 `
-	-e SQL_CONNECTION_STRING="$env:SQL_CONNECTION_STRING" `
-	-e IMAGE_ROOT_PATH=/data/images `
-	-e SEED_DATA_PATH=/seed/catalog.json `
-	-v ${PWD}/data/images:/data/images:ro `
-	-v ${PWD}/data/catalog.json:/seed/catalog.json:ro `
-	lego-catalog
-```
-
-Open http://localhost:8080.
-
-Key env vars for container:
-- `SQL_CONNECTION_STRING` (required unless default works)
-- `IMAGE_ROOT_PATH` (container path to mounted images)
-- `SEED_DATA_PATH` (optional seed JSON import file path)
-- `PERFTEST_API_KEY` (override default `Azure12346578` for perf endpoint)
-
-Non-root user `appuser` is used in the final image. Adjust port via `ASPNETCORE_URLS` if needed.
-
-### Future Enhancements (Deferred)
-- Switch to EF Core migrations later if schema evolution becomes necessary.
-- Blob storage image provider via `IImageStore` abstraction.
-- OpenTelemetry instrumentation.
-	- Implemented (see Observability section).
-
-### Troubleshooting
-- If images 404: verify `IMAGE_ROOT_PATH` and that filenames in DB match actual PNG files.
-- If startup import does nothing: ensure `SKIP_STARTUP_IMPORT` is not `true` and DB is empty.
-
-### License / Generated Assets
-Generated images & metadata are for instructional use only.
-
-### Performance Test Endpoint
-For load testing without establishing Blazor Server circuits you can hit a dedicated HTTP endpoint that returns the full catalog list (all figures) in a single JSON response.
-
-Endpoint:
-```
-GET /perftest/catalog
-Header: x-api-key: <key>
-```
-
-Security:
-- Protected by an API key passed in header `x-api-key`.
-- Default key: `Azure12346578` (defined in `appsettings.json` under `PerfTest:ApiKey`).
-- Override via environment variable `PERFTEST_API_KEY` for production / real tests.
-
-Environment precedence for key:
-1. `PERFTEST_API_KEY` env var
-2. `PerfTest:ApiKey` in configuration (e.g., `appsettings.json`)
-3. Built-in fallback constant `Azure12346578`
-
-Example (PowerShell) manual test:
-```powershell
-Invoke-RestMethod -Uri 'http://localhost:5000/perftest/catalog' -Headers @{ 'x-api-key' = 'Azure12346578' }
-```
-
-Use this endpoint in Azure Load Testing / JMeter / k6 to drive database + serialization load without needing to script the SignalR negotiate/WebSocket steps of Blazor Server.
+- **`/healthz` OK but `/readyz` returns 503** — SQL Server is unreachable or the startup
+  migration/import failed. Read the startup log.
+- **Startup import rejected the document** — it validates the whole file before writing
+  anything, so one bad ID, filename, category slug, or empty field fails the batch.
+- **Image returns 404** — the file must exist under `CATALOG_IMAGES_PATH` with an exact
+  lowercase `<productId>.png` name.
+- **App won't start at all** — most often a missing `PERFTEST_API_KEY`, an out-of-range
+  work factor, or one of the three telemetry identity variables.

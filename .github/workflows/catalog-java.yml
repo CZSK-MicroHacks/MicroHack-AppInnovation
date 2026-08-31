@@ -1,0 +1,760 @@
+name: Catalog Java CI/CD
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: catalog-java-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  EXPECTED_STACK: java-postgresql
+  IMAGE_REPOSITORY: catalog-java
+  WORKFLOW_PATH: .github/workflows/catalog-java.yml
+  HANDOFF_FILE: evidence/modernization-contract.json
+
+jobs:
+  staging:
+    # Pinned, not `ubuntu-latest`. The workshop's whole premise is a reproducible
+    # toolchain (workshop/toolchain.lock.json pins the JDK, the .NET SDKs, Git by
+    # Authenticode subject and jq by hash), so the CI that validates the handoff
+    # must not float its own base image. `ubuntu-latest` currently resolves to
+    # ubuntu-24.04, so this pin is behaviour-preserving today; it becomes the
+    # thing that stops a runner-image rollover from changing the result of a
+    # rehearsal that is supposed to be repeatable a year later.
+    runs-on: ubuntu-24.04
+    environment: staging
+    steps:
+      - name: Check out the workflow control commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Bind the control commit to the frozen handoff
+        id: handoff
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -f "$HANDOFF_FILE"
+          HANDOFF_SHA256="$(sha256sum "$HANDOFF_FILE" | cut -d' ' -f1)"
+          SOURCE_COMMIT="$(jq -er '.source.commitSha' "$HANDOFF_FILE")"
+          jq -e \
+            --arg stack "$EXPECTED_STACK" \
+            --arg repository "$IMAGE_REPOSITORY" \
+            '
+              .schemaVersion == "1.4.0"
+              and .source.stack == $stack
+              and (.source.commitSha | test("^[0-9a-f]{40}$"))
+              and .containerImage.repository == $repository
+              and .containerImage.tag == .source.commitSha
+              and (.containerImage.digest | test("^sha256:[0-9a-f]{64}$"))
+            ' "$HANDOFF_FILE" >/dev/null
+          test "$GITHUB_SHA" != "$SOURCE_COMMIT"
+          git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+
+          REGISTRY_RESOURCE_ID="$(jq -er '.containerImage.registryResourceId' "$HANDOFF_FILE")"
+          CONTAINER_APP_RESOURCE_ID="$(jq -er '.application.resourceId' "$HANDOFF_FILE")"
+          REGISTRY_LOGIN_SERVER="$(jq -er '.containerImage.registry' "$HANDOFF_FILE")"
+          CONTAINER_APP_NAME="$(jq -er '.application.containerAppName' "$HANDOFF_FILE")"
+          RESOURCE_GROUP="$(jq -er '.application.resourceGroup' "$HANDOFF_FILE")"
+          APPLICATION_URL="$(jq -er '.application.url | rtrimstr("/")' "$HANDOFF_FILE")"
+          HEALTH_URL="$(jq -er '.application.healthUrl | rtrimstr("/")' "$HANDOFF_FILE")"
+          READINESS_URL="$(jq -er '.application.readinessUrl | rtrimstr("/")' "$HANDOFF_FILE")"
+          PREVIOUS_REVISION="$(jq -er '.application.revisionName' "$HANDOFF_FILE")"
+          APP_HOST="${APPLICATION_URL#https://}"
+          ENVIRONMENT_SUFFIX="${APP_HOST#*.}"
+          CANDIDATE_REVISION="${CONTAINER_APP_NAME}--ci-${SOURCE_COMMIT:0:12}"
+          CANDIDATE_URL="https://${CONTAINER_APP_NAME}---candidate.${ENVIRONMENT_SUFFIX}"
+
+          test "$APP_HOST" = "${CONTAINER_APP_NAME}.${ENVIRONMENT_SUFFIX}"
+          test "$HEALTH_URL" = "${APPLICATION_URL}/healthz"
+          test "$READINESS_URL" = "${APPLICATION_URL}/readyz"
+          test "${REGISTRY_RESOURCE_ID##*/}" = "${REGISTRY_LOGIN_SERVER%%.*}"
+          test "${CONTAINER_APP_RESOURCE_ID##*/}" = "$CONTAINER_APP_NAME"
+          test "$(cut -d/ -f3 <<<"$REGISTRY_RESOURCE_ID")" = "$(cut -d/ -f3 <<<"$CONTAINER_APP_RESOURCE_ID")"
+          test "$(cut -d/ -f5 <<<"$CONTAINER_APP_RESOURCE_ID")" = "$RESOURCE_GROUP"
+
+          mkdir -p evidence/cicd
+          jq -n \
+            --arg schemaVersion "1.1.0" \
+            --arg sliceId "$(jq -er '.sliceId' "$HANDOFF_FILE")" \
+            --arg stack "$EXPECTED_STACK" \
+            --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg controlCommit "$GITHUB_SHA" \
+            --arg handoffFile "$HANDOFF_FILE" \
+            --arg handoffSha256 "$HANDOFF_SHA256" \
+            --arg registryResourceId "$REGISTRY_RESOURCE_ID" \
+            --arg registryLoginServer "$REGISTRY_LOGIN_SERVER" \
+            --arg imageRepository "$IMAGE_REPOSITORY" \
+            --arg handoffImageDigest "$(jq -er '.containerImage.digest' "$HANDOFF_FILE")" \
+            --arg containerAppResourceId "$CONTAINER_APP_RESOURCE_ID" \
+            --arg containerAppName "$CONTAINER_APP_NAME" \
+            --arg resourceGroup "$RESOURCE_GROUP" \
+            --arg applicationUrl "$APPLICATION_URL" \
+            --arg healthUrl "$HEALTH_URL" \
+            --arg readinessUrl "$READINESS_URL" \
+            --arg previousRevision "$PREVIOUS_REVISION" \
+            --arg candidateRevision "$CANDIDATE_REVISION" \
+            --arg candidateUrl "$CANDIDATE_URL" \
+            --arg workflowPath "$WORKFLOW_PATH" \
+            --arg githubRepository "$GITHUB_REPOSITORY" \
+            --arg ref "$GITHUB_REF" \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --argjson runId "$GITHUB_RUN_ID" \
+            --argjson runAttempt "$GITHUB_RUN_ATTEMPT" \
+            '{
+              schemaVersion: $schemaVersion,
+              sliceId: $sliceId,
+              stack: $stack,
+              sourceCommit: $sourceCommit,
+              controlCommit: $controlCommit,
+              handoffFile: $handoffFile,
+              handoffSha256: $handoffSha256,
+              registryResourceId: $registryResourceId,
+              registryLoginServer: $registryLoginServer,
+              imageRepository: $imageRepository,
+              handoffImageDigest: $handoffImageDigest,
+              containerAppResourceId: $containerAppResourceId,
+              containerAppName: $containerAppName,
+              resourceGroup: $resourceGroup,
+              applicationUrl: $applicationUrl,
+              healthUrl: $healthUrl,
+              readinessUrl: $readinessUrl,
+              previousRevision: $previousRevision,
+              candidateRevision: $candidateRevision,
+              candidateUrl: $candidateUrl,
+              workflowPath: $workflowPath,
+              githubRepository: $githubRepository,
+              ref: $ref,
+              event: $event,
+              runId: $runId,
+              runAttempt: $runAttempt
+            }' > evidence/cicd/context.json
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact application source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ steps.handoff.outputs.source_commit }}
+          path: application-source
+          persist-credentials: false
+
+      - name: Verify the application checkout
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git -C application-source rev-parse HEAD)" = "$(jq -er '.sourceCommit' evidence/cicd/context.json)"
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: microsoft
+          java-version: 21.0.12
+          cache: maven
+          cache-dependency-path: application-source/java/pom.xml
+
+      - name: Test the handoff application source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd application-source/java
+          ./mvnw --batch-mode --no-transfer-progress test
+
+      - name: Sign in with the staging deployment subject
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build, push, and resolve the immutable image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CONTEXT=evidence/cicd/context.json
+          SOURCE_COMMIT="$(jq -er '.sourceCommit' "$CONTEXT")"
+          REGISTRY_LOGIN_SERVER="$(jq -er '.registryLoginServer' "$CONTEXT")"
+          REGISTRY_NAME="${REGISTRY_LOGIN_SERVER%%.*}"
+          REPOSITORY="$(jq -er '.imageRepository' "$CONTEXT")"
+          TAGGED_IMAGE="${REGISTRY_LOGIN_SERVER}/${REPOSITORY}:${SOURCE_COMMIT}"
+          az acr login --name "$REGISTRY_NAME"
+          docker build --file application-source/java/Dockerfile --tag "$TAGGED_IMAGE" application-source
+          docker push "$TAGGED_IMAGE"
+          az acr manifest show-metadata \
+            --registry "$REGISTRY_NAME" \
+            --name "${REPOSITORY}:${SOURCE_COMMIT}" \
+            --output json > evidence/cicd/manifest.raw.json
+          DIGEST="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' evidence/cicd/manifest.raw.json)"
+          IMAGE_REFERENCE="${REGISTRY_LOGIN_SERVER}/${REPOSITORY}@${DIGEST}"
+          COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --arg digest "$DIGEST" \
+            --arg reference "$IMAGE_REFERENCE" \
+            --arg completedAt "$COMPLETED_AT" \
+            '($context[0]) as $c | {
+              schemaVersion: "1.1.0",
+              runId: $c.runId,
+              runAttempt: $c.runAttempt,
+              githubRepository: $c.githubRepository,
+              workflowPath: $c.workflowPath,
+              headSha: $c.controlCommit,
+              ref: $c.ref,
+              sourceCommit: $c.sourceCommit,
+              registryResourceId: $c.registryResourceId,
+              repository: ($c.registryLoginServer + "/" + $c.imageRepository),
+              tag: $c.sourceCommit,
+              digest: $digest,
+              reference: $reference,
+              completedAt: $completedAt,
+              status: "success"
+            }' > evidence/cicd/build.json
+
+      - name: Deploy and observe a zero-traffic candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CONTEXT=evidence/cicd/context.json
+          APP_NAME="$(jq -er '.containerAppName' "$CONTEXT")"
+          RESOURCE_GROUP="$(jq -er '.resourceGroup' "$CONTEXT")"
+          PREVIOUS_REVISION="$(jq -er '.previousRevision' "$CONTEXT")"
+          CANDIDATE_REVISION="$(jq -er '.candidateRevision' "$CONTEXT")"
+          CANDIDATE_URL="$(jq -er '.candidateUrl' "$CONTEXT")"
+          APPLICATION_URL="$(jq -er '.applicationUrl' "$CONTEXT")"
+          HEALTH_URL="$(jq -er '.healthUrl' "$CONTEXT")"
+          READINESS_URL="$(jq -er '.readinessUrl' "$CONTEXT")"
+          IMAGE_REFERENCE="$(jq -er '.reference' evidence/cicd/build.json)"
+          az containerapp revision set-mode --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --mode multiple --output none
+          if ! az containerapp revision show \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --output none 2>/dev/null; then
+            az containerapp revision copy \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --from-revision "$PREVIOUS_REVISION" \
+              --image "$IMAGE_REFERENCE" \
+              --revision-suffix "ci-$(jq -er '.sourceCommit[0:12]' "$CONTEXT")" \
+              --output none
+          fi
+          az containerapp ingress traffic set \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision-weight "${PREVIOUS_REVISION}=100" "${CANDIDATE_REVISION}=0" \
+            --output none
+          az containerapp revision label add \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$CANDIDATE_REVISION" \
+            --label candidate \
+            --output none
+
+          ready=false
+          for _ in {1..30}; do
+            az containerapp revision list \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --output json > evidence/cicd/before-revisions.raw.json
+            if jq -e \
+              --arg previous "$PREVIOUS_REVISION" \
+              --arg candidate "$CANDIDATE_REVISION" \
+              --arg image "$IMAGE_REFERENCE" \
+              '
+                any(.[];
+                  .name == $previous
+                  and .properties.active == true
+                  and .properties.healthState == "Healthy"
+                  and .properties.trafficWeight == 100
+                )
+                and any(.[];
+                  .name == $candidate
+                  and .properties.active == true
+                  and .properties.healthState == "Healthy"
+                  and .properties.trafficWeight == 0
+                  and any(.properties.template.containers[]; .image == $image)
+                )
+              ' evidence/cicd/before-revisions.raw.json >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          test "$ready" = true
+          CANDIDATE_OBSERVED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --slurpfile raw evidence/cicd/before-revisions.raw.json \
+            --arg image "$IMAGE_REFERENCE" \
+            --arg observedAt "$CANDIDATE_OBSERVED_AT" \
+            '($context[0]) as $c
+            | ($raw[0][] | select(.name == $c.candidateRevision)) as $candidate
+            | {
+                schemaVersion: "1.1.0",
+                runId: $c.runId,
+                runAttempt: $c.runAttempt,
+                githubRepository: $c.githubRepository,
+                workflowPath: $c.workflowPath,
+                headSha: $c.controlCommit,
+                ref: $c.ref,
+                containerAppResourceId: $c.containerAppResourceId,
+                revisionName: $candidate.name,
+                imageReference: $image,
+                active: $candidate.properties.active,
+                healthState: $candidate.properties.healthState,
+                trafficWeight: $candidate.properties.trafficWeight,
+                label: "candidate",
+                labelUrl: $c.candidateUrl,
+                observedAt: $observedAt
+              }' > evidence/cicd/candidate.json
+          probe_exact_200() {
+            local url="$1"
+            local code
+            for _ in {1..20}; do
+              code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$url" || true)"
+              if [[ "$code" == "200" ]]; then printf '%s' "$code"; return 0; fi
+              sleep 6
+            done
+            return 1
+          }
+          test "$(probe_exact_200 "$CANDIDATE_URL")" = 200
+          test "$(probe_exact_200 "${CANDIDATE_URL}/healthz")" = 200
+          test "$(probe_exact_200 "${CANDIDATE_URL}/readyz")" = 200
+          SMOKE_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --arg image "$IMAGE_REFERENCE" \
+            --arg observedAt "$SMOKE_AT" \
+            '($context[0]) as $c | {
+              schemaVersion: "1.1.0",
+              runId: $c.runId,
+              runAttempt: $c.runAttempt,
+              githubRepository: $c.githubRepository,
+              workflowPath: $c.workflowPath,
+              headSha: $c.controlCommit,
+              ref: $c.ref,
+              candidateUrl: $c.candidateUrl,
+              healthUrl: ($c.candidateUrl + "/healthz"),
+              readinessUrl: ($c.candidateUrl + "/readyz"),
+              revisionName: $c.candidateRevision,
+              imageReference: $image,
+              observedAt: $observedAt,
+              healthStatus: 200,
+              readinessStatus: 200
+            }' > evidence/cicd/smoke.json
+          test "$(probe_exact_200 "$APPLICATION_URL")" = 200
+          test "$(probe_exact_200 "$HEALTH_URL")" = 200
+          test "$(probe_exact_200 "$READINESS_URL")" = 200
+          az containerapp revision list \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output json > evidence/cicd/before-revisions.raw.json
+          jq -e \
+            --arg previous "$PREVIOUS_REVISION" \
+            --arg candidate "$CANDIDATE_REVISION" \
+            --arg candidateImage "$IMAGE_REFERENCE" \
+            --arg previousImage "$(jq -er '.registryLoginServer + "/" + .imageRepository + "@" + .handoffImageDigest' "$CONTEXT")" \
+            '
+              any(.[];
+                .name == $previous
+                and .properties.active == true
+                and .properties.healthState == "Healthy"
+                and .properties.trafficWeight == 100
+                and any(.properties.template.containers[]; .image == $previousImage)
+              )
+              and any(.[];
+                .name == $candidate
+                and .properties.active == true
+                and .properties.healthState == "Healthy"
+                and .properties.trafficWeight == 0
+                and any(.properties.template.containers[]; .image == $candidateImage)
+              )
+            ' evidence/cicd/before-revisions.raw.json >/dev/null
+          BEFORE_OBSERVED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          RAW_SHA256="$(sha256sum evidence/cicd/before-revisions.raw.json | cut -d' ' -f1)"
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --slurpfile raw evidence/cicd/before-revisions.raw.json \
+            --arg observedAt "$BEFORE_OBSERVED_AT" \
+            '($context[0]) as $c
+            | ($raw[0][] | select(.name == $c.previousRevision)) as $previous
+            | ($raw[0][] | select(.name == $c.candidateRevision)) as $candidate
+            | {
+                schemaVersion: "1.1.0",
+                runId: $c.runId,
+                runAttempt: $c.runAttempt,
+                githubRepository: $c.githubRepository,
+                workflowPath: $c.workflowPath,
+                headSha: $c.controlCommit,
+                ref: $c.ref,
+                containerAppResourceId: $c.containerAppResourceId,
+                previousRevision: $previous.name,
+                candidateRevision: $candidate.name,
+                previousWeight: $previous.properties.trafficWeight,
+                candidateWeight: $candidate.properties.trafficWeight,
+                previousActive: $previous.properties.active,
+                candidateActive: $candidate.properties.active,
+                previousHealthState: $previous.properties.healthState,
+                candidateHealthState: $candidate.properties.healthState,
+                applicationUrl: $c.applicationUrl,
+                healthUrl: $c.healthUrl,
+                readinessUrl: $c.readinessUrl,
+                healthStatus: 200,
+                readinessStatus: 200,
+                observedAt: $observedAt
+              }' > evidence/cicd/before.json
+          jq -n \
+            --arg observedAt "$BEFORE_OBSERVED_AT" \
+            --arg rawSha256 "$RAW_SHA256" \
+            '{
+              previous: 100,
+              candidate: 0,
+              observedAt: $observedAt,
+              source: "azure-container-app-revision-list",
+              rawResultFile: "evidence/cicd/before-revisions.raw.json",
+              rawResultSha256: $rawSha256,
+              resultFile: "evidence/cicd/before.json"
+            }' > evidence/cicd/before-declaration.json
+
+      - name: Upload staging evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: catalog-java-cicd-${{ github.run_id }}-${{ github.run_attempt }}-staging
+          path: evidence/cicd/
+          if-no-files-found: error
+          retention-days: 14
+
+  production:
+    needs: staging
+    # Pinned for the same reason as `staging`; see the note there.
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Check out the approved control commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Download the exact staging attempt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: catalog-java-cicd-${{ github.run_id }}-${{ github.run_attempt }}-staging
+          path: evidence/cicd/
+
+      - name: Recheck immutable control and source identities
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          jq -e \
+            --argjson runId "$GITHUB_RUN_ID" \
+            --argjson runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg workflow "$WORKFLOW_PATH" \
+            --arg controlCommit "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            '
+              .runId == $runId
+              and .runAttempt == $runAttempt
+              and .githubRepository == $repository
+              and .workflowPath == $workflow
+              and .controlCommit == $controlCommit
+              and .sourceCommit != $controlCommit
+              and .ref == $ref
+              and .event == "workflow_dispatch"
+            ' evidence/cicd/context.json >/dev/null
+
+      - name: Sign in with the production deployment subject
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Promote with an armed rollback trap
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CONTEXT=evidence/cicd/context.json
+          APP_NAME="$(jq -er '.containerAppName' "$CONTEXT")"
+          RESOURCE_GROUP="$(jq -er '.resourceGroup' "$CONTEXT")"
+          PREVIOUS_REVISION="$(jq -er '.previousRevision' "$CONTEXT")"
+          CANDIDATE_REVISION="$(jq -er '.candidateRevision' "$CONTEXT")"
+          APPLICATION_URL="$(jq -er '.applicationUrl' "$CONTEXT")"
+          HEALTH_URL="$(jq -er '.healthUrl' "$CONTEXT")"
+          READINESS_URL="$(jq -er '.readinessUrl' "$CONTEXT")"
+          CANDIDATE_IMAGE="$(jq -er '.reference' evidence/cicd/build.json)"
+          PREVIOUS_IMAGE="$(jq -er '.registryLoginServer + "/" + .imageRepository + "@" + .handoffImageDigest' "$CONTEXT")"
+          GUARD_INSTALLED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          ROLLBACK_ATTEMPTED_AT=
+          ROLLBACK_COMPLETED_AT=
+          capture_revisions() {
+            az containerapp revision list \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --output json > "$1"
+          }
+          rollback() {
+            ROLLBACK_ATTEMPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+            az containerapp ingress traffic set \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision-weight "${PREVIOUS_REVISION}=100" "${CANDIDATE_REVISION}=0" \
+              --output none
+            capture_revisions evidence/cicd/rollback-revisions.raw.json
+            jq -e \
+              --arg previous "$PREVIOUS_REVISION" \
+              --arg candidate "$CANDIDATE_REVISION" \
+              --arg previousImage "$PREVIOUS_IMAGE" \
+              --arg candidateImage "$CANDIDATE_IMAGE" \
+              '
+                any(.[];
+                  .name == $previous
+                  and .properties.active == true
+                  and .properties.healthState == "Healthy"
+                  and .properties.trafficWeight == 100
+                  and any(.properties.template.containers[]; .image == $previousImage)
+                )
+                and any(.[];
+                  .name == $candidate
+                  and .properties.active == true
+                  and .properties.healthState == "Healthy"
+                  and .properties.trafficWeight == 0
+                  and any(.properties.template.containers[]; .image == $candidateImage)
+                )
+              ' evidence/cicd/rollback-revisions.raw.json >/dev/null
+            ROLLBACK_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          }
+          trap rollback EXIT
+
+          PROMOTION_ATTEMPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          az containerapp ingress traffic set \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision-weight "${PREVIOUS_REVISION}=0" "${CANDIDATE_REVISION}=100" \
+            --output none
+          capture_revisions evidence/cicd/promotion-revisions.raw.json
+          jq -e \
+            --arg previous "$PREVIOUS_REVISION" \
+            --arg candidate "$CANDIDATE_REVISION" \
+            --arg previousImage "$PREVIOUS_IMAGE" \
+            --arg candidateImage "$CANDIDATE_IMAGE" \
+            '
+              any(.[];
+                .name == $previous
+                and .properties.active == true
+                and .properties.healthState == "Healthy"
+                and .properties.trafficWeight == 0
+                and any(.properties.template.containers[]; .image == $previousImage)
+              )
+              and any(.[];
+                .name == $candidate
+                and .properties.active == true
+                and .properties.healthState == "Healthy"
+                and .properties.trafficWeight == 100
+                and any(.properties.template.containers[]; .image == $candidateImage)
+              )
+            ' evidence/cicd/promotion-revisions.raw.json >/dev/null
+          probe_exact_200() {
+            local code
+            for _ in {1..20}; do
+              code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$1" || true)"
+              if [[ "$code" == "200" ]]; then printf '%s' "$code"; return 0; fi
+              sleep 6
+            done
+            return 1
+          }
+          test "$(probe_exact_200 "$APPLICATION_URL")" = 200
+          test "$(probe_exact_200 "$HEALTH_URL")" = 200
+          test "$(probe_exact_200 "$READINESS_URL")" = 200
+          PROMOTION_OBSERVED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          rollback
+          trap - EXIT
+          test "$(probe_exact_200 "$APPLICATION_URL")" = 200
+          test "$(probe_exact_200 "$HEALTH_URL")" = 200
+          test "$(probe_exact_200 "$READINESS_URL")" = 200
+          ROLLBACK_OBSERVED_AT="$ROLLBACK_COMPLETED_AT"
+
+          write_transition() {
+            jq -n \
+              --slurpfile context "$CONTEXT" \
+              --slurpfile raw "$1" \
+              --arg observedAt "$2" \
+              '($context[0]) as $c
+              | ($raw[0][] | select(.name == $c.previousRevision)) as $previous
+              | ($raw[0][] | select(.name == $c.candidateRevision)) as $candidate
+              | {
+                  schemaVersion: "1.1.0",
+                  runId: $c.runId,
+                  runAttempt: $c.runAttempt,
+                  githubRepository: $c.githubRepository,
+                  workflowPath: $c.workflowPath,
+                  headSha: $c.controlCommit,
+                  ref: $c.ref,
+                  containerAppResourceId: $c.containerAppResourceId,
+                  previousRevision: $previous.name,
+                  candidateRevision: $candidate.name,
+                  previousWeight: $previous.properties.trafficWeight,
+                  candidateWeight: $candidate.properties.trafficWeight,
+                  previousActive: $previous.properties.active,
+                  candidateActive: $candidate.properties.active,
+                  previousHealthState: $previous.properties.healthState,
+                  candidateHealthState: $candidate.properties.healthState,
+                  applicationUrl: $c.applicationUrl,
+                  healthUrl: $c.healthUrl,
+                  readinessUrl: $c.readinessUrl,
+                  healthStatus: 200,
+                  readinessStatus: 200,
+                  observedAt: $observedAt
+                }' > "$3"
+          }
+          write_transition evidence/cicd/promotion-revisions.raw.json "$PROMOTION_OBSERVED_AT" evidence/cicd/promotion.json
+          write_transition evidence/cicd/rollback-revisions.raw.json "$ROLLBACK_OBSERVED_AT" evidence/cicd/rollback.json
+          PROMOTION_RAW_SHA256="$(sha256sum evidence/cicd/promotion-revisions.raw.json | cut -d' ' -f1)"
+          ROLLBACK_RAW_SHA256="$(sha256sum evidence/cicd/rollback-revisions.raw.json | cut -d' ' -f1)"
+          jq -n \
+            --arg promotionObservedAt "$PROMOTION_OBSERVED_AT" \
+            --arg promotionRawSha256 "$PROMOTION_RAW_SHA256" \
+            --arg rollbackObservedAt "$ROLLBACK_OBSERVED_AT" \
+            --arg rollbackRawSha256 "$ROLLBACK_RAW_SHA256" \
+            '{
+              promotion: {
+                previous: 0,
+                candidate: 100,
+                observedAt: $promotionObservedAt,
+                source: "azure-container-app-revision-list",
+                rawResultFile: "evidence/cicd/promotion-revisions.raw.json",
+                rawResultSha256: $promotionRawSha256,
+                resultFile: "evidence/cicd/promotion.json"
+              },
+              rollback: {
+                previous: 100,
+                candidate: 0,
+                observedAt: $rollbackObservedAt,
+                source: "azure-container-app-revision-list",
+                rawResultFile: "evidence/cicd/rollback-revisions.raw.json",
+                rawResultSha256: $rollbackRawSha256,
+                resultFile: "evidence/cicd/rollback.json"
+              }
+            }' > evidence/cicd/transition-declarations.json
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --arg guardInstalledAt "$GUARD_INSTALLED_AT" \
+            --arg promotionAttemptedAt "$PROMOTION_ATTEMPTED_AT" \
+            --arg rollbackAttemptedAt "$ROLLBACK_ATTEMPTED_AT" \
+            --arg rollbackCompletedAt "$ROLLBACK_COMPLETED_AT" \
+            '($context[0]) as $c | {
+              schemaVersion: "1.1.0",
+              runId: $c.runId,
+              runAttempt: $c.runAttempt,
+              githubRepository: $c.githubRepository,
+              workflowPath: $c.workflowPath,
+              headSha: $c.controlCommit,
+              ref: $c.ref,
+              mechanism: "shell-trap",
+              guardInstalledAt: $guardInstalledAt,
+              promotionAttemptedAt: $promotionAttemptedAt,
+              rollbackAttemptedAt: $rollbackAttemptedAt,
+              rollbackCompletedAt: $rollbackCompletedAt,
+              executesOnFailure: true,
+              promotionSucceeded: true,
+              rollbackSucceeded: true
+            }' > evidence/cicd/rollback-safety.json
+
+          jq -n \
+            --slurpfile context "$CONTEXT" \
+            --slurpfile build evidence/cicd/build.json \
+            --slurpfile candidate evidence/cicd/candidate.json \
+            --slurpfile smoke evidence/cicd/smoke.json \
+            --slurpfile before evidence/cicd/before-declaration.json \
+            --slurpfile transitions evidence/cicd/transition-declarations.json \
+            --slurpfile safety evidence/cicd/rollback-safety.json \
+            '($context[0]) as $c
+            | ($build[0]) as $b
+            | ($smoke[0]) as $smoke
+            | ($safety[0]) as $safety
+            | {
+                schemaVersion: "1.1.0",
+                subject: {
+                  sliceId: $c.sliceId,
+                  stack: $c.stack,
+                  sourceCommit: $c.sourceCommit,
+                  containerAppResourceId: $c.containerAppResourceId,
+                  revisionName: $c.previousRevision,
+                  imageDigest: $c.handoffImageDigest
+                },
+                workflow: {
+                  file: $c.workflowPath,
+                  headSha: $c.controlCommit,
+                  handoffFile: $c.handoffFile,
+                  handoffSha256: $c.handoffSha256,
+                  runId: ($c.runId | tostring),
+                  runAttempt: $c.runAttempt,
+                  repository: $c.githubRepository,
+                  ref: $c.ref,
+                  event: $c.event
+                },
+                image: {
+                  repository: $b.repository,
+                  sourceCommit: $b.sourceCommit,
+                  tag: $b.tag,
+                  digest: $b.digest,
+                  reference: $b.reference,
+                  resultFile: "evidence/cicd/build.json"
+                },
+                revisions: {
+                  mode: "multiple",
+                  previous: $c.previousRevision,
+                  candidate: $c.candidateRevision,
+                  candidateLabel: "candidate",
+                  candidateUrl: $c.candidateUrl,
+                  resultFile: "evidence/cicd/candidate.json"
+                },
+                smoke: {
+                  healthStatus: $smoke.healthStatus,
+                  readinessStatus: $smoke.readinessStatus,
+                  candidateUrl: $smoke.candidateUrl,
+                  healthUrl: $smoke.healthUrl,
+                  readinessUrl: $smoke.readinessUrl,
+                  testedBeforeApproval: true,
+                  resultFile: "evidence/cicd/smoke.json"
+                },
+                traffic: {
+                  before: $before[0],
+                  promotion: $transitions[0].promotion,
+                  rollback: $transitions[0].rollback,
+                  safety: {
+                    mechanism: $safety.mechanism,
+                    guardInstalledAt: $safety.guardInstalledAt,
+                    promotionAttemptedAt: $safety.promotionAttemptedAt,
+                    rollbackAttemptedAt: $safety.rollbackAttemptedAt,
+                    rollbackCompletedAt: $safety.rollbackCompletedAt,
+                    executesOnFailure: $safety.executesOnFailure,
+                    promotionSucceeded: $safety.promotionSucceeded,
+                    rollbackSucceeded: $safety.rollbackSucceeded,
+                    resultFile: "evidence/cicd/rollback-safety.json"
+                  }
+                },
+                assertions: {
+                  immutableImage: true,
+                  candidateHadZeroTraffic: true,
+                  approvalPrecededPromotion: true,
+                  promotionVerified: true,
+                  rollbackVerified: true,
+                  previousRevisionRetained: true,
+                  sourceCommitCheckedOut: true,
+                  roleAuditExternal: true,
+                  revisionStateObserved: true,
+                  rollbackGuardArmed: true
+                }
+              }' > evidence/cicd/report-fragment.json
+
+      - name: Upload completed production evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: catalog-java-cicd-${{ github.run_id }}-${{ github.run_attempt }}-production
+          path: evidence/cicd/
+          if-no-files-found: error
+          retention-days: 14

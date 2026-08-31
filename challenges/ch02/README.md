@@ -1,14 +1,43 @@
-# Test autoscaling under load
+# ch02: Test autoscaling under load
 
 ## Goal
-In this challenge we will put our application under load to make sure auto-scaling work properly. Note this application is using Blazor technology which uses SignalR (WebSockets with fallback to long polling) which might make testing little more challenging.
+
+In this challenge we put the application under load to check that autoscaling actually
+works. On the VM there was one instance and one way to survive a busy day: hope, followed
+by a request for a bigger machine. Now the platform can add capacity by itself — but only
+if the scale rule watches the right signal.
+
+Note that the .NET version uses Blazor Server, which relies on SignalR (WebSockets with a
+fallback to long polling). That makes load testing a little more interesting, because not
+every load tool speaks WebSockets. The Java version renders plain server-side HTML and has
+no such constraint.
+
+Both applications expose `GET /perftest/catalog`, a deliberately bounded database workload
+protected by an `x-api-key` header, so you can generate representative database load over
+ordinary HTTP.
 
 ## Actions
-- OPTIONAL: Experience slow-start by decreasing coll-down in Azure Container App to 5 minutes and set auto-pause of SQL to 15 minutes (which is minimum) and wait. Then open browser and measure time for application and database to get started. It takes some time - for what use cases this is viable option?
-- Use Azure App Testing to generate load to application including something that generates load on database. When to use Azure Load Testing and when Playwright workspaces? Or combination? Will you use JMeter or Locust or for our situation simple URL test is enough?
+
+- OPTIONAL: experience a slow start. Reduce the cooldown on the Container App to 5 minutes
+  and set the database to auto-pause after 15 minutes (the minimum). Wait, then open the
+  browser and measure how long the application and the database take to wake up. For which
+  workloads is scale-to-zero a good trade?
+- Generate load against the application, including something that puts real work on the
+  database. When would you use **Azure Load Testing** and when **Playwright Workspaces**?
+  Or both? Is a simple URL test enough here, or do you need JMeter or Locust?
+- Watch the database while the web tier scales out. Scaling the front end moves the
+  pressure somewhere — where does it go, and what would you scale next?
 
 ## Success Criteria
-- Demonstrate Azure Container Apps scaled automatically to multiple replicas and SQL database used more than minimum cores.
+
+- Azure Container Apps demonstrably scaled out to multiple replicas under load.
+- The managed database consumed more than its minimum compute during the run.
+- The application served the load without errors, and gave the capacity back afterwards.
 
 ## Solution - Spoilerwarning
-[Solution Steps](/solutions/ch02/README.md)
+
+[Solution Steps](../../solutions/ch02/README.md)
+
+---
+
+**Previous:** [ch01](../ch01/README.md) · **Next:** [ch03](../ch03/README.md)

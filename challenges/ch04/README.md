@@ -1,13 +1,35 @@
-# Monitor application performance with tracing
+# ch04: Monitor application performance with tracing
 
 ## Goal
-Our application has been instrumented with standard OpenTelemetry tracing to monitor performance and diagnose issues, yet it is not compiled to support any specific vendor monitoring solution such as Microsoft. Add Azure Application Insights via collector so there is no vendor lock-in on application level.
+
+The application is already instrumented with standard **OpenTelemetry** tracing, but it is
+not compiled against any vendor-specific monitoring SDK. That is deliberate: telemetry is a
+place where vendor lock-in creeps in easily.
+
+In this challenge you will get those traces into **Azure Application Insights** via a
+collector, so the choice of backend stays an infrastructure decision rather than an
+application one.
+
+On the VM, the only diagnostics were a text log file on the same disk as everything else.
+When the box was unhealthy, so was your ability to find out why.
 
 ## Actions
-- Ensure application tracing is collected and sent to Azure Application Insights.
+
+- Make sure the application's tracing is collected and sent to Azure Application Insights.
+- Do it without adding an Azure-specific exporter to the application code. What does the
+  OpenTelemetry Collector give you that a vendor SDK does not?
+- Once traces arrive, follow a single request end to end. Where does the time actually go?
 
 ## Success Criteria
-- In Azure Application Insights, we can see traces from our application.
+
+- Traces from the application are visible in Azure Application Insights.
+- The application map shows the app and its dependency on the managed database.
+- No vendor-specific telemetry SDK was added to the application code.
 
 ## Solution - Spoilerwarning
-[Solution Steps](/solutions/ch04/README.md)
+
+[Solution Steps](../../solutions/ch04/README.md)
+
+---
+
+**Previous:** [ch03](../ch03/README.md) · **Next:** [ch05-defender](../ch05-defender/README.md)
