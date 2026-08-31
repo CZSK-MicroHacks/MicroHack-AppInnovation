@@ -29,12 +29,6 @@ row counts, `/healthz` and `/readyz` responses, canonical image, and the `198/20
 corpus check. Every later "did it get better?" claim is measured against this number, so
 a missing baseline makes the wrap-up scorecard unanswerable.
 
-**Bastion (Azure Bastion)**
-The managed jump host that gives you RDP access to your two Windows VMs through the
-browser. The VMs have no public IP address of their own; Bastion is the only way in.
-One Bastion host is deployed **per participant**, and it bills per hour whether or not
-anyone is connected.
-
 **Bicep**
 Microsoft's domain-specific language for Azure Resource Manager templates. The workshop's
 Azure target (`infra/`) is written in Bicep. You deploy it; you do not usually edit it.
@@ -116,11 +110,6 @@ How long it takes to get back to a working state after a failure. Challenge 6 me
 real one: from the alert firing on the drill revision to traffic being back on the healthy
 revision.
 
-**NAT Gateway**
-The managed outbound-internet path for your VM subnet. It gives the private VMs a stable
-outbound address without exposing them inbound. One NAT gateway is deployed **per
-participant** and, like Bastion, bills per hour whether or not any traffic flows.
-
 **OIDC (OpenID Connect)**
 The way the GitHub Actions workflow in Challenge 3 authenticates to Azure: GitHub presents
 a short-lived token, Azure validates it against a *federated credential* registered on a
@@ -134,6 +123,13 @@ it, so a commit-anchored figure would claim an interval it did not record. In th
 you put it next to the legacy release you counted in Challenge 0 — its `manualDeploySteps`
 and the out-of-hours window they needed — against the Challenge 3 number, which is one
 pipeline run plus one approval. Older notes may call this *deployment lead time*.
+
+**RDP (Remote Desktop Protocol)**
+How you get a Windows desktop on your two legacy VMs. Each VM has its own public IP
+address and port 3389 is open to it, so you connect with any Remote Desktop client using
+the administrator credentials your facilitator hands out. The catalog application listens
+on the VM's loopback interface, so the browser you use to view it is the one *inside* the
+VM.
 
 **Revision**
 An immutable snapshot of a Container App's configuration and image. Changing the image or
@@ -154,7 +150,7 @@ approves the proposed action.
 
 **Terraform**
 The infrastructure-as-code tool used for the *facilitator-owned* base infrastructure in
-`baseInfra/` — the participant VMs, network, Bastion, and Entra users. Participants do not
+`baseInfra/` — the participant VMs, network, public IPs, and Entra users. Participants do not
 run it; the Azure target you deploy is Bicep.
 
 **Traffic split**

@@ -13,6 +13,22 @@ output "java_vm_names" {
   value       = [for _, environment in module.user_environment : environment.java_vm_name]
 }
 
+output "legacy_vm_access_by_environment" {
+  description = "Map of participant index to each legacy VM's RDP address and the app URL to open inside it."
+  value = {
+    for index, environment in module.user_environment :
+    index => environment.legacy_vm_access
+  }
+}
+
+output "public_ip_addresses_by_environment" {
+  description = "Map of participant index to the public IP address of each legacy VM, used for RDP."
+  value = {
+    for index, environment in module.user_environment :
+    index => environment.public_ip_addresses
+  }
+}
+
 output "vm_names_by_environment" {
   description = "Map of participant index to unambiguous dotnet and java VM names."
   value = {

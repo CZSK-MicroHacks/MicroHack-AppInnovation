@@ -56,7 +56,7 @@ What good output looks like, and what to say about it on the floor:
 
 Common causes of a surprising result: the first request after VM start is slow because
 of JIT or connection warm-up (the block issues one warm-up request precisely for that,
-but a cold VM can still skew the slowest sample); and a Bastion session competing for CPU
+but a cold VM can still skew the slowest sample); and an RDP session competing for CPU
 inflates the median. Neither invalidates the exercise — both are worth saying out loud,
 because they are the same measurement problems participants will have at home.
 

@@ -47,7 +47,7 @@ with the rest of the room.
 ## Before you start
 
 **Where you work.** Everything below runs on the selected VM from Challenge 0, reached
-over Azure Bastion. The source tree is at `C:\MicroHack\source` — **that directory is
+over RDP at its public IP address. The source tree is at `C:\MicroHack\source` — **that directory is
 what "the repository root" means throughout this workshop.** Open that folder in VS Code
 and start each terminal with `cd C:\MicroHack\source`.
 

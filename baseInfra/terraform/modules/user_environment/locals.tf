@@ -2,18 +2,12 @@ locals {
   padded                  = format("%03d", var.user_index)
   rg_name                 = "rg-user${local.padded}"
   team_name               = "user${local.padded}"
-  pip_name                = "pip-user${local.padded}"
-  nat_pip_name            = "pip-nat-user${local.padded}"
   vnet_name               = "vnet-user${local.padded}"
   vms_subnet_name         = "vms"
-  bastion_subnet_name     = "AzureBastionSubnet"
   nsg_name                = "nsg-user${local.padded}"
-  nat_gateway_name        = "nat-user${local.padded}"
-  bastion_name            = "bastion-user${local.padded}"
   derived_vnet_cidr       = "10.${var.user_index}.0.0/22"
   vnet_cidr               = local.derived_vnet_cidr
   derived_vms_subnet_cidr = "10.${var.user_index}.0.0/24"
-  derived_bastion_cidr    = "10.${var.user_index}.1.0/26"
   vms_subnet_cidr         = local.derived_vms_subnet_cidr
   source_archive_url      = "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/${var.source_commit}.zip"
   provisioner_path        = "${path.module}/../../../scripts/provision-vm.ps1"
@@ -22,7 +16,7 @@ locals {
     filesha256(local.provisioner_path),
     filesha256(local.bootstrapper_path),
     "custom-data-v2",
-    "gzip-bootstrap-v1",
+    "plain-bootstrap-v1",
     "gzip-provisioner-v1"
   ]))
   # infra/main.bicep needs the exact ARM ID of each stack's legacy VM. It is composed from
@@ -77,21 +71,29 @@ locals {
       local.provisioner_wrapper
     ]))
   }
-  bootstrapper_gzip_base64 = base64gzip(file(local.bootstrapper_path))
+  # The extension command carries the bootstrapper as plain text. It used to carry it gzipped
+  # and dot-source it through [ScriptBlock]::Create, but Microsoft Defender on Windows Server
+  # 2025 scores base64 + GZipStream + ScriptBlock::Create inside `powershell.exe
+  # -EncodedCommand` as Behavior:Win32/PShellCobStager.A. It terminated powershell.exe about
+  # half a second in, before the bootstrapper ran, and because the process was killed rather
+  # than failed the extension recorded exit code 0 with an empty message: every VM came up
+  # green with nothing installed on it. Plain text is not scored that way, and the one
+  # remaining decompression - the provisioner body inside custom data - is safe because it
+  # runs from a file rather than from -EncodedCommand.
+  #
+  # The comment-based help is stripped only so the rendered command stays clear of the
+  # ~8,191-character Windows command-line limit; the file keeps it for readers.
+  bootstrapper_source = replace(file(local.bootstrapper_path), "/(?s)^<#.*?#>\\s*/", "")
   provisioner_bootstrap_wrapper = {
     for stack in keys(local.stacks) : stack => join("\n", [
       "$ErrorActionPreference='Stop'",
-      "$b=[Convert]::FromBase64String('${local.bootstrapper_gzip_base64}')",
-      "$m=New-Object IO.MemoryStream(,$b)",
-      "$g=New-Object IO.Compression.GZipStream($m,[IO.Compression.CompressionMode]::Decompress)",
-      "$r=New-Object IO.StreamReader($g)",
-      "try{$s=$r.ReadToEnd()}finally{$r.Dispose();$g.Dispose();$m.Dispose()}",
-      ". ([ScriptBlock]::Create($s))",
-      # `exit 0` only normalises the success path. The protection against a green extension
-      # over a failed bootstrap is not here: it is `$ErrorActionPreference='Stop'` above,
-      # combined with the `$LASTEXITCODE` throw at the end of Invoke-ProvisioningBootstrap
-      # in baseInfra/scripts/bootstrap-provision-vm.ps1. Either one throwing halts this
-      # command before `exit 0` is reached, so the extension reports failure.
+      local.bootstrapper_source,
+      # `exit 0` normalises the success path. A failure inside the bootstrapper surfaces
+      # because `$ErrorActionPreference='Stop'` above and the `$LASTEXITCODE` throw at the end
+      # of Invoke-ProvisioningBootstrap both halt this command before `exit 0` is reached.
+      # That protects against a failing bootstrapper, not against one that never runs: if the
+      # host process is killed outright nothing here executes and the extension still reports
+      # success, which is why the command must avoid anything Defender terminates on sight.
       "Invoke-ProvisioningBootstrap -Stack '${stack}' -SourceCommit '${var.source_commit}' -SourceArchiveSha256 '${var.source_archive_sha256}'",
       "exit 0"
     ])
@@ -107,11 +109,15 @@ locals {
       vm_name       = "vm-dotnet-user${local.padded}"
       computer_name = "dotnet-u${local.padded}"
       nic_name      = "nic-dotnet-user${local.padded}"
+      pip_name      = "pip-dotnet-user${local.padded}"
+      app_port      = 5000
     }
     java = {
       vm_name       = "vm-java-user${local.padded}"
       computer_name = "java-u${local.padded}"
       nic_name      = "nic-java-user${local.padded}"
+      pip_name      = "pip-java-user${local.padded}"
+      app_port      = 8080
     }
   }
 }

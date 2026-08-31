@@ -8,7 +8,7 @@ independent Windows Server 2025 legacy workstations before the workshop starts:
 | .NET | `vm-dotnet-userNNN` | SQL Server 2022 Express | .NET SDK 8.0.424 catalog on port 5000 |
 | Java | `vm-java-userNNN` | PostgreSQL 18.6-1 | Microsoft OpenJDK 17.0.20+8 catalog on port 8080 |
 
-The VMs share `rg-userNNN`, `vnet-userNNN`, the `vms` subnet, `bastion-userNNN`,
+The VMs share `rg-userNNN`, `vnet-userNNN`, the `vms` subnet, and each has its own public IP,
 `nsg-userNNN`, `nat-userNNN`, and `pip-nat-userNNN`. They have separate NICs, dynamic private
 addresses, VM resources, Premium OS disks, managed identities, and Custom Script Extensions.
 Either VM can be stopped or deallocated without changing the other.
@@ -67,7 +67,7 @@ Prerequisites:
 
 - Terraform 1.13.3 and PowerShell 7
 - Azure CLI 2.80.0 authenticated to the target subscription
-- subscription permissions for resource groups, networking, Bastion, VMs, role assignments,
+- subscription permissions for resource groups, networking, public IPs, VMs, role assignments,
   provider registration, and optional Entra user creation
 
 From the repository root, run the quota and cost gate for the exact participant count, regions,
@@ -84,11 +84,9 @@ VM size, and disk size:
 ```
 
 The command fails when the SKU is restricted or regional, VM-family, VM-count, Premium managed
-disk, Standard public IP, or NAT gateway quota cannot cover the per-participant footprint. Every
-participant gets two Windows VMs, two Premium OS disks, one Bastion host, one NAT gateway, and two
-Standard public IP addresses, and all of those are counted. Azure exposes no Bastion usage metric,
-so the script counts Bastion hosts already deployed in each region and compares the total against
-`-BastionHostsPerRegionLimit` (default 50). Quota metrics or retail meters that Azure does not
+disk, or Standard public IP quota cannot cover the per-participant footprint. Every
+participant gets two Windows VMs, two Premium OS disks, and two Standard public IP addresses -- one
+per VM -- and all of those are counted. Quota metrics or retail meters that Azure does not
 return are reported in `quotaMetricsUnavailable` and `pricesUnavailable` instead of being dropped
 silently.
 
@@ -149,7 +147,7 @@ The root outputs include:
 - `resource_group_names`, `vnet_names`, and region distribution
 - `deployment_footprint` with doubled VM, vCPU, OS-disk, and disk-GiB totals
 
-Connect through Azure Bastion; there are no VM public IP addresses. After Challenge 0,
+Connect over RDP to each VM's public IP address. After Challenge 0,
 deallocate only the VM derived from the validated
 `evidence/ch00-selection.json`. Use the executable mapping and authorization procedure
 in [Challenge 0](../challenges/ch00/README.md), not a stack-name guess or a copied

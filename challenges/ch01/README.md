@@ -23,7 +23,7 @@ necessarily to finish it. See "If you run out of time" below.
 ## Before you start
 
 **Where you work.** Everything in this chapter runs on your selected VM from Challenge 0,
-reached over Azure Bastion. The source tree is at `C:\MicroHack\source`, extracted there
+reached over RDP at its public IP address. The source tree is at `C:\MicroHack\source`, extracted there
 from a verified archive by the provisioner. **That directory is what "the repository
 root" means in this and every other workshop document** — start each terminal with
 `cd C:\MicroHack\source`.

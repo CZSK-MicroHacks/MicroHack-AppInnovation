@@ -123,7 +123,7 @@ Nothing below this line can be rushed later.
 | --- | --- | --- |
 | A **disposable** Azure subscription with no production workload | Subscription owner | The workshop enables subscription-wide Defender plans and creates a subscription budget. Do not use a shared subscription |
 | Subscription Owner rights for you | Subscription owner | Needed for role assignments, Defender pricing, and the Serverless Containers portal preflight. Yours alone, and only through T-1 — see [Who holds what rights, and when](#who-holds-what-rights-and-when). Participants never need it |
-| Quota increases | You | See the preflight section. Request VM-family vCPU, Standard public IP, and NAT gateway increases together — public IPs are the one people forget |
+| Quota increases | You | See the preflight section. Request VM-family vCPU and Standard public IP increases together — public IPs are the one people forget |
 | GitHub plan decision | You | See the Challenge 3 blocker above. **Team or Enterprise Cloud if the repositories are private** |
 | GitHub Copilot Business seats | GitHub org admin | One per participant who will use either Copilot path |
 | Defender for Cloud paid plans authorized | Subscription owner | Five pricing resources plus a subscription budget. Costs are in [the cost estimate](CostEstimate.md) |
@@ -192,10 +192,9 @@ script, so run it in `pwsh`:
 ```
 
 It fails closed on regional vCPU, VM-family vCPU, VM count, Premium managed disk, Standard
-public IP, and NAT gateway quota. Per participant it counts **2 VMs, 2 OS disks, 1 Bastion
-host, 1 NAT gateway, and 2 Standard public IPs**. Azure exposes no Bastion quota metric, so
-the script counts Bastion hosts already deployed in each region and compares the total
-against `-BastionHostsPerRegionLimit` (default 50).
+and public IP quota. Per participant it counts **2 VMs, 2 OS disks, and 2 Standard public
+IPs** -- one public IP per VM, used for RDP into the machine. Azure
+Bastion and the NAT gateway are no longer deployed.
 
 Check two fields in the output before you move on:
 
@@ -778,7 +777,7 @@ credential map: read it when you are ready to set the secrets, not before.
 | Every VM provisioned healthy | `C:\MicroHack\status\dotnet-smoke.json` and `java-smoke.json` on each VM; both must pass `/healthz`, `/readyz`, the canonical image, the `198/20/198` corpus, and the native database counts |
 | **Source tree is the one you pinned** | On one VM, read `C:\MicroHack\source\.source-commit` and confirm it matches your `source_commit`. Confirm `C:\MicroHack\source\infra` and every `challenges\*` folder exist |
 | **Deployment parameter files exist** | On one VM, in an ordinary **non-elevated** PowerShell — the session a participant has — `(Get-ChildItem C:\protected\*-<stack>-*.json).Count` returns `9`, and `$p = (Get-Content C:\protected\manual-<stack>-baseline.json \| ConvertFrom-Json).parameters; $p.facilitatorPrincipalObjectId.value; [bool]$p.performanceApiKey.value` shows your object ID and `True`. Run it unelevated on purpose: that is the session Challenge 1 deploys from, so it also proves the Read ACE landed. `Access is denied` here means the grant is missing and every participant stops on their first deployment |
-| Bastion access works | Connect to at least one VM per region |
+| RDP access works | Connect to at least one VM per region over its public IP |
 | **A participant can write where the work happens** | In that same non-elevated session, `New-Item C:\MicroHack\source\.t1-probe -ItemType File` must **succeed** and `New-Item C:\protected\.t1-probe -ItemType File` must **fail** with `Access is denied`. Remove the probe afterwards. The first proves Challenge 1 can commit and build in the tree it was given; the second proves the parameter files cannot be edited into something that no longer matches the deployment they describe. A VM that passes the read check above and fails this one has the wrong ACL rather than a missing one |
 | **A participant can create the migration export directory** | **Confirmation, not discovery.** `baseInfra/scripts/provision-vm.ps1` now creates `C:\ProgramData\MicroHack\migration` itself and places an explicit **Modify** ACE for `admin_username` on it (`New-MigrationExportDirectory`, using the same `Set-ProtectedAcl` call that grants read on `C:\protected`), so the permission is asserted at provisioning time instead of inherited from a folder created as SYSTEM. Confirm it held: in that same non-elevated session, `New-Item C:\ProgramData\MicroHack\migration\.t1-probe -ItemType File` must **succeed**. Remove the probe but **leave the directory** — deleting it discards the ACE that makes this work. All six Challenge 1 path documents create the directory with `New-Item -Force` before writing the database export, so on a correctly provisioned VM that line is now a no-op. If the probe fails with `Access is denied`, do not re-image — [editing a provisioning script re-provisions every VM](#reset-one-participant) — fix the ACL in place, per VM: `az vm run-command invoke -g <rg> -n <vm> --command-id RunPowerShellScript --scripts 'New-Item -ItemType Directory -Force C:\ProgramData\MicroHack\migration > $null; icacls C:\ProgramData\MicroHack\migration /grant azureuser:(OI)(CI)M'`, substituting your own `admin_username` if you changed it from `azureuser`. Left unfixed, every participant loses their database export, which is the artifact Challenge 1 exists to produce |
 | Load Testing prerequisites exist | Deploy `infra/perf-testing.bicep` and set the performance-test API-key secret in the Key Vault it creates to the value `terraform output -json performance_api_keys` reports for that participant and stack. A secret that does not match the generated key fails Challenge 2 with a 401, not a deployment error |
@@ -861,7 +860,7 @@ that profile from the machine's *other* Azure CLI profiles. It does not isolate 
 participant.
 
 **What is actually on the VM.** `$HOME` in that line resolves to the Windows profile of the
-account the participant signed in as through Bastion — the VM's local administrator,
+account the participant signed in as over RDP — the VM's local administrator,
 `admin_username` from `baseInfra/terraform/variables.tf`, default `azureuser`. So
 `C:\Users\azureuser\.azure-365` holds a signed-in Azure CLI profile: `azureProfile.json`
 plus an MSAL token cache holding access and refresh tokens for whichever identity you signed
@@ -989,7 +988,7 @@ terraform apply -var-file local.tfvars \
   -replace='module.user_environment["7"].azapi_resource.vm["java"]'
 ```
 
-**Rebuild a participant's whole environment** — network, Bastion, NAT gateway, both VMs.
+**Rebuild a participant's whole environment** — network, public IPs, both VMs.
 Expect 30–45 minutes before the VMs report healthy:
 
 ```bash

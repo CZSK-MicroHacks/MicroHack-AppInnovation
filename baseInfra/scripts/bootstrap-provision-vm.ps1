@@ -1,68 +1,17 @@
 <#
 .SYNOPSIS
-Separates protected VM custom data before launching the facilitator provisioner.
+Splits the VM custom-data bundle and launches the facilitator provisioner.
 
 .DESCRIPTION
-Reads the custom-data bundle as data, writes the secret payload and clean provisioner
-with SYSTEM/Administrators-only ACLs, removes the original bundle, and only then launches
-Windows PowerShell against the clean provisioner. Subsequent extension runs reuse the
-protected local files because Azure custom data is immutable.
+Custom data carries a base64 secret payload and the provisioner script, separated by marker
+lines. This writes both to disk and then runs the provisioner from that file.
+
+This script is inlined as plain text into the Custom Script Extension command. It must not
+decompress and then evaluate a script it assembled in memory: Microsoft Defender classifies
+base64 + GZipStream + ScriptBlock::Create inside powershell.exe -EncodedCommand as
+Behavior:Win32/PShellCobStager.A, terminates the process, and the extension still reports
+success. Keep this file small enough to inline, and keep every launch file-based.
 #>
-
-function Set-BootstrapAcl {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path,
-
-        [switch]$Directory
-    )
-
-    $Acl = if ($Directory) {
-        New-Object Security.AccessControl.DirectorySecurity
-    }
-    else {
-        New-Object Security.AccessControl.FileSecurity
-    }
-    $Acl.SetAccessRuleProtection($true, $false)
-    foreach ($Identity in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators')) {
-        if ($Directory) {
-            $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
-                $Identity,
-                'FullControl',
-                'ContainerInherit,ObjectInherit',
-                'None',
-                'Allow'
-            )
-        }
-        else {
-            $Rule = New-Object Security.AccessControl.FileSystemAccessRule(
-                $Identity,
-                'FullControl',
-                'Allow'
-            )
-        }
-        $Acl.AddAccessRule($Rule)
-    }
-    Set-Acl -LiteralPath $Path -AclObject $Acl
-}
-
-function Remove-BootstrapFile {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return
-    }
-    # The guest agent sets ReadOnly on CustomData.bin; Windows enforces it ahead of the DACL.
-    Set-ItemProperty -LiteralPath $Path -Name IsReadOnly -Value $false
-    $Length = (Get-Item -LiteralPath $Path).Length
-    if ($Length -gt 0) {
-        [IO.File]::WriteAllBytes($Path, (New-Object byte[] $Length))
-    }
-    Remove-Item -LiteralPath $Path -Force
-}
 
 function Invoke-ProvisioningBootstrap {
     [CmdletBinding()]
@@ -80,70 +29,39 @@ function Invoke-ProvisioningBootstrap {
         [string]$SourceArchiveSha256
     )
 
-    $CustomDataPath = 'C:\AzureData\CustomData.bin'
-    $ProvisionerPath = 'C:\AzureData\provision-vm.ps1'
-    $SecretRoot = 'C:\MicroHack\secrets'
-    $PayloadPath = Join-Path $SecretRoot 'provisioning.json'
-    $BundleHeader = "MICROHACK_CUSTOM_DATA_V2`n"
-    $ProvisionerMarker = "`nMICROHACK_PROVISIONER_START`n"
-    $SourceArchiveUrl = "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/$SourceCommit.zip"
+    $DataPath = 'C:\AzureData\CustomData.bin'
+    $ScriptPath = 'C:\AzureData\provision-vm.ps1'
+    $PayloadPath = 'C:\MicroHack\secrets\provisioning.json'
+    $Header = "MICROHACK_CUSTOM_DATA_V2`n"
+    $Marker = "`nMICROHACK_PROVISIONER_START`n"
 
-    New-Item -ItemType Directory -Path $SecretRoot -Force | Out-Null
-    Set-BootstrapAcl -Path $SecretRoot -Directory
+    New-Item -ItemType Directory -Path (Split-Path $PayloadPath) -Force | Out-Null
 
-    if (Test-Path -LiteralPath $CustomDataPath) {
-        $Bundle = [IO.File]::ReadAllText($CustomDataPath)
-        if (-not $Bundle.StartsWith($BundleHeader, [StringComparison]::Ordinal)) {
-            throw 'VM custom data does not contain the expected provisioning bundle header.'
-        }
-        $MarkerIndex = $Bundle.IndexOf(
-            $ProvisionerMarker,
-            $BundleHeader.Length,
-            [StringComparison]::Ordinal
-        )
-        if ($MarkerIndex -lt 0) {
-            throw 'VM custom data does not contain the provisioner boundary.'
-        }
-
-        $PayloadBase64 = $Bundle.Substring(
-            $BundleHeader.Length,
-            $MarkerIndex - $BundleHeader.Length
-        )
-        $ProvisionerText = $Bundle.Substring($MarkerIndex + $ProvisionerMarker.Length)
-        $PayloadBytes = [Convert]::FromBase64String($PayloadBase64)
-        if ($PayloadBytes.Length -eq 0 -or [string]::IsNullOrWhiteSpace($ProvisionerText)) {
-            throw 'VM custom data contains an empty payload or provisioner.'
-        }
-
-        [IO.File]::WriteAllBytes($PayloadPath, $PayloadBytes)
-        Set-BootstrapAcl -Path $PayloadPath
-        [IO.File]::WriteAllText(
-            $ProvisionerPath,
-            $ProvisionerText,
-            (New-Object Text.UTF8Encoding($false))
-        )
-        Set-BootstrapAcl -Path $ProvisionerPath
-
-        $PayloadBytes = $null
-        $PayloadBase64 = $null
-        $Bundle = $null
-        Remove-BootstrapFile -Path $CustomDataPath
+    $Bundle = [IO.File]::ReadAllText($DataPath)
+    if (-not $Bundle.StartsWith($Header, [StringComparison]::Ordinal)) {
+        throw 'VM custom data does not contain the expected bundle header.'
+    }
+    $Index = $Bundle.IndexOf($Marker, $Header.Length, [StringComparison]::Ordinal)
+    if ($Index -lt 0) {
+        throw 'VM custom data does not contain the provisioner boundary.'
     }
 
-    if (-not (Test-Path -LiteralPath $PayloadPath) -or
-        -not (Test-Path -LiteralPath $ProvisionerPath)) {
-        throw 'Protected provisioning files are unavailable after bootstrap.'
+    $Payload = $Bundle.Substring($Header.Length, $Index - $Header.Length)
+    $Body = $Bundle.Substring($Index + $Marker.Length)
+    if ($Payload.Length -eq 0 -or [string]::IsNullOrWhiteSpace($Body)) {
+        throw 'VM custom data contains an empty payload or provisioner.'
     }
-    Set-BootstrapAcl -Path $PayloadPath
-    Set-BootstrapAcl -Path $ProvisionerPath
+
+    [IO.File]::WriteAllBytes($PayloadPath, [Convert]::FromBase64String($Payload))
+    [IO.File]::WriteAllText($ScriptPath, $Body, (New-Object Text.UTF8Encoding($false)))
 
     & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-        -File $ProvisionerPath `
+        -File $ScriptPath `
         -Stack $Stack `
         -SourceCommit $SourceCommit `
-        -SourceArchiveUrl $SourceArchiveUrl `
+        -SourceArchiveUrl "https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation/archive/$SourceCommit.zip" `
         -SourceArchiveSha256 $SourceArchiveSha256
     if ($LASTEXITCODE -ne 0) {
-        throw "The clean facilitator provisioner exited with code $LASTEXITCODE."
+        throw "The facilitator provisioner exited with code $LASTEXITCODE."
     }
 }

@@ -4,6 +4,20 @@
 of them to Azure — and prove, with evidence, that it is faster to deploy, safer to
 change, and able to survive an incident.**
 
+> **Before you start — confirm you have the integrated material.** This repository has been
+> delivered in two forms, and only one of them is the workshop described below. Rather than
+> naming a branch (which goes stale the moment it merges), verify it directly:
+>
+> ```bash
+> ls -d tests/acceptance workshop/contracts infra/observability-workbook.bicep
+> ```
+>
+> **All three must exist.** If any is missing, your checkout predates the integrated workshop:
+> the acceptance suite, the contract layer, and Challenge 4 are all materially different, and
+> the challenge instructions will not match what you have. Fetch the revision that contains
+> them before continuing. This check is deliberately written against the *content* rather than
+> against a branch name or commit count, so it stays correct after the integration lands.
+
 ## The situation
 
 A specialty retailer sells collectible figures. Its product catalog — 198 items across
@@ -151,7 +165,7 @@ points where the facilitator may hand out a golden handoff to keep the group tog
 
 - A workshop identity assigned to exactly one participant resource group.
 - GitHub access and, for either Copilot path, an active GitHub Copilot entitlement.
-- Azure Bastion access to the two private Windows workshop VMs.
+- RDP access to the two Windows workshop VMs over their public IP addresses.
 - The repository at the facilitator-provided immutable commit.
 - Familiarity with PowerShell, JSON, and the selected application stack.
 

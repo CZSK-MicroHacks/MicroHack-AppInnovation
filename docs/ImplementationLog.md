@@ -1898,3 +1898,63 @@ It was caught by grepping the resolved tree for each fix rather than assuming th
 preserved them, which is the same check that found the half-landed template reference.
 Restored in a follow-up commit, keeping upstream's wording verbatim everywhere the two
 actually overlapped.
+
+### 2026-08-31 (Base infrastructure - legacy VM baseline made to actually work)
+Goal of this pass: the Challenge 1 prerequisite — both legacy apps genuinely running on two
+Azure VMs, provisioned unattended by `terraform apply`. Verified by a real `n=1` deployment
+rather than by reading the code.
+
+**Access model: direct public IP per VM; Bastion and NAT Gateway removed.**
+The workshop is about modernization content, not security, and the environment is created
+immediately before a delivery, holds no private data, and is destroyed afterwards. Bastion and a
+NAT gateway were per-participant hourly costs buying protection the workshop does not need. Each
+VM now has its own Standard static public IP with 3389 open. `bastion.tf` deleted;
+`networking.tf` rewritten; `enable_public_ip_resources` removed as a concept.
+
+The legacy app itself is **not** exposed: it is browsed at `localhost` inside the VM over RDP.
+That is both what was asked for and a better story — the app being reachable only from the one
+machine it runs on is exactly the constraint Challenge 1 argues against. The NSG rule for
+5000/8080 was therefore removed (Windows Firewall blocked those ports anyway, so the rule was
+promising something that did not work), and `legacy_app_urls` was replaced with
+`legacy_vm_access`, which returns the RDP address plus the URL to open once inside.
+
+**Custom Script Extension rewritten as plain text — this was the reason nothing worked.**
+The extension gzipped the bootstrapper and evaluated it in memory via `[ScriptBlock]::Create`
+under `-EncodedCommand`. Defender scores that as `Behavior:Win32/PShellCobStager.A` and kills
+the process ~0.5 s in; because it was killed rather than failed, the extension reported success
+with an empty message and Terraform reported a clean apply over two completely empty VMs. The
+bootstrapper is now inlined as plain text (`bootstrapper_source` in `locals.tf`). To fit the
+8,191-character command-line limit it was cut from 5,077 to 2,738 bytes by deleting
+`Set-BootstrapAcl` and `Remove-BootstrapFile` — pure hardening, out of scope here — and
+Terraform strips the `<#...#>` help block at render time. A `≤7,800` precondition in `vm.tf`
+guards the remaining headroom. Full detail in CommonErrors #121.
+
+**Re-apply no longer destroys participant environments.**
+`module.user_environment` had `depends_on` on the provider-registration module *and* declared
+`azurerm_client_config` internally, so the subscription ID was unknown at plan time and the
+resource group's `parent_id` forced replacement of the whole environment. The subscription is
+now read at the root and passed in as `var.subscription_id`. The dependency was never settling
+because the CognitiveServices registration carried a permanent feature diff, so that resource
+gained `ignore_changes = [feature]`. Detail in CommonErrors #122.
+
+**Provider registration no longer revokes the feature it needs.**
+`azurerm_resource_provider_registration` treats `feature` blocks as authoritative, so declaring
+none *unregisters* every registered preview feature on each apply. This silently revoked
+`Microsoft.Network/AllowBringYourOwnPublicIpAddress` and produced the long-standing (and
+misdiagnosed) belief that "tenant governance blocks public IPs and reverts re-registration
+within minutes". The module now declares features through a `dynamic "feature"` block driven by
+a `provider_features` map. Registering by hand is two commands, not one: `az feature register`
+**and** `az provider register -n Microsoft.Network`.
+
+**Windows image selection.** Pinned patch versions are deprecated within months and then fail
+with `ImageVersionDeprecated`, so the image moved to `version = "latest"`. That exposed a second
+trap: `*-azure-edition` SKUs are Hotpatch-enabled and demand
+`patchMode = "AutomaticByPlatform"`, but platform patch orchestration flips the VM to
+`Updating`, during which `az vm run-command` returns `Conflict` — unusable for a workshop that
+leans on run-command. Settled on the plain `2025-datacenter-g2` SKU, which keeps
+`patchMode = "Manual"` valid.
+
+**Result.** A single `terraform apply` builds the RG, network, both VMs, and provisions both
+stacks with no manual step. Both report `/healthz` 200 and `/readyz` 200 on localhost, and both
+smoke markers in `C:\MicroHack\status` show 198 figures / 20 categories / 198 images against the
+canonical image. The follow-up `terraform plan` prints `No changes.`

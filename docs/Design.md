@@ -43,8 +43,8 @@ extension point.
 
 ## Legacy baseline
 
-Each participant resource group contains two independent private Windows Server 2025
-VMs behind Azure Bastion:
+Each participant resource group contains two independent Windows Server 2025 VMs, each
+with its own public IP:
 
 | Stack | Source runtime | Native database | Local application |
 | --- | --- | --- | --- |
@@ -56,9 +56,11 @@ verifies installer hashes/publishers, starts the native database and application
 writes a sanitized smoke marker only after liveness, readiness, a canonical image, and
 native `198/20/198` counts pass.
 
-There is no VM public IP. The VMs share only participant-scoped network resources and
-can be powered independently. Challenge 0 selects one stack and deallocates the other;
-it does not delete either baseline.
+The public IP exists for RDP only; the catalog is served on the loopback interface and is
+browsed inside the VM, which is faithful to the single-machine baseline the workshop is
+arguing against. The VMs share only participant-scoped network resources and can be
+powered independently. Challenge 0 selects one stack and deallocates the other; it does
+not delete either baseline.
 
 ## Three modernization paths
 

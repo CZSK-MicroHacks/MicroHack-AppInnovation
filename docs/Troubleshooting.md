@@ -92,7 +92,7 @@ Get-ScheduledTask -TaskName 'MicroHack-*'
 Only one stack marker/log set exists on each VM. A missing marker means provisioning did
 not complete its native database, health, readiness, image, and corpus checks. The
 facilitator owns repair or replacement. Participants must not reseed, install alternate
-tool versions, expose a public IP, or bypass Bastion.
+tool versions or change how the VM is reached.
 
 ### `az vm run-command` returns `Conflict: Run command extension execution is in progress`
 
@@ -106,7 +106,7 @@ action.
 | `Updating` | Either a platform operation **or an orphaned run-command** — not distinguishable from this field alone | Run the probe below |
 
 **An orphaned run-command is the case that catches people.** Stopping the local `az`
-process — `Ctrl-C`, closing the terminal, losing the Bastion session — **does not cancel
+process — `Ctrl-C`, closing the terminal, losing the RDP session — **does not cancel
 the invocation on the VM.** It keeps executing until it finishes or hits the service-side
 execution limit, holding the channel the whole time with nothing attached to it. A measured
 occurrence held a VM for **60 minutes 48 seconds**.

@@ -48,7 +48,7 @@ Assumes 09:00–17:00 both days with a 45-minute lunch and two 15-minute breaks.
 | Time | Block | Notes |
 | --- | --- | --- |
 | 09:00–09:10 | **[Opening demo](Demo.md)** | 10 minutes, facilitator-driven, day 1 only. Show the legacy catalog running on a Windows VM, then show the finished modernized app and roll a bad revision back in about ninety seconds. Do not explain the architecture — show the destination and stop. The six steps, their exact commands, the output to expect, and what to say are in that script, which also lists which steps need a prepared environment. |
-| 09:10–09:30 | Orientation | Bastion sign-in, resource-group boundaries, the immutable source commit, the evidence rules, and the [glossary](Glossary.md). Say explicitly: never hand-edit evidence, and ask for a golden handoff rather than fabricating one. |
+| 09:10–09:30 | Orientation | RDP sign-in to each VM's public IP, resource-group boundaries, the immutable source commit, the evidence rules, and the [glossary](Glossary.md). Say explicitly: never hand-edit evidence, and ask for a golden handoff rather than fabricating one. |
 | 09:30–10:30 | **Challenge 0 — select a baseline** | Both VMs, both apps, the `198/20/198` corpus check, then pick one stack. Approve each deallocation as it is requested. |
 | 10:30–10:45 | Break | |
 | 10:45–12:30 | **Challenge 1 — block 1** | Path choice happens here. Steer the room: see the path table above. |

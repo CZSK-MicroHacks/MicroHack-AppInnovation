@@ -5,11 +5,10 @@ variable "n" {
 Number of user environments to provision.
 Each environment consists of a resource group containing:
  - Two independent Windows Server 2025 VMs: dotnet/SQL Server and java/PostgreSQL
- - Public IP (for Bastion) and separate Public IP for NAT Gateway
- - NAT Gateway for outbound SNAT
+ - One Standard static Public IP per VM, attached to the NIC for RDP
  - Network Security Group
  - Virtual Network (derived CIDR 10.<index>.0.0/22)
- - Subnets: 'vms' plus 'AzureBastionSubnet'
+ - A single 'vms' subnet
 Set to a reasonable small number for demos. Must be >=1.
 EOT
 
@@ -25,7 +24,7 @@ variable "locations" {
 List of Azure regions to distribute per-user environments across (round-robin).
 Assignment rule: environment index i (1-based) is placed in
   locations[(i - 1) % length(locations)].
-All regions must support the required resource types (VM size, Bastion, NAT Gateway).
+All regions must support the required resource types (VM size, Standard public IPs).
 Changing the region assigned to an existing index forces recreation of that environment's resource group and all contained resources.
 Provide at least one region; empty list is invalid.
 EOT
@@ -361,15 +360,3 @@ EOT
   }
 }
 
-variable "enable_public_ip_resources" {
-  type        = bool
-  default     = true
-  description = <<EOT
-Provision public IP addresses and the resources that depend on them (Azure Bastion and the
-NAT Gateway) in every participant environment.
-
-Keep the default `true`. Set to `false` only as a documented deviation when the target
-subscription is governed such that public IP creation is blocked outright. See the module
-variable of the same name in modules/user_environment for the consequences.
-EOT
-}

@@ -6,18 +6,19 @@ estimates the monthly compute, OS-disk, and network cost.
 .DESCRIPTION
 Reads the selected VM SKU and current regional Azure compute and network usage, then fails
 when the requested footprint exceeds regional or VM-family vCPU quota, VM count, Premium
-managed-disk, public-IP, or NAT-gateway quota. Every participant receives one Azure Bastion
-host, one NAT gateway, and two Standard static public IP addresses in addition to two VMs,
-so all of those are counted here rather than treated as shared foundation.
+managed-disk, or public-IP quota. Every participant receives two VMs and two Standard static
+public IP addresses -- one per VM, used for RDP and for browsing the legacy application --
+so those are counted here rather than treated as shared foundation.
 
-Azure does not expose a Bastion quota through `az network list-usages`; the script counts
-Bastion hosts already deployed in the region and compares the total against
--BastionHostsPerRegionLimit, which defaults to the published Azure default of 50.
+Azure Bastion and the NAT gateway are no longer part of the topology: each VM carries its own
+public IP, which provides both inbound access and an explicit outbound path. The Bastion and
+NAT accounting below is retained but driven by per-participant counts of zero, so it
+short-circuits; set those counts back above zero if the topology ever reintroduces them.
 
 It queries the public Azure Retail Prices API for Windows consumption, Premium SSD
-managed-disk, Bastion gateway, and public-IP rates, prints the exact footprint, and can
-enforce a facilitator cost ceiling. Meters or quota metrics that Azure does not return are
-reported as unavailable instead of being silently dropped.
+managed-disk, and public-IP rates, prints the exact footprint, and can enforce a facilitator
+cost ceiling. Meters or quota metrics that Azure does not return are reported as unavailable
+instead of being silently dropped.
 #>
 
 [CmdletBinding()]
@@ -153,10 +154,10 @@ $null = Invoke-AzureCliJson -Arguments @(
 
 # Subscription capability gate. Quota alone is not enough: some tenants withhold the
 # Microsoft.Network/AllowBringYourOwnPublicIpAddress feature, and without it every public IP
-# allocation is refused regardless of available quota. That breaks Bastion and NAT here in the
-# base infrastructure, and it also breaks the Challenge 1 target, where an external Container
-# Apps managed environment fails roughly eight minutes into the deployment after ~21 other
-# resources have already been created. Surface it here, in seconds, instead of there.
+# allocation is refused regardless of available quota. That breaks the per-VM public IPs here
+# in the base infrastructure, and it also breaks the Challenge 1 target, where an external
+# Container Apps managed environment fails roughly eight minutes into the deployment after
+# ~21 other resources have already been created. Surface it here, in seconds, instead of there.
 $PublicIpFeature = Invoke-AzureCliJson -Arguments @(
     'feature',
     'show',
@@ -170,23 +171,33 @@ $PublicIpFeature = Invoke-AzureCliJson -Arguments @(
 $PublicIpFeatureState = (@($PublicIpFeature.properties.state) -join '')
 $PublicIpAllocationBlocked = $PublicIpFeatureState -ne 'Registered'
 if ($PublicIpAllocationBlocked) {
-    Write-Warning ("Subscription {0} reports Microsoft.Network/AllowBringYourOwnPublicIpAddress as '{1}' rather than 'Registered'. Public IP allocation will be refused, which blocks the Bastion host, the NAT gateway, and the external Container Apps environment used by Challenge 1. Register the feature, or deploy the Challenge 1 target with containerAppsEnvironmentInternal=true and reach the catalog from inside the peered virtual network." -f $SubscriptionId, $PublicIpFeatureState)
+    # Registering this feature is a two-step operation and the second step is easy to miss:
+    # `az feature register` alone leaves the state unpropagated, so public IP creation keeps
+    # failing and the subscription looks permanently governed against public IPs when it is
+    # not. `az provider register` is what actually applies it.
+    Write-Warning ("Subscription {0} reports Microsoft.Network/AllowBringYourOwnPublicIpAddress as '{1}' rather than 'Registered'. Public IP allocation will be refused, which blocks the per-VM public IPs the participants use for RDP and for browsing the legacy app, and the external Container Apps environment used by Challenge 1. Register it with: az feature register --namespace Microsoft.Network --name AllowBringYourOwnPublicIpAddress --subscription {0}; az provider register -n Microsoft.Network --subscription {0}. Both commands are required -- registering the feature without re-registering the provider does not take effect." -f $SubscriptionId, $PublicIpFeatureState)
 }
 
-# Per participant: one Bastion host, one NAT gateway, one Bastion public IP, one NAT public IP.
+# Per participant: one public IP per legacy VM, so participants can RDP in and browse the
+# legacy application directly. Azure Bastion and the NAT gateway are no longer deployed --
+# the VM public IPs provide both inbound access and an explicit outbound path -- so their
+# per-participant counts are zero and the checks below short-circuit.
 $PublicIpsPerParticipant = 2
-$NatGatewaysPerParticipant = 1
-$BastionHostsPerParticipant = 1
+$NatGatewaysPerParticipant = 0
+$BastionHostsPerParticipant = 0
 
-$ExistingBastionHosts = @(
-    Invoke-AzureCliJson -Arguments @(
-        'network',
-        'bastion',
-        'list',
-        '--subscription',
-        $SubscriptionId
+$ExistingBastionHosts = @()
+if ($BastionHostsPerParticipant -gt 0) {
+    $ExistingBastionHosts = @(
+        Invoke-AzureCliJson -Arguments @(
+            'network',
+            'bastion',
+            'list',
+            '--subscription',
+            $SubscriptionId
+        )
     )
-)
+}
 
 $TotalVmCount = $ParticipantCount * 2
 $TotalDiskCount = $ParticipantCount * 2
@@ -319,18 +330,20 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
     else {
         $PublicIpsAvailable = [int]$PublicIpQuota.limit - [int]$PublicIpQuota.currentValue
         if ($RequiredPublicIps -gt $PublicIpsAvailable) {
-            throw "$Location requires $RequiredPublicIps Standard public IP addresses (one Bastion plus one NAT gateway address per participant) but only $PublicIpsAvailable are available."
+            throw "$Location requires $RequiredPublicIps Standard public IP addresses (one per legacy VM per participant) but only $PublicIpsAvailable are available."
         }
     }
 
     $NatGatewaysAvailable = $null
-    if ($null -eq $NatGatewayQuota) {
-        $QuotaMetricsUnavailable += "$Location`: NAT gateways"
-    }
-    else {
-        $NatGatewaysAvailable = [int]$NatGatewayQuota.limit - [int]$NatGatewayQuota.currentValue
-        if ($RequiredNatGateways -gt $NatGatewaysAvailable) {
-            throw "$Location requires $RequiredNatGateways NAT gateways but only $NatGatewaysAvailable are available."
+    if ($RequiredNatGateways -gt 0) {
+        if ($null -eq $NatGatewayQuota) {
+            $QuotaMetricsUnavailable += "$Location`: NAT gateways"
+        }
+        else {
+            $NatGatewaysAvailable = [int]$NatGatewayQuota.limit - [int]$NatGatewayQuota.currentValue
+            if ($RequiredNatGateways -gt $NatGatewaysAvailable) {
+                throw "$Location requires $RequiredNatGateways NAT gateways but only $NatGatewaysAvailable are available."
+            }
         }
     }
 
@@ -357,30 +370,41 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
         "and armSkuName eq 'Premium_SSD_Managed_Disk_$PremiumDiskSku' " +
         "and meterName eq '$PremiumDiskSku LRS Disk' and priceType eq 'Consumption'"
     )
-    $BastionPrice = Get-OptionalRetailPrice -Filter (
-        "serviceName eq 'Azure Bastion' and armRegionName eq '$ArmLocation' " +
-        "and meterName eq 'Basic Gateway' and priceType eq 'Consumption'"
-    )
+    # Bastion and NAT Gateway are only priced when the topology actually deploys them. Both
+    # counts are zero now that participants reach the VMs over their own public IPs, so the
+    # lookups are skipped rather than reported as unavailable prices.
+    $BastionPrice = $null
+    if ($RequiredBastionHosts -gt 0) {
+        $BastionPrice = Get-OptionalRetailPrice -Filter (
+            "serviceName eq 'Azure Bastion' and armRegionName eq '$ArmLocation' " +
+            "and meterName eq 'Basic Gateway' and priceType eq 'Consumption'"
+        )
+    }
     $PublicIpPrice = Get-OptionalRetailPrice -Filter (
         "serviceName eq 'Virtual Network' and armRegionName eq '$ArmLocation' " +
         "and meterName eq 'Standard IPv4 Static Public IP' and priceType eq 'Consumption'"
     )
     # NAT Gateway is billed from a single global meter rather than a regional one.
-    $NatGatewayPrice = Get-OptionalRetailPrice -Filter (
-        "serviceName eq 'NAT Gateway' and armRegionName eq 'Global' " +
-        "and skuName eq 'Standard' and meterName eq 'Standard Gateway' " +
-        "and priceType eq 'Consumption'"
-    )
+    $NatGatewayPrice = $null
+    if ($RequiredNatGateways -gt 0) {
+        $NatGatewayPrice = Get-OptionalRetailPrice -Filter (
+            "serviceName eq 'NAT Gateway' and armRegionName eq 'Global' " +
+            "and skuName eq 'Standard' and meterName eq 'Standard Gateway' " +
+            "and priceType eq 'Consumption'"
+        )
+    }
 
     $MonthlyCompute = [decimal]$VmPrice.retailPrice * $MonthlyHours * $RegionVmCount
     $MonthlyDisks = [decimal]$DiskPrice.retailPrice * $RegionVmCount
 
     $MonthlyBastion = [decimal]0
-    if ($null -eq $BastionPrice) {
-        $PricesUnavailable += "$Location`: Azure Bastion Basic gateway hour"
-    }
-    else {
-        $MonthlyBastion = [decimal]$BastionPrice.retailPrice * $MonthlyHours * $RequiredBastionHosts
+    if ($RequiredBastionHosts -gt 0) {
+        if ($null -eq $BastionPrice) {
+            $PricesUnavailable += "$Location`: Azure Bastion Basic gateway hour"
+        }
+        else {
+            $MonthlyBastion = [decimal]$BastionPrice.retailPrice * $MonthlyHours * $RequiredBastionHosts
+        }
     }
 
     $MonthlyPublicIps = [decimal]0
@@ -392,11 +416,13 @@ foreach ($Location in @($Locations | Select-Object -Unique)) {
     }
 
     $MonthlyNatGateways = [decimal]0
-    if ($null -eq $NatGatewayPrice) {
-        $PricesUnavailable += "$Location`: NAT gateway hour"
-    }
-    else {
-        $MonthlyNatGateways = [decimal]$NatGatewayPrice.retailPrice * $MonthlyHours * $RequiredNatGateways
+    if ($RequiredNatGateways -gt 0) {
+        if ($null -eq $NatGatewayPrice) {
+            $PricesUnavailable += "$Location`: NAT gateway hour"
+        }
+        else {
+            $MonthlyNatGateways = [decimal]$NatGatewayPrice.retailPrice * $MonthlyHours * $RequiredNatGateways
+        }
     }
 
     $MonthlyNetwork = $MonthlyBastion + $MonthlyPublicIps + $MonthlyNatGateways

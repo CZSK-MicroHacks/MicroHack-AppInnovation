@@ -18,7 +18,7 @@ and `jq` on your PATH and `az login` done against the subscription that owns the
 resources.
 
 Two steps deliberately happen elsewhere, and say so where they appear: step 1 opens the
-catalog in the VM's own browser over Azure Bastion, and step 5 is the Azure portal.
+catalog in the VM's own browser over RDP, and step 5 is the Azure portal.
 Everything else is your laptop. This is the first ten minutes in front of the room — a
 block that fails because you were in the wrong shell looks exactly like an application
 that does not work.
@@ -53,7 +53,7 @@ Every command below is either quoted from a chapter or is a chapter's command wi
 
 ## 1. The legacy catalog, and its baseline (00:00 – 01:45)
 
-Open the catalog in the VM's own browser over Azure Bastion — `http://localhost:5000` for
+Open the catalog in the VM's own browser after connecting over RDP — `http://localhost:5000` for
 `dotnet-sqlserver`, `http://localhost:8080` for `java-postgresql`
 ([Challenge 0, step 1](../challenges/ch00/README.md), the stack table). Search for a
 figure, filter a category, open one detail page and let its photograph load.

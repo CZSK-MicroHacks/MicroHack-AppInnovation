@@ -16,12 +16,12 @@ This chapter is where you see that for yourself and write down the numbers you w
 on day 2 to prove the move was worth it. It is also where you choose which of the two
 legacy stacks you will carry forward.
 
-**Estimated time:** 50–60 minutes, including two Azure Bastion sessions.
+**Estimated time:** 50–60 minutes, including hands-on time in both VMs.
 
 ## Before you start
 
 - Your facilitator has given you a participant resource group (`rg-userNNN`), both VM
-  names, and Azure Bastion access to both private VMs.
+  names, and the public IP address and RDP credentials for both VMs.
 - Your facilitator has given you the **full 40-character lowercase commit** the VMs were
   provisioned from. You will need it three times; keep it on the clipboard.
 - Both VMs report a successful provisioning state.
@@ -77,12 +77,21 @@ markers check out, and the unselected VM is deallocated with approval.
 
 ## 1. Open both catalogs
 
-Connect to each VM through Azure Bastion and open the catalog in the VM's browser:
+Each VM has its own public IP address for RDP. Connect to each one with the administrator
+credentials your facilitator provided, then open the catalog in the browser **inside** the
+VM. Get the addresses from the deployment output, or with:
 
-| Stack ID | VM | Runtime and database | Local URL |
+```bash
+az vm list-ip-addresses -g rg-userNNN -o table
+```
+
+| Stack ID | VM | Runtime and database | URL inside the VM |
 | --- | --- | --- | --- |
 | `dotnet-sqlserver` | `vm-dotnet-userNNN` | .NET 8 and SQL Server 2022 Express | `http://localhost:5000` |
 | `java-postgresql` | `vm-java-userNNN` | Microsoft OpenJDK 17 and PostgreSQL 18 | `http://localhost:8080` |
+
+That the application is only reachable from the machine it runs on is itself part of the
+"before" picture: it is bound to one box, and being on that box is the only way in.
 
 Spend five minutes per application actually using it. Search for a figure. Filter by a
 category. Open a detail page and load its photograph. The two applications should look
@@ -90,8 +99,9 @@ and behave identically — that is deliberate, and it is what makes the comparis
 Challenge 1 fair.
 
 While you are there, notice what you *cannot* do: there is no second instance to fail
-over to, no dashboard telling you how many requests just arrived, and no URL to give
-anyone outside this VM.
+over to, no dashboard telling you how many requests just arrived, and no way to release a
+new version without touching this one machine. This one VM is the whole service — if it
+stops, the catalog is gone.
 
 ## 2. Take the baseline day 2 will argue with
 
@@ -199,7 +209,7 @@ Both VMs were provisioned from one immutable commit and carry a signed marker pr
 what was installed. Confirming it now means that any difference you see later is
 something *you* changed.
 
-Connect to the .NET VM through Azure Bastion, open PowerShell at the source tree
+Connect to the .NET VM over RDP, open PowerShell at the source tree
 (`cd C:\MicroHack\source`), and run:
 
 ```powershell

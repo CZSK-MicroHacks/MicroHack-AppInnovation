@@ -50,8 +50,17 @@ resource "azapi_resource" "vm" {
         imageReference = {
           publisher = "MicrosoftWindowsServer"
           offer     = "WindowsServer"
-          sku       = "2025-datacenter-azure-edition"
-          version   = "26100.7456.251206"
+          # Deliberately the plain Desktop Experience SKU rather than `-azure-edition`.
+          # The Azure Edition images are Hotpatch-compatible, and Azure rejects them unless
+          # patchMode is "AutomaticByPlatform" -- which is precisely the platform patch
+          # orchestration the osProfile comment below explains this workshop cannot use.
+          sku = "2025-datacenter-g2"
+          # Not pinned to a patch version. Azure deprecates specific Windows Server image
+          # versions within months, and a pinned version fails the deployment outright with
+          # ImageVersionDeprecated once that happens -- which is exactly how the previously
+          # pinned 26100.7456.251206 broke. The environment is rebuilt fresh for each
+          # delivery, so tracking the current image is what keeps it deployable.
+          version = "latest"
         }
       }
       osProfile = {

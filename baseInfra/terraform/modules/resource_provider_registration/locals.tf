@@ -140,3 +140,14 @@ locals {
     "Microsoft.LoadTestService", # Azure Load Testing
   ]
 }
+
+locals {
+  # Preview features that must stay registered for the workshop topology to deploy. Each
+  # participant VM carries its own public IP address, and Azure refuses every public IP
+  # allocation in this subscription unless this feature is registered.
+  provider_features = {
+    "Microsoft.Network" = {
+      "AllowBringYourOwnPublicIpAddress" = true
+    }
+  }
+}

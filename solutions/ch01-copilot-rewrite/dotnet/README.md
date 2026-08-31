@@ -13,7 +13,7 @@ containing secrets.
 ## Where you work, and what the VM does not have
 
 Every Azure and migration command here runs on the selected VM from Challenge 0, reached
-over Azure Bastion. The source tree is at `C:\MicroHack\source`, extracted from a
+over RDP at its public IP address. The source tree is at `C:\MicroHack\source`, extracted from a
 verified archive by the provisioner. **That directory is what "the repository root" means
 in this and every other workshop document.** Start each terminal with
 `cd C:\MicroHack\source`.

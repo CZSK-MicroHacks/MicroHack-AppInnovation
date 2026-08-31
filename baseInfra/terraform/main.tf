@@ -1,3 +1,5 @@
+data "azurerm_client_config" "current" {}
+
 locals {
   user_indices      = range(1, var.n + 1)
   region_count      = length(var.locations)
@@ -29,6 +31,7 @@ module "user_environment" {
   for_each = var.manage_azure_resources ? { for i in local.user_indices : i => i } : {}
 
   user_index                      = each.value
+  subscription_id                 = data.azurerm_client_config.current.subscription_id
   location                        = local.user_location_map[each.value]
   admin_username                  = var.admin_username
   admin_password                  = var.admin_password
@@ -41,7 +44,6 @@ module "user_environment" {
   facilitator_principal_object_id = var.facilitator_principal_object_id
   assigned_user_object_id         = var.manage_entra_users ? lookup(module.entra_users, tostring(each.value)).object_id : null
   create_role_assignment          = var.manage_entra_users
-  enable_public_ip_resources      = var.enable_public_ip_resources
 
   depends_on = [module.resource_providers]
 }

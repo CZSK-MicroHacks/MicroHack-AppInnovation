@@ -971,3 +971,67 @@ export JAVA_HOME=~/.local/jdk/jdk-17.0.20+8/Contents/Home
 
 This yields exactly the pinned 17.0.20+8. Check `java -version` before building: an older
 system JDK earlier on `PATH` produces a Maven failure that does not mention the JDK.
+
+## 121. VM provisioning silently does nothing: the extension "succeeds" but the VM is empty
+**Symptom:** `terraform apply` completes, `azapi_resource.vm_setup` reports `Succeeded` with an
+empty message, and yet `C:\MicroHack` does not exist on the VM, no app is listening, and no
+provisioner log was ever written. The extension log shows
+`Command execution finished with code: 0` about **0.5 seconds** after it started, with no output.
+
+**Cause:** Microsoft Defender. The extension command used to carry `bootstrap-provision-vm.ps1`
+gzipped and base64-encoded, decompress it in memory, and evaluate it with
+`[ScriptBlock]::Create(...)` — all inside `powershell.exe -EncodedCommand`. On Windows Server
+2025 that combination (`FromBase64String` + `GZipStream` + `ScriptBlock::Create` under
+`-EncodedCommand`) matches the Cobalt Strike stager heuristic **`Behavior:Win32/PShellCobStager.A`**
+and Defender *terminates the process*. Because the process was killed rather than returning a
+failure, the extension recorded exit code 0 and Terraform reported success.
+
+**How to confirm:**
+```powershell
+Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 20 |
+  Where-Object Id -in 1116,1117 | Format-List TimeCreated, Message
+```
+Events 1116/1117 naming `PShellCobStager` are the smoking gun. Note that the *identical* script
+run via `powershell.exe -File` is not flagged — the heuristic only scores it under
+`-EncodedCommand`.
+
+**Resolution:** Inline the bootstrapper as **plain text** in the extension command; never
+decompress-and-evaluate in memory. See `modules/user_environment/locals.tf` →
+`bootstrapper_source`. Keeping it under the 8,191-character Windows command-line limit required
+shrinking the script, so the ACL/secret-scrubbing helpers were removed (this workshop
+deliberately does no security hardening) and Terraform strips the `<#...#>` help block at render
+time. The gzip layer that carries the *provisioner body* in `customData` is fine, because that
+one is executed with `-File`.
+
+**Guard rail:** `vm.tf` has a precondition that the rendered command stays ≤7,800 characters. If
+you add to `bootstrap-provision-vm.ps1`, that precondition is what will tell you.
+
+## 122. `terraform apply` wants to destroy and recreate every participant resource group
+**Symptom:** A re-apply that should be a no-op instead plans
+`Plan: 15 to add, 2 to change, 15 to destroy`, with the resource group and every resource in it
+(VNet, NSG, NICs, public IPs, VMs, role assignments) marked `forces replacement` on `parent_id`
+or `id`. For a facilitator scaling `n` mid-workshop this wipes every attendee's work.
+
+**Cause:** Two things compounding.
+
+1. `module.user_environment` declares `depends_on = [module.resource_providers]`. Terraform
+   defers *every data source inside a module* to apply time whenever that module's `depends_on`
+   target has a pending change. The module declared `data "azurerm_client_config" "current"`
+   internally, so `subscription_id` became **unknown at plan time**, so
+   `parent_id = "/subscriptions/${unknown}"` forced replacement of the resource group and
+   cascaded to everything under it.
+2. The dependency never settled, because
+   `azurerm_resource_provider_registration.providers["Microsoft.CognitiveServices"]` had a
+   permanent diff: Azure reports preview features nobody asked for (`Cloud.Speech.PersonalVoice`,
+   `OpenAI.1PGatingTier`), refresh writes them back into state, and the authoritative `feature`
+   set wants to remove them on every plan.
+
+**Resolution:** Fix both halves.
+- Read the subscription at the **root** module (`data "azurerm_client_config" "current"` in
+  `main.tf`, which has no `depends_on`) and pass it in as `var.subscription_id`.
+- Add `ignore_changes = [feature]` to the provider-registration resource so the perpetual diff
+  stops. Features are applied on create and then left alone.
+
+**Verification:** After a successful apply, `terraform plan` must print
+`No changes. Your infrastructure matches the configuration.` Treat anything else as a defect —
+a plan that is not clean is what re-arms this bug.

@@ -9,7 +9,7 @@ module.user_environment["1"].azapi_resource.vm["java"]
 ```
 
 The matching NIC, extension, managed-identity role assignment, generated database password, and
-generated performance key use the same `dotnet` or `java` key. The network, Bastion, NAT Gateway,
+generated performance key use the same `dotnet` or `java` key. The network,
 NSG, resource group, and outbound public IP remain single shared resources in that participant
 module.
 
@@ -219,8 +219,9 @@ registration explicitly re-enables it before start. Provisioning creates a stack
 marker only after the app, liveness, readiness, canonical image, canonical manifest counts, and
 native database counts pass.
 
-Deallocating `vm-dotnet-userNNN` does not affect `vm-java-userNNN`, and vice versa. Shared Bastion,
-VNet, subnet, NSG, NAT Gateway, and outbound IP remain available while either VM is stopped.
+Deallocating `vm-dotnet-userNNN` does not affect `vm-java-userNNN`, and vice versa. The shared
+VNet, subnet, and NSG remain available while either VM is stopped. Each VM keeps its own static
+public IP address across a stop/start cycle, so the URL a participant bookmarked stays valid.
 
 ## Provider registration lifecycle
 
