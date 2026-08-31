@@ -1083,3 +1083,34 @@ it is the NSG rule that gets removed.
 **Implication:** any access design that depends on a *persistent* inbound allow rule created at
 deployment time will decay after roughly twenty minutes. Treat opening RDP as a participant
 step performed when it is needed, not as something the deployment can do once and rely on.
+
+**Resolution (measured, not assumed):** the sweep is *selective*. Two rules were written into
+the same NSG at the same moment — `rdp` with `sourceAddressPrefix: Internet`, and a second
+scoped to a single `/32`. The sweep at the next interval removed the `Internet` rule and left
+the scoped one, which then survived further sweeps and stayed usable. Sweeps ran on a ~20-minute
+cadence aligned to :06/:26/:46, not at a fixed offset from when the rule was created.
+
+So the baseline now ships `rdp_source_address_prefixes`, defaulting to `[]`, which creates the
+NSG with no inbound rules at all. Participants open 3389 for their own address in Challenge 0,
+step 1 — they hold Owner on their resource group, so this needs no facilitator:
+```bash
+MYIP=$(curl -s https://api.ipify.org)
+az network nsg rule create -g rg-userNNN --nsg-name nsg-userNNN -n allow-my-rdp \
+  --priority 300 --protocol Tcp --access Allow --direction Inbound \
+  --source-address-prefixes "$MYIP/32" --destination-port-ranges 3389
+```
+Both the root variable and the NSG resource reject `Internet` outright, because an unscoped
+rule is worse than no rule: it works long enough to look correct and then strands people
+mid-challenge with a VM that appears to have broken.
+
+**Do not mistake this for the same symptom from a different cause.** While diagnosing it, one
+VM's public IP timed out on 3389 while the other answered instantly, on an identical NSG,
+subnet, NIC and public-IP SKU. That was the *local* network blocking that address, not Azure.
+Two checks separate them, and both are cheap:
+```bash
+# What Azure thinks of the flow -- reports the rule name that decides it
+az network watcher test-ip-flow --vm vm-dotnet-userNNN -g rg-userNNN \
+  --direction Inbound --protocol TCP --local 10.1.0.4:3389 --remote <your-ip>:56789
+```
+If that returns `Allow` and the connection still times out, reach the address from somewhere
+else — the other VM in the same resource group will do — before touching any configuration.

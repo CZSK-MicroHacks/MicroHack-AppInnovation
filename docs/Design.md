@@ -56,7 +56,11 @@ verifies installer hashes/publishers, starts the native database and application
 writes a sanitized smoke marker only after liveness, readiness, a canonical image, and
 native `198/20/198` counts pass.
 
-The public IP exists for RDP only; the catalog is served on the loopback interface and is
+The public IP exists for RDP only, and the NSG ships with no inbound rules: tenant
+governance deletes an unscoped 3389 rule within about twenty minutes but leaves an
+address-scoped one alone, so each participant opens 3389 for their own address in
+Challenge 0 rather than the deployment opening it for everyone once. The catalog is
+served on the loopback interface and is
 browsed inside the VM, which is faithful to the single-machine baseline the workshop is
 arguing against. The VMs share only participant-scoped network resources and can be
 powered independently. Challenge 0 selects one stack and deallocates the other; it does

@@ -75,7 +75,35 @@ you are not keeping.
 You are done when `evidence/ch00-selection.json` names exactly one stack, both baseline
 markers check out, and the unselected VM is deallocated with approval.
 
-## 1. Open both catalogs
+## 1. Open RDP for your own address
+
+The environment is created with **no inbound RDP rule**. This is not an oversight and it
+is not a security exercise: the tenant's governance automation deletes any 3389 rule that
+allows the whole internet, roughly twenty minutes after it appears. A rule scoped to *your*
+address is left alone, so the one that works is the one you create.
+
+You hold **Owner** on your own resource group, so you can do this yourself. Run it once,
+from your own machine:
+
+```bash
+# Your current public address, then a rule that admits only it
+MYIP=$(curl -s https://api.ipify.org)
+az network nsg rule create \
+  -g rg-userNNN --nsg-name nsg-userNNN -n allow-my-rdp \
+  --priority 300 --protocol Tcp --access Allow --direction Inbound \
+  --source-address-prefixes "$MYIP/32" --destination-port-ranges 3389
+```
+
+In PowerShell, replace the first line with `$MYIP = Invoke-RestMethod https://api.ipify.org`
+and use `$MYIP/32`.
+
+> [!NOTE]
+> If RDP stops responding later in the day, your public address has probably changed —
+> switching networks or a VPN reconnect is enough. Re-run the same command; the rule is
+> replaced in place, not duplicated. If you had to open the whole internet to get moving,
+> expect to lose it again within twenty minutes.
+
+## 2. Open both catalogs
 
 Each VM has its own public IP address for RDP. Connect to each one with the administrator
 credentials your facilitator provided, then open the catalog in the browser **inside** the
@@ -103,7 +131,7 @@ over to, no dashboard telling you how many requests just arrived, and no way to 
 new version without touching this one machine. This one VM is the whole service — if it
 stops, the catalog is gone.
 
-## 2. Take the baseline day 2 will argue with
+## 3. Take the baseline day 2 will argue with
 
 This is the "before" column of your final scorecard. Run it on **both** VMs — it takes
 about three minutes each — changing only the two values at the top.
@@ -203,7 +231,7 @@ empty cell is the one thing a before/after table cannot survive. `manualRollback
 almost certainly `0`, and that zero is the most quotable number Challenge 0 produces —
 Challenge 3 replaces it with a timed traffic weight change.
 
-## 3. Verify the .NET baseline
+## 4. Verify the .NET baseline
 
 Both VMs were provisioned from one immutable commit and carry a signed marker proving
 what was installed. Confirming it now means that any difference you see later is
@@ -261,7 +289,7 @@ is alive, `/readyz` says it can actually reach its data. On this VM both are alw
 together, because the database is the same machine. Keep that distinction — it becomes
 load-bearing the moment the database moves away.
 
-## 4. Verify the Java baseline
+## 5. Verify the Java baseline
 
 Connect to the Java VM and repeat the same check with only these two values changed:
 
@@ -280,7 +308,7 @@ Both applications must report the same `198` figures, `20` categories, and 198 i
 If they do not, stop — the comparison is no longer fair and the facilitator needs to
 reprovision.
 
-## 5. Choose the stack you will carry forward
+## 6. Choose the stack you will carry forward
 
 You have now used both applications and measured both. Choose on that basis, not on the
 version numbers.
@@ -303,7 +331,7 @@ through 6. Neither is the easy option.
 Pick the one closest to what you support at home — or, if your table can split, pick
 different ones deliberately so you have someone to compare notes with at the wrap-up.
 
-## 6. Record the selection
+## 7. Record the selection
 
 On the selected VM, replace the placeholders and create the selection record. Every later
 chapter reads this file to know which stack you are on, so it has to be exact:
@@ -372,7 +400,7 @@ if (
 
 Silence means it passed.
 
-## 7. Deallocate the unselected VM
+## 8. Deallocate the unselected VM
 
 You only need one legacy machine from here on, and the other one costs money for two
 days. Deallocating it takes $4.42 a day off your environment — $16.14 becomes $11.72,
@@ -459,10 +487,12 @@ power-state verification are written out in
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
+| RDP times out, on a VM that reports *running* | Either you have not run step 1 yet, or your public address changed — a VPN reconnect or moving between networks is enough. | Re-run the step 1 command; it replaces the rule rather than adding a second one. If it still times out, confirm Azure agrees the flow is allowed: `az network watcher test-ip-flow --vm <vm> -g rg-userNNN --direction Inbound --protocol TCP --local <private-ip>:3389 --remote <your-ip>:56789`. `Allow` means the block is on your own network, not in Azure. |
+| RDP worked, then stopped about twenty minutes later | An inbound rule that allowed the whole internet was used instead of an address-scoped one. Tenant governance deletes those automatically. | Run the step 1 command as written, with `$MYIP/32`. Do not widen the source to get moving; it will fail again at the next sweep, usually mid-task. |
 | `The .NET provisioning marker does not match the frozen baseline.` | `$expectedSourceCommit` is a short SHA, a branch, uppercase, or from the wrong provisioning run. | Paste the full 40-character lowercase commit the facilitator gave you. If it still fails, the VM was provisioned from a different commit — that is a facilitator repair, not yours. |
 | `The .NET baseline HTTP checks failed.` | The `MicroHack-*` scheduled task or the local database service is not running yet. | Check `Get-ScheduledTask -TaskName 'MicroHack-*'` and the database service state, wait for startup to finish, and retry. Do not reseed the database. |
-| `Challenge 0 selection evidence is invalid.` | Selected and unselected VM names are swapped, or the resource group is not `rg-userNNN`. | Re-read the mapping in step 6: the selected stack determines both names. |
-| The deallocation command in step 7 returns an authorization error | You are Owner on your resource group only, and the facilitator retains power-state rights. | Ask the facilitator to run it and record the outcome. Deferred deallocation is an acceptable outcome for this chapter. |
+| `Challenge 0 selection evidence is invalid.` | Selected and unselected VM names are swapped, or the resource group is not `rg-userNNN`. | Re-read the mapping in step 7: the selected stack determines both names. |
+| The deallocation command in step 8 returns an authorization error | You are Owner on your resource group only, and the facilitator retains power-state rights. | Ask the facilitator to run it and record the outcome. Deferred deallocation is an acceptable outcome for this chapter. |
 
 Everything else: [troubleshooting](../../docs/Troubleshooting.md).
 

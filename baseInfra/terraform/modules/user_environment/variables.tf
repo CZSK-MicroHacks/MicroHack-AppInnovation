@@ -121,3 +121,14 @@ variable "subscription_id" {
   description = "Subscription that hosts the participant resource group."
   type        = string
 }
+
+# Empty by default, which creates the NSG with no inbound rules. Tenant governance automation
+# deletes any inbound 3389 rule sourced from `Internet` within ~20 minutes, so an unscoped rule
+# is worse than none: it appears to work and then vanishes mid-session. Facilitators who know a
+# fixed venue egress address can set it here; otherwise participants open RDP for their own
+# address in Challenge 0 using the Owner role they hold on this resource group.
+variable "rdp_source_address_prefixes" {
+  description = "Source CIDRs allowed to reach RDP (3389). Empty creates no inbound rule."
+  type        = list(string)
+  default     = []
+}

@@ -360,3 +360,17 @@ EOT
   }
 }
 
+
+# See modules/user_environment/variables.tf for why this defaults to empty. Set it only to a
+# concrete address or CIDR, never to "Internet": tenant governance deletes unscoped inbound
+# 3389 rules within ~20 minutes (docs/CommonErrors.md #124).
+variable "rdp_source_address_prefixes" {
+  description = "Source CIDRs allowed to reach RDP (3389) on every participant VM. Empty creates no inbound rule; participants open their own in Challenge 0."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !contains([for p in var.rdp_source_address_prefixes : lower(p)], "internet")
+    error_message = "Use concrete CIDRs. An 'Internet' source is removed by tenant governance shortly after apply."
+  }
+}

@@ -1993,3 +1993,48 @@ nineteen minutes after Terraform created it, leaving `securityRules: []`. RDP is
 reachable while the rule exists — verified against both VMs — so the access model works; it
 just decays. This is very likely the true origin of the repo's long-standing claim that tenant
 governance blocks public IPs. See CommonErrors #124.
+
+### RDP access: participant-scoped NSG rule instead of an open one
+
+Closing out the governance finding above. The sweep turned out to be **selective**, which
+changes the fix entirely. Two rules were written into the same NSG at the same moment: `rdp`
+sourced from `Internet`, and `rdp-scoped-test` sourced from a single `/32`. The next sweep
+removed the first and left the second, which then survived subsequent sweeps and stayed
+usable. Sweeps ran on a ~20-minute cadence aligned to :06/:26/:46 rather than at a fixed
+offset from rule creation, so this is a periodic scan, not a reaction to the write.
+
+So the baseline no longer creates an inbound rule at all. `rdp_source_address_prefixes`
+(root and `user_environment`) defaults to `[]`, which renders `securityRules = []`.
+Participants open 3389 for their own address in Challenge 0, step 1 — they already hold
+Owner on their resource group, so this needs no facilitator involvement, and a changed
+address later in the day is fixed by re-running the same command. Facilitators with a fixed
+venue egress address can pre-populate the variable instead.
+
+Both the root variable and the NSG resource **reject `Internet` outright**. That is
+deliberate: an unscoped rule is worse than no rule, because it works long enough to look
+correct and then strands people mid-challenge with a VM that appears to have broken. Making
+it fail at plan time is cheaper than making it fail at 14:30.
+
+Verified end to end: `terraform plan` scoped the work to `0 to add, 1 to change, 0 to
+destroy` — no resource-group or VM replacement, so the idempotency fix still holds — the
+apply left `securityRules: []`, the follow-up plan reported `No changes.`, and the exact
+command now printed in Challenge 0 opened RDP successfully against a live VM.
+
+When the variable is empty the NSG body omits `securityRules` rather than sending an empty
+list. Terraform is applied once before a delivery, so this is not about protecting
+participants from a re-apply; it is about keeping `terraform plan` quiet. An empty list is
+authoritative, so every participant rule would show up as pending drift, and the `No changes.`
+check that detects the resource-group replacement bug (CommonErrors #122) only has value
+while it stays silent. Confirmed with a participant-created rule live in the NSG: plan
+reported `No changes.`
+
+One diagnostic worth recording, because it cost time and looked identical: during this work
+one VM's public IP timed out on 3389 while the other answered instantly, on an identical
+NSG, subnet, NIC and public-IP SKU. `az network watcher test-ip-flow` reported `Allow`, and
+the address was reachable from the *other* VM in the same resource group — the block was the
+local corporate network, not Azure. Both checks are in CommonErrors #124.
+
+Docs realigned: `challenges/ch00` gains step 1 and two troubleshooting rows (sections
+renumbered 2-8, with the cross-references in `docs/Demo.md` and `challenges/wrapup` updated),
+and `docs/Facilitator.md`, `docs/Design.md`, `docs/Glossary.md` and `docs/Agenda.md` no
+longer claim 3389 is open on arrival.

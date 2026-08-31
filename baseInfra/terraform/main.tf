@@ -44,6 +44,7 @@ module "user_environment" {
   facilitator_principal_object_id = var.facilitator_principal_object_id
   assigned_user_object_id         = var.manage_entra_users ? lookup(module.entra_users, tostring(each.value)).object_id : null
   create_role_assignment          = var.manage_entra_users
+  rdp_source_address_prefixes     = var.rdp_source_address_prefixes
 
   depends_on = [module.resource_providers]
 }
