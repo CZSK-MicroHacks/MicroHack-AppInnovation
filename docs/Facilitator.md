@@ -138,6 +138,26 @@ rm source.zip
 Set `source_commit` in your Terraform tfvars and set `TF_VAR_source_archive_sha256` to the
 64-character digest.
 
+The pin is deliberately local: `local.tfvars` is git-ignored, and the tracked
+`config.tfvars.example` ships an empty `source_commit`. If you just want a known-good
+starting point, this pair was verified end to end — provisioned onto both VMs, digest and
+content guards passing, apps healthy afterwards:
+
+```hcl
+source_commit         = "349ad50d5ab8fb3f52a5365a631fbcd5054a63ab"
+source_archive_sha256 = "a2987977df4b095f7b07e45d47b7629126a6557cc8bc3e8f4d0b2807dfd1bf27"
+```
+
+Re-run the steps above for any newer commit — the digest changes with the tree.
+
+> The provisioner refuses an archive that does not contain `data/manifest.json`, `dotnet/`,
+> `java/` and `challenges/ch01/`. That guard only proves the archive *is* a workshop tree,
+> not that it is the current one, so a stale pin can still install an old workshop silently.
+> Re-pin whenever the content changes.
+
+Changing the pin updates the VM extensions in place — no VM is rebuilt, and provisioning
+leaves participant work alone when the VM's `.source-commit` marker already matches.
+
 ## Provision participants
 
 Copy `baseInfra/terraform/config.tfvars.example` to a git-ignored local tfvars file and
