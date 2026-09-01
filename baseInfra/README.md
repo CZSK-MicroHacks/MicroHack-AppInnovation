@@ -151,6 +151,34 @@ az account set --subscription '<subscription-guid>'
 ./baseInfra/scripts/facilitator-test-deploy.ps1
 ```
 
+To review what would happen without creating anything, add `-DryRun`. It runs the same
+inference, preflight, and plan, then prints a summary of the changes and stops:
+
+```pwsh
+./baseInfra/scripts/facilitator-test-deploy.ps1 -DryRun
+```
+
+```text
+Target subscription : Contoso Workshop (7bc68c68-...)
+
+Totals
+  Create      120
+
+By resource type
+  Create       82  azurerm_resource_provider_registration
+  Create        4  Microsoft.Compute/virtualMachines
+  Create        2  Microsoft.Resources/resourceGroups
+  ...
+
+Resource groups
+  Create     rg-user001
+  Create     rg-user002
+```
+
+Anything that would be destroyed or replaced is listed separately and highlighted. The dry run
+skips the VM password prompt, since no password reaches Azure or state on a plan-only run, and
+leaves the saved plan at `baseInfra/terraform/tfplan` for `terraform show tfplan`.
+
 It is a dry-run tool, not a delivery tool. Three defaults differ from a real cohort:
 
 - Terraform state is written to a local file (`~/.microhack/baseinfra-test/terraform.tfstate`
@@ -160,10 +188,10 @@ It is a dry-run tool, not a delivery tool. Three defaults differ from a real coh
 - `manage_entra_users` defaults to `false`, so no participant signs in to Azure.
 - The VM administrator password defaults to a well-known throwaway value.
 
-Useful switches: `-VarFile <name>` writes to a different tfvars file (an existing one is backed
-up before it is overwritten), `-StatePath <path>` relocates the state file, and `-SkipPreflight`
-skips the quota and cost gate. The script never applies without showing the plan first, and it
-prints the matching `terraform destroy` command when it finishes.
+Useful switches: `-DryRun` stops after the plan, `-VarFile <name>` writes to a different tfvars
+file (an existing one is backed up before it is overwritten), `-StatePath <path>` relocates the
+state file, and `-SkipPreflight` skips the quota and cost gate. The script never applies without
+showing the plan first, and it prints the matching `terraform destroy` command when it finishes.
 
 Verify the script's input handling without touching Azure:
 

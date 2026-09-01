@@ -79,6 +79,39 @@ Assert-Equal 'two character classes are rejected' `
 Assert-Equal 'three character classes are accepted' `
     (Test-WindowsPasswordComplexity 'abcdefghijkl1A') 'True'
 
+# Terraform encodes a replacement as delete+create in either order, so -DryRun must not
+# report those as two separate resources.
+Assert-Equal 'create action' (Get-PlanAction -Actions @('create')) 'Create'
+Assert-Equal 'update action' (Get-PlanAction -Actions @('update')) 'Update'
+Assert-Equal 'delete action' (Get-PlanAction -Actions @('delete')) 'Delete'
+Assert-Equal 'no-op action' (Get-PlanAction -Actions @('no-op')) 'No change'
+Assert-Equal 'delete+create is a replacement' (Get-PlanAction -Actions @('delete', 'create')) 'Replace'
+Assert-Equal 'create+delete is a replacement' (Get-PlanAction -Actions @('create', 'delete')) 'Replace'
+
+# The module provisions through azapi_resource, so the Terraform type is identical for a
+# resource group and a VM. The summary has to read the real ARM type out of the planned body.
+$azapiVm = '{"type":"azapi_resource","address":"module.user_environment[\"1\"].azapi_resource.vm[\"dotnet\"]","change":{"actions":["create"],"after":{"type":"Microsoft.Compute/virtualMachines@2024-11-01","name":"vm-dotnet-user001"}}}' | ConvertFrom-Json
+Assert-Equal 'azapi type drops the API version' (Get-PlanResourceType -Change $azapiVm) 'Microsoft.Compute/virtualMachines'
+Assert-Equal 'azapi name comes from the body' (Get-PlanResourceName -Change $azapiVm) 'vm-dotnet-user001'
+
+$plainResource = '{"type":"random_password","address":"module.x.random_password.db","change":{"actions":["create"],"after":{}}}' | ConvertFrom-Json
+Assert-Equal 'non-azapi type is passed through' (Get-PlanResourceType -Change $plainResource) 'random_password'
+Assert-Equal 'unnamed resource falls back to its address' (Get-PlanResourceName -Change $plainResource) 'module.x.random_password.db'
+
+# A destroy has no "after" body at all, which must not throw under StrictMode.
+$destroyed = '{"type":"azapi_resource","address":"module.x.azapi_resource.rg","change":{"actions":["delete"],"after":null}}' | ConvertFrom-Json
+Assert-Equal 'destroyed azapi resource falls back to the Terraform type' (Get-PlanResourceType -Change $destroyed) 'azapi_resource'
+Assert-Equal 'destroyed resource falls back to its address' (Get-PlanResourceName -Change $destroyed) 'module.x.azapi_resource.rg'
+
+# An unchanged subscription yields a plan document with no resource_changes member at all,
+# which reads as an error under StrictMode unless the property bag is indexed.
+foreach ($document in @('{}', '{"resource_changes":[]}')) {
+    $script:stubPlanJson = $document
+    function Invoke-NativeJson { param($FilePath, $Arguments) $script:stubPlanJson | ConvertFrom-Json }
+    $rendered = Show-PlanSummary -PlanFile 'tfplan' -SubscriptionName 'S' -SubscriptionId 'i' 6>&1 | Out-String
+    Assert-Equal "empty plan is reported, not thrown: $document" ($rendered -match 'Plan is empty') 'True'
+}
+
 Write-Host ''
 if ($failures -gt 0) {
     Write-Host "$failures check(s) failed." -ForegroundColor Red

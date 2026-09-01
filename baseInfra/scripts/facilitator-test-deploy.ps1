@@ -1,4 +1,5 @@
 #!/usr/bin/env pwsh
+
 <#
 .SYNOPSIS
 Guided facilitator TEST deployment of the MicroHack base infrastructure.
@@ -32,8 +33,16 @@ the repository.
 Skips the capacity and cost preflight. The blocking capacity_preflight_confirmed input
 must then be acknowledged manually at the prompt.
 
+.PARAMETER DryRun
+Stops after terraform plan and prints a summary of what the apply would change in the
+subscription. Nothing is created, and the VM password prompt is skipped because no
+password reaches Azure or state on a plan-only run.
+
 .EXAMPLE
 ./baseInfra/scripts/facilitator-test-deploy.ps1
+
+.EXAMPLE
+./baseInfra/scripts/facilitator-test-deploy.ps1 -DryRun
 
 .EXAMPLE
 ./baseInfra/scripts/facilitator-test-deploy.ps1 -VarFile test.tfvars -SkipPreflight
@@ -46,7 +55,9 @@ param(
 
     [string]$StatePath,
 
-    [switch]$SkipPreflight
+    [switch]$SkipPreflight,
+
+    [switch]$DryRun
 )
 
 Set-StrictMode -Version Latest
@@ -226,6 +237,153 @@ function ConvertTo-HclList {
     return '[' + (($Values | ForEach-Object { ConvertTo-HclString $_ }) -join ', ') + ']'
 }
 
+function Get-PlanResourceType {
+    <#
+    .SYNOPSIS
+    Returns the Azure resource type a planned change creates.
+    .DESCRIPTION
+    This module provisions through azapi_resource, so the Terraform type is the same string
+    for a resource group and a virtual machine. The real ARM type lives in the planned body
+    as "Microsoft.Compute/virtualMachines@2024-11-01"; the API version is dropped so changes
+    group by type rather than by type and version.
+    #>
+    param([Parameter(Mandatory)]$Change)
+
+    $terraformType = $Change.type
+    if ($terraformType -notlike 'azapi_*') { return $terraformType }
+
+    $after = $Change.change.PSObject.Properties['after']
+    if (-not $after -or -not $after.Value) { return $terraformType }
+
+    $armType = $after.Value.PSObject.Properties['type']
+    if (-not $armType -or -not $armType.Value) { return $terraformType }
+
+    return ($armType.Value -split '@')[0]
+}
+
+function Get-PlanResourceName {
+    <#
+    .SYNOPSIS
+    Returns the Azure resource name for a planned change, or the Terraform address if the
+    resource has no name of its own (role assignments are named by GUID at apply time).
+    #>
+    param([Parameter(Mandatory)]$Change)
+
+    $after = $Change.change.PSObject.Properties['after']
+    if ($after -and $after.Value) {
+        $name = $after.Value.PSObject.Properties['name']
+        if ($name -and $name.Value) { return [string]$name.Value }
+    }
+
+    return $Change.address
+}
+
+function Get-PlanAction {
+    <#
+    .SYNOPSIS
+    Reduces a terraform change.actions array to a single verb.
+    .DESCRIPTION
+    Terraform reports a replacement as the pair delete/create in either order, depending on
+    whether the resource sets create_before_destroy, so the pair is collapsed to Replace.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Actions)
+
+    if ($Actions.Count -gt 1) {
+        if ($Actions -contains 'create' -and $Actions -contains 'delete') { return 'Replace' }
+        return (($Actions | Sort-Object) -join '+')
+    }
+
+    switch ($Actions[0]) {
+        'create' { 'Create' }
+        'update' { 'Update' }
+        'delete' { 'Delete' }
+        'read' { 'Read' }
+        'no-op' { 'No change' }
+        default { $Actions[0] }
+    }
+}
+
+function Show-PlanSummary {
+    <#
+    .SYNOPSIS
+    Prints what a saved plan would change in the subscription, grouped by action and type.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$PlanFile,
+        [Parameter(Mandatory)][string]$SubscriptionName,
+        [Parameter(Mandatory)][string]$SubscriptionId
+    )
+
+    $plan = Invoke-NativeJson -FilePath 'terraform' -Arguments @('show', '-json', $PlanFile)
+
+    $changes = @()
+    # Indexing the property bag tolerates an empty plan document under StrictMode, where
+    # reading .Properties.Name on an object with no members throws.
+    if ($plan.PSObject.Properties['resource_changes']) {
+        $changes = @($plan.resource_changes | Where-Object { $_.change.actions -notcontains 'no-op' })
+    }
+
+    Write-Host ''
+    Write-Host "Target subscription : $SubscriptionName" -ForegroundColor Cyan
+    Write-Host "                      $SubscriptionId" -ForegroundColor DarkGray
+
+    if ($changes.Count -eq 0) {
+        Write-Host ''
+        Write-Host 'Plan is empty - the subscription already matches this configuration.' -ForegroundColor Green
+        return
+    }
+
+    $annotated = foreach ($change in $changes) {
+        [pscustomobject]@{
+            Action  = Get-PlanAction -Actions @($change.change.actions)
+            Type    = Get-PlanResourceType -Change $change
+            Name    = Get-PlanResourceName -Change $change
+            Address = $change.address
+        }
+    }
+
+    Write-Host ''
+    Write-Host 'Totals' -ForegroundColor Yellow
+    $annotated | Group-Object Action | Sort-Object Name |
+        ForEach-Object { Write-Host ('  {0,-10} {1,4}' -f $_.Name, $_.Count) }
+
+    Write-Host ''
+    Write-Host 'By resource type' -ForegroundColor Yellow
+    $annotated | Group-Object Action, Type | Sort-Object Name |
+        ForEach-Object {
+            $first = $_.Group[0]
+            Write-Host ('  {0,-10} {1,4}  {2}' -f $first.Action, $_.Count, $first.Type)
+        }
+
+    # Resource groups are the blast radius a facilitator most needs to eyeball before applying.
+    $groups = @($annotated | Where-Object { $_.Type -in @('Microsoft.Resources/resourceGroups', 'azurerm_resource_group') })
+    if ($groups.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'Resource groups' -ForegroundColor Yellow
+        foreach ($group in $groups | Sort-Object Name) {
+            Write-Host ('  {0,-10} {1}' -f $group.Action, $group.Name)
+        }
+    }
+
+    $vms = @($annotated | Where-Object { $_.Type -in @('Microsoft.Compute/virtualMachines', 'azurerm_windows_virtual_machine') })
+    if ($vms.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'Virtual machines' -ForegroundColor Yellow
+        foreach ($vm in $vms | Sort-Object Name) {
+            Write-Host ('  {0,-10} {1}' -f $vm.Action, $vm.Name)
+        }
+    }
+
+    $destructive = @($annotated | Where-Object { $_.Action -in @('Delete', 'Replace') })
+    if ($destructive.Count -gt 0) {
+        Write-Host ''
+        Write-Warning "$($destructive.Count) resource(s) would be destroyed or replaced:"
+        foreach ($item in $destructive | Sort-Object Address) {
+            Write-Host ('  {0,-10} {1}' -f $item.Action, $item.Address) -ForegroundColor Red
+        }
+    }
+}
+
 #endregion helpers
 
 #region 1. tooling
@@ -234,7 +392,14 @@ Write-Host ''
 Write-Host 'MicroHack base infrastructure - facilitator TEST deployment' -ForegroundColor Green
 Write-Host 'Local Terraform state, no Entra users by default, throwaway VM password.' -ForegroundColor DarkGray
 
-Write-Step '1/9 Checking tooling'
+# A dry run stops after plan, so it has no report step.
+$StepTotal = if ($DryRun) { 8 } else { 9 }
+if ($DryRun) {
+    Write-Host ''
+    Write-Host 'DRY RUN: stops after terraform plan. Nothing is created.' -ForegroundColor Cyan
+}
+
+Write-Step "1/$StepTotal Checking tooling"
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw "PowerShell 7 or newer is required; this session is $($PSVersionTable.PSVersion)."
@@ -261,12 +426,13 @@ Write-Detail "repository root $repoRoot"
 
 #region 2. azure context
 
-Write-Step '2/9 Reading the Azure CLI session'
+Write-Step "2/$StepTotal Reading the Azure CLI session"
 
 $account = Invoke-NativeJson -FilePath 'az' -Arguments @('account', 'show', '-o', 'json') `
     -FailureMessage 'No active Azure CLI session. Run "az login" and "az account set --subscription <id>" first.'
 
 $subscriptionId = $account.id
+$subscriptionName = $account.name
 Write-Detail "subscription  $($account.name) ($subscriptionId)"
 Write-Detail "signed in as  $($account.user.name)"
 
@@ -301,7 +467,7 @@ if (-not (Read-YesNo -Prompt 'Deploy into this subscription as this identity?' -
 
 #region 3. inputs
 
-Write-Step '3/9 Collecting deployment inputs'
+Write-Step "3/$StepTotal Collecting deployment inputs"
 
 $participantCount = [int](Read-WithDefault -Prompt 'Number of participant environments' -Default '2' `
         -Validate { param($v) $v -match '^\d+$' -and [int]$v -ge 1 -and [int]$v -le 254 } `
@@ -315,12 +481,20 @@ $locationsInput = Read-WithDefault -Prompt 'Azure regions (comma separated)' -De
 } -ValidationMessage 'Provide at least one region; duplicates are rejected by Terraform.'
 $locations = @($locationsInput -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
-Write-Host ''
-Write-Host '   The VM password is stored in Terraform state and on the VMs. This default is a' -ForegroundColor DarkGray
-Write-Host '   throwaway value for facilitator testing only - never reuse it for a real cohort.' -ForegroundColor DarkGray
-$adminPassword = Read-WithDefault -Prompt 'VM administrator password' -Default $SuggestedTestPassword `
-    -Validate { param($v) Test-WindowsPasswordComplexity -Password $v } `
-    -ValidationMessage 'Windows requires 12-123 characters with at least three of: lowercase, uppercase, digit, symbol.'
+if ($DryRun) {
+    # No password reaches Azure or state on a plan-only run, but the variable has no default
+    # and Terraform would prompt for it, so a placeholder keeps the run non-interactive.
+    $adminPassword = $SuggestedTestPassword
+    Write-Detail 'VM password prompt skipped (dry run uses a placeholder)'
+}
+else {
+    Write-Host ''
+    Write-Host '   The VM password is stored in Terraform state and on the VMs. This default is a' -ForegroundColor DarkGray
+    Write-Host '   throwaway value for facilitator testing only - never reuse it for a real cohort.' -ForegroundColor DarkGray
+    $adminPassword = Read-WithDefault -Prompt 'VM administrator password' -Default $SuggestedTestPassword `
+        -Validate { param($v) Test-WindowsPasswordComplexity -Password $v } `
+        -ValidationMessage 'Windows requires 12-123 characters with at least three of: lowercase, uppercase, digit, symbol.'
+}
 
 $manageEntraUsers = Read-YesNo -Prompt 'Create Entra ID participant users (not needed for a test run)?' -Default $false
 $entraUserDomain = ''
@@ -371,7 +545,7 @@ Write-Detail "footprint: $footprintVms VMs, $($footprintVms * $vmVcpus) vCPUs, $
 
 #region 4. source pin
 
-Write-Step '4/9 Pinning and verifying the source archive'
+Write-Step "4/$StepTotal Pinning and verifying the source archive"
 
 Write-Host '   [1] Known-good verified commit (recommended for a test run)' -ForegroundColor DarkGray
 Write-Host '   [2] Current local HEAD (must already be pushed to GitHub)' -ForegroundColor DarkGray
@@ -446,7 +620,7 @@ Write-Detail 'archive contains data/manifest.json, dotnet/, java/, challenges/ch
 
 #region 5. local state backend
 
-Write-Step '5/9 Configuring local Terraform state'
+Write-Step "5/$StepTotal Configuring local Terraform state"
 
 if (-not $StatePath) {
     $defaultStateDir = Join-Path $HOME '.microhack/baseinfra-test'
@@ -506,7 +680,7 @@ Write-Detail "state file $StatePath"
 
 #region 6. tfvars
 
-Write-Step '6/9 Writing Terraform variables'
+Write-Step "6/$StepTotal Writing Terraform variables"
 
 $varFilePath = if ([System.IO.Path]::IsPathRooted($VarFile)) { $VarFile } else { Join-Path $terraformDir $VarFile }
 
@@ -560,7 +734,7 @@ defender_facilitator_authorized = false
 
 #region 7. preflight
 
-Write-Step '7/9 Capacity and cost preflight'
+Write-Step "7/$StepTotal Capacity and cost preflight"
 
 $preflightConfirmed = $false
 
@@ -630,7 +804,7 @@ Write-Detail "wrote $varFilePath"
 
 #region 8-9. init, plan, apply, report
 
-Write-Step '8/9 Running Terraform'
+Write-Step "8/$StepTotal Running Terraform"
 
 # Keeping the password out of the tfvars file is the documented pattern; it is still
 # written to state, which is why the state directory is locked down above.
@@ -650,6 +824,19 @@ try {
     Write-Host '-- terraform plan' -ForegroundColor Yellow
     Invoke-Native -FilePath 'terraform' -Arguments @('plan', "-var-file=$VarFile", '-out=tfplan', '-input=false')
 
+    Show-PlanSummary -PlanFile 'tfplan' -SubscriptionName $subscriptionName -SubscriptionId $subscriptionId
+
+    if ($DryRun) {
+        Write-Host ''
+        Write-Host 'Dry run complete. Nothing was created.' -ForegroundColor Green
+        Write-Host "  saved plan   baseInfra/terraform/tfplan" -ForegroundColor DarkGray
+        Write-Host "  variables    baseInfra/terraform/$VarFile" -ForegroundColor DarkGray
+        Write-Host '  full detail  terraform show tfplan' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host 'Re-run without -DryRun to deploy.' -ForegroundColor Yellow
+        return
+    }
+
     Write-Host ''
     Write-Host 'Review the plan above: resource counts, regions, and any replacements.' -ForegroundColor Yellow
     if (-not (Read-YesNo -Prompt 'Apply this plan?' -Default $false)) {
@@ -661,7 +848,7 @@ try {
     Write-Host "-- terraform apply (provisioning $footprintVms VMs; typically 20-40 minutes)" -ForegroundColor Yellow
     Invoke-Native -FilePath 'terraform' -Arguments @('apply', '-input=false', 'tfplan')
 
-    Write-Step '9/9 Deployment report'
+    Write-Step "9/9 Deployment report"
 
     $outputs = Invoke-NativeJson -FilePath 'terraform' -Arguments @('output', '-json')
 
