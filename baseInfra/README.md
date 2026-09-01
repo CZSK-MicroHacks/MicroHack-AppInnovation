@@ -137,6 +137,40 @@ data, and protected extension settings. VM custom data is ACL-restricted on Wind
 encrypted secret store; its safety depends on the encrypted, access-controlled Terraform backend
 and administrator-only VM access. Restrict state and administrator access as tightly as the VMs.
 
+## Guided test deployment (facilitator dry run)
+
+`baseInfra/scripts/facilitator-test-deploy.ps1` walks a facilitator through the whole sequence
+above in one interactive pass: it reads the subscription and facilitator identity from the
+active Azure CLI session, prompts for the remaining inputs, downloads and verifies the source
+archive, runs the capacity preflight, then executes init/validate/plan/apply and prints how to
+reach every provisioned VM.
+
+```pwsh
+az login
+az account set --subscription '<subscription-guid>'
+./baseInfra/scripts/facilitator-test-deploy.ps1
+```
+
+It is a dry-run tool, not a delivery tool. Three defaults differ from a real cohort:
+
+- Terraform state is written to a local file (`~/.microhack/baseinfra-test/terraform.tfstate`
+  by default) through a generated `backend_override.tf`, instead of the encrypted remote
+  backend. State still holds generated database passwords and performance API keys, so the
+  directory is created with owner-only permissions and must stay private.
+- `manage_entra_users` defaults to `false`, so no participant signs in to Azure.
+- The VM administrator password defaults to a well-known throwaway value.
+
+Useful switches: `-VarFile <name>` writes to a different tfvars file (an existing one is backed
+up before it is overwritten), `-StatePath <path>` relocates the state file, and `-SkipPreflight`
+skips the quota and cost gate. The script never applies without showing the plan first, and it
+prints the matching `terraform destroy` command when it finishes.
+
+Verify the script's input handling without touching Azure:
+
+```pwsh
+pwsh tests/baseInfra/facilitator-test-deploy.helpers.tests.ps1
+```
+
 ## Outputs and access
 
 The root outputs include:
