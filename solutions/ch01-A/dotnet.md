@@ -48,6 +48,10 @@ dotnet run --project dotnet/src/LegoCatalog.App/LegoCatalog.App.csproj
 
 > If the upgrade turns into a fight, timebox it. Getting to Azure matters more than
 > reaching the newest possible version — .NET 9 is a perfectly good stopping point.
+>
+> The upgraded project files are in
+> [`dotnet/app/src/…/LegoCatalog.App.csproj`](./dotnet/app/src/LegoCatalog.App/LegoCatalog.App.csproj)
+> and [`dotnet/app/tests/…`](./dotnet/app/tests/LegoCatalog.App.Tests/LegoCatalog.App.Tests.csproj).
 
 ## Step 2: Use a cloud database
 
@@ -77,6 +81,9 @@ Deploy it:
 ```powershell
 az deployment group create --resource-group rg-userNNN --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 ```
+
+> A worked version of this template — built up across steps 2, 4, 5 and 6 — is in
+> [`dotnet/bicep/`](./dotnet/bicep/README.md).
 
 Now move the data. The catalog is small, so the simplest route is to let the application
 create the schema and re-import the seed data:
@@ -115,6 +122,10 @@ Create a Dockerfile for my application.
 ```
 
 Build and run it locally, and confirm you get the same catalog page as before.
+
+> A worked [`Dockerfile`](./dotnet/app/Dockerfile) and
+> [`.dockerignore`](./dotnet/app/.dockerignore), with the `docker build` and `docker run`
+> commands, are in [`dotnet/`](./dotnet/README.md).
 
 ## Step 4: Create an Azure Container Registry and build there
 

@@ -64,6 +64,9 @@ Environment variables override `appsettings.json` and `application.properties`. 
 For Challenge 1, public database access is allowed for learning simplicity. Common fixes:
 
 - Add your current client IP when the app runs locally against Azure SQL or PostgreSQL.
+- Behind a VPN or corporate proxy, the address the database sees is **not** what
+  `curl https://api.ipify.org` reports. Take the address from the error itself — *"Client
+  with IP address 'x.x.x.x' is not allowed to access the server"* — and whitelist that one.
 - Allow Azure services only when your Container App needs to reach the database without VNet integration.
 - Confirm database name, username format, port (`1433` for SQL, `5432` for PostgreSQL), and SSL requirements.
 - Restart or create a new Container App revision after changing secrets or environment variables.

@@ -22,6 +22,11 @@ back and look at.
 
 ➡️ **[Java walkthrough](./java.md)**
 
+The .NET walkthrough builds up a single Bicep template across steps 2, 4, 5 and 6. The
+finished files for that path — the upgraded project files, the Dockerfile and the Bicep —
+are in [`dotnet/`](./dotnet/README.md). The `dotnet/` folder at the repository root stays
+in its legacy state on purpose, so it remains the "before" you can compare against.
+
 ## The six steps, in both walkthroughs
 
 1. **Upgrade the framework** — while the app still runs locally, before Azure enters the
