@@ -18,6 +18,11 @@ back and look at.
 | Managed database | Azure Database for PostgreSQL Flexible Server |
 | Local port | 8080 |
 
+The finished [application overlays](./java/README.md) and
+[Bicep files](./java/bicep/README.md) are available alongside this walkthrough. The
+root `java/` folder remains the legacy baseline; apply the overlays to your working
+copy before running the commands below.
+
 ## Step 1: Upgrade the framework
 
 The application runs on Java 17 and Spring Boot 3.5.16. Before moving anything to Azure,

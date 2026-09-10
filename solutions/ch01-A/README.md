@@ -27,6 +27,10 @@ finished files for that path — the upgraded project files, the Dockerfile and 
 are in [`dotnet/`](./dotnet/README.md). The `dotnet/` folder at the repository root stays
 in its legacy state on purpose, so it remains the "before" you can compare against.
 
+The Java path has corresponding [solution artifacts](./java/README.md) and
+[staged Bicep](./java/bicep/README.md). Its application files are overlays too, keeping
+the root `java/` baseline intact.
+
 ## The six steps, in both walkthroughs
 
 1. **Upgrade the framework** — while the app still runs locally, before Azure enters the
