@@ -50,7 +50,7 @@ with. No preference? Take `dotnet-sqlserver`.
    Confirm that its status is **Running**, then on **Overview** select
    **Connect → Connect**.
 
-   <img src="../../images/screenshots/ch00-01-open-vm-connect.png" alt="Azure VM Overview page with the Connect menu highlighted" width="900">
+   <img src="../../images/screenshots/Screenshot%202026-09-23%20at%2017.57.51.png" alt="GitHub Copilot App download page" width="900">
 
 2. There is no standing inbound RDP rule, and you should not create one — tenant governance
    removes rules that leave management ports open. On the **Connect** page, under
@@ -75,7 +75,7 @@ with. No preference? Take `dotnet-sqlserver`.
 5. Inside the VM, open the browser and go to the URL for your stack:
    `http://localhost:5000` for .NET or `http://localhost:8080` for Java.
 
-   <img src="../../images/screenshots/ch00-04-open-catalog.png" alt="Lego Catalog running at localhost 5000 inside the VM" width="900">
+   <img src="../../images/screenshots/ch00-01-open-vm-connect.png" alt="Azure VM Overview page with the Connect menu highlighted" width="900">
 
 6. Use the application. Search for a figure, filter by a category, open a detail page, and
    load a photograph. Note that the catalog is reachable only from the machine where it

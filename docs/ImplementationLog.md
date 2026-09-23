@@ -8,6 +8,9 @@
   access, confirming port 3389 is available, and opening the catalog on `localhost`.
 - Give the selected screenshots stable `ch00-*` filenames and explain that the pictured
   .NET VM is representative of both stack paths.
+- After review, use the supplied `17.57.51` screenshot in the first image slot and move
+  the former first VM Connect screenshot to the final image slot without reordering the
+  surrounding steps.
 
 ## 2026-09-23 - ch01-A participant guidance
 
