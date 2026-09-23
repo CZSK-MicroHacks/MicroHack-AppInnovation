@@ -41,21 +41,52 @@ with. No preference? Take `dotnet-sqlserver`.
 
 ## Actions
 
-- Connect to your VM. There is no standing inbound RDP rule and you should not create one —
-  tenant governance removes rules that leave management ports open. Use **Just-in-Time (JIT)
-  VM access** instead: in the Azure Portal open your VM, choose **Connect**, and enable JIT
-  if offered. Otherwise open **Microsoft Defender for Cloud → Just-in-time VM access**, find
-  your VM on the **Not Configured** tab, and enable it. Then request access for port 3389
-  from **My IP**, download the `.rdp` file, and sign in with the credentials your
-  facilitator gave you.
-- Use the application. Search for a figure, filter by a category, open a detail page, load a
-  photograph. Note that it is only reachable from the machine it runs on — that is part of
-  the "before" picture.
-- Look at what the application depends on: the database service running on the same box, the
-  198 PNG files in a folder on the C: drive, the connection string in a config file, and the
-  single text log. Which of these would survive the VM being rebuilt?
-- Ask yourself how a one-line label fix reaches production today. Count the steps. Then
-  count the steps to undo it.
+> [!NOTE]
+> The screenshots use `vm-dotnet-user001` as an example. Open the VM for your chosen stack
+> and assigned user number; names, IP addresses, and usernames in your environment will
+> differ.
+
+1. In the Azure portal, open your `rg-userNNN` resource group and select your chosen VM.
+   Confirm that its status is **Running**, then on **Overview** select
+   **Connect → Connect**.
+
+   <img src="../../images/screenshots/ch00-01-open-vm-connect.png" alt="Azure VM Overview page with the Connect menu highlighted" width="900">
+
+2. There is no standing inbound RDP rule, and you should not create one — tenant governance
+   removes rules that leave management ports open. On the **Connect** page, under
+   **Native RDP**, select **Request JIT + Check access** to request Just-in-Time access to
+   port 3389 from your current IP address.
+
+   <img src="../../images/screenshots/ch00-02-request-jit.png" alt="Azure Native RDP connection page with Request JIT and Check access highlighted" width="900">
+
+   If Azure reports that JIT is not configured, select **Manage JIT** and enable it. If that
+   option is not available, open **Microsoft Defender for Cloud → Just-in-time VM access**,
+   find your VM on the **Not Configured** tab, enable JIT, and request port 3389 from
+   **My IP**.
+
+3. Wait until Azure shows green checks for both **JIT access granted** and
+   **Port 3389 is accessible**. Then select **Download RDP file**.
+
+   <img src="../../images/screenshots/ch00-03-jit-access-granted.png" alt="Azure Native RDP connection page showing JIT access granted and port 3389 accessible" width="900">
+
+4. Open the downloaded `.rdp` file and sign in with the credentials your facilitator gave
+   you. If your public IP changes or the JIT window expires, repeat steps 2 and 3.
+
+5. Inside the VM, open the browser and go to the URL for your stack:
+   `http://localhost:5000` for .NET or `http://localhost:8080` for Java.
+
+   <img src="../../images/screenshots/ch00-04-open-catalog.png" alt="Lego Catalog running at localhost 5000 inside the VM" width="900">
+
+6. Use the application. Search for a figure, filter by a category, open a detail page, and
+   load a photograph. Note that the catalog is reachable only from the machine where it
+   runs — that is part of the "before" picture.
+
+7. Look at what the application depends on: the database service running on the same box,
+   the 198 PNG files in a folder on the C: drive, the connection string in a config file,
+   and the single text log. Which of these would survive the VM being rebuilt?
+
+8. Ask yourself how a one-line label fix reaches production today. Count the steps. Then
+   count the steps to undo it.
 
 ## Success Criteria
 

@@ -9,10 +9,10 @@ Keep the catalog application you have, and move it forward: a current Java and S
 version, running as a container on **Azure Container Apps**, talking to **Azure Database for
 PostgreSQL**, with the product images served from **Azure storage**.
 
-Work in **GitHub Codespaces** on your own fork or clone of this repository. The
-[dev container](../../.devcontainer/README.md) already has both SDKs, Maven, Docker and the
-Azure CLI, so nothing needs installing on your machine. The legacy VM from
-[Challenge 0](../ch00/README.md) stays exactly as it is. It
+Work in **GitHub Codespaces** on your own fork or the repository assigned by your
+facilitator. The [dev container](../../.devcontainer/README.md) already has both SDKs,
+Maven, Docker and the Azure CLI, so nothing needs installing on your machine.
+The legacy VM from [Challenge 0](../ch00/README.md) stays exactly as it is. It
 is the "before" you can go back and look at, and in path A you never deploy from it.
 
 | | |
@@ -23,10 +23,54 @@ is the "before" you can go back and look at, and in path A you never deploy from
 | Managed database | Azure Database for PostgreSQL Flexible Server |
 | Local port | 8080 |
 
+## Open the repository in GitHub Codespaces
+
+1. Sign in to GitHub and open your fork of
+   [`CZSK-MicroHacks/MicroHack-AppInnovation`](https://github.com/CZSK-MicroHacks/MicroHack-AppInnovation),
+   or the repository your facilitator assigned to you. On the repository's **Code** tab,
+   find the green **Code** button above the file list.
+
+   <img src="../../images/codespaces-01-repository.png" alt="MicroHack-AppInnovation repository with the green Code button visible" width="900">
+
+2. Select **Code** → **Codespaces** → **Create codespace on main**. If GitHub shows who
+   will pay for the codespace, confirm that it matches the account or organization you
+   expect before continuing.
+
+   <img src="../../images/codespaces-02-create.png" alt="GitHub Code menu with the Codespaces tab and Create codespace on main button" width="520">
+
+3. Wait for the dev container to finish building. GitHub opens the repository in VS Code
+   in your browser automatically. To return later, open the repository's **Code** tab and
+   press <kbd>,</kbd>, or visit [github.com/codespaces](https://github.com/codespaces),
+   then resume the existing codespace.
+
+   <img src="../../images/codespaces-03-resume.png" alt="GitHub page for resuming an existing codespace" width="620">
+
+> [!NOTE]
+> Screenshots 2 and 3 are from GitHub Docs:
+> [Creating a codespace for a repository](https://docs.github.com/en/codespaces/developing-in-a-codespace/creating-a-codespace-for-a-repository)
+> and
+> [Opening an existing codespace](https://docs.github.com/en/codespaces/developing-in-a-codespace/opening-an-existing-codespace),
+> licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ## Recommended steps
 
-Five steps, in this order. Each one leaves you with something that works, so you can stop
+Six steps, in this order. Each one leaves you with something that works, so you can stop
 and start again after any of them.
+
+### Step 0 — Explore the application
+
+Before changing code, open GitHub Copilot Chat at the repository root and start with:
+
+```
+Give me a high-level description of the application under the "java" folder. I am new to the project and want to know basic stuff to start building or adding new features.
+```
+
+Use the answer to locate the application entry point, configuration, data access, tests,
+and local run command. Check Copilot's summary against [`java/README.md`](../../java/README.md)
+and the source before moving on.
+
+**Checkpoint:** you can explain how a request reaches the database, where runtime settings
+come from, and which command builds and tests the application.
 
 ### Step 1 — Upgrade the framework
 
@@ -34,11 +78,7 @@ The application is a few versions behind. Bring it up to date **while it still r
 against the local database** — an upgrade is far easier to review before you add Azure to
 the picture.
 
-The **GitHub Copilot app modernization** extension for VS Code does this as a guided flow:
-it assesses the project, proposes a plan, and executes it task by task. Install it, open
-`java/`, and let it drive. Review each change; run the tests after each step.
-
-Prefer plain Copilot Chat? Start here:
+Use GitHub Copilot Chat directly. Start here:
 
 ```
 Upgrade this project to the latest LTS Java and Spring Boot version.
@@ -57,11 +97,30 @@ available in the dev container. To run the *application* locally, start a databa
 
 ```bash
 docker run -d --name catalog-pg -p 5432:5432 \
+  -e POSTGRES_DB=catalog \
+  -e POSTGRES_USER=catalog \
   -e POSTGRES_PASSWORD='<choose-a-strong-password>' \
   postgres:18
 ```
 
-Then set the `CATALOG_DATABASE_*` variables from [`java/README.md`](../../java/README.md).
+The application builds its PostgreSQL connection from environment variables and does not
+discover the container automatically. Export values that match the `POSTGRES_*` settings
+above in the same terminal, from `java/`:
+
+```bash
+export CATALOG_DATABASE_HOST=localhost
+export CATALOG_DATABASE_PORT=5432
+export CATALOG_DATABASE_NAME=catalog
+export CATALOG_DATABASE_USERNAME=catalog
+export CATALOG_DATABASE_PASSWORD='<same-strong-password-used-above>'
+export CATALOG_DATABASE_SSL_MODE=disable
+```
+
+The password must exactly match `POSTGRES_PASSWORD`. Use `disable` only for this local
+container; Azure PostgreSQL requires TLS later. These values apply only to the current
+shell and must not be committed. Before starting the app, also set the data paths and
+required local runtime identity variables shown in the
+[`java/README.md` run instructions](../../java/README.md#run-it).
 
 **Checkpoint:** `./mvnw test` passes and the app still serves the catalog on
 `http://localhost:8080`.
@@ -181,6 +240,10 @@ Modify main.bicep to deploy the application to Azure Container Apps.
   do only what it is good at.
 - Add a health probe configuration to the Container App using `/healthz` and `/readyz`, and
   watch what happens when you stop the database.
+- After completing the challenge, optionally compare your Chat-driven upgrade with the
+  **GitHub Copilot app modernization** extension. Do not use the extension for the main
+  challenge — the goal here is to practise exploring, planning, and changing the
+  application with Copilot Chat.
 
 ## Solution — spoiler warning
 

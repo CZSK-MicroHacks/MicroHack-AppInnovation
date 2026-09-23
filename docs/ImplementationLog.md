@@ -1,5 +1,30 @@
 # Implementation log
 
+## 2026-09-23 - ch00 VM navigation
+
+- Replace the dense VM connection bullet with a numbered participant walkthrough that
+  preserves the JIT-only access requirement and the Defender for Cloud fallback.
+- Add four annotated screenshots for opening the VM connection page, requesting JIT
+  access, confirming port 3389 is available, and opening the catalog on `localhost`.
+- Give the selected screenshots stable `ch00-*` filenames and explain that the pictured
+  .NET VM is representative of both stack paths.
+
+## 2026-09-23 - ch01-A participant guidance
+
+- Add a stack-specific Step 0 to both ch01-A variants so participants first use Copilot
+  Chat to understand the application, its entry point, configuration, data access, and
+  tests before making modernization changes.
+- Use Copilot Chat directly for the required framework upgrade. Move the GitHub Copilot
+  app modernization extension to an explicitly post-challenge bonus comparison so it is
+  not used to complete the core exercise.
+- Add copy-and-paste local database environment variables to both variants and explain how
+  they map the application to the database container. The Java container now creates the
+  same database and user named in the application variables.
+- Add a three-screen Codespaces walkthrough covering the repository **Code** button,
+  creating a codespace, and resuming one. The repository screenshot is captured from the
+  public workshop repository; the creation and resume screenshots come from GitHub Docs
+  under CC BY 4.0 with attribution in both challenge guides.
+
 ## 2026-09-09 - ch01-A Java walkthrough
 
 - Follow the six steps in `solutions/ch01-A/java.md`; leave ch00 VMs and the legacy
