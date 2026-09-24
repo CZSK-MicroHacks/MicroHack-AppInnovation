@@ -25,7 +25,7 @@ Start with the symptom, then change only one layer at a time: VM access, local a
 
 ## VM and JIT access
 
-Each resource group has two VMs. Use only the one for the stack picked in [ch00](../challenges/ch00/README.md).
+Each resource group has two VMs. Use only the one for the stack picked in [ch00](../challenges/ch00.md).
 
 | Stack | VM | Local URL |
 | --- | --- | --- |
@@ -103,7 +103,7 @@ Scale-down is not instant. Wait for the cooldown period before concluding it is 
 
 ## OpenTelemetry and Application Insights
 
-If traces do not appear in [ch04](../challenges/ch04/README.md):
+If traces do not appear in [ch04](../challenges/ch04.md):
 
 - Confirm the Application Insights connection string is set on the active revision.
 - Confirm the app starts the OpenTelemetry exporter.

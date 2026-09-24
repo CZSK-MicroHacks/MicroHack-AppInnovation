@@ -4,7 +4,7 @@ This is the legacy application you are modernizing: a .NET 8 Blazor Server monol
 by SQL Server 2022 Express, both installed on the same Windows VM.
 
 It deliberately ships **no Dockerfile and no Azure infrastructure**. Creating those is your
-job in [Challenge 1](../challenges/ch01/README.md).
+job in [Challenge 1](../challenges/ch01.md).
 
 ## Prerequisites
 
@@ -74,7 +74,7 @@ in one transaction, and listens on the URL Kestrel prints — usually
 | `GET /perftest/catalog` | Bounded database work behind an `x-api-key` header, for load testing |
 
 `/healthz` and `/readyz` are what you wire into the Container App probes in Challenge 1;
-`/perftest/catalog` is what you hammer in [Challenge 2](../challenges/ch02/README.md).
+`/perftest/catalog` is what you hammer in [Challenge 2](../challenges/ch02.md).
 
 ## Test
 
@@ -91,7 +91,7 @@ own `catalog.import`, `catalog.query`, and `catalog.performance` spans with matc
 metrics and structured logs. It identifies itself as `service.name=mh-catalog-dotnet` in
 namespace `app-innovation`.
 
-You point that endpoint at a collector in [Challenge 4](../challenges/ch04/README.md).
+You point that endpoint at a collector in [Challenge 4](../challenges/ch04.md).
 
 ## Troubleshooting
 

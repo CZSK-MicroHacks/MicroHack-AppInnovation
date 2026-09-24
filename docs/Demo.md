@@ -10,12 +10,12 @@ Do not teach the full architecture in this slot. Make the audience want the hand
 
 Prepare one completed run, or at least one deployed catalog app. Have access to:
 
-- a legacy VM from [ch00](../challenges/ch00/README.md);
-- a modernized app from [ch01](../challenges/ch01/README.md);
-- metrics from [ch02](../challenges/ch02/README.md);
-- a GitHub Actions workflow from [ch03](../challenges/ch03/README.md);
-- Application Insights from [ch04](../challenges/ch04/README.md);
-- optionally, an SRE Agent incident from [ch06](../challenges/ch06-sre-agent/README.md).
+- a legacy VM from [ch00](../challenges/ch00.md);
+- a modernized app from [ch01](../challenges/ch01.md);
+- metrics from [ch02](../challenges/ch02.md);
+- a GitHub Actions workflow from [ch03](../challenges/ch03.md);
+- Application Insights from [ch04](../challenges/ch04.md);
+- optionally, an SRE Agent incident from [ch06](../challenges/ch06-sre-agent.md).
 
 Optional shell variables for live commands:
 
@@ -44,8 +44,8 @@ no autoscale, and little visibility when it slows down."
 better operations.
 
 ## 2. Challenge 1 has two honest routes (01:30–02:30)
-**Show:** Open [ch01](../challenges/ch01/README.md), then the two paths:
-[ch01-A](../challenges/ch01-A/README.md) and [ch01-B](../challenges/ch01-B/README.md).
+**Show:** Open [ch01](../challenges/ch01.md), then the two paths:
+[ch01-A](../challenges/ch01-A.md) and [ch01-B](../challenges/ch01-B.md).
 
 **Say:** "Path A keeps the code and moves it forward. Path B keeps the behavior and writes
 a PRD before rebuilding. Both use Copilot heavily, both require human review, and both land
@@ -124,11 +124,11 @@ another dependency."
 ## 7. The incident story closes the loop (08:30–10:00)
 
 **Show:** If Challenge 6 is prepared, show the alert, SRE Agent investigation, and
-human-approved recovery action. If not, show the [ch06 guide](../challenges/ch06-sre-agent/README.md)
+human-approved recovery action. If not, show the [ch06 guide](../challenges/ch06-sre-agent.md)
 and describe the loop: observe, ask the agent, challenge the recommendation, approve the
 safe fix.
 
-Close with the [wrap-up](../challenges/wrapup/README.md) scorecard:
+Close with the [wrap-up](../challenges/wrapup.md) scorecard:
 
 | Before | After |
 | --- | --- |

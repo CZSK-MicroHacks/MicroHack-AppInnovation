@@ -13,7 +13,7 @@ On the day, use the printable [day-of card](DayOfCard.md). For schedule trade-of
 - That group contains two legacy Windows VMs:
   - `vm-dotnet-userNNN` for .NET 8 Blazor Server + SQL Server 2022 Express.
   - `vm-java-userNNN` for Spring Boot 3 / Java 17 + PostgreSQL 18.
-- Participants choose one stack in [ch00](../challenges/ch00/README.md) and keep it.
+- Participants choose one stack in [ch00](../challenges/ch00.md) and keep it.
 - RDP is direct to the VM public IP after requesting **Just-in-Time VM access**. Do not
   add standing inbound 3389 rules.
 - From ch01 onward, participants work from source and author their own Bicep with Copilot.
@@ -34,8 +34,8 @@ On the day, use the printable [day-of card](DayOfCard.md). For schedule trade-of
 | Quota and region choice | Count two `Standard_D2as_v5` Windows VMs, two Premium OS disks, and two Standard public IPs per participant. Large cohorts may need multiple regions or subscriptions. |
 | GitHub organization | Participants need a place to push code and run Actions. If repos are private and Challenge 3 uses required reviewers, use GitHub Team or Enterprise Cloud. |
 | GitHub Copilot licenses | Assign one seat per participant who will use Copilot. Confirm the VS Code extension works before day 1. |
-| Paid Defender plans | [ch05-defender](../challenges/ch05-defender/README.md) is better with Defender CSPM, Containers, Servers Plan 2, SQL, and open-source relational database plans enabled. Get subscription-owner sign-off for cost and cleanup. |
-| Azure SRE Agent capacity | [ch06-sre-agent](../challenges/ch06-sre-agent/README.md) may be per team or facilitator-led. Confirm regional availability, permissions, and hourly agent-unit cost. |
+| Paid Defender plans | [ch05-defender](../challenges/ch05-defender.md) is better with Defender CSPM, Containers, Servers Plan 2, SQL, and open-source relational database plans enabled. Get subscription-owner sign-off for cost and cleanup. |
+| Azure SRE Agent capacity | [ch06-sre-agent](../challenges/ch06-sre-agent.md) may be per team or facilitator-led. Confirm regional availability, permissions, and hourly agent-unit cost. |
 | Budget and teardown owner | Put the destroy date in a calendar. Forgetting teardown costs more than the workshop. |
 
 ## Lead time
@@ -130,7 +130,7 @@ COMMIT=$(git rev-parse HEAD)
 REPO=CZSK-MicroHacks/MicroHack-AppInnovation
 curl -fsSL -o source.zip "https://github.com/$REPO/archive/$COMMIT.zip"
 unzip -Z1 source.zip | sed 's|^[^/]*/||' | sort | grep -E \
-  '^(README.md|challenges/ch01/README.md|challenges/ch01-A/README.md|challenges/ch01-B/README.md|dotnet/README.md|java/README.md|baseInfra/README.md)$'
+  '^(README.md|challenges/ch01.md|challenges/ch01-A.md|challenges/ch01-B.md|dotnet/README.md|java/README.md|baseInfra/README.md)$'
 shasum -a 256 source.zip
 rm source.zip
 ```
@@ -151,11 +151,14 @@ source_archive_sha256 = "13a2bd207b9236a220f37b334da5102271163b172cf0d1bcf6ead44
 That commit is on `main`. Pin to a commit that is merged rather than one that only exists
 on a feature branch, so the archive stays reachable after the branch is deleted. Re-run the
 steps above for any newer commit — the digest changes with the tree.
+The known-good pin above predates the flat challenge layout: it remains usable for existing
+deliveries, but VMs will not receive the new layout until you pin a merged layout commit.
 
 > The provisioner refuses an archive that does not contain `data/manifest.json`, `dotnet/`,
-> `java/` and `challenges/ch01/`. That guard only proves the archive *is* a workshop tree,
+> `java/` and `challenges/ch01.md` (or the legacy `challenges/ch01/` directory for
+> previously pinned archives). That guard only proves the archive *is* a workshop tree,
 > not that it is the current one, so a stale pin can still install an old workshop silently.
-> Re-pin whenever the content changes.
+> Re-pin after publishing this layout change and whenever the content changes.
 
 Changing the pin updates the VM extensions in place — no VM is rebuilt, and provisioning
 leaves participant work alone when the VM's `.source-commit` marker already matches.
@@ -204,14 +207,14 @@ terraform output public_ip_addresses_by_environment
 
 | Challenge | Facilitator focus | Common saves |
 | --- | --- | --- |
-| [ch00](../challenges/ch00/README.md) | Keep it to stack choice and the legacy before-state. Help with JIT and RDP. | JIT expired: request access again. Wrong VM: check `vm-dotnet-userNNN` versus `vm-java-userNNN`. App external URL missing: expected; browse inside RDP. |
-| [ch01](../challenges/ch01/README.md) → [A](../challenges/ch01-A/README.md) / [B](../challenges/ch01-B/README.md) | Explain the two paths, have each person open only their own, and split tables so teams can compare. Do not hand out a template; participants author Bicep, Dockerfiles, and deployment steps with Copilot. | Check stale env vars, database firewall rules, ACR pull identity, Azure Files/image paths, and the fact that the VM has no Docker daemon. Use `az acr build`. |
-| [ch02](../challenges/ch02/README.md) | Watch pressure move from Container Apps replicas to the database. Azure Load Testing is fine for `GET /perftest/catalog`; Playwright is better for browser/WebSocket flows. | If replicas do not move, check max replicas and HTTP concurrency. If the database stays flat, verify the test hits the performance endpoint with the API key. |
-| [ch03](../challenges/ch03/README.md) | Make sure the GitHub plan supports required reviewers for your repo visibility. Push participants toward OIDC with a managed identity. | No approval prompt usually means the environment rule is unavailable or attached to the wrong job/environment. |
-| [ch04](../challenges/ch04/README.md) | Wire the Container Apps OpenTelemetry collector to Application Insights without adding a vendor SDK. | Generate traffic, wait a few minutes, and restart the revision after collector changes. |
-| [ch05-defender](../challenges/ch05-defender/README.md) | Subscription-owner approval is required before paid Defender plans are enabled. Participants inspect posture; facilitators own subscription-wide changes. | Focus on ACR admin, HTTPS-only ingress, database public access, and VM management exposure through JIT. Empty blades can mean findings have not arrived yet. |
-| [ch06-sre-agent](../challenges/ch06-sre-agent/README.md) | Decide per-team agent versus facilitator-led before the day. Use Review mode, not autonomous remediation. Only an SRE Agent Administrator approves writes. | Keep the failure small and reversible: bad DB host, bad secret, stopped database, or a bad revision promoted for the drill. |
-| [ch07-enterprise](../challenges/ch07-enterprise/README.md), [ch07-innovation](../challenges/ch07-innovation/README.md), [wrap-up](../challenges/wrapup/README.md) | ch07 is optional. Drop it before cutting the wrap-up. | The wrap-up is what participants can take back to their manager. |
+| [ch00](../challenges/ch00.md) | Keep it to stack choice and the legacy before-state. Help with JIT and RDP. | JIT expired: request access again. Wrong VM: check `vm-dotnet-userNNN` versus `vm-java-userNNN`. App external URL missing: expected; browse inside RDP. |
+| [ch01](../challenges/ch01.md) → [A](../challenges/ch01-A.md) / [B](../challenges/ch01-B.md) | Explain the two paths, have each person open only their own, and split tables so teams can compare. Do not hand out a template; participants author Bicep, Dockerfiles, and deployment steps with Copilot. | Check stale env vars, database firewall rules, ACR pull identity, Azure Files/image paths, and the fact that the VM has no Docker daemon. Use `az acr build`. |
+| [ch02](../challenges/ch02.md) | Watch pressure move from Container Apps replicas to the database. Azure Load Testing is fine for `GET /perftest/catalog`; Playwright is better for browser/WebSocket flows. | If replicas do not move, check max replicas and HTTP concurrency. If the database stays flat, verify the test hits the performance endpoint with the API key. |
+| [ch03](../challenges/ch03.md) | Make sure the GitHub plan supports required reviewers for your repo visibility. Push participants toward OIDC with a managed identity. | No approval prompt usually means the environment rule is unavailable or attached to the wrong job/environment. |
+| [ch04](../challenges/ch04.md) | Wire the Container Apps OpenTelemetry collector to Application Insights without adding a vendor SDK. | Generate traffic, wait a few minutes, and restart the revision after collector changes. |
+| [ch05-defender](../challenges/ch05-defender.md) | Subscription-owner approval is required before paid Defender plans are enabled. Participants inspect posture; facilitators own subscription-wide changes. | Focus on ACR admin, HTTPS-only ingress, database public access, and VM management exposure through JIT. Empty blades can mean findings have not arrived yet. |
+| [ch06-sre-agent](../challenges/ch06-sre-agent.md) | Decide per-team agent versus facilitator-led before the day. Use Review mode, not autonomous remediation. Only an SRE Agent Administrator approves writes. | Keep the failure small and reversible: bad DB host, bad secret, stopped database, or a bad revision promoted for the drill. |
+| [ch07-enterprise](../challenges/ch07-enterprise.md), [ch07-innovation](../challenges/ch07-innovation.md), [wrap-up](../challenges/wrapup.md) | ch07 is optional. Drop it before cutting the wrap-up. | The wrap-up is what participants can take back to their manager. |
 
 ## Reset one participant
 

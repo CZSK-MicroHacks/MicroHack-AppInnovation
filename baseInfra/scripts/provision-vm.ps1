@@ -1070,6 +1070,18 @@ superpassword=$DatabasePassword
     }
 }
 
+function Test-SourceArchiveChallenge {
+    <#
+    .SYNOPSIS
+    Recognizes the flat ch01 guide or the legacy challenge directory in an extracted archive.
+    #>
+    param([Parameter(Mandatory)][string]$ArchiveRoot)
+
+    $ChallengeRoot = Join-Path $ArchiveRoot 'challenges'
+    return ((Test-Path (Join-Path $ChallengeRoot 'ch01.md')) -or
+        (Test-Path (Join-Path $ChallengeRoot 'ch01')))
+}
+
 function Install-SourceArchive {
     # Re-provisioning is the facilitator's first response to a broken stack, and by that
     # point the participant's Challenge 1 commits live only in $SourceRoot\.git. Replacing
@@ -1097,7 +1109,7 @@ function Install-SourceArchive {
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'data\manifest.json')) -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'dotnet')) -or
         -not (Test-Path (Join-Path $ArchiveRoot.FullName 'java')) -or
-        -not (Test-Path (Join-Path $ArchiveRoot.FullName 'challenges\ch01'))) {
+        -not (Test-SourceArchiveChallenge -ArchiveRoot $ArchiveRoot.FullName)) {
         throw ("The verified source archive does not carry the workshop content this " +
             "provisioner expects. Re-pin source_commit - see docs/Facilitator.md.")
     }

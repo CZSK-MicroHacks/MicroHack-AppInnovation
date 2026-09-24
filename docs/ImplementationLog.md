@@ -1,5 +1,16 @@
 # Implementation log
 
+## 2026-09-24 - template-aligned workshop layout
+
+- Flatten challenge guides to `challenges/<challenge>.md`, with the two ch01-A stack
+  variants at `challenges/ch01-A-dotnet.md` and `challenges/ch01-A-java.md`.
+- Rename `solutions/` to `walkthrough/` without flattening the solution artifact folders
+  or changing the other top-level folder layout. Update navigation, screenshots, and
+  relative links for the new locations.
+- Accept both flat and legacy ch01 challenge layouts in facilitator and VM source-archive
+  checks so previously pinned workshop commits continue to provision. Re-pin the source
+  archive to publish the new layout on VMs.
+
 ## 2026-09-23 - ch00 VM navigation
 
 - Replace the dense VM connection bullet with a numbered participant walkthrough that
@@ -23,6 +34,9 @@
 - Add copy-and-paste local database environment variables to both variants and explain how
   they map the application to the database container. The Java container now creates the
   same database and user named in the application variables.
+- Make both Step 2 Copilot prompts continue beyond Bicep authoring: confirm the Azure
+  target, validate and preview the template, deploy it, verify the deployment, and return
+  the application connection details without exposing secrets.
 - Add a three-screen Codespaces walkthrough covering the repository **Code** button,
   creating a codespace, and resuming one. The repository screenshot is captured from the
   public workshop repository; the creation and resume screenshots come from GitHub Docs
@@ -30,9 +44,9 @@
 
 ## 2026-09-09 - ch01-A Java walkthrough
 
-- Follow the six steps in `solutions/ch01-A/java.md`; leave ch00 VMs and the legacy
+- Follow the six steps in `walkthrough/ch01-A/java.md`; leave ch00 VMs and the legacy
   root `java/` application untouched. Store modernized application overlays and Bicep
-  under `solutions/ch01-A/java/`, matching the existing .NET solution convention.
+  under `walkthrough/ch01-A/java/`, matching the existing .NET solution convention.
 - Use the existing `rg-user001` and its Sweden Central location through the supplied
   Azure CLI profile. Java-specific names avoid modifying the pre-existing .NET deployment.
 - Split Bicep into database, registry/identity, environment/storage, and application

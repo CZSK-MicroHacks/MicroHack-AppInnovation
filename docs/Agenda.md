@@ -38,28 +38,28 @@ Assumes 09:00–17:00 both days with a 45-minute lunch and two 15-minute breaks.
 | --- | --- | --- |
 | 09:00–09:10 | **[Opening demo](Demo.md)** | Show the journey: legacy VM catalog, target Azure app, autoscale, pipeline, traces, and the incident story. Keep it fast. |
 | 09:10–09:30 | Orientation | Explain resource groups, Just-in-Time RDP access, the two stacks, and the two Challenge 1 paths. Point to the [glossary](Glossary.md). |
-| 09:30–10:30 | **[ch00 — choose a stack](../challenges/ch00/README.md)** | Participants pick `.NET 8 + SQL Server` or `Java 17 + PostgreSQL`, connect to the matching VM, and confirm the legacy app runs. |
+| 09:30–10:30 | **[ch00 — choose a stack](../challenges/ch00.md)** | Participants pick `.NET 8 + SQL Server` or `Java 17 + PostgreSQL`, connect to the matching VM, and confirm the legacy app runs. |
 | 10:30–10:45 | Break | Use the break to unblock RDP and MFA problems. |
-| 10:45–12:30 | **[ch01 — modernization block 1](../challenges/ch01/README.md)** | Tables choose [ch01-A](../challenges/ch01-A/README.md) or [ch01-B](../challenges/ch01-B/README.md). Encourage small checkpoints: app still runs, database connects, image builds. |
+| 10:45–12:30 | **[ch01 — modernization block 1](../challenges/ch01.md)** | Tables choose [ch01-A](../challenges/ch01-A.md) or [ch01-B](../challenges/ch01-B.md). Encourage small checkpoints: app still runs, database connects, image builds. |
 | 12:30–13:15 | Lunch | Ask tables to compare path choices informally. |
 | 13:15–15:15 | **ch01 — modernization block 2** | Focus on getting the managed database, container image, and first Container App deployment working. |
 | 15:15–15:30 | **ch01 debrief** | Split-path comparison: what did Copilot help with, what needed human review, and what would you do differently at work? |
 | 15:30–15:45 | Break | Reset the room before load testing. |
-| 15:45–17:00 | **[ch02 — load and autoscaling](../challenges/ch02/README.md)** | Run the first load test, watch replicas and database pressure, and discuss scale-to-zero tradeoffs. |
+| 15:45–17:00 | **[ch02 — load and autoscaling](../challenges/ch02.md)** | Run the first load test, watch replicas and database pressure, and discuss scale-to-zero tradeoffs. |
 
 ### Day 2
 
 | Time | Block | Notes |
 | --- | --- | --- |
 | 09:00–09:15 | Day 2 kickoff | Confirm each team has a working Container App URL, managed database, image access, and health checks. |
-| 09:15–11:15 | **[ch03 — CI/CD and revisions](../challenges/ch03/README.md)** | Build the GitHub Actions flow with OIDC, staging revision, approval, promotion, and rollback. |
+| 09:15–11:15 | **[ch03 — CI/CD and revisions](../challenges/ch03.md)** | Build the GitHub Actions flow with OIDC, staging revision, approval, promotion, and rollback. |
 | 11:15–11:30 | Break | Check that GitHub environments and Azure federated credentials are in place. |
-| 11:30–12:45 | **[ch04 — observability](../challenges/ch04/README.md)** | Add OpenTelemetry and Application Insights. Show traces before polishing dashboards. |
+| 11:30–12:45 | **[ch04 — observability](../challenges/ch04.md)** | Add OpenTelemetry and Application Insights. Show traces before polishing dashboards. |
 | 12:45–13:30 | Lunch | Ask teams to name one signal they wish the VM had produced. |
-| 13:30–15:00 | **[ch05-defender — security posture](../challenges/ch05-defender/README.md)** | Read Defender for Cloud findings and decide what should be fixed first. Keep it read-only unless the guide says otherwise. |
+| 13:30–15:00 | **[ch05-defender — security posture](../challenges/ch05-defender.md)** | Read Defender for Cloud findings and decide what should be fixed first. Keep it read-only unless the guide says otherwise. |
 | 15:00–15:15 | Break | Decide whether ch06 is hands-on or facilitator-led. |
-| 15:15–16:15 | **[ch06-sre-agent — incident](../challenges/ch06-sre-agent/README.md)** | Let the agent investigate, challenge its reasoning, and approve only the safe recovery action. |
-| 16:15–16:40 | **[Wrap-up](../challenges/wrapup/README.md)** | Fill the before/after scorecard while the numbers are fresh. |
+| 15:15–16:15 | **[ch06-sre-agent — incident](../challenges/ch06-sre-agent.md)** | Let the agent investigate, challenge its reasoning, and approve only the safe recovery action. |
+| 16:15–16:40 | **[Wrap-up](../challenges/wrapup.md)** | Fill the before/after scorecard while the numbers are fresh. |
 | 16:40–17:00 | Closing debrief | Round the room: what surprised you, and what will you try on Monday? |
 
 ## Time levers
@@ -72,8 +72,8 @@ Assumes 09:00–17:00 both days with a 45-minute lunch and two 15-minute breaks.
    teaches the reasoning loop: observe, ask the agent, verify, approve.
 4. **Use portal views when commands would slow the room down.** Metrics, revisions, traces,
    and Defender findings all demo well from the portal.
-5. **Keep optional work optional.** [ch07-enterprise](../challenges/ch07-enterprise/README.md)
-   and [ch07-innovation](../challenges/ch07-innovation/README.md) are excellent follow-up
+5. **Keep optional work optional.** [ch07-enterprise](../challenges/ch07-enterprise.md)
+   and [ch07-innovation](../challenges/ch07-innovation.md) are excellent follow-up
    exercises, not prerequisites for a successful two days.
 
 ## The useful waiting time in ch02

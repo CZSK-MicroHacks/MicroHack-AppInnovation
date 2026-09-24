@@ -3,8 +3,8 @@ package com.microsoft.microhack.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import com.microsoft.microhack.catalog.service.CatalogDocumentParser;
 import com.microsoft.microhack.catalog.service.CatalogImportValidationException;
 import com.microsoft.microhack.catalog.service.CategorySlug;
@@ -23,7 +23,7 @@ class ConformanceVectorTest {
 
     private static final String CONTRACTS_MARKER = "workshop/contracts";
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final JsonMapper mapper = JsonMapper.builder().build();
     private final CatalogDocumentParser parser = new CatalogDocumentParser(
             mapper,
             Validation.buildDefaultValidatorFactory().getValidator());

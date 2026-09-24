@@ -61,7 +61,7 @@ through `az acr build`, so no Docker daemon is installed or required.
 
 Work through the delivery checklist in
 [the facilitator guide](../docs/Facilitator.md) before this component gate. The two-VM
-baseline is consumed by [Challenge 0](../challenges/ch00/README.md).
+baseline is consumed by [Challenge 0](../challenges/ch00.md).
 
 Prerequisites:
 
@@ -92,8 +92,8 @@ silently.
 
 Download the immutable archive once to record the digest that every VM will enforce. Set `$commit`
 to the exact 40-hex SHA you pushed for this delivery — take it from `git rev-parse HEAD` after the
-push and confirm the published archive really contains `dotnet/`, `java/`, `data/`, and every
-`challenges/` folder, following "Re-pin the VM source commit" in
+push and confirm the published archive really contains `dotnet/`, `java/`, `data/`, and the flat challenge guides in
+`challenges/`, following "Re-pin the VM source commit" in
 [the facilitator guide](../docs/Facilitator.md). The placeholder below is not a commit and the
 snippet does nothing until you replace it:
 
@@ -193,7 +193,7 @@ file (an existing one is backed up before it is overwritten), `-StatePath <path>
 state file, and `-SkipPreflight` skips the quota and cost gate. The script never applies without
 showing the plan first, and it prints the matching `terraform destroy` command when it finishes.
 
-Verify the script's input handling without touching Azure:
+Verify the script's input handling and both source-archive layout checks without touching Azure:
 
 ```pwsh
 pwsh tests/baseInfra/facilitator-test-deploy.helpers.tests.ps1
@@ -211,9 +211,9 @@ The root outputs include:
 
 Connect over RDP by requesting **Just-in-Time VM access** in the Azure Portal — the NSG
 ships with no inbound rules, and standing 3389 rules are removed by tenant governance.
-Participants do this themselves in [Challenge 0](../challenges/ch00/README.md) for whichever
+Participants do this themselves in [Challenge 0](../challenges/ch00.md) for whichever
 VM matches the stack they chose. Both VMs stay running for the duration of the workshop; the
-facilitator can follow the [ch00 solution](../solutions/ch00/README.md) to help anyone stuck.
+facilitator can follow the [ch00 solution](../walkthrough/ch00/README.md) to help anyone stuck.
 
 Power-state changes are bounded to starting or stopping a VM and do not authorize
 replacement or deletion.
