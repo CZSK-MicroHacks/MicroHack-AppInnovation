@@ -31,7 +31,7 @@ generated a batch for you; if you want to generate your own, see
 ## Two stacks, pick one
 
 The same catalog exists twice, so you can practise on something close to what you actually
-maintain. In [ch00](./challenges/ch00/README.md) you choose **one** and keep it for the
+maintain. In [ch00](./challenges/ch00.md) you choose **one** and keep it for the
 whole workshop.
 
 | | `dotnet-sqlserver` | `java-postgresql` |
@@ -62,16 +62,16 @@ Both converge on the same Azure architecture, so neither is the easy option.
 
 | Challenge | What you do | Guide | Solution |
 | --- | --- | --- | --- |
-| **ch00** | Meet the application, choose your stack | [Challenge](./challenges/ch00/README.md) | [Solution](./solutions/ch00/README.md) |
-| **ch01** | Migrate the database, containerize, deploy to Azure | [Choose a path](./challenges/ch01/README.md) → [ch01-A](./challenges/ch01-A/README.md) · [ch01-B](./challenges/ch01-B/README.md) | [A](./solutions/ch01-A/README.md) · [B](./solutions/ch01-B/README.md) |
-| **ch02** | Test autoscaling under load | [Challenge](./challenges/ch02/README.md) | [Solution](./solutions/ch02/README.md) |
-| **ch03** | Automate deployment with CI/CD | [Challenge](./challenges/ch03/README.md) | [Solution](./solutions/ch03/README.md) |
-| **ch04** | Monitor performance with tracing | [Challenge](./challenges/ch04/README.md) | [Solution](./solutions/ch04/README.md) |
-| **ch05-defender** | See what the migration actually exposed | [Challenge](./challenges/ch05-defender/README.md) | [Solution](./solutions/ch05-defender/README.md) |
-| **ch06-sre-agent** | Let an AI agent diagnose an incident | [Challenge](./challenges/ch06-sre-agent/README.md) | [Solution](./solutions/ch06-sre-agent/README.md) |
-| **ch07-enterprise** | Optional: enterprise security hardening | [Challenge](./challenges/ch07-enterprise/README.md) | Open-ended |
-| **ch07-innovation** | Optional: add AI capabilities | [Challenge](./challenges/ch07-innovation/README.md) | Open-ended |
-| **Wrap-up** | What you moved, and what to take home | [Wrap-up](./challenges/wrapup/README.md) | — |
+| **ch00** | Meet the application, choose your stack | [Challenge](./challenges/ch00.md) | [Solution](./walkthrough/ch00/README.md) |
+| **ch01** | Migrate the database, containerize, deploy to Azure | [Choose a path](./challenges/ch01.md) → [ch01-A](./challenges/ch01-A.md) · [ch01-B](./challenges/ch01-B.md) | [A](./walkthrough/ch01-A/README.md) · [B](./walkthrough/ch01-B/README.md) |
+| **ch02** | Test autoscaling under load | [Challenge](./challenges/ch02.md) | [Solution](./walkthrough/ch02/README.md) |
+| **ch03** | Automate deployment with CI/CD | [Challenge](./challenges/ch03.md) | [Solution](./walkthrough/ch03/README.md) |
+| **ch04** | Monitor performance with tracing | [Challenge](./challenges/ch04.md) | [Solution](./walkthrough/ch04/README.md) |
+| **ch05-defender** | See what the migration actually exposed | [Challenge](./challenges/ch05-defender.md) | [Solution](./walkthrough/ch05-defender/README.md) |
+| **ch06-sre-agent** | Let an AI agent diagnose an incident | [Challenge](./challenges/ch06-sre-agent.md) | [Solution](./walkthrough/ch06-sre-agent/README.md) |
+| **ch07-enterprise** | Optional: enterprise security hardening | [Challenge](./challenges/ch07-enterprise.md) | Open-ended |
+| **ch07-innovation** | Optional: add AI capabilities | [Challenge](./challenges/ch07-innovation.md) | Open-ended |
+| **Wrap-up** | What you moved, and what to take home | [Wrap-up](./challenges/wrapup.md) | — |
 
 Focus on getting through **at least ch01 and ch02** — those are the minimum. The ch07
 challenges are for teams with time to spare, or as follow-up work afterwards.
@@ -82,16 +82,16 @@ See [the agenda](./docs/Agenda.md) for how this fits into the available time.
 
 Challenge 1 is the heart of the workshop, and there are two honest ways through it:
 
-- **[ch01-A — Modernize the existing application](./challenges/ch01-A/README.md).** Keep
+- **[ch01-A — Modernize the existing application](./challenges/ch01-A.md).** Keep
   the code, upgrade the framework, containerize it, and move the data to a managed
   database. The realistic upgrade workflow, and the shorter route.
-- **[ch01-B — Rewrite from a specification](./challenges/ch01-B/README.md).** Treat the
+- **[ch01-B — Rewrite from a specification](./challenges/ch01-B.md).** Treat the
   legacy app as the source of behaviour, have Copilot write a PRD and a plan, and rebuild
   on a modern stack of your choice — JavaScript included. Spec-driven development in
   practice.
 
 Both end at the same Azure architecture, so nobody gets stranded. Read
-[ch01](./challenges/ch01/README.md) to choose, then open only your path. If your table has
+[ch01](./challenges/ch01.md) to choose, then open only your path. If your table has
 several people, split so you can compare notes afterwards.
 
 ## MicroHack tips
@@ -119,11 +119,11 @@ Authenticator app after first login.
 
 Your resource group contains **two** Virtual Machines — one per stack. Each runs the legacy
 catalog with a local database and image files in a folder. Access is through
-**Just-in-Time VM access** over RDP; see [ch00](./challenges/ch00/README.md).
+**Just-in-Time VM access** over RDP; see [ch00](./challenges/ch00.md).
 
 From ch01 onwards you write code, and the workshop assumes you do that in **GitHub
 Codespaces** on your own fork or clone of this repository. The
-[dev container](./.devcontainer/README.md) ships both SDKs (.NET 8 and 10, Java 21 and 17),
+[dev container](.devcontainer/README.md) ships both SDKs (.NET 8 and 10, Java 21 and 17),
 Maven, a Docker daemon and the Azure CLI, so nothing has to be installed on your machine
 and both stacks behave the same for everyone.
 
@@ -155,8 +155,8 @@ Delivery planning — lead times, cost, capacity, and the per-challenge runbook 
 
 | Path | Purpose |
 | --- | --- |
-| [`challenges`](./challenges) | Participant instructions — start here |
-| [`solutions`](./solutions) | Reference solutions, hints, and prompts |
+| [`challenges`](./challenges) | Flat participant guides — start with [`ch00.md`](./challenges/ch00.md) |
+| [`walkthrough`](./walkthrough) | Reference solutions, hints, prompts, and implementation artifacts |
 | [`dotnet`](./dotnet/README.md) | .NET/SQL Server legacy baseline |
 | [`java`](./java/README.md) | Java/PostgreSQL legacy baseline |
 | [`data`](./data) | The canonical 198-figure, 20-category catalog and its images |
@@ -164,6 +164,11 @@ Delivery planning — lead times, cost, capacity, and the per-challenge runbook 
 | [`baseInfra`](./baseInfra/README.md) | Facilitator-owned lab infrastructure (Terraform) |
 | [`tests/load`](./tests/load) | JMeter plan and load-test config for ch02 |
 | [`docs`](./docs) | Agenda, facilitator guide, glossary, troubleshooting, cost estimate |
+
+Each challenge is one Markdown file; the two ch01-A stack guides are
+[`ch01-A-dotnet.md`](./challenges/ch01-A-dotnet.md) and
+[`ch01-A-java.md`](./challenges/ch01-A-java.md). Walkthroughs retain their per-challenge
+folders so the accompanying application and Bicep files stay together.
 
 ## Safety
 

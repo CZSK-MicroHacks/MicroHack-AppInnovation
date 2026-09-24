@@ -27,7 +27,7 @@ Shared routes: `/`, `/figure/{id}`, `/images/{file}`, `/import`, `/healthz`, `/r
 ## Legacy baseline
 
 Each participant resource group, `rg-userNNN`, contains two Windows VMs. Participants pick
-one in [ch00](../challenges/ch00/README.md) and leave the other alone.
+one in [ch00](../challenges/ch00.md) and leave the other alone.
 
 | Stack | VM | Runtime | Database | Local URL |
 | --- | --- | --- | --- | --- |
@@ -74,8 +74,8 @@ flowchart TD
     C6 --> W[Wrap-up\nBefore/after scorecard]
 ```
 
-Optional follow-up work lives in [ch07-enterprise](../challenges/ch07-enterprise/README.md)
-and [ch07-innovation](../challenges/ch07-innovation/README.md).
+Optional follow-up work lives in [ch07-enterprise](../challenges/ch07-enterprise.md)
+and [ch07-innovation](../challenges/ch07-innovation.md).
 
 ## Challenge 1 paths
 

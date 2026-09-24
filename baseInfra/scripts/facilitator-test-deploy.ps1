@@ -384,6 +384,17 @@ function Show-PlanSummary {
     }
 }
 
+function Test-ArchiveContainsChallenge {
+    <#
+    .SYNOPSIS
+    Recognizes the flat ch01 guide and the previously pinned challenge directory in an archive.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Entries)
+
+    return (($Entries -contains 'challenges/ch01.md') -or
+        [bool]($Entries | Where-Object { $_.StartsWith('challenges/ch01/') } | Select-Object -First 1))
+}
+
 #endregion helpers
 
 #region 1. tooling
@@ -596,7 +607,7 @@ try {
     }
 
     $missing = @()
-    foreach ($marker in @('data/manifest.json', 'dotnet/', 'java/', 'challenges/ch01/')) {
+    foreach ($marker in @('data/manifest.json', 'dotnet/', 'java/')) {
         $found = if ($marker.EndsWith('/')) {
             [bool]($entries | Where-Object { $_.StartsWith($marker) } | Select-Object -First 1)
         }
@@ -604,6 +615,9 @@ try {
             $entries -contains $marker
         }
         if (-not $found) { $missing += $marker }
+    }
+    if (-not (Test-ArchiveContainsChallenge -Entries $entries)) {
+        $missing += 'challenges/ch01.md (or legacy challenges/ch01/)'
     }
     if ($missing.Count -gt 0) {
         throw "Archive for $sourceCommit is missing $($missing -join ', '). Pin a published workshop commit."
@@ -614,7 +628,7 @@ finally {
 }
 
 Write-Detail "sha256 $sourceArchiveSha256"
-Write-Detail 'archive contains data/manifest.json, dotnet/, java/, challenges/ch01/'
+Write-Detail 'archive contains data/manifest.json, dotnet/, java/, and a ch01 challenge guide'
 
 #endregion
 

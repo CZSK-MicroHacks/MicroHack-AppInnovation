@@ -5,7 +5,7 @@ application on Java 17, backed by PostgreSQL, both installed on the same Windows
 uses Spring MVC, Thymeleaf, JPA, and a Flyway migration.
 
 It deliberately ships **no Dockerfile and no Azure infrastructure**. Creating those is your
-job in [Challenge 1](../challenges/ch01/README.md).
+job in [Challenge 1](../challenges/ch01.md).
 
 ## Prerequisites
 
@@ -103,7 +103,7 @@ Open <http://localhost:8080/>.
 | `GET /perftest/catalog` | Bounded database work behind an `x-api-key` header, for load testing |
 
 `/healthz` and `/readyz` are what you wire into the Container App probes in Challenge 1;
-`/perftest/catalog` is what you hammer in [Challenge 2](../challenges/ch02/README.md).
+`/perftest/catalog` is what you hammer in [Challenge 2](../challenges/ch02.md).
 
 ## Test and package
 

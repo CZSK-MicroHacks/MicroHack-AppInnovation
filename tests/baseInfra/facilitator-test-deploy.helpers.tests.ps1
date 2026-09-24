@@ -1,12 +1,13 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-Checks the pure helper functions in baseInfra/scripts/facilitator-test-deploy.ps1.
+Checks the pure helper functions in baseInfra/scripts/facilitator-test-deploy.ps1 and the
+source-archive challenge checks in both facilitator and VM provisioning scripts.
 
 .DESCRIPTION
 Loads only the function definitions out of the deployment script's AST, so the interactive
-body never runs, then asserts the HCL rendering and password rules that the generated
-tfvars file depends on. Exits non-zero when any expectation fails.
+body never runs, then asserts HCL rendering, password rules, and compatibility with flat
+and legacy source-archive challenge layouts. Exits non-zero when any expectation fails.
 
 .EXAMPLE
 pwsh tests/baseInfra/facilitator-test-deploy.helpers.tests.ps1
@@ -110,6 +111,49 @@ foreach ($document in @('{}', '{"resource_changes":[]}')) {
     function Invoke-NativeJson { param($FilePath, $Arguments) $script:stubPlanJson | ConvertFrom-Json }
     $rendered = Show-PlanSummary -PlanFile 'tfplan' -SubscriptionName 'S' -SubscriptionId 'i' 6>&1 | Out-String
     Assert-Equal "empty plan is reported, not thrown: $document" ($rendered -match 'Plan is empty') 'True'
+}
+
+Assert-Equal 'flat challenge file in source archive' `
+    (Test-ArchiveContainsChallenge -Entries @('challenges/ch01.md')) 'True'
+Assert-Equal 'legacy challenge directory in source archive' `
+    (Test-ArchiveContainsChallenge -Entries @('challenges/ch01/README.md')) 'True'
+Assert-Equal 'unrelated challenge directory is insufficient' `
+    (Test-ArchiveContainsChallenge -Entries @('challenges/ch01-A/README.md')) 'False'
+Assert-Equal 'empty source archive is rejected' `
+    (Test-ArchiveContainsChallenge -Entries @()) 'False'
+
+$vmScriptPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../baseInfra/scripts/provision-vm.ps1'))
+$vmParseErrors = $null
+$vmTokens = $null
+$vmAst = [System.Management.Automation.Language.Parser]::ParseFile($vmScriptPath, [ref]$vmTokens, [ref]$vmParseErrors)
+if ($vmParseErrors) {
+    throw "provision-vm.ps1 could not be parsed: $($vmParseErrors -join '; ')"
+}
+$sourceChallengeFunction = $vmAst.Find(
+    { param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Test-SourceArchiveChallenge' },
+    $true)
+if ($null -eq $sourceChallengeFunction) {
+    throw 'Test-SourceArchiveChallenge was not found in provision-vm.ps1.'
+}
+. ([scriptblock]::Create($sourceChallengeFunction.Extent.Text))
+
+$archiveRoot = Join-Path ([System.IO.Path]::GetTempPath()) "microhack-layout-$([guid]::NewGuid().ToString('N'))"
+try {
+    $challengeRoot = Join-Path $archiveRoot 'challenges'
+    New-Item -ItemType Directory -Path $challengeRoot | Out-Null
+    Assert-Equal 'missing challenge rejects VM source archive' `
+        (Test-SourceArchiveChallenge -ArchiveRoot $archiveRoot) 'False'
+    New-Item -ItemType File -Path (Join-Path $challengeRoot 'ch01.md') | Out-Null
+    Assert-Equal 'flat challenge accepted for VM source archive' `
+        (Test-SourceArchiveChallenge -ArchiveRoot $archiveRoot) 'True'
+    Remove-Item -LiteralPath (Join-Path $challengeRoot 'ch01.md')
+    New-Item -ItemType Directory -Path (Join-Path $challengeRoot 'ch01') | Out-Null
+    Assert-Equal 'legacy challenge accepted for VM source archive' `
+        (Test-SourceArchiveChallenge -ArchiveRoot $archiveRoot) 'True'
+}
+finally {
+    if (Test-Path $archiveRoot) { Remove-Item -LiteralPath $archiveRoot -Recurse -Force }
 }
 
 Write-Host ''
