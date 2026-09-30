@@ -1,31 +1,5 @@
 # Implementation log
 
-## 2026-09-29 - Large-screen timer canvas
-
-- Add a project-scoped **Timer** Copilot canvas with an intentionally minimal full-screen
-  layout for workshop rooms, presentations, and other big-screen countdowns.
-- Use a shrinking circular orbit as the primary remaining-time indicator, with responsive
-  tabular digits, restrained controls, visible focus states, and reduced-motion support.
-- Keep countdown time authoritative in the extension process so stopping, resuming, iframe
-  polling, and multiple views of the same timer remain synchronized.
-- Support setting hours, minutes, and seconds in the canvas, plus Start, Stop, Reset,
-  `Space` start/stop, and `R` reset controls.
-- Expose matching agent actions for reading state, setting duration, starting, stopping,
-  and resetting the timer without adding package dependencies.
-- Render the large countdown with the app's tabular monospaced font, including its
-  distinctive slashed-zero convention.
-- Bound countdown typography by both viewport width and height, with a 10 rem ceiling, so
-  maximized wide-screen panels retain the balanced spacing of the normal panel view.
-- Add an **End at** mode that accepts a future local time today, calculates the exact
-  countdown duration in the extension process, starts immediately, and rejects past times
-  rather than silently rolling them into tomorrow.
-- Show the calculated end time in the running status and expose the same behavior through
-  the `set_end_time` canvas action.
-- Add an accessible **Duration** / **End at** segmented switch so only the selected timer
-  entry method is visible, preserving the canvas's minimal control layout.
-- Apply a smaller responsive type scale whenever hours are visible so `HH:MM:SS` remains
-  fully contained by the orbit while the shorter `MM:SS` display stays prominent.
-
 ## 2026-09-28 - Azure workshop infrastructure dashboard
 
 - Add a project-scoped Copilot canvas for facilitator deployment reporting across all
